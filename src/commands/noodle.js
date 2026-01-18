@@ -140,11 +140,9 @@ for (const recipeId of known) {
 const r = contentBundle.recipes?.[recipeId];
 if (!r) continue;
 
-```
 for (const ing of r.ingredients ?? []) {
   if (ing?.item_id) out.add(ing.item_id);
 }
-```
 
 }
 
@@ -159,7 +157,6 @@ const lines = (r.ingredients ?? []).map((ing) => {
 const need = ing.qty ?? 0;
 const have = player.inv_ingredients?.[ing.item_id] ?? 0;
 
-```
 const itemName = contentBundle.items?.[ing.item_id]?.name ?? ing.item_id;
 const ok = have >= need;
 
@@ -167,7 +164,6 @@ const marker = ok ? "✅" : "🧺";
 const shortage = ok ? "" : ` (need ${need - have} more)`;
 
 return `${marker} **${itemName}** — need **${need}**, you have **${have}**${shortage}`;
-```
 
 });
 
@@ -197,9 +193,7 @@ const lines = snaps.slice(0, 8).map(({ id, order }) => {
 const rName = order ? (contentBundle.recipes[order.recipe_id]?.name ?? order.recipe_id) : null;
 const npcName = order ? (contentBundle.npcs[order.npc_archetype]?.name ?? order.npc_archetype) : null;
 
-```
 return `⚠️ Auto-canceled expired order \`${shortOrderId(id)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
-```
 
 });
 
@@ -284,7 +278,6 @@ const opts = (MARKET_ITEM_IDS ?? [])
 .map((id) => {
 if (!allowed.has(id)) return null;
 
-```
   const it = content.items?.[id];
   if (!it) return null;
 
@@ -299,7 +292,6 @@ if (!allowed.has(id)) return null;
 })
 .filter(Boolean)
 .slice(0, 25);
-```
 
 if (!opts.length) {
 return componentCommit(interaction, {
@@ -387,7 +379,6 @@ return componentCommit(interaction, payload);
 try {
 const owner = `discord:${interaction.id}`;
 
-```
 const server = ensureServer(serverId);
 const settings = buildSettingsMap(settingsCatalog, server.settings);
 server.season = computeActiveSeason(settings);
@@ -968,7 +959,6 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   return commitState({ content: "That subcommand exists but isn’t implemented yet.", ephemeral: true });
 });
-```
 
 } catch (e) {
 console.error("NOODLE CMD ERROR:", e?.stack ?? e);
@@ -1018,7 +1008,6 @@ const set = buildSettingsMap(settingsCatalog, s.settings);
 s.season = computeActiveSeason(set);
 rollMarket({ serverId, content, serverState: s });
 
-```
   const opts = (s.order_board ?? []).slice(0, 25).map((o) => {
     const rName = content.recipes[o.recipe_id]?.name ?? o.recipe_id;
     const npcName = content.npcs[o.npc_archetype]?.name ?? o.npc_archetype;
@@ -1099,7 +1088,6 @@ if (action === "cook") {
 }
 
 return componentCommit(interaction, { content: "Unknown picker action.", ephemeral: true });
-```
 
 }
 
@@ -1113,7 +1101,6 @@ return componentCommit(interaction, { content: "Unknown selection.", ephemeral: 
 if (interaction.isStringSelectMenu?.()) {
 const cid = interaction.customId;
 
-```
 // accept picker
 if (cid.startsWith("noodle:pick:accept_select:")) {
   const orderId = interaction.values?.[0];
@@ -1160,7 +1147,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
   return interaction.showModal(modal);
 }
-```
 
 }
 
