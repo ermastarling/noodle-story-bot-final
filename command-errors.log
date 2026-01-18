@@ -1,0 +1,117 @@
+
+[2026-01-15T07:47:48.363Z]
+ReferenceError: MARKET_ITEM_IDS is not defined
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:324:11
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:222:14)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:130:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+    at WebSocketManager.<anonymous> (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:236:12)
+    at WebSocketManager.emit (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\@vladfrangu\async_event_emitter\dist\index.cjs:2504:31)
+
+[2026-01-16T23:40:35.003Z]
+Error: LOCK_BUSY
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:11:17)
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:367:18
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:327:14)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:156:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+    at WebSocketManager.<anonymous> (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:236:12)
+
+[2026-01-16T23:41:00.914Z]
+Error: LOCK_BUSY
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:11:17)
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:367:18
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:327:14)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:156:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+    at WebSocketManager.<anonymous> (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:236:12)
+
+[2026-01-16T23:51:20.194Z]
+ReferenceError: tp is not defined
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:378:15
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:328:14)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:156:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+    at WebSocketManager.<anonymous> (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:236:12)
+    at WebSocketManager.emit (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\@vladfrangu\async_event_emitter\dist\index.cjs:2504:31)
+
+[2026-01-17T06:05:45.534Z]
+ReferenceError: stepText is not defined
+    at formatTutorialMessage (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/game/tutorial.js:71:3)
+    at tutorialSuffix (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:123:15)
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:647:15
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:340:14)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:664:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+
+[2026-01-17T06:06:07.588Z]
+ReferenceError: stepText is not defined
+    at formatTutorialMessage (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/game/tutorial.js:71:3)
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:298:23
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:294:16)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:664:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+    at WebSocketManager.<anonymous> (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:236:12)
+
+[2026-01-17T06:09:48.099Z]
+ReferenceError: stepText is not defined
+    at formatTutorialMessage (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/game/tutorial.js:71:3)
+    at tutorialSuffix (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:123:15)
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:647:15
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:340:14)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:664:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+
+[2026-01-17T06:09:56.283Z]
+ReferenceError: stepText is not defined
+    at formatTutorialMessage (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/game/tutorial.js:71:3)
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:298:23
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:294:16)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:664:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+    at WebSocketManager.<anonymous> (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:236:12)
+
+[2026-01-17T06:10:06.591Z]
+ReferenceError: stepText is not defined
+    at formatTutorialMessage (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/game/tutorial.js:71:3)
+    at tutorialSuffix (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:123:15)
+    at file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:451:55
+    at withLock (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at Object.execute (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/commands/noodle.js:340:14)
+    at Client.<anonymous> (file:///C:/Users/derak/OneDrive/Desktop/Noodle%20Story/noodle-story-bot-final/src/index.js:664:15)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
+    at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
