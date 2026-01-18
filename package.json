@@ -1,0 +1,19 @@
+{
+  "name": "noodle-story-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Noodle Story \u2014 cozy Discord bot game",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "NODE_ENV=development node src/index.js",
+    "register": "node src/register-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "better-sqlite3": "^11.3.0",
+    "node-cron": "^3.0.3"
+  }
+}
