@@ -1,0 +1,73 @@
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: '18'
+
+  - name: Cache npm
+    uses: actions/cache@v4
+    with:
+      path: ~/.npm
+      key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+      restore-keys: |
+        ${{ runner.os }}-node-
+
+  - name: Install dependencies
+    run: npm ci
+
+  - name: Run tests (if any)
+    run: |
+      if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.test ? 0 : 1)"; then
+        npm test || true
+      else
+        echo "No test script defined"
+      fi
+
+  - name: Register slash/application commands (if present)
+    env:
+      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      GUILD_ID: ${{ secrets.GUILD_ID }}
+      PUBLIC_KEY: ${{ secrets.PUBLIC_KEY }}
+    run: |
+      set -e
+      echo "Attempting to register slash/application commands..."
+      # Prefer common npm scripts if present
+      if [ -f package.json ] && node -e "const s=require('./package.json').scripts||{}; process.exit(s['deploy-commands']||s['register-commands']||s['deploy']||s['register'] ? 0 : 1)"; then
+        npm run deploy-commands || npm run register-commands || npm run deploy || npm run register || true
+      elif [ -f deploy-commands.js ]; then
+        node deploy-commands.js
+      elif [ -f registerCommands.js ]; then
+        node registerCommands.js
+      elif [ -f scripts/deploy-commands.js ]; then
+        node scripts/deploy-commands.js
+      elif [ -f scripts/registerCommands.js ]; then
+        node scripts/registerCommands.js
+      else
+        echo "No deploy/register script found. Skipping command registration."
+      fi
+
+  - name: Start bot for short run
+    env:
+      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      GUILD_ID: ${{ secrets.GUILD_ID }}
+      PUBLIC_KEY: ${{ secrets.PUBLIC_KEY }}
+    run: |
+      set -e
+      echo "Attempting to start bot for a short run (120s)..."
+      start_pid=""
+      # Prefer npm start if defined in package.json
+      if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.start ? 0 : 1)"; then
+        npm run start & start_pid=$!
+      elif [ -f index.js ]; then
+        node index.js & start_pid=$!
+      elif [ -f src/index.js ]; then
+        node src/index.js & start_pid=$!
+      else
+        echo "No start script or common entrypoint found (index.js or src/index.js). Exiting."
+        exit 1
+      fi
+      echo "Bot started (pid=$start_pid). Sleeping 120s..."
+      sleep 120
+      echo "Stopping bot..."
+      kill "$start_pid" || pkill -f node || true
