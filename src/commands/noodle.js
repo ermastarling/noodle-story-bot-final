@@ -134,7 +134,7 @@ return p;
 }
 
 function renderProfileEmbed(player, displayName) {
-return new EmbedBuilder()
+const embed = new EmbedBuilder()
 .setTitle(`🍜 ${player.profile.shop_name}`)
 .setDescription(`*${player.profile.tagline}*`)
 .addFields(
@@ -142,8 +142,32 @@ return new EmbedBuilder()
 { name: "Level", value: String(player.shop_level), inline: true },
 { name: "REP", value: String(player.rep), inline: true },
 { name: "Coins", value: `${player.coins}c`, inline: true }
-)
-.setFooter({ text: `Owner: ${displayName}` });
+);
+
+// Add cooked bowls inventory
+if (player.inv_bowls && Object.keys(player.inv_bowls).length > 0) {
+  const bowlLines = Object.entries(player.inv_bowls)
+    .map(([key, bowl]) => {
+      const recipeName = content.recipes?.[bowl.recipe_id]?.name ?? bowl.recipe_id;
+      return `• **${recipeName}**: ${bowl.qty}`;
+    })
+    .join("\n");
+  embed.addFields({ name: "🍲 Cooked Bowls", value: bowlLines || "None", inline: false });
+}
+
+// Add ingredients inventory
+if (player.inv_ingredients && Object.keys(player.inv_ingredients).length > 0) {
+  const ingLines = Object.entries(player.inv_ingredients)
+    .map(([id, qty]) => {
+      const itemName = content.items?.[id]?.name ?? id;
+      return `• **${itemName}**: ${qty}`;
+    })
+    .join("\n");
+  embed.addFields({ name: "🥕 Ingredients", value: ingLines || "None", inline: false });
+}
+
+embed.setFooter({ text: `Owner: ${displayName}` });
+return embed;
 }
 
 function resetTutorialState(player) {
@@ -241,9 +265,9 @@ const { ephemeral, ...rest } = payload ?? {};
 const shouldBeEphemeral = ephemeral === true && !rest.components;
 const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
-// Modal submits: reply/followUp only  
+// Modal submits: deferred in index.js, so use editReply
 if (interaction.isModalSubmit?.()) {
-if (interaction.deferred || interaction.replied) return interaction.followUp(options);
+if (interaction.deferred || interaction.replied) return interaction.editReply(rest);
 return interaction.reply(options);
 }
 
@@ -815,7 +839,8 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         `🍲 You cooked **${qty}× ${r.name}**.`,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
-      ].filter(Boolean).join("\n")
+      ].filter(Boolean).join("\n"),
+      components: [noodleOrdersActionRow(userId)]
     });
   }
 
@@ -929,13 +954,23 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const rName = content.recipes[order.recipe_id]?.name ?? order.recipe_id;
 
     const needs = formatRecipeNeeds({ recipeId: order.recipe_id, content, player: p });
+    
+    // Check if player already has a cooked bowl for this recipe
+    const hasBowl = p.inv_bowls?.[order.recipe_id];
+    const statusMsg = hasBowl
+      ? `🍲 You have **${hasBowl.qty}** cooked bowl${hasBowl.qty > 1 ? "s" : ""}! Ready to serve.`
+      : needs;
+
     const timeNote = expiresAt
-      ? `\n⏳ Limited-time: **~${Math.ceil((expiresAt - acceptedAt) / 60000)} min** to serve.`
-      : `\n🌿 No rush, this order won’t expire.`;
+      ? `
+⏳ Limited-time: **~${Math.ceil((expiresAt - acceptedAt) / 60000)} min** to serve.`
+      : `
+🌿 No rush, this order won't expire.`;
 
     return commitState({
       content:
-        `✅ Accepted order \`${shown}\` — **${rName}**.${timeNote}\n\n${needs}\n${tutorialSuffix(p)}`
+        `✅ Accepted order \`${shown}\` — **${rName}**.${timeNote}\n\n${statusMsg}\n${tutorialSuffix(p)}`,
+      components: [noodleOrdersActionRow(userId)]
     });
   }
 
@@ -1048,7 +1083,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
-    return commitState({ content: `${msg}${suffix}` });
+    return commitState({ content: `${msg}${suffix}`, components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)] });
   }
 
   return commitState({ content: "That subcommand exists but isn’t implemented yet.", ephemeral: true });
@@ -1098,8 +1133,9 @@ const sub = action;
 return runNoodle(interaction, { sub, group: null, overrides: {} });
 }
 
-/* ---------------- QUICK PICKERS ---------------- */
-if (kind === "pick" && !action.endsWith("_select")) {
+/* ---------------- QUICK PICKERS (BUTTONS ONLY) ---------------- */
+// Skip modals - they're handled separately below
+if (kind === "pick" && !action.endsWith("_select") && !interaction.isModalSubmit?.()) {
 // noodle:pick:<what>:<ownerId>
 if (action === "accept") {
 const s = ensureServer(serverId);
@@ -1129,7 +1165,7 @@ rollMarket({ serverId, content, serverState: s });
 
   return componentCommit(interaction, {
     content: "Select an order to accept:",
-    components: [new ActionRowBuilder().addComponents(menu)]
+    components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)]
   });
 }
 
@@ -1159,7 +1195,7 @@ if (action === "cancel" || action === "serve") {
 
   return componentCommit(interaction, {
     content: action === "serve" ? "Select an accepted order to serve:" : "Select an accepted order to cancel:",
-    components: [new ActionRowBuilder().addComponents(menu)]
+    components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)]
   });
 }
 
@@ -1185,7 +1221,7 @@ if (action === "cook") {
 
   return componentCommit(interaction, {
     content: "Select a recipe to cook:",
-    components: [new ActionRowBuilder().addComponents(menu)]
+    components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)]
   });
 }
 
@@ -1194,13 +1230,8 @@ return componentCommit(interaction, { content: "Unknown picker action.", ephemer
 }
 
 /* ---------------- PICKER SELECT MENUS ---------------- */
-if (kind === "pick" && action.endsWith("_select")) {
-// Not used; selects are routed via kind === "pick" above because customId is noodle:pick:<x>_select:<userId>
-return componentCommit(interaction, { content: "Unknown selection.", ephemeral: true });
-}
-
 // Handle select menus for pickers:
-if (interaction.isStringSelectMenu?.()) {
+if (interaction.isSelectMenu?.()) {
 const cid = interaction.customId;
 
 // accept picker
@@ -1277,7 +1308,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   }
 
   /* ---------------- MULTI-BUY SELECT MENU ---------------- */
-  if (interaction.isStringSelectMenu?.() && interaction.customId.startsWith("noodle:multibuy:select:")) {
+  if (interaction.isSelectMenu?.() && interaction.customId.startsWith("noodle:multibuy:select:")) {
     const owner = interaction.customId.split(":")[3];
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });

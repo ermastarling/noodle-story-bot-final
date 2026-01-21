@@ -115,17 +115,41 @@ import { fileURLToPath } from "url";
     const startTime = Date.now();
     console.log(`[${new Date().toISOString()}] Interaction received:`, interaction.type, interaction.customId || interaction.commandName);
     
-    // IMMEDIATELY defer buttons/selects FIRST, before ANY other logic
-    if (interaction.isButton?.() || (interaction.isStringSelectMenu?.() && !interaction.customId?.includes("cook_select:"))) {
-      if (interaction.customId?.startsWith("noodle:")) {
-        const deferStart = Date.now();
-        try {
-          await interaction.deferUpdate();
-          console.log(`✅ Deferred in ${Date.now() - deferStart}ms (total ${Date.now() - startTime}ms)`);
-        } catch (e) {
-          console.log(`⚠️ Defer failed after ${Date.now() - deferStart}ms (total ${Date.now() - startTime}ms):`, e?.message);
-          return; // Stop processing this interaction
+    // IMMEDIATELY defer buttons/selects/modals FIRST, before ANY other logic
+    // Note: Discord.js v13 uses isSelectMenu(), not isStringSelectMenu()
+    const isBtn = interaction.isButton?.();
+    const isSelect = interaction.isSelectMenu?.();
+    const isModal = interaction.isModalSubmit?.();
+    const cid = interaction.customId;
+    const isCookSelect = cid?.includes("cook_select:");
+    const isNoodle = cid?.startsWith("noodle:");
+    
+    // Defer buttons/selects with deferUpdate (updates original message)
+    // BUT: Don't defer buttons that will show modals (qty, clear for multibuy)
+    if (isBtn || (isSelect && !isCookSelect)) {
+      if (isNoodle) {
+        // Check if this button/select will show a modal
+        const willShowModal = cid?.includes("multibuy:qty:") || 
+                            cid?.includes("pick:cook_select:");
+        if (!willShowModal) {
+          const deferStart = Date.now();
+          try {
+            await interaction.deferUpdate();
+            console.log(`✅ Deferred button/select in ${Date.now() - deferStart}ms`);
+          } catch (e) {
+            console.log(`⚠️ Button/select defer failed:`, e?.message);
+            return;
+          }
         }
+      }
+    } else if (isModal && isNoodle) {
+      const deferStart = Date.now();
+      try {
+        await interaction.deferReply();
+        console.log(`✅ Deferred modal in ${Date.now() - deferStart}ms`);
+      } catch (e) {
+        console.log(`⚠️ Modal defer failed:`, e?.message);
+        return;
       }
     }
 
@@ -221,7 +245,7 @@ import { fileURLToPath } from "url";
     }
 
     /* ---------- NOODLE UI COMPONENTS ---------- */
-    if (interaction.isButton?.() || interaction.isStringSelectMenu?.() || interaction.isModalSubmit?.()) {
+    if (interaction.isButton?.() || interaction.isSelectMenu?.() || interaction.isModalSubmit?.()) {
       try {
         const id = interaction.customId || "";
         if (id.startsWith("noodle:")) {
