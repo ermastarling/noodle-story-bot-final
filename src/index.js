@@ -9,8 +9,6 @@ import { fileURLToPath } from "url";
   
   const Client = Discord.Client;
   const Intents = Discord.Intents;
-  const Partials = Discord.Partials;
-  const Events = Discord.Events;
   const MessageFlags = Discord.MessageFlags;
 
   if (!Client || !Intents) {
@@ -66,8 +64,7 @@ import { fileURLToPath } from "url";
       Intents.FLAGS.GUILD_MESSAGES,
       Intents.FLAGS.DIRECT_MESSAGES,
       Intents.FLAGS.MESSAGE_CONTENT
-    ],
-    partials: [Partials.CHANNEL]
+    ]
   });
 
   const db = openDb();
@@ -94,7 +91,7 @@ import { fileURLToPath } from "url";
     return [...client.guilds.cache.keys()];
   }
 
-  client.once(Events.ClientReady, (c) => {
+  client.once("ready", (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
     try {
@@ -114,7 +111,7 @@ import { fileURLToPath } from "url";
   /*  Interaction handling                                               */
   /* ------------------------------------------------------------------ */
 
-  client.on(Events.InteractionCreate, async (interaction) => {
+  client.on("interactionCreate", async (interaction) => {
     /* ---------- AUTOCOMPLETE ---------- */
     if (interaction.isAutocomplete()) {
       try {
