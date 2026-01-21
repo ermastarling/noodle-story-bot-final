@@ -3,14 +3,17 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import discordPkg from "discord.js";
+import { GatewayIntentBits, Partials, Events, Client, MessageFlags } from "discord.js";
 
-const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  Events,
-  MessageFlags
-} = discordPkg;
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent
+  ],
+  partials: [Partials.Channel]
+});
 import { commandMap } from "./commands/index.js";
 import { startDailyResetScheduler } from "./jobs/dailyReset.js";
 import { loadContentBundle, loadSettingsCatalog } from "./content/index.js";
@@ -50,16 +53,6 @@ if (!token) {
   console.error("❌ Missing DISCORD_TOKEN in .env");
   process.exit(1);
 }
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.MessageContent
-  ],
-  partials: [Partials.Channel]
-});
 
 const db = openDb();
 
