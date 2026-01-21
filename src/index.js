@@ -2,13 +2,15 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import {
+import * as discordPkg from "discord.js";
+
+const {
   Client,
   GatewayIntentBits,
   Partials,
   Events,
   MessageFlags
-} from "discord.js";
+} = discordPkg;
 import { commandMap } from "./commands/index.js";
 import { startDailyResetScheduler } from "./jobs/dailyReset.js";
 import { loadContentBundle, loadSettingsCatalog } from "./content/index.js";
