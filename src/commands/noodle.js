@@ -244,26 +244,24 @@ if (interaction.deferred || interaction.replied) return interaction.followUp(opt
 return interaction.reply(options);
 }
 
-// Buttons/selects: prefer deferUpdate then editReply
-let wasDeferred = interaction.deferred || interaction.replied;
-if (!wasDeferred) {
+// Buttons/selects: already deferred in handleComponent, or defer now if not yet
+if (!interaction.deferred && !interaction.replied) {
 try {
 await interaction.deferUpdate();
-wasDeferred = true;
 } catch (e) {
-// deferUpdate failed, but we still need to respond
-console.error("deferUpdate failed:", e?.message ?? e);
+// May already be deferred or expired
+console.error("deferUpdate in componentCommit failed:", e?.message ?? e);
 }
 }
 
-// After deferUpdate (success or fail), always use editReply for non-ephemeral or followUp for ephemeral
-if (wasDeferred) {
+// After defer, use editReply for non-ephemeral or followUp for ephemeral
+if (interaction.deferred || interaction.replied) {
 // ephemeral -> followUp is safest
 if (options.flags === MessageFlags.Ephemeral) return interaction.followUp(options);
 return interaction.editReply(options);
 }
 
-// Fallback: if we couldn't defer and it's not already deferred/replied
+// Fallback (should rarely happen)
 return interaction.reply(options);
 }
 
@@ -1020,6 +1018,27 @@ return commit({ content: cozyError(e), ephemeral: true });
 /* ------------------------------------------------------------------ */
 
 async function handleComponent(interaction) {
+// Defer immediately for select menus to avoid timeout
+if (interaction.isStringSelectMenu?.()) {
+try {
+await interaction.deferUpdate();
+} catch (e) {
+console.error("Failed to defer select menu:", e?.message ?? e);
+}
+}
+
+// Defer for buttons that will take time (nav buttons that call runNoodle)
+if (interaction.isButton?.()) {
+const id = String(interaction.customId || "");
+if (id.startsWith("noodle:nav:")) {
+  try {
+    await interaction.deferUpdate();
+  } catch (e) {
+    console.error("Failed to defer nav button:", e?.message ?? e);
+  }
+}
+}
+
 const serverId = interaction.guildId;
 if (!serverId) {
 return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
