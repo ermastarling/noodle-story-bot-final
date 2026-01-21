@@ -412,6 +412,16 @@ flags: MessageFlags.Ephemeral
 
 const userId = interaction.user.id;
 
+// Defer immediately for slash commands to prevent timeout
+if (interaction.isChatInputCommand?.() && !interaction.deferred && !interaction.replied) {
+try {
+await interaction.deferReply();
+} catch (e) {
+// If defer fails, mark as deferred to avoid double-reply attempts
+interaction.deferred = true;
+}
+}
+
 const opt = {
 getString: (name) =>
 overrides?.strings?.[name] ??
@@ -425,11 +435,12 @@ overrides?.users?.[name] ??
 };
 
 const commit = async (payload) => {
-// Slash: reply/followUp
+// Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
 const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
-if (interaction.deferred || interaction.replied) return interaction.followUp(options);
+// If deferred, use editReply. Otherwise use reply (shouldn't happen but safety)
+if (interaction.deferred || interaction.replied) return interaction.editReply(rest);
 return interaction.reply(options);
 }
 // Components: editReply flow
