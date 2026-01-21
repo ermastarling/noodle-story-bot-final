@@ -1,5 +1,8 @@
 import "dotenv/config";
-import { REST, Routes } from "discord.js";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { REST, Routes } = require("discord.js");
 import { commands } from "./commands/index.js";
 
 const token = process.env.DISCORD_TOKEN;

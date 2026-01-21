@@ -2,13 +2,16 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import {
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const {
   Client,
   GatewayIntentBits,
   Partials,
   Events,
   MessageFlags
-} from "discord.js";
+} = require("discord.js");
 import { commandMap } from "./commands/index.js";
 import { startDailyResetScheduler } from "./jobs/dailyReset.js";
 import { loadContentBundle, loadSettingsCatalog } from "./content/index.js";
