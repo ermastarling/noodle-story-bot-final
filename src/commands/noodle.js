@@ -57,8 +57,7 @@ new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🌿 Se
 function noodleSecondaryMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:help:${userId}`).setLabel("❓ Help").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:start:${userId}`).setLabel("✨ Start").setStyle(ButtonStyle.Success)
+new ButtonBuilder().setCustomId(`noodle:nav:help:${userId}`).setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -414,9 +413,7 @@ if (sub === "help") {
   };
 
   return commit({
-    content: map[topic] ?? map["getting-started"],
-    components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)],
-    ephemeral: true
+    content: map[topic] ?? map["getting-started"]
   });
 }
 
@@ -428,7 +425,7 @@ if (sub === "profile") {
 
   return commit({
     embeds: [embed],
-    components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+    components: [noodleMainMenuRow(userId)
   });
 }
 
@@ -782,7 +779,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     return commitState({
       content: parts.join("\n"),
-      components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+      components: [noodleOrdersActionRow(userId)]
     });
   }
 
