@@ -238,37 +238,31 @@ async function componentCommit(interaction, payload) {
 const { ephemeral, ...rest } = payload ?? {};
 const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
-console.log("🟣 componentCommit called, deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral);
+console.log("🟣 componentCommit, deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral);
 
 // Modal submits: reply/followUp only  
 if (interaction.isModalSubmit?.()) {
-console.log("🟣 Modal submit detected");
+console.log("🟣 Modal submit - using reply/followUp");
 if (interaction.deferred || interaction.replied) return interaction.followUp(options);
 return interaction.reply(options);
 }
 
-// Buttons/selects: defer only if not already deferred
-const alreadyDeferred = interaction.deferred || interaction.replied;
-console.log("🟣 Button/select, alreadyDeferred:", alreadyDeferred);
-if (!alreadyDeferred) {
-console.log("🟡 Not deferred yet, deferring now");
+// Buttons/selects: already deferred in index.js
+// If somehow not deferred yet, try to defer now
+if (!interaction.deferred && !interaction.replied) {
+console.log("🟡 Not deferred, attempting defer");
 try {
 await interaction.deferUpdate();
 console.log("✅ Deferred in componentCommit");
 } catch (e) {
-// Ignore if already acknowledged - we'll try editReply anyway
-if (!e.message?.includes("already been acknowledged")) {
-  console.error("❌ deferUpdate in componentCommit failed:", e?.message ?? e);
-}
+console.error("❌ Failed to defer:", e?.message ?? e);
 }
 }
 
 // Use editReply for non-ephemeral or followUp for ephemeral  
-// Always check the current state since defer might have succeeded above
 if (interaction.deferred || interaction.replied) {
-// ONLY use followUp if explicitly ephemeral, otherwise use editReply
 if (ephemeral === true) {
-  console.log("🟣 Using followUp (ephemeral)");
+  console.log("🟣 Using followUp");
   return interaction.followUp(options);
 }
 console.log("🟣 Using editReply");
@@ -1036,43 +1030,8 @@ async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
 console.log("🔵 handleComponent:", customId, "deferred:", interaction.deferred, "replied:", interaction.replied);
 
-// Defer immediately for select menus that will process with runNoodle (avoid timeout)
-// BUT NOT for cook_select which shows a modal (modals can't be shown after defer)
-if (interaction.isStringSelectMenu?.()) {
-const needsDefer = customId.startsWith("noodle:pick:accept_select:") || 
-                   customId.startsWith("noodle:pick:cancel_select:") ||
-                   customId.startsWith("noodle:pick:serve_select:") ||
-                   customId.startsWith("noodle:multibuy:select:");
-if (needsDefer) {
-  console.log("🟡 Deferring select menu");
-  try {
-    await interaction.deferUpdate();
-    console.log("✅ Select deferred, state:", interaction.deferred, interaction.replied);
-  } catch (e) {
-    console.error("❌ Failed to defer select menu:", e?.message ?? e);
-  }
-}
-}
-
-// Defer for buttons that will take time
-if (interaction.isButton?.()) {
-// Nav buttons that call runNoodle
-// Picker buttons that do DB operations (accept, cook, serve, cancel)
-const needsDefer = customId.startsWith("noodle:nav:") || 
-                   customId.startsWith("noodle:pick:accept:") ||
-                   customId.startsWith("noodle:pick:cook:") ||
-                   customId.startsWith("noodle:pick:serve:") ||
-                   customId.startsWith("noodle:pick:cancel:");
-if (needsDefer) {
-  console.log("🟡 Deferring button");
-  try {
-    await interaction.deferUpdate();
-    console.log("✅ Button deferred, state:", interaction.deferred, interaction.replied);
-  } catch (e) {
-    console.error("❌ Failed to defer button:", e?.message ?? e);
-  }
-}
-}
+// Note: deferUpdate is already called in index.js for most components
+// We don't need to defer again here, just route to the appropriate handler
 
 const serverId = interaction.guildId;
 if (!serverId) {
