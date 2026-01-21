@@ -112,14 +112,19 @@ import { fileURLToPath } from "url";
   /* ------------------------------------------------------------------ */
 
   client.on("interactionCreate", async (interaction) => {
+    const startTime = Date.now();
+    console.log(`[${new Date().toISOString()}] Interaction received:`, interaction.type, interaction.customId || interaction.commandName);
+    
     // IMMEDIATELY defer buttons/selects FIRST, before ANY other logic
     if (interaction.isButton?.() || (interaction.isStringSelectMenu?.() && !interaction.customId?.includes("cook_select:"))) {
       if (interaction.customId?.startsWith("noodle:")) {
+        const deferStart = Date.now();
         try {
           await interaction.deferUpdate();
+          console.log(`✅ Deferred in ${Date.now() - deferStart}ms (total ${Date.now() - startTime}ms)`);
         } catch (e) {
-          console.log("Early defer failed:", e?.message);
-          interaction.deferred = true;
+          console.log(`⚠️ Defer failed after ${Date.now() - deferStart}ms (total ${Date.now() - startTime}ms):`, e?.message);
+          return; // Stop processing this interaction
         }
       }
     }
