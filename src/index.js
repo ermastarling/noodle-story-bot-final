@@ -210,13 +210,17 @@ import { fileURLToPath } from "url";
         console.log("📌 Component interaction:", id);
         if (id.startsWith("noodle:")) {
           // Defer immediately for buttons/selects (but NOT modals or cook_select which shows a modal)
+          let deferFailed = false;
           if (interaction.isButton?.() || (interaction.isStringSelectMenu?.() && !id.includes("cook_select:"))) {
             console.log("🔄 Attempting to defer...");
             try {
               await interaction.deferUpdate();
               console.log("✅ Deferred successfully");
             } catch (deferErr) {
-              console.log("⚠️ Defer error (continuing anyway):", deferErr?.message ?? deferErr);
+              console.log("⚠️ Defer error:", deferErr?.message ?? deferErr);
+              deferFailed = true;
+              // Mark as deferred anyway to prevent double-response attempts
+              interaction.deferred = true;
             }
           }
           return noodleCommand.handleComponent(interaction);

@@ -188,3 +188,99 @@ DiscordAPIError: Unknown interaction
     at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
     at async CommandInteraction.deferReply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:61:5)
     at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:245:9)
+
+[2026-01-21T07:34:17.489Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:243:7)
+
+[2026-01-21T07:35:06.107Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:243:7)
+
+[2026-01-21T07:36:27.701Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:36:35.035Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:38:24.736Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:38:32.261Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:42:41.350Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:43:22.101Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:43:22.103Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:43:22.113Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:44:02.976Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+
+[2026-01-21T07:44:02.990Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)

@@ -236,9 +236,12 @@ warning: `${lines.join("\n")}${more}`
 
 async function componentCommit(interaction, payload) {
 const { ephemeral, ...rest } = payload ?? {};
-const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
+// Default: non-ephemeral UNLESS explicitly marked as ephemeral
+// If payload has components (select menus, etc), don't make it ephemeral unless explicitly requested
+const shouldBeEphemeral = ephemeral === true && !rest.components;
+const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
-console.log("📤 componentCommit, deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral);
+console.log("📤 componentCommit, type:", interaction.constructor.name, "deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral, "hasComponents:", !!rest.components, "shouldBeEphemeral:", shouldBeEphemeral);
 
 // Modal submits: reply/followUp only  
 if (interaction.isModalSubmit?.()) {
@@ -247,32 +250,56 @@ if (interaction.deferred || interaction.replied) return interaction.followUp(opt
 return interaction.reply(options);
 }
 
-// Buttons/selects: already deferred in index.js
-// If somehow not deferred yet, try to defer now
+// Slash commands: use deferReply (not deferUpdate)
+if (interaction.isChatInputCommand?.()) {
+console.log("📤 Is slash command");
 if (!interaction.deferred && !interaction.replied) {
-console.log("📤 Not deferred, attempting defer");
-try {
-await interaction.deferUpdate();
-console.log("📤 Deferred in componentCommit");
-} catch (e) {
-console.log("📤 Defer error:", e?.message ?? e);
+  try {
+    await interaction.deferReply({ ephemeral: shouldBeEphemeral });
+    console.log("📤 Deferred slash command");
+  } catch (e) {
+    console.log("📤 Defer error:", e?.message ?? e);
+    // Mark as deferred to prevent retry
+    interaction.deferred = true;
+  }
 }
+if (interaction.deferred || interaction.replied) {
+  return interaction.editReply(rest);
 }
+return interaction.reply(options);
+}
+
+// For buttons/selects, deferUpdate should have been called in index.js
+// We should NOT try to defer again here
+console.log("📤 Button/select - deferred:", interaction.deferred);
 
 console.log("📤 After defer check - deferred:", interaction.deferred, "replied:", interaction.replied);
 
 // Convert components to JSON if they're builder objects
 let finalOptions = { ...options };
 if (finalOptions.components) {
-  console.log("📤 Converting components to JSON, count:", finalOptions.components.length);
-  finalOptions.components = finalOptions.components.map(row => 
-    row.components ? { type: 1, components: row.components.map(comp => comp.toJSON?.() ?? comp) } : row
-  );
+  console.log("📤 Converting components to JSON");
+  finalOptions.components = finalOptions.components.map(row => {
+    if (row.components) {
+      const converted = { type: 1, components: row.components.map(comp => {
+        const json = comp.toJSON?.() ?? comp;
+        if (json.options) {
+          console.log("📤 Select menu options count:", json.options.length);
+          json.options.forEach((opt, i) => {
+            if (i < 2) console.log("📤 Option", i, ":", { label: opt.label?.slice(0, 50), value: opt.value?.slice(0, 50) });
+          });
+        }
+        return json;
+      })};
+      return converted;
+    }
+    return row;
+  });
 }
 
-// Use editReply for non-ephemeral or followUp for ephemeral  
+// Use editReply for components that were deferred, or followUp for ephemeral  
 if (interaction.deferred || interaction.replied) {
-if (ephemeral === true) {
+if (shouldBeEphemeral === true) {
   console.log("📤 Using followUp (ephemeral)");
   return interaction.followUp(finalOptions);
 }
@@ -1085,11 +1112,14 @@ rollMarket({ serverId, content, serverState: s });
     const npcName = content.npcs[o.npc_archetype]?.name ?? o.npc_archetype;
     const labelRaw = `${shortOrderId(o.order_id)} — ${rName} (${npcName})`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    return { label, value: o.order_id };
+    const value = String(o.order_id);
+    console.log("📋 Option:", { label: label.slice(0, 50), value: value.slice(0, 50), labelLen: label.length, valueLen: value.length });
+    return { label, value };
   });
 
   if (!opts.length) return componentCommit(interaction, { content: "No orders available to accept.", ephemeral: true });
 
+  console.log("📋 Creating menu with", opts.length, "options");
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:accept_select:${userId}`)
     .setPlaceholder("Select an order to accept")
