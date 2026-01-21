@@ -7,6 +7,7 @@ FORAGE_ITEM_IDS
 } from "../game/forage.js";
 import {
 advanceTutorial,
+ensureTutorial,
 getCurrentTutorialStep,
 formatTutorialMessage,
 formatTutorialCompletionMessage
@@ -23,7 +24,9 @@ import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { nowTs } from "../util/time.js";
-import {
+import discordPkg from "discord.js";
+
+const {
 ActionRowBuilder,
 StringSelectMenuBuilder,
 ModalBuilder,
@@ -34,7 +37,7 @@ ButtonStyle,
 SlashCommandBuilder,
 EmbedBuilder,
 MessageFlags
-} from "discord.js";
+} = discordPkg;
 
 const content = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();
@@ -123,6 +126,11 @@ return new EmbedBuilder()
 { name: "Coins", value: `${player.coins}c`, inline: true }
 )
 .setFooter({ text: `Owner: ${displayName}` });
+}
+
+function resetTutorialState(player) {
+player.tutorial = null;
+ensureTutorial(player);
 }
 
 function tutorialSuffix(player) {
@@ -383,7 +391,29 @@ const settings = buildSettingsMap(settingsCatalog, server.settings);
 server.season = computeActiveSeason(settings);
 rollMarket({ serverId, content, serverState: server });
 
-const needsPlayer = !["help", "season", "event"].includes(sub);
+if (group === "dev" && sub === "reset_tutorial") {
+  const target = opt.getUser("user");
+  if (!target) {
+    return commit({ content: "Pick a user to reset.", ephemeral: true });
+  }
+
+  return withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
+    const p = ensurePlayer(serverId, target.id);
+    resetTutorialState(p);
+    upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
+
+    const step = getCurrentTutorialStep(p);
+    const tut = formatTutorialMessage(step);
+    const mention = `<@${target.id}>`;
+
+    return commit({
+      content: `🔧 Reset tutorial for ${mention}.${tut ? `\n\n${tut}` : ""}`,
+      ephemeral: true
+    });
+  });
+}
+
+const needsPlayer = group !== "dev" && !["help", "season", "event"].includes(sub);
 const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 
 /* ---------------- START ---------------- */
@@ -1482,6 +1512,17 @@ export const noodleCommand = {
     )
     .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
     .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
+    .addSubcommandGroup((group) =>
+      group
+        .setName("dev")
+        .setDescription("Developer tools.")
+        .addSubcommand((sc) =>
+          sc
+            .setName("reset_tutorial")
+            .setDescription("Reset a user’s tutorial progress.")
+            .addUserOption((o) => o.setName("user").setDescription("User to reset").setRequired(true))
+        )
+    )
     .addSubcommand((sc) =>
       sc
         .setName("buy")
