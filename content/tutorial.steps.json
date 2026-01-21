@@ -5,36 +5,31 @@
       "id": "intro_order",
       "title": "Your First Customer",
       "text": "Check today’s order board and accept an order.",
-      "complete_on": "accept",
-      "tip": "Try: /noodle orders → then /noodle accept <order_id>"
+      "complete_on": "accept"
     },
     {
       "id": "intro_market",
       "title": "Stock the Pantry",
       "text": "Buy wheat noodles & soy broth from the market.",
-      "complete_on": "buy",
-      "tip": "Try: /noodle buy → hit **enter** to buy multiple items."
+      "complete_on": "buy"
     },
     {
       "id": "intro_forage",
       "title": "Forage Fresh Ingredients",
       "text": "Forage for fresh scallions to get cooking.",
-      "complete_on": "forage",
-      "tip": "Try: /noodle forage → select ingredients"
+      "complete_on": "forage"
     },
     {
       "id": "intro_cook",
       "title": "Cook the Order",
       "text": "Cook Classic Soy Ramen as your customer requested.",
-      "complete_on": "cook",
-      "tip": "Try: /noodle cook <recipe_id>"
+      "complete_on": "cook"
     },
     {
       "id": "intro_serve",
       "title": "Serve & Earn",
       "text": "Serve your accepted order to earn coins, SXP, and REP.",
-      "complete_on": "serve",
-      "tip": "Try: /noodle serve <order_id>"
+      "complete_on": "serve"
     }
   ]
 }

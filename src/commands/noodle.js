@@ -245,20 +245,25 @@ return interaction.reply(options);
 }
 
 // Buttons/selects: prefer deferUpdate then editReply
-if (!interaction.deferred && !interaction.replied) {
+let wasDeferred = interaction.deferred || interaction.replied;
+if (!wasDeferred) {
 try {
 await interaction.deferUpdate();
-} catch {
-// ignore
+wasDeferred = true;
+} catch (e) {
+// deferUpdate failed, but we still need to respond
+console.error("deferUpdate failed:", e?.message ?? e);
 }
 }
 
-if (interaction.deferred || interaction.replied) {
+// After deferUpdate (success or fail), always use editReply for non-ephemeral or followUp for ephemeral
+if (wasDeferred) {
 // ephemeral -> followUp is safest
 if (options.flags === MessageFlags.Ephemeral) return interaction.followUp(options);
 return interaction.editReply(options);
 }
 
+// Fallback: if we couldn't defer and it's not already deferred/replied
 return interaction.reply(options);
 }
 
@@ -764,7 +769,6 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       content: [
         `🍲 You cooked **${qty}× ${r.name}**.`,
         `You now have **${have}** bowl(s) ready.`,
-        `Tip: serve with \`/noodle serve <order_id>\` after you accept an order.`,
         tutorialSuffix(p)
       ].filter(Boolean).join("\n")
     });
@@ -886,7 +890,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     return commitState({
       content:
-        `✅ Accepted order \`${shown}\` — **${rName}**.${timeNote}\n\n${needs}\n\nTip: buy with \`/noodle buy\` or forage with \`/noodle forage\`.\n${tutorialSuffix(p)}`
+        `✅ Accepted order \`${shown}\` — **${rName}**.${timeNote}\n\n${needs}\n${tutorialSuffix(p)}`
     });
   }
 

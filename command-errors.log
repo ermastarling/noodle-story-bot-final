@@ -156,3 +156,11 @@ data.components[1].components[1].style: This field is required
     at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
     at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
     at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:232:7)
+
+[2026-01-21T06:50:58.155Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:232:7)

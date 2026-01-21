@@ -241,11 +241,15 @@ import { fileURLToPath } from "url";
         console.error("❌ Failed to write error log:", err?.stack ?? err);
       }
 
-      const msg = "Something went a little sideways, try again.";
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral });
-      } else {
-        await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+      try {
+        const msg = "Something went a little sideways, try again.";
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral });
+        } else {
+          await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+        }
+      } catch (replyErr) {
+        console.error("❌ Failed to send error reply:", replyErr?.message ?? replyErr);
       }
     }
   });
