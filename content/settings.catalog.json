@@ -1,0 +1,77 @@
+[
+  {
+    "key": "SEASON_MODE",
+    "type": "choice",
+    "scope": "server",
+    "default": "rolling_days",
+    "choices": [
+      "rolling_days",
+      "fixed_dates"
+    ],
+    "description": "How seasons advance.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SEASON_DURATION_DAYS",
+    "type": "int",
+    "scope": "server",
+    "default": 28,
+    "min": 7,
+    "max": 90,
+    "description": "Rolling season length in days.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SEASON_START_ANCHOR",
+    "type": "string",
+    "scope": "server",
+    "default": "2026-01-01",
+    "description": "Anchor date for rolling seasons (YYYY-MM-DD).",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "ORDER_TIER_WEIGHTS_BASE",
+    "type": "json",
+    "scope": "server",
+    "default": {
+      "common": 0.7,
+      "rare": 0.25,
+      "epic": 0.04,
+      "seasonal": 0.01
+    },
+    "description": "Base order tier weights.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "ORDERS_BASE_COUNT",
+    "type": "int",
+    "scope": "server",
+    "default": 8,
+    "min": 1,
+    "max": 16,
+    "description": "Base orders on board.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "LIMITED_TIME_CHANCE",
+    "type": "float",
+    "scope": "server",
+    "default": 0.2,
+    "min": 0,
+    "max": 1,
+    "description": "Chance an order is limited-time.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  }
+]
