@@ -112,6 +112,18 @@ import { fileURLToPath } from "url";
   /* ------------------------------------------------------------------ */
 
   client.on("interactionCreate", async (interaction) => {
+    // IMMEDIATELY defer buttons/selects FIRST, before ANY other logic
+    if (interaction.isButton?.() || (interaction.isStringSelectMenu?.() && !interaction.customId?.includes("cook_select:"))) {
+      if (interaction.customId?.startsWith("noodle:")) {
+        try {
+          await interaction.deferUpdate();
+        } catch (e) {
+          console.log("Early defer failed:", e?.message);
+          interaction.deferred = true;
+        }
+      }
+    }
+
     /* ---------- AUTOCOMPLETE ---------- */
     if (interaction.isAutocomplete()) {
       try {
@@ -208,15 +220,7 @@ import { fileURLToPath } from "url";
       try {
         const id = interaction.customId || "";
         if (id.startsWith("noodle:")) {
-          // Defer immediately for buttons/selects (but NOT modals or cook_select which shows a modal)
-          if (interaction.isButton?.() || (interaction.isStringSelectMenu?.() && !id.includes("cook_select:"))) {
-            try {
-              await interaction.deferUpdate();
-            } catch (deferErr) {
-              // Mark as deferred anyway to prevent double-response attempts
-              interaction.deferred = true;
-            }
-          }
+          // Already deferred at the top of interactionCreate handler
           return await noodleCommand.handleComponent(interaction);
         }
       } catch (e) {

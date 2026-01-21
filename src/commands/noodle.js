@@ -413,10 +413,14 @@ flags: MessageFlags.Ephemeral
 const userId = interaction.user.id;
 
 // Defer immediately for slash commands to prevent timeout
+// DON'T defer for components - they're already deferred in index.js
 if (interaction.isChatInputCommand?.() && !interaction.deferred && !interaction.replied) {
+console.log("[runNoodle] Deferring slash command...");
 try {
 await interaction.deferReply();
+console.log("[runNoodle] Deferred successfully");
 } catch (e) {
+console.log("[runNoodle] Defer failed:", e?.message);
 // If defer fails, mark as deferred to avoid double-reply attempts
 interaction.deferred = true;
 }
