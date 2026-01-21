@@ -425,7 +425,7 @@ if (sub === "profile") {
 
   return commit({
     embeds: [embed],
-    components: [noodleMainMenuRow(userId)
+    components: [noodleMainMenuRow(userId)]
   });
 }
 
@@ -433,7 +433,7 @@ if (sub === "profile") {
 if (sub === "season") {
   return commit({
     content: `🌿 The world is currently in **${server.season}**.`,
-    components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+    components: [noodleMainMenuRow(userId)]
   });
 }
 
