@@ -207,13 +207,16 @@ import { fileURLToPath } from "url";
     if (interaction.isButton?.() || interaction.isStringSelectMenu?.() || interaction.isModalSubmit?.()) {
       try {
         const id = interaction.customId || "";
+        console.log("📌 Component interaction:", id);
         if (id.startsWith("noodle:")) {
           // Defer immediately for buttons/selects (but NOT modals or cook_select which shows a modal)
           if (interaction.isButton?.() || (interaction.isStringSelectMenu?.() && !id.includes("cook_select:"))) {
+            console.log("🔄 Attempting to defer...");
             try {
               await interaction.deferUpdate();
+              console.log("✅ Deferred successfully");
             } catch (deferErr) {
-              // Silently ignore defer errors
+              console.log("⚠️ Defer error (continuing anyway):", deferErr?.message ?? deferErr);
             }
           }
           return noodleCommand.handleComponent(interaction);

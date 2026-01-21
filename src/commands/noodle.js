@@ -238,8 +238,11 @@ async function componentCommit(interaction, payload) {
 const { ephemeral, ...rest } = payload ?? {};
 const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
+console.log("📤 componentCommit, deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral);
+
 // Modal submits: reply/followUp only  
 if (interaction.isModalSubmit?.()) {
+console.log("📤 Is modal submit");
 if (interaction.deferred || interaction.replied) return interaction.followUp(options);
 return interaction.reply(options);
 }
@@ -247,16 +250,21 @@ return interaction.reply(options);
 // Buttons/selects: already deferred in index.js
 // If somehow not deferred yet, try to defer now
 if (!interaction.deferred && !interaction.replied) {
+console.log("📤 Not deferred, attempting defer");
 try {
 await interaction.deferUpdate();
+console.log("📤 Deferred in componentCommit");
 } catch (e) {
-console.error("componentCommit defer error:", e?.message ?? e);
+console.log("📤 Defer error:", e?.message ?? e);
 }
 }
+
+console.log("📤 After defer check - deferred:", interaction.deferred, "replied:", interaction.replied);
 
 // Convert components to JSON if they're builder objects
 let finalOptions = { ...options };
 if (finalOptions.components) {
+  console.log("📤 Converting components to JSON, count:", finalOptions.components.length);
   finalOptions.components = finalOptions.components.map(row => 
     row.components ? { type: 1, components: row.components.map(comp => comp.toJSON?.() ?? comp) } : row
   );
@@ -265,12 +273,15 @@ if (finalOptions.components) {
 // Use editReply for non-ephemeral or followUp for ephemeral  
 if (interaction.deferred || interaction.replied) {
 if (ephemeral === true) {
+  console.log("📤 Using followUp (ephemeral)");
   return interaction.followUp(finalOptions);
 }
+console.log("📤 Using editReply");
 return interaction.editReply(finalOptions);
 }
 
 // Last resort fallback
+console.log("📤 Using reply (fallback)");
 return interaction.reply(finalOptions);
 }
 
