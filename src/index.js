@@ -3,7 +3,14 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import discordPkg from "discord.js";
-import { GatewayIntentBits, Partials, Events, Client, MessageFlags } from "discord.js";
+
+const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  Events,
+  MessageFlags
+} = discordPkg;
 
 const client = new Client({
   intents: [
