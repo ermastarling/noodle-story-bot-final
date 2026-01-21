@@ -84,11 +84,8 @@ export function formatTutorialCompletionMessage() {
     "✨ **Your noodle shop is officially open!**",
     "From here, you can play freely:",
     "",
-    "• Start each day with `/noodle orders` and accept customers with `/noodle accept`",
-    "• Stock up at the market using `/noodle buy` and sell extras with `/noodle sell`",
-    "• Forage for fresh ingredients with `/noodle forage`",
-    "• Cook recipes with `/noodle cook` and serve them with `/noodle serve`",
-    "• Track your growth with `/noodle profile` and learn anytime with `/noodle help`",
+    "• Start each day with `/noodle orders` to accept, cook and serve customers using the provided buttons.",
+    "• Track your growth with `/noodle profile` and use `/noodle help` for command help.",
     "",
     "Your story begins here, etch your noodle shop into legend, one bowl at a time 🍜"
   ].join("\n");

@@ -133,6 +133,15 @@ p = getPlayer(db, serverId, userId);
 return p;
 }
 
+function displayItemName(id) {
+  const known = content.items?.[id]?.name;
+  if (known) return known;
+  return String(id ?? "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown item";
+}
+
 function renderProfileEmbed(player, displayName) {
 const embed = new EmbedBuilder()
 .setTitle(`🍜 ${player.profile.shop_name}`)
@@ -157,13 +166,23 @@ if (player.inv_bowls && Object.keys(player.inv_bowls).length > 0) {
 
 // Add ingredients inventory
 if (player.inv_ingredients && Object.keys(player.inv_ingredients).length > 0) {
-  const ingLines = Object.entries(player.inv_ingredients)
-    .map(([id, qty]) => {
-      const itemName = content.items?.[id]?.name ?? id;
-      return `• **${itemName}**: ${qty}`;
-    })
+  // Aggregate quantities by display name to avoid duplicates (e.g., soy_broth vs Soy Broth)
+  const agg = new Map();
+  for (const [id, qty] of Object.entries(player.inv_ingredients)) {
+    if (!qty || qty <= 0) continue; // skip zeros
+    const name = displayItemName(id);
+    const key = name.toLowerCase();
+    const cur = agg.get(key) ?? { name, qty: 0 };
+    cur.qty += qty;
+    agg.set(key, cur);
+  }
+
+  const ingLines = [...agg.values()]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(({ name, qty }) => `• **${name}**: ${qty}`)
     .join("\n");
-  embed.addFields({ name: "🥕 Ingredients", value: ingLines || "None", inline: false });
+
+  if (ingLines) embed.addFields({ name: "🥕 Ingredients", value: ingLines, inline: false });
 }
 
 embed.setFooter({ text: `Owner: ${displayName}` });
@@ -436,18 +455,15 @@ flags: MessageFlags.Ephemeral
 
 const userId = interaction.user.id;
 
-// Defer immediately for slash commands to prevent timeout
+// Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
-if (interaction.isChatInputCommand?.() && !interaction.deferred && !interaction.replied) {
-console.log("[runNoodle] Deferring slash command...");
-try {
-await interaction.deferReply();
-console.log("[runNoodle] Deferred successfully");
-} catch (e) {
-console.log("[runNoodle] Defer failed:", e?.message);
-// If defer fails, mark as deferred to avoid double-reply attempts
-interaction.deferred = true;
-}
+if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !interaction.deferred && !interaction.replied) {
+  try {
+    await interaction.deferReply();
+  } catch (e) {
+    // If defer fails, mark as deferred to avoid double-reply attempts
+    interaction.deferred = true;
+  }
 }
 
 const opt = {
@@ -528,10 +544,7 @@ if (sub === "start") {
 if (sub === "help") {
   const topic = opt.getString("topic") ?? "getting-started";
   const map = {
-    "getting-started": "Use `/noodle orders` → `/noodle accept` → `/noodle cook` → `/noodle serve`.",
-    market: "Buy with `/noodle buy item quantity` and sell with `/noodle sell item quantity`.",
-    cooking: "Cook bowls with `/noodle cook recipe quantity`. Serve accepted orders with `/noodle serve order_id`.",
-    world: "Check `/noodle season` and `/noodle event`."
+    "getting-started": "Use `/noodle start` to begin the tutorial & use buttons on menu to advance. Sell extra market items with `/noodle sell` item quantity.",
   };
 
   return commit({
@@ -749,7 +762,10 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const stock = s.market_stock?.[itemId] ?? 0;
     const cost = price * qty;
 
-    if (stock < qty) return commitState({ content: `Only ${stock} in stock today.`, ephemeral: true });
+    if (stock < qty) {
+      const friendly = displayItemName(itemId);
+      return commitState({ content: `Only ${stock} in stock today for **${friendly}**.`, ephemeral: true });
+    }
     if (p.coins < cost) return commitState({ content: "Not enough coins for that purchase.", ephemeral: true });
 
     p.coins -= cost;
@@ -970,7 +986,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content:
         `✅ Accepted order \`${shown}\` — **${rName}**.${timeNote}\n\n${statusMsg}\n${tutorialSuffix(p)}`,
-      components: [noodleOrdersActionRow(userId)]
+      components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)]
     });
   }
 
@@ -1406,20 +1422,23 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         for (const [id3, qty3] of Object.entries(want)) {
           if (!MARKET_ITEM_IDS.includes(id3)) {
-            return componentCommit(interaction, { content: `\`${id3}\` isn’t a market item.`, ephemeral: true });
+            const friendly = displayItemName(id3);
+            return componentCommit(interaction, { content: `${friendly} isn’t a market item.`, ephemeral: true });
           }
 
           const it = content.items?.[id3];
           if (!it) {
-            return componentCommit(interaction, { content: `Unknown item: \`${id3}\`.`, ephemeral: true });
+            const friendly = displayItemName(id3);
+            return componentCommit(interaction, { content: `Unknown item: ${friendly}.`, ephemeral: true });
           }
 
           const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
           const stock = s.market_stock?.[id3] ?? 0;
 
           if (stock < qty3) {
+            const friendly = displayItemName(id3);
             return componentCommit(interaction, {
-              content: `Only ${stock} in stock today for \`${id3}\`.`,
+              content: `Only ${stock} in stock today for **${friendly}**.`,
               ephemeral: true
             });
           }
@@ -1538,20 +1557,23 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       for (const [id3, qty3] of Object.entries(want)) {
         if (!MARKET_ITEM_IDS.includes(id3)) {
-          return componentCommit(interaction, { content: `\`${id3}\` isn’t a market item.`, ephemeral: true });
+          const friendly = displayItemName(id3);
+          return componentCommit(interaction, { content: `${friendly} isn’t a market item.`, ephemeral: true });
         }
 
         const it = content.items?.[id3];
         if (!it) {
-          return componentCommit(interaction, { content: `Unknown item: \`${id3}\`.`, ephemeral: true });
+          const friendly = displayItemName(id3);
+          return componentCommit(interaction, { content: `Unknown item: ${friendly}.`, ephemeral: true });
         }
 
         const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
         const stock = s.market_stock?.[id3] ?? 0;
 
         if (stock < qty3) {
+          const friendly = displayItemName(id3);
           return componentCommit(interaction, {
-            content: `Only ${stock} in stock today for \`${id3}\`.`,
+            content: `Only ${stock} in stock today for **${friendly}**.`,
             ephemeral: true
           });
         }

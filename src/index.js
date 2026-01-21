@@ -124,9 +124,11 @@ import { fileURLToPath } from "url";
     const isCookSelect = cid?.includes("cook_select:");
     const isNoodle = cid?.startsWith("noodle:");
     
+    const alreadyAck = interaction.deferred || interaction.replied;
+
     // Defer buttons/selects with deferUpdate (updates original message)
     // BUT: Don't defer buttons that will show modals (qty, clear for multibuy)
-    if (isBtn || (isSelect && !isCookSelect)) {
+    if (!alreadyAck && (isBtn || (isSelect && !isCookSelect))) {
       if (isNoodle) {
         // Check if this button/select will show a modal
         const willShowModal = cid?.includes("multibuy:qty:") || 
@@ -142,7 +144,7 @@ import { fileURLToPath } from "url";
           }
         }
       }
-    } else if (isModal && isNoodle) {
+    } else if (!alreadyAck && isModal && isNoodle) {
       const deferStart = Date.now();
       try {
         await interaction.deferReply();
