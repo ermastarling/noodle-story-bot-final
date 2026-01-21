@@ -1,5 +1,5 @@
 import "dotenv/config";
-import * as discordPkg from "discord.js";
+import discordPkg from "discord.js";
 
 const { REST, Routes } = discordPkg;
 import { commands } from "./commands/index.js";

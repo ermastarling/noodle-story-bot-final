@@ -24,7 +24,7 @@ import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { nowTs } from "../util/time.js";
-import * as discordPkg from "discord.js";
+import discordPkg from "discord.js";
 
 const {
 ActionRowBuilder,
