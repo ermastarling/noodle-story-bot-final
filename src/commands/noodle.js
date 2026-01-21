@@ -718,7 +718,8 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         `You now have **${have}** bowl(s) ready.`,
         `Tip: serve with \`/noodle serve <order_id>\` after you accept an order.`,
         tutorialSuffix(p)
-      ].filter(Boolean).join("\n")
+      ].filter(Boolean).join("\n"),
+      components: [noodleOrdersActionRow(userId)]
     });
   }
 
