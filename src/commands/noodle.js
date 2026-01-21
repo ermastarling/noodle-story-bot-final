@@ -24,9 +24,8 @@ import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { nowTs } from "../util/time.js";
-import { createRequire } from "module";
+import discordPkg from "discord.js";
 
-const require = createRequire(import.meta.url);
 const {
 ActionRowBuilder,
 StringSelectMenuBuilder,
@@ -38,7 +37,7 @@ ButtonStyle,
 SlashCommandBuilder,
 EmbedBuilder,
 MessageFlags
-} = require("discord.js");
+} = discordPkg;
 
 const content = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();
