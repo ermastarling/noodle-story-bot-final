@@ -238,21 +238,27 @@ async function componentCommit(interaction, payload) {
 const { ephemeral, ...rest } = payload ?? {};
 const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
+console.log("🟣 componentCommit called, deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral);
+
 // Modal submits: reply/followUp only  
 if (interaction.isModalSubmit?.()) {
+console.log("🟣 Modal submit detected");
 if (interaction.deferred || interaction.replied) return interaction.followUp(options);
 return interaction.reply(options);
 }
 
 // Buttons/selects: defer only if not already deferred
 const alreadyDeferred = interaction.deferred || interaction.replied;
+console.log("🟣 Button/select, alreadyDeferred:", alreadyDeferred);
 if (!alreadyDeferred) {
+console.log("🟡 Not deferred yet, deferring now");
 try {
 await interaction.deferUpdate();
+console.log("✅ Deferred in componentCommit");
 } catch (e) {
 // Ignore if already acknowledged - we'll try editReply anyway
 if (!e.message?.includes("already been acknowledged")) {
-  console.error("deferUpdate in componentCommit failed:", e?.message ?? e);
+  console.error("❌ deferUpdate in componentCommit failed:", e?.message ?? e);
 }
 }
 }
@@ -260,13 +266,17 @@ if (!e.message?.includes("already been acknowledged")) {
 // Use editReply for non-ephemeral or followUp for ephemeral  
 // Always check the current state since defer might have succeeded above
 if (interaction.deferred || interaction.replied) {
-if (options.flags === MessageFlags.Ephemeral) {
+// ONLY use followUp if explicitly ephemeral, otherwise use editReply
+if (ephemeral === true) {
+  console.log("🟣 Using followUp (ephemeral)");
   return interaction.followUp(options);
 }
+console.log("🟣 Using editReply");
 return interaction.editReply(options);
 }
 
 // Last resort fallback
+console.log("🟣 Using reply (fallback)");
 return interaction.reply(options);
 }
 
@@ -1024,6 +1034,7 @@ return commit({ content: cozyError(e), ephemeral: true });
 
 async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
+console.log("🔵 handleComponent:", customId, "deferred:", interaction.deferred, "replied:", interaction.replied);
 
 // Defer immediately for select menus that will process with runNoodle (avoid timeout)
 // BUT NOT for cook_select which shows a modal (modals can't be shown after defer)
@@ -1033,10 +1044,12 @@ const needsDefer = customId.startsWith("noodle:pick:accept_select:") ||
                    customId.startsWith("noodle:pick:serve_select:") ||
                    customId.startsWith("noodle:multibuy:select:");
 if (needsDefer) {
+  console.log("🟡 Deferring select menu");
   try {
     await interaction.deferUpdate();
+    console.log("✅ Select deferred, state:", interaction.deferred, interaction.replied);
   } catch (e) {
-    console.error("Failed to defer select menu:", e?.message ?? e);
+    console.error("❌ Failed to defer select menu:", e?.message ?? e);
   }
 }
 }
@@ -1051,10 +1064,12 @@ const needsDefer = customId.startsWith("noodle:nav:") ||
                    customId.startsWith("noodle:pick:serve:") ||
                    customId.startsWith("noodle:pick:cancel:");
 if (needsDefer) {
+  console.log("🟡 Deferring button");
   try {
     await interaction.deferUpdate();
+    console.log("✅ Button deferred, state:", interaction.deferred, interaction.replied);
   } catch (e) {
-    console.error("Failed to defer button:", e?.message ?? e);
+    console.error("❌ Failed to defer button:", e?.message ?? e);
   }
 }
 }
