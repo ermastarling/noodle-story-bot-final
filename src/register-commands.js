@@ -1,7 +1,6 @@
 import "dotenv/config";
-import discordPkg from "discord.js";
-
-const { REST, Routes } = discordPkg;
+import { REST } from "@discordjs/rest";
+import { Routes } from "discord-api-types/v10";
 import { commands } from "./commands/index.js";
 
 const token = process.env.DISCORD_TOKEN;

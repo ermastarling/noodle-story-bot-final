@@ -25,6 +25,7 @@ import { ensureDailyOrders } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { nowTs } from "../util/time.js";
 import discordPkg from "discord.js";
+import { SlashCommandBuilder } from "@discordjs/builders";
 
 const {
 ActionRowBuilder,
@@ -34,7 +35,6 @@ TextInputBuilder,
 TextInputStyle,
 ButtonBuilder,
 ButtonStyle,
-SlashCommandBuilder,
 EmbedBuilder,
 MessageFlags
 } = discordPkg;
