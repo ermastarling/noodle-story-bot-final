@@ -238,11 +238,8 @@ async function componentCommit(interaction, payload) {
 const { ephemeral, ...rest } = payload ?? {};
 const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
-console.log("🟣 componentCommit, deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral);
-
 // Modal submits: reply/followUp only  
 if (interaction.isModalSubmit?.()) {
-console.log("🟣 Modal submit - using reply/followUp");
 if (interaction.deferred || interaction.replied) return interaction.followUp(options);
 return interaction.reply(options);
 }
@@ -250,28 +247,31 @@ return interaction.reply(options);
 // Buttons/selects: already deferred in index.js
 // If somehow not deferred yet, try to defer now
 if (!interaction.deferred && !interaction.replied) {
-console.log("🟡 Not deferred, attempting defer");
 try {
 await interaction.deferUpdate();
-console.log("✅ Deferred in componentCommit");
 } catch (e) {
-console.error("❌ Failed to defer:", e?.message ?? e);
+console.error("componentCommit defer error:", e?.message ?? e);
 }
+}
+
+// Convert components to JSON if they're builder objects
+let finalOptions = { ...options };
+if (finalOptions.components) {
+  finalOptions.components = finalOptions.components.map(row => 
+    row.components ? { type: 1, components: row.components.map(comp => comp.toJSON?.() ?? comp) } : row
+  );
 }
 
 // Use editReply for non-ephemeral or followUp for ephemeral  
 if (interaction.deferred || interaction.replied) {
 if (ephemeral === true) {
-  console.log("🟣 Using followUp");
-  return interaction.followUp(options);
+  return interaction.followUp(finalOptions);
 }
-console.log("🟣 Using editReply");
-return interaction.editReply(options);
+return interaction.editReply(finalOptions);
 }
 
 // Last resort fallback
-console.log("🟣 Using reply (fallback)");
-return interaction.reply(options);
+return interaction.reply(finalOptions);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1028,7 +1028,6 @@ return commit({ content: cozyError(e), ephemeral: true });
 
 async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
-console.log("🔵 handleComponent:", customId, "deferred:", interaction.deferred, "replied:", interaction.replied);
 
 // Note: deferUpdate is already called in index.js for most components
 // We don't need to defer again here, just route to the appropriate handler

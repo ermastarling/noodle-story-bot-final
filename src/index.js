@@ -208,15 +208,12 @@ import { fileURLToPath } from "url";
       try {
         const id = interaction.customId || "";
         if (id.startsWith("noodle:")) {
-          // Defer immediately for buttons/selects (but NOT modals - they can't defer)
-          // Also NOT for cook_select which shows a modal
-          if ((interaction.isButton?.() || interaction.isStringSelectMenu?.()) && 
-              id !== "noodle:pick:cook_select" &&
-              !id.includes("cook_select:")) {
+          // Defer immediately for buttons/selects (but NOT modals or cook_select which shows a modal)
+          if (interaction.isButton?.() || (interaction.isStringSelectMenu?.() && !id.includes("cook_select:"))) {
             try {
               await interaction.deferUpdate();
             } catch (deferErr) {
-              console.error("Failed to defer component in index.js:", deferErr?.message ?? deferErr);
+              // Silently ignore defer errors
             }
           }
           return noodleCommand.handleComponent(interaction);
