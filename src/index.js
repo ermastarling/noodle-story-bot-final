@@ -151,7 +151,7 @@ import { fileURLToPath } from "url";
         console.log(`✅ Deferred modal in ${Date.now() - deferStart}ms`);
       } catch (e) {
         console.log(`⚠️ Modal defer failed:`, e?.message);
-        return;
+        // Continue so handler can attempt a followUp or reply
       }
     }
 

@@ -1281,6 +1281,10 @@ if (cid.startsWith("noodle:pick:serve_select:")) {
 if (cid.startsWith("noodle:pick:cook_select:")) {
   const recipeId = interaction.values?.[0];
 
+  if (interaction.deferred || interaction.replied) {
+    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+  }
+
   const modal = new ModalBuilder()
     .setCustomId(`noodle:pick:cook_qty:${userId}:${recipeId}`)
     .setTitle("Cook bowls");
@@ -1374,6 +1378,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     // Enter quantities -> show modal
     if (mode === "qty") {
+      if (interaction.deferred || interaction.replied) {
+        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      }
+
       const modal = new ModalBuilder()
         .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${selectedIds.join(",")}`)
         .setTitle("Multi-buy quantities");
