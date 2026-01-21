@@ -222,7 +222,8 @@ import { fileURLToPath } from "url";
     }
 
     /* ---------- SLASH COMMANDS ---------- */
-    if (!interaction.isChatInputCommand()) return;
+    const isChatInput = interaction.isChatInputCommand?.() || interaction.isCommand?.();
+    if (!isChatInput) return;
 
     const cmd = commandMap.get(interaction.commandName);
     if (!cmd) return;
