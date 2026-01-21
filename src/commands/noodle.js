@@ -997,7 +997,7 @@ return runNoodle(interaction, { sub, group: null, overrides: {} });
 }
 
 /* ---------------- QUICK PICKERS ---------------- */
-if (kind === "pick") {
+if (kind === "pick" && !action.endsWith("_select")) {
 // noodle:pick:<what>:<ownerId>
 if (action === "accept") {
 const s = ensureServer(serverId);
