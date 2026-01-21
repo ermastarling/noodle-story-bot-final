@@ -241,24 +241,18 @@ const { ephemeral, ...rest } = payload ?? {};
 const shouldBeEphemeral = ephemeral === true && !rest.components;
 const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
-console.log("📤 componentCommit, type:", interaction.constructor.name, "deferred:", interaction.deferred, "replied:", interaction.replied, "ephemeral:", ephemeral, "hasComponents:", !!rest.components, "shouldBeEphemeral:", shouldBeEphemeral);
-
 // Modal submits: reply/followUp only  
 if (interaction.isModalSubmit?.()) {
-console.log("📤 Is modal submit");
 if (interaction.deferred || interaction.replied) return interaction.followUp(options);
 return interaction.reply(options);
 }
 
 // Slash commands: use deferReply (not deferUpdate)
 if (interaction.isChatInputCommand?.()) {
-console.log("📤 Is slash command");
 if (!interaction.deferred && !interaction.replied) {
   try {
     await interaction.deferReply({ ephemeral: shouldBeEphemeral });
-    console.log("📤 Deferred slash command");
   } catch (e) {
-    console.log("📤 Defer error:", e?.message ?? e);
     // Mark as deferred to prevent retry
     interaction.deferred = true;
   }
@@ -271,22 +265,16 @@ return interaction.reply(options);
 
 // For buttons/selects, deferUpdate should have been called in index.js
 // We should NOT try to defer again here
-console.log("📤 Button/select - deferred:", interaction.deferred);
-
-console.log("📤 After defer check - deferred:", interaction.deferred, "replied:", interaction.replied);
 
 // Convert components to JSON if they're builder objects
 let finalOptions = { ...options };
 if (finalOptions.components) {
-  console.log("📤 Converting components to JSON");
   finalOptions.components = finalOptions.components.map(row => {
     if (row.components) {
       const converted = { type: 1, components: row.components.map(comp => {
         const json = comp.toJSON?.() ?? comp;
         if (json.options) {
-          console.log("📤 Select menu options count:", json.options.length);
           json.options.forEach((opt, i) => {
-            if (i < 2) console.log("📤 Option", i, ":", { label: opt.label?.slice(0, 50), value: opt.value?.slice(0, 50) });
           });
         }
         return json;
@@ -300,15 +288,12 @@ if (finalOptions.components) {
 // Use editReply for components that were deferred, or followUp for ephemeral  
 if (interaction.deferred || interaction.replied) {
 if (shouldBeEphemeral === true) {
-  console.log("📤 Using followUp (ephemeral)");
   return interaction.followUp(finalOptions);
 }
-console.log("📤 Using editReply");
 return interaction.editReply(finalOptions);
 }
 
 // Last resort fallback
-console.log("📤 Using reply (fallback)");
 return interaction.reply(finalOptions);
 }
 
@@ -1113,13 +1098,13 @@ rollMarket({ serverId, content, serverState: s });
     const labelRaw = `${shortOrderId(o.order_id)} — ${rName} (${npcName})`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     const value = String(o.order_id);
-    console.log("📋 Option:", { label: label.slice(0, 50), value: value.slice(0, 50), labelLen: label.length, valueLen: value.length });
+
     return { label, value };
   });
 
   if (!opts.length) return componentCommit(interaction, { content: "No orders available to accept.", ephemeral: true });
 
-  console.log("📋 Creating menu with", opts.length, "options");
+
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:accept_select:${userId}`)
     .setPlaceholder("Select an order to accept")
