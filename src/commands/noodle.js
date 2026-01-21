@@ -28,16 +28,34 @@ import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
 const {
-ActionRowBuilder,
-StringSelectMenuBuilder,
-ModalBuilder,
-TextInputBuilder,
-TextInputStyle,
-ButtonBuilder,
-ButtonStyle,
-EmbedBuilder,
-MessageFlags
+MessageActionRow,
+MessageSelectMenu,
+MessageButton,
+MessageEmbed,
+MessageFlags,
+Modal,
+TextInputComponent,
+Constants
 } = discordPkg;
+
+// Aliases for v14+ compatibility in code
+const ActionRowBuilder = MessageActionRow;
+const StringSelectMenuBuilder = MessageSelectMenu;
+const ModalBuilder = Modal;
+const TextInputBuilder = TextInputComponent;
+const ButtonBuilder = MessageButton;
+const EmbedBuilder = MessageEmbed;
+const ButtonStyle = {
+  Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
+  Secondary: Constants?.MessageButtonStyles?.SECONDARY ?? 2,
+  Success: Constants?.MessageButtonStyles?.SUCCESS ?? 3,
+  Danger: Constants?.MessageButtonStyles?.DANGER ?? 4,
+  Link: Constants?.MessageButtonStyles?.LINK ?? 5
+};
+const TextInputStyle = {
+  Short: Constants?.TextInputStyles?.SHORT ?? 1,
+  Paragraph: Constants?.TextInputStyles?.PARAGRAPH ?? 2
+};
 
 const content = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();

@@ -115,3 +115,44 @@ ReferenceError: stepText is not defined
     at InteractionCreateAction.handle (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\actions\InteractionCreate.js:101:12)
     at module.exports [as INTERACTION_CREATE] (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\handlers\INTERACTION_CREATE.js:4:36)
     at WebSocketManager.handlePacket (C:\Users\derak\OneDrive\Desktop\Noodle Story\noodle-story-bot-final\node_modules\discord.js\src\client\websocket\WebSocketManager.js:352:31)
+
+[2026-01-21T06:45:50.355Z]
+TypeError: EmbedBuilder is not a constructor
+    at renderProfileEmbed (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:119:8)
+    at file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:423:19
+    at withLock (file:///workspaces/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at runNoodle (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:421:10)
+    at Object.execute (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:1580:12)
+    at Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:232:17)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/actions/InteractionCreate.js:83:12)
+    at module.exports [as INTERACTION_CREATE] (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/handlers/INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/WebSocketManager.js:346:31)
+
+[2026-01-21T06:46:11.942Z]
+TypeError: ActionRowBuilder is not a constructor
+    at noodleOrdersActionRow (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:68:8)
+    at file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:812:20
+    at withLock (file:///workspaces/noodle-story-bot-final/src/infra/locks.js:18:12)
+    at runNoodle (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:483:8)
+    at Object.execute (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:1580:12)
+    at Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:232:17)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/actions/InteractionCreate.js:83:12)
+    at module.exports [as INTERACTION_CREATE] (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/handlers/INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/WebSocketManager.js:346:31)
+
+[2026-01-21T06:48:24.555Z]
+DiscordAPIError: Invalid Form Body
+data.components[0].components[0].style: This field is required
+data.components[0].components[1].style: This field is required
+data.components[0].components[2].style: This field is required
+data.components[0].components[3].style: This field is required
+data.components[0].components[4].style: This field is required
+data.components[1].components[0].style: This field is required
+data.components[1].components[1].style: This field is required
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:232:7)
