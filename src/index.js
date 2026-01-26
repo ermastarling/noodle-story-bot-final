@@ -115,6 +115,15 @@ import { fileURLToPath } from "url";
     const startTime = Date.now();
     console.log(`[${new Date().toISOString()}] Interaction received:`, interaction.type, interaction.customId || interaction.commandName);
     
+    // Check interaction age - Discord invalidates after 3 seconds
+    const createdAt = interaction.createdTimestamp;
+    const age = Date.now() - createdAt;
+    if (age > 2800) {
+      console.log(`⚠️ Interaction is ${age}ms old, likely to expire. Skipping.`);
+      return;
+    }
+    console.log(`📍 Processing interaction (age: ${age}ms)`);
+    
     // IMMEDIATELY defer buttons/selects/modals FIRST, before ANY other logic
     // Note: Discord.js v13 uses isSelectMenu(), not isStringSelectMenu()
     const isBtn = interaction.isButton?.();
@@ -133,14 +142,17 @@ import { fileURLToPath } from "url";
         // Check if this button/select will show a modal
         const willShowModal = cid?.includes("multibuy:qty:") || 
                             cid?.includes("pick:cook_select:");
+        if (willShowModal) {
+          console.log(`⏭️  Skipping defer for modal-showing button: ${cid}`);
+        }
         if (!willShowModal) {
           const deferStart = Date.now();
           try {
             await interaction.deferUpdate();
             console.log(`✅ Deferred button/select in ${Date.now() - deferStart}ms`);
           } catch (e) {
-            console.log(`⚠️ Button/select defer failed:`, e?.message);
-            return;
+            console.log(`⚠️ Button/select defer failed (age was ${age}ms):`, e?.message);
+            // Continue processing - handler may be able to respond directly
           }
         }
       }
@@ -150,7 +162,7 @@ import { fileURLToPath } from "url";
         await interaction.deferReply();
         console.log(`✅ Deferred modal in ${Date.now() - deferStart}ms`);
       } catch (e) {
-        console.log(`⚠️ Modal defer failed:`, e?.message);
+        console.log(`⚠️ Modal defer failed (age was ${age}ms):`, e?.message);
         // Continue so handler can attempt a followUp or reply
       }
     }

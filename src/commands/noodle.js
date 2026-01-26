@@ -286,8 +286,27 @@ const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } :
 
 // Modal submits: deferred in index.js, so use editReply
 if (interaction.isModalSubmit?.()) {
-if (interaction.deferred || interaction.replied) return interaction.editReply(rest);
-return interaction.reply(options);
+if (interaction.deferred || interaction.replied) {
+  try {
+    return await interaction.editReply(rest);
+  } catch (e) {
+    console.log(`⚠️ Modal editReply failed:`, e?.message);
+    // If edit fails, try followUp as last resort
+    try {
+      return await interaction.followUp({ ...rest, ephemeral: true });
+    } catch (e2) {
+      console.log(`⚠️ Modal followUp also failed:`, e2?.message);
+      return;
+    }
+  }
+}
+// If not deferred/replied, try regular reply (shouldn't happen but safety net)
+try {
+  return await interaction.reply(options);
+} catch (e) {
+  console.log(`⚠️ Modal reply failed:`, e?.message);
+  return;
+}
 }
 
 // Slash commands: use deferReply (not deferUpdate)
@@ -330,14 +349,35 @@ if (finalOptions.components) {
 
 // Use editReply for components that were deferred, or followUp for ephemeral  
 if (interaction.deferred || interaction.replied) {
-if (shouldBeEphemeral === true) {
-  return interaction.followUp(finalOptions);
-}
-return interaction.editReply(finalOptions);
+  if (shouldBeEphemeral === true) {
+    try {
+      return await interaction.followUp(finalOptions);
+    } catch (e) {
+      console.log(`⚠️ Component followUp failed:`, e?.message);
+      return;
+    }
+  }
+  try {
+    return await interaction.editReply(finalOptions);
+  } catch (e) {
+    console.log(`⚠️ Component editReply failed:`, e?.message);
+    // Try followUp as fallback
+    try {
+      return await interaction.followUp({ ...finalOptions, ephemeral: true });
+    } catch (e2) {
+      console.log(`⚠️ Component followUp fallback also failed:`, e2?.message);
+      return;
+    }
+  }
 }
 
-// Last resort fallback
-return interaction.reply(finalOptions);
+// Last resort fallback - not deferred/replied yet
+try {
+  return await interaction.reply(finalOptions);
+} catch (e) {
+  console.log(`⚠️ Component reply failed:`, e?.message);
+  return;
+}
 }
 
 /* ------------------------------------------------------------------ */
@@ -1298,7 +1338,15 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
   modal.addComponents(new ActionRowBuilder().addComponents(input));
 
-  return interaction.showModal(modal);
+  try {
+    return await interaction.showModal(modal);
+  } catch (e) {
+    console.log(`⚠️ showModal failed for cook:`, e?.message);
+    return componentCommit(interaction, { 
+      content: "⚠️ Discord couldn't show the modal. Try using `/noodle cook` directly instead.", 
+      ephemeral: true 
+    });
+  }
 }
 
 }
@@ -1364,6 +1412,39 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       return componentCommit(interaction, { content: "No items selected.", ephemeral: true });
     }
 
+    // Enter quantities -> show modal IMMEDIATELY (before any DB work to avoid timeout)
+    if (mode === "qty") {
+      if (interaction.deferred || interaction.replied) {
+        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${selectedIds.join(",")}`)
+        .setTitle("Multi-buy quantities");
+
+      const pickedNames = selectedIds.map((id) => content.items?.[id]?.name ?? displayItemName(id));
+
+      const input = new TextInputBuilder()
+        .setCustomId("lines")
+        .setLabel("One per line: item=qty (Carrots=3)")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setPlaceholder(pickedNames.map((n) => `${n}=1`).join("\n"));
+
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      
+      try {
+        return await interaction.showModal(modal);
+      } catch (e) {
+        console.log(`⚠️ showModal failed for multibuy:`, e?.message);
+        return componentCommit(interaction, { 
+          content: "⚠️ Discord couldn't show the modal. Try using `/noodle buy` with individual items instead.", 
+          ephemeral: true 
+        });
+      }
+    }
+
+    // All other button modes need DB queries first
     const serverState = ensureServer(serverId);
     const settings = buildSettingsMap(settingsCatalog, serverState.settings);
     serverState.season = computeActiveSeason(settings);
@@ -1374,29 +1455,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     // Clear -> re-render picker
     if (mode === "clear") {
       return renderMultiBuyPicker({ interaction, userId, s: serverState, p });
-    }
-
-    // Enter quantities -> show modal
-    if (mode === "qty") {
-      if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-      }
-
-      const modal = new ModalBuilder()
-        .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${selectedIds.join(",")}`)
-        .setTitle("Multi-buy quantities");
-
-      const pickedNames = selectedIds.map((id) => content.items?.[id]?.name ?? id);
-
-      const input = new TextInputBuilder()
-        .setCustomId("lines")
-        .setLabel("One per line: item=qty (Carrots=3)")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setPlaceholder(pickedNames.map((n) => `${n}=1`).join("\n"));
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return interaction.showModal(modal);
     }
 
     // Buy 1 each -> perform purchase
@@ -1538,6 +1596,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     if (!Object.keys(want).length) {
       return componentCommit(interaction, { content: "No quantities provided.", ephemeral: true });
     }
+
+    // Send immediate acknowledgment before DB work to avoid timeout
+    await componentCommit(interaction, { content: "🛒 Processing your purchase…", components: [] });
 
     // Idempotency (prevents double submit)
     const action = "multibuy";
