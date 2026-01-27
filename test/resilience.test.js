@@ -318,3 +318,23 @@ test("B7: applyResilienceMechanics - sets rep floor bonus when rep is at 0", () 
   // Should set the rep floor bonus flag
   assert.strictEqual(player.buffs.rep_floor_bonus, true);
 });
+
+test("B4: updateFailStreak - triggers relief after 3 failures then resets on success", () => {
+  const player = { buffs: { fail_streak: 0 } };
+  
+  // Track 3 failures
+  updateFailStreak(player, false); // 1st failure
+  assert.strictEqual(player.buffs.fail_streak, 1);
+  
+  updateFailStreak(player, false); // 2nd failure
+  assert.strictEqual(player.buffs.fail_streak, 2);
+  
+  updateFailStreak(player, false); // 3rd failure - triggers relief
+  assert.strictEqual(player.buffs.fail_streak, 0);
+  assert.strictEqual(player.buffs.fail_streak_relief, 2);
+  
+  // Success should not reset fail_streak while relief is active
+  updateFailStreak(player, true);
+  assert.strictEqual(player.buffs.fail_streak, 0);
+  assert.strictEqual(player.buffs.fail_streak_relief, 2); // unchanged
+});

@@ -30,6 +30,7 @@ import {
   clearTemporaryRecipes,
   getPityDiscount,
   consumeFailStreakRelief,
+  updateFailStreak,
   checkRepFloorBonus
 } from "../game/resilience.js";
 import discordPkg from "discord.js";
@@ -284,6 +285,11 @@ if (exp && nowMs > exp) expiredIds.push(fullId);
 }
 
 if (!expiredIds.length) return { expiredIds: [], warning: "" };
+
+// Track fail streak for expired orders (B4)
+if (expiredIds.length > 0) {
+  updateFailStreak(p, false); // failure
+}
 
 // Capture snapshots BEFORE delete
 const snaps = expiredIds.map((id) => {
@@ -1236,6 +1242,8 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const now3 = nowTs();
       if (accepted.expires_at && now3 > accepted.expires_at) {
         delete acceptedMap[fullOrderId];
+        // Track fail streak for manually expired order (B4)
+        updateFailStreak(p, false); // failure
         results.push(`⏳ Order \`${shortOrderId(fullOrderId)}\` expired.`);
         continue;
       }
@@ -1272,6 +1280,9 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         player: p
       });
 
+      // Track successful serve for fail streak (B4)
+      updateFailStreak(p, true); // success
+      
       // Consume fail-streak relief after successful serve (B4)
       consumeFailStreakRelief(p);
 
