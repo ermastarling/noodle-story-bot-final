@@ -12,6 +12,67 @@ import {
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
+test("C1: applySpoilageCatchup - respects zero SPOILAGE_MAX_CATCHUP_TICKS", () => {
+  const player = { 
+    user_id: "test_user",
+    inv_ingredients: { scallions: 10 }, 
+    upgrades: {} 
+  };
+  const settings = { 
+    SPOILAGE_ENABLED: true, 
+    SPOILAGE_APPLY_ON_LOGIN: true,
+    SPOILAGE_TICK_HOURS: 1,
+    SPOILAGE_MAX_CATCHUP_TICKS: 0, // Explicitly set to 0 to disable catch-up
+    SPOILAGE_BASE_CHANCE: 1.0
+  };
+  const content = { 
+    items: { 
+      scallions: { spoilable: true, tags: ["fresh"] } 
+    } 
+  };
+  const lastActiveAt = Date.now() - 10 * HOUR_MS; // 10 hours offline
+  const now = Date.now();
+
+  const result = applySpoilageCatchup(player, settings, content, lastActiveAt, now);
+
+  // Should apply 0 ticks even though 10 hours passed
+  assert.strictEqual(result.ticksApplied, 0);
+  assert.strictEqual(result.applied, false);
+  assert.strictEqual(player.inv_ingredients.scallions, 10); // No spoilage
+});
+
+test("C1: applySpoilageCatchup - respects zero SPOILAGE_BASE_CHANCE", () => {
+  const player = { 
+    user_id: "test_user",
+    inv_ingredients: { scallions: 10 }, 
+    upgrades: {} 
+  };
+  const settings = { 
+    SPOILAGE_ENABLED: true, 
+    SPOILAGE_APPLY_ON_LOGIN: true,
+    SPOILAGE_TICK_HOURS: 1,
+    SPOILAGE_MAX_CATCHUP_TICKS: 24,
+    SPOILAGE_BASE_CHANCE: 0 // Explicitly set to 0 for no spoilage
+  };
+  const content = { 
+    items: { 
+      scallions: { 
+        name: "Scallions",
+        spoilable: true,
+        tags: ["fresh"]
+      } 
+    } 
+  };
+  const lastActiveAt = Date.now() - 5 * HOUR_MS;
+  const now = Date.now();
+
+  const result = applySpoilageCatchup(player, settings, content, lastActiveAt, now);
+
+  // Should apply ticks but with 0% spoilage chance, nothing spoils
+  assert.strictEqual(result.ticksApplied, 5);
+  assert.strictEqual(player.inv_ingredients.scallions, 10); // No spoilage due to 0% chance
+});
+
 test("C1: applySpoilageCatchup - skips when SPOILAGE_ENABLED is false", () => {
   const player = { inv_ingredients: { scallions: 10 }, upgrades: {} };
   const settings = { SPOILAGE_ENABLED: false };

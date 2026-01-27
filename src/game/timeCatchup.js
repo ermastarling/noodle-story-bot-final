@@ -49,9 +49,9 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
     return { applied: false, spoiled: {}, messages: [] };
   }
 
-  const tickHours = settings.SPOILAGE_TICK_HOURS || 1;
-  const maxCatchupTicks = settings.SPOILAGE_MAX_CATCHUP_TICKS || 24;
-  const baseChance = settings.SPOILAGE_BASE_CHANCE || 0.05;
+  const tickHours = settings.SPOILAGE_TICK_HOURS ?? 1;
+  const maxCatchupTicks = settings.SPOILAGE_MAX_CATCHUP_TICKS ?? 24;
+  const baseChance = settings.SPOILAGE_BASE_CHANCE ?? 0.05;
 
   // Calculate elapsed time and number of ticks
   const elapsedMs = now - lastActiveAt;
@@ -62,7 +62,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
   const ticksToApply = Math.min(totalTicks, maxCatchupTicks);
 
   if (ticksToApply <= 0) {
-    return { applied: false, spoiled: {}, messages: [] };
+    return { applied: false, spoiled: {}, ticksApplied: 0, messages: [] };
   }
 
   // Get player upgrades for protected storage
