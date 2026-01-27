@@ -3,7 +3,8 @@ import { dayKeyUTC, nowTs } from "../util/time.js";
 
 export function generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool }) {
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"orders", serverId, dayKey });
-  const count = Number(settings.ORDERS_BASE_COUNT ?? 8);
+  const maxOrders = 100;
+  const count = Math.min(Number(settings.ORDERS_BASE_COUNT ?? maxOrders), maxOrders);
   const tierWeights = settings.ORDER_TIER_WEIGHTS_BASE ?? { common:0.70, rare:0.25, epic:0.04, seasonal:0.01 };
 
   const recipes = Object.values(content.recipes);
@@ -58,7 +59,7 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
     });
   }
 
-  return board.slice(0, Math.min(board.length, 16));
+  return board.slice(0, Math.min(board.length, maxOrders));
 }
 
 export function ensureDailyOrders(serverState, settings, content, playerRecipePool, serverId) {

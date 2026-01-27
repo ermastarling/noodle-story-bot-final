@@ -22,7 +22,7 @@
     {
       "id": "intro_cook",
       "title": "Cook the Order",
-      "text": "Cook Classic Soy Ramen as your customer requested. (Click on Orders button).",
+      "text": "Cook Classic Soy Ramen as your customer requested.",
       "complete_on": "cook"
     },
     {
