@@ -24,6 +24,14 @@ import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { nowTs } from "../util/time.js";
+import {
+  applyResilienceMechanics,
+  getAvailableRecipes,
+  clearTemporaryRecipes,
+  getPityDiscount,
+  consumeFailStreakRelief,
+  checkRepFloorBonus
+} from "../game/resilience.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -689,12 +697,28 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     ).catch(() => {});
   }
 
+  // Apply resilience mechanics (B1-B9)
+  const resilience = applyResilienceMechanics(p, s, content);
+
   const commitState = async (replyObj) => {
+    // Clear temporary recipes if player has coins again (B2)
+    clearTemporaryRecipes(p);
+    
     upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     upsertServer(db, serverId, s, null);
 
+    // Prepend resilience messages if any
+    let finalContent = replyObj.content || "";
+    if (resilience.messages.length > 0 && !finalContent.includes("🆘")) {
+      const resilienceMsg = resilience.messages.join("\n\n");
+      finalContent = finalContent 
+        ? `${resilienceMsg}\n\n${finalContent}` 
+        : resilienceMsg;
+    }
+
     const out = {
       ...replyObj,
+      content: finalContent,
       components: replyObj.components ?? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
     };
 
@@ -847,7 +871,9 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({ content: "That item isn’t on the market.", ephemeral: true });
     }
 
-    const price = s.market_prices?.[itemId] ?? item.base_price;
+    // Check for pity discount (B6)
+    const pityPrice = getPityDiscount(p, itemId);
+    const price = pityPrice ?? (s.market_prices?.[itemId] ?? item.base_price);
     const stock = s.market_stock?.[itemId] ?? 0;
     const cost = price * qty;
 
@@ -1238,8 +1264,12 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         isLimitedTime: order.is_limited_time,
         servedAtMs: servedAt,
         acceptedAtMs: accepted.accepted_at,
-        speedWindowSeconds: order.speed_window_seconds
+        speedWindowSeconds: order.speed_window_seconds,
+        player: p
       });
+
+      // Consume fail-streak relief after successful serve (B4)
+      consumeFailStreakRelief(p);
 
       bowl.qty -= 1;
       if (bowl.qty <= 0) delete p.inv_bowls[key];

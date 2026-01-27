@@ -1,960 +1,1219 @@
 {
   "content_bundle_version": 1,
   "items": {
-  "scallions": {
-    "item_id": "scallions",
-    "name": "Scallions",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "common",
-    "spoilable": true,
-    "tags": ["fresh", "mild"]
+    "scallions": {
+      "item_id": "scallions",
+      "name": "Scallions",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "common",
+      "spoilable": true,
+      "tags": [
+        "fresh",
+        "mild"
+      ]
+    },
+    "carrots": {
+      "item_id": "carrots",
+      "name": "Carrots",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "common",
+      "spoilable": true,
+      "tags": [
+        "sweet",
+        "crunch"
+      ]
+    },
+    "root_vegetables": {
+      "item_id": "root_vegetables",
+      "name": "Root Vegetables",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "common",
+      "spoilable": true,
+      "tags": [
+        "earthy"
+      ]
+    },
+    "citrus_peels": {
+      "item_id": "citrus_peels",
+      "name": "Citrus Peels",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "common",
+      "spoilable": true,
+      "tags": [
+        "bright"
+      ]
+    },
+    "citrus_slices": {
+      "item_id": "citrus_slices",
+      "name": "Citrus Slices",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "common",
+      "spoilable": true,
+      "tags": [
+        "bright",
+        "fresh"
+      ]
+    },
+    "wild_greens": {
+      "item_id": "wild_greens",
+      "name": "Wild Greens",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "common",
+      "spoilable": true,
+      "tags": [
+        "green"
+      ]
+    },
+    "forest_mushrooms": {
+      "item_id": "forest_mushrooms",
+      "name": "Forest Mushrooms",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "common",
+      "spoilable": true,
+      "tags": [
+        "umami"
+      ]
+    },
+    "night_herbs": {
+      "item_id": "night_herbs",
+      "name": "Night Herbs",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": [
+        "mystic",
+        "aromatic"
+      ]
+    },
+    "ember_peppers": {
+      "item_id": "ember_peppers",
+      "name": "Ember Peppers",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": [
+        "spicy"
+      ]
+    },
+    "dew_greens": {
+      "item_id": "dew_greens",
+      "name": "Dew Greens",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": [
+        "fresh"
+      ]
+    },
+    "petal_garnish": {
+      "item_id": "petal_garnish",
+      "name": "Petal Garnish",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": [
+        "floral"
+      ]
+    },
+    "roasted_roots": {
+      "item_id": "roasted_roots",
+      "name": "Roasted Roots",
+      "category": "topping",
+      "acquisition": "forage",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": [
+        "smoky",
+        "earthy"
+      ]
+    },
+    "black_garlic": {
+      "item_id": "black_garlic",
+      "name": "Black Garlic",
+      "category": "aromatic",
+      "acquisition": "forage",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": [
+        "umami",
+        "sweet"
+      ]
+    },
+    "star_anise": {
+      "item_id": "star_anise",
+      "name": "Star Anise",
+      "category": "aromatic",
+      "acquisition": "forage",
+      "tier": "rare",
+      "spoilable": false,
+      "tags": [
+        "spice",
+        "sweet"
+      ]
+    },
+    "night_spices": {
+      "item_id": "night_spices",
+      "name": "Night Spices",
+      "category": "aromatic",
+      "acquisition": "forage",
+      "tier": "rare",
+      "spoilable": false,
+      "tags": [
+        "mystic",
+        "spice"
+      ]
+    },
+    "broth_soy": {
+      "item_id": "broth_soy",
+      "name": "Soy Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 12,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_ginger": {
+      "item_id": "broth_ginger",
+      "name": "Ginger Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 13,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_butter": {
+      "item_id": "broth_butter",
+      "name": "Butter Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 14,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_sweet_soy": {
+      "item_id": "broth_sweet_soy",
+      "name": "Sweet Soy Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 14,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_chicken": {
+      "item_id": "broth_chicken",
+      "name": "Chicken Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 15,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_rich_stock": {
+      "item_id": "broth_rich_stock",
+      "name": "Rich Stock",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 18,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_chili": {
+      "item_id": "broth_chili",
+      "name": "Chili Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 15,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_light": {
+      "item_id": "broth_light",
+      "name": "Light Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 11,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_beef": {
+      "item_id": "broth_beef",
+      "name": "Beef Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 17,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_mixed": {
+      "item_id": "broth_mixed",
+      "name": "Mixed Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 13,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "broth_herbal": {
+      "item_id": "broth_herbal",
+      "name": "Herbal Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 16,
+      "stock_min": 10,
+      "stock_max": 50
+    },
+    "broth_miso": {
+      "item_id": "broth_miso",
+      "name": "Miso Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 16,
+      "stock_min": 10,
+      "stock_max": 50
+    },
+    "broth_black_garlic": {
+      "item_id": "broth_black_garlic",
+      "name": "Black Garlic Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 20,
+      "stock_min": 6,
+      "stock_max": 18
+    },
+    "broth_shio": {
+      "item_id": "broth_shio",
+      "name": "Shio Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 15,
+      "stock_min": 10,
+      "stock_max": 50
+    },
+    "broth_citrus_infused": {
+      "item_id": "broth_citrus_infused",
+      "name": "Citrus-Infused Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 17,
+      "stock_min": 8,
+      "stock_max": 50
+    },
+    "broth_glowing_miso": {
+      "item_id": "broth_glowing_miso",
+      "name": "Glowing Miso Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 22,
+      "stock_min": 6,
+      "stock_max": 25
+    },
+    "broth_fire": {
+      "item_id": "broth_fire",
+      "name": "Fire Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 21,
+      "stock_min": 6,
+      "stock_max": 25
+    },
+    "broth_floral": {
+      "item_id": "broth_floral",
+      "name": "Floral Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 21,
+      "stock_min": 6,
+      "stock_max": 25
+    },
+    "broth_sakura": {
+      "item_id": "broth_sakura",
+      "name": "Sakura Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 22,
+      "stock_min": 6,
+      "stock_max": 25
+    },
+    "broth_chilled_citrus": {
+      "item_id": "broth_chilled_citrus",
+      "name": "Chilled Citrus Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 22,
+      "stock_min": 6,
+      "stock_max": 25
+    },
+    "broth_pumpkin": {
+      "item_id": "broth_pumpkin",
+      "name": "Pumpkin Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 17,
+      "stock_min": 8,
+      "stock_max": 25
+    },
+    "broth_creamy_hearth": {
+      "item_id": "broth_creamy_hearth",
+      "name": "Creamy Hearth Broth",
+      "category": "broth",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 22,
+      "stock_min": 6,
+      "stock_max": 25
+    },
+    "noodles_wheat": {
+      "item_id": "noodles_wheat",
+      "name": "Wheat Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 10,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "noodles_soft": {
+      "item_id": "noodles_soft",
+      "name": "Soft Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 10,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "noodles_thin": {
+      "item_id": "noodles_thin",
+      "name": "Thin Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 10,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "noodles_egg": {
+      "item_id": "noodles_egg",
+      "name": "Egg Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 12,
+      "stock_min": 14,
+      "stock_max": 50
+    },
+    "noodles_thick": {
+      "item_id": "noodles_thick",
+      "name": "Thick Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 11,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "noodles_ramen": {
+      "item_id": "noodles_ramen",
+      "name": "Ramen Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 11,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "noodles_udon": {
+      "item_id": "noodles_udon",
+      "name": "Udon Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 12,
+      "stock_min": 14,
+      "stock_max": 50
+    },
+    "noodles_chunky": {
+      "item_id": "noodles_chunky",
+      "name": "Chunky Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 12,
+      "stock_min": 14,
+      "stock_max": 50
+    },
+    "noodles_fine": {
+      "item_id": "noodles_fine",
+      "name": "Fine Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 10,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "noodles_hand_pulled": {
+      "item_id": "noodles_hand_pulled",
+      "name": "Hand-Pulled Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": true,
+      "base_price": 14,
+      "stock_min": 10,
+      "stock_max": 25
+    },
+    "noodles_spiced": {
+      "item_id": "noodles_spiced",
+      "name": "Spiced Noodles",
+      "category": "noodles",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 12,
+      "stock_min": 14,
+      "stock_max": 25
+    },
+    "topping_chili_flakes": {
+      "item_id": "topping_chili_flakes",
+      "name": "Chili Flakes",
+      "category": "topping",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": false,
+      "base_price": 6,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "topping_extra_broth": {
+      "item_id": "topping_extra_broth",
+      "name": "Extra Broth",
+      "category": "topping",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": true,
+      "base_price": 7,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "topping_roasted_pork": {
+      "item_id": "topping_roasted_pork",
+      "name": "Roasted Pork",
+      "category": "topping",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": true,
+      "base_price": 12,
+      "stock_min": 25,
+      "stock_max": 50
+    },
+    "spice_sesame_oil": {
+      "item_id": "spice_sesame_oil",
+      "name": "Sesame Oil",
+      "category": "spice",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": false,
+      "base_price": 8,
+      "stock_min": 50,
+      "stock_max": 100
+    },
+    "spice_chili_oil": {
+      "item_id": "spice_chili_oil",
+      "name": "Chili Oil",
+      "category": "spice",
+      "acquisition": "market",
+      "tier": "common",
+      "spoilable": false,
+      "base_price": 8,
+      "stock_min": 50,
+      "stock_max": 100
+    }
   },
-  "carrots": {
-    "item_id": "carrots",
-    "name": "Carrots",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "common",
-    "spoilable": true,
-    "tags": ["sweet", "crunch"]
-  },
-  "root_vegetables": {
-    "item_id": "root_vegetables",
-    "name": "Root Vegetables",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "common",
-    "spoilable": true,
-    "tags": ["earthy"]
-  },
-  "citrus_peels": {
-    "item_id": "citrus_peels",
-    "name": "Citrus Peels",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "common",
-    "spoilable": true,
-    "tags": ["bright"]
-  },
-  "citrus_slices": {
-    "item_id": "citrus_slices",
-    "name": "Citrus Slices",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "common",
-    "spoilable": true,
-    "tags": ["bright", "fresh"]
-  },
-  "wild_greens": {
-    "item_id": "wild_greens",
-    "name": "Wild Greens",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "common",
-    "spoilable": true,
-    "tags": ["green"]
-  },
-  "forest_mushrooms": {
-    "item_id": "forest_mushrooms",
-    "name": "Forest Mushrooms",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "common",
-    "spoilable": true,
-    "tags": ["umami"]
-  },
-  "night_herbs": {
-    "item_id": "night_herbs",
-    "name": "Night Herbs",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "rare",
-    "spoilable": true,
-    "tags": ["mystic", "aromatic"]
-  },
-  "ember_peppers": {
-    "item_id": "ember_peppers",
-    "name": "Ember Peppers",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "rare",
-    "spoilable": true,
-    "tags": ["spicy"]
-  },
-  "dew_greens": {
-    "item_id": "dew_greens",
-    "name": "Dew Greens",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "uncommon",
-    "spoilable": true,
-    "tags": ["fresh"]
-  },
-  "petal_garnish": {
-    "item_id": "petal_garnish",
-    "name": "Petal Garnish",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "uncommon",
-    "spoilable": true,
-    "tags": ["floral"]
-  },
-  "roasted_roots": {
-    "item_id": "roasted_roots",
-    "name": "Roasted Roots",
-    "category": "topping",
-    "acquisition": "forage",
-    "tier": "uncommon",
-    "spoilable": true,
-    "tags": ["smoky", "earthy"]
-  },
-  "black_garlic": {
-    "item_id": "black_garlic",
-    "name": "Black Garlic",
-    "category": "aromatic",
-    "acquisition": "forage",
-    "tier": "rare",
-    "spoilable": true,
-    "tags": ["umami", "sweet"]
-  },
-  "star_anise": {
-    "item_id": "star_anise",
-    "name": "Star Anise",
-    "category": "aromatic",
-    "acquisition": "forage",
-    "tier": "rare",
-    "spoilable": false,
-    "tags": ["spice", "sweet"]
-  },
-  "night_spices": {
-    "item_id": "night_spices",
-    "name": "Night Spices",
-    "category": "aromatic",
-    "acquisition": "forage",
-    "tier": "rare",
-    "spoilable": false,
-    "tags": ["mystic", "spice"]
-  },
-  "broth_soy": {
-    "item_id": "broth_soy",
-    "name": "Soy Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 12,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_ginger": {
-    "item_id": "broth_ginger",
-    "name": "Ginger Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 13,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_butter": {
-    "item_id": "broth_butter",
-    "name": "Butter Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 14,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_sweet_soy": {
-    "item_id": "broth_sweet_soy",
-    "name": "Sweet Soy Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 14,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_chicken": {
-    "item_id": "broth_chicken",
-    "name": "Chicken Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 15,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_rich_stock": {
-    "item_id": "broth_rich_stock",
-    "name": "Rich Stock",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 18,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_chili": {
-    "item_id": "broth_chili",
-    "name": "Chili Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 15,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_light": {
-    "item_id": "broth_light",
-    "name": "Light Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 11,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_beef": {
-    "item_id": "broth_beef",
-    "name": "Beef Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 17,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_mixed": {
-    "item_id": "broth_mixed",
-    "name": "Mixed Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 13,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "broth_herbal": {
-    "item_id": "broth_herbal",
-    "name": "Herbal Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 16,
-    "stock_min": 10,
-    "stock_max": 50
-  },
-  "broth_miso": {
-    "item_id": "broth_miso",
-    "name": "Miso Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 16,
-    "stock_min": 10,
-    "stock_max": 50
-  },
-  "broth_black_garlic": {
-    "item_id": "broth_black_garlic",
-    "name": "Black Garlic Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 20,
-    "stock_min": 6,
-    "stock_max": 18
-  },
-  "broth_shio": {
-    "item_id": "broth_shio",
-    "name": "Shio Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 15,
-    "stock_min": 10,
-    "stock_max": 50
-  },
-  "broth_citrus_infused": {
-    "item_id": "broth_citrus_infused",
-    "name": "Citrus-Infused Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 17,
-    "stock_min": 8,
-    "stock_max": 50
-  },
-  "broth_glowing_miso": {
-    "item_id": "broth_glowing_miso",
-    "name": "Glowing Miso Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 22,
-    "stock_min": 6,
-    "stock_max": 25
-  },
-  "broth_fire": {
-    "item_id": "broth_fire",
-    "name": "Fire Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 21,
-    "stock_min": 6,
-    "stock_max": 25
-  },
-  "broth_floral": {
-    "item_id": "broth_floral",
-    "name": "Floral Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 21,
-    "stock_min": 6,
-    "stock_max": 25
-  },
-  "broth_sakura": {
-    "item_id": "broth_sakura",
-    "name": "Sakura Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 22,
-    "stock_min": 6,
-    "stock_max": 25
-  },
-  "broth_chilled_citrus": {
-    "item_id": "broth_chilled_citrus",
-    "name": "Chilled Citrus Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 22,
-    "stock_min": 6,
-    "stock_max": 25
-  },
-  "broth_pumpkin": {
-    "item_id": "broth_pumpkin",
-    "name": "Pumpkin Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 17,
-    "stock_min": 8,
-    "stock_max": 25
-  },
-  "broth_creamy_hearth": {
-    "item_id": "broth_creamy_hearth",
-    "name": "Creamy Hearth Broth",
-    "category": "broth",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 22,
-    "stock_min": 6,
-    "stock_max": 25
-  },
-
-  "noodles_wheat": {
-    "item_id": "noodles_wheat",
-    "name": "Wheat Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 10,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "noodles_soft": {
-    "item_id": "noodles_soft",
-    "name": "Soft Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 10,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "noodles_thin": {
-    "item_id": "noodles_thin",
-    "name": "Thin Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 10,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "noodles_egg": {
-    "item_id": "noodles_egg",
-    "name": "Egg Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 12,
-    "stock_min": 14,
-    "stock_max": 50
-  },
-  "noodles_thick": {
-    "item_id": "noodles_thick",
-    "name": "Thick Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 11,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "noodles_ramen": {
-    "item_id": "noodles_ramen",
-    "name": "Ramen Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 11,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "noodles_udon": {
-    "item_id": "noodles_udon",
-    "name": "Udon Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 12,
-    "stock_min": 14,
-    "stock_max": 50
-  },
-  "noodles_chunky": {
-    "item_id": "noodles_chunky",
-    "name": "Chunky Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 12,
-    "stock_min": 14,
-    "stock_max": 50
-  },
-  "noodles_fine": {
-    "item_id": "noodles_fine",
-    "name": "Fine Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 10,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "noodles_hand_pulled": {
-    "item_id": "noodles_hand_pulled",
-    "name": "Hand-Pulled Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "rare",
-    "spoilable": true,
-    "base_price": 14,
-    "stock_min": 10,
-    "stock_max": 25
-  },
-  "noodles_spiced": {
-    "item_id": "noodles_spiced",
-    "name": "Spiced Noodles",
-    "category": "noodles",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 12,
-    "stock_min": 14,
-    "stock_max": 25
-  },
-
-  "topping_chili_flakes": {
-    "item_id": "topping_chili_flakes",
-    "name": "Chili Flakes",
-    "category": "topping",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": false,
-    "base_price": 6,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "topping_extra_broth": {
-    "item_id": "topping_extra_broth",
-    "name": "Extra Broth",
-    "category": "topping",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": true,
-    "base_price": 7,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "topping_roasted_pork": {
-    "item_id": "topping_roasted_pork",
-    "name": "Roasted Pork",
-    "category": "topping",
-    "acquisition": "market",
-    "tier": "uncommon",
-    "spoilable": true,
-    "base_price": 12,
-    "stock_min": 25,
-    "stock_max": 50
-  },
-
-  "spice_sesame_oil": {
-    "item_id": "spice_sesame_oil",
-    "name": "Sesame Oil",
-    "category": "spice",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": false,
-    "base_price": 8,
-    "stock_min": 50,
-    "stock_max": 100
-  },
-  "spice_chili_oil": {
-    "item_id": "spice_chili_oil",
-    "name": "Chili Oil",
-    "category": "spice",
-    "acquisition": "market",
-    "tier": "common",
-    "spoilable": false,
-    "base_price": 8,
-    "stock_min": 50,
-    "stock_max": 100
-  }
-},
   "recipes": {
-  "classic_soy_ramen": {
-    "recipe_id": "classic_soy_ramen",
-    "name": "Classic Soy Ramen",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_soy", "qty": 1 },
-      { "item_id": "noodles_wheat", "qty": 1 },
-      { "item_id": "scallions", "qty": 1 }
-    ]
+    "classic_soy_ramen": {
+      "recipe_id": "classic_soy_ramen",
+      "name": "Classic Soy Ramen",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_soy",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_wheat",
+          "qty": 1
+        },
+        {
+          "item_id": "scallions",
+          "qty": 1
+        }
+      ]
+    },
+    "simple_broth": {
+      "recipe_id": "simple_broth",
+      "name": "Simple Broth",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_soy",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_wheat",
+          "qty": 1
+        }
+      ]
+    },
+    "ginger_soft_noodles": {
+      "recipe_id": "ginger_soft_noodles",
+      "name": "Ginger Broth with Soft Noodles",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_ginger",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_soft",
+          "qty": 1
+        },
+        {
+          "item_id": "spice_sesame_oil",
+          "qty": 1
+        }
+      ]
+    },
+    "butter_noodles": {
+      "recipe_id": "butter_noodles",
+      "name": "Butter Noodles",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_butter",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_wheat",
+          "qty": 1
+        }
+      ]
+    },
+    "sweet_soy_broth": {
+      "recipe_id": "sweet_soy_broth",
+      "name": "Sweet Soy Broth",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_sweet_soy",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_thin",
+          "qty": 1
+        }
+      ]
+    },
+    "home_style_chicken_noodle": {
+      "recipe_id": "home_style_chicken_noodle",
+      "name": "Home-Style Chicken Noodle",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_chicken",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_egg",
+          "qty": 1
+        },
+        {
+          "item_id": "carrots",
+          "qty": 1
+        }
+      ]
+    },
+    "slow_simmered_broth": {
+      "recipe_id": "slow_simmered_broth",
+      "name": "Slow-Simmered Broth",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_rich_stock",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_thick",
+          "qty": 1
+        }
+      ]
+    },
+    "hot_pepper_ramen": {
+      "recipe_id": "hot_pepper_ramen",
+      "name": "Hot Pepper Ramen",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_chili",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_ramen",
+          "qty": 1
+        },
+        {
+          "item_id": "topping_chili_flakes",
+          "qty": 1
+        }
+      ]
+    },
+    "extra_broth_udon": {
+      "recipe_id": "extra_broth_udon",
+      "name": "Extra Broth Udon",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_light",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_udon",
+          "qty": 1
+        },
+        {
+          "item_id": "topping_extra_broth",
+          "qty": 1
+        }
+      ]
+    },
+    "beef_broth_ramen": {
+      "recipe_id": "beef_broth_ramen",
+      "name": "Beef Broth Ramen",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_beef",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_ramen",
+          "qty": 1
+        },
+        {
+          "item_id": "scallions",
+          "qty": 1
+        }
+      ]
+    },
+    "hearty_noodle_stew": {
+      "recipe_id": "hearty_noodle_stew",
+      "name": "Hearty Noodle Stew",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_mixed",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_chunky",
+          "qty": 1
+        },
+        {
+          "item_id": "carrots",
+          "qty": 1
+        }
+      ]
+    },
+    "herb_hill_udon": {
+      "recipe_id": "herb_hill_udon",
+      "name": "Herb Hill Udon",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_herbal",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_udon",
+          "qty": 1
+        },
+        {
+          "item_id": "wild_greens",
+          "qty": 1
+        }
+      ]
+    },
+    "mushroom_miso": {
+      "recipe_id": "mushroom_miso",
+      "name": "Mushroom Miso",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_miso",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_wheat",
+          "qty": 1
+        },
+        {
+          "item_id": "forest_mushrooms",
+          "qty": 1
+        }
+      ]
+    },
+    "spicy_black_garlic_ramen": {
+      "recipe_id": "spicy_black_garlic_ramen",
+      "name": "Spicy Black Garlic Ramen",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_black_garlic",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_ramen",
+          "qty": 1
+        },
+        {
+          "item_id": "spice_chili_oil",
+          "qty": 1
+        },
+        {
+          "item_id": "black_garlic",
+          "qty": 1
+        }
+      ]
+    },
+    "charred_pork_noodles": {
+      "recipe_id": "charred_pork_noodles",
+      "name": "Charred Pork Noodles",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_soy",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_wheat",
+          "qty": 1
+        },
+        {
+          "item_id": "topping_roasted_pork",
+          "qty": 1
+        }
+      ]
+    },
+    "clear_shio_bowl": {
+      "recipe_id": "clear_shio_bowl",
+      "name": "Clear Shio Bowl",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_shio",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_thin",
+          "qty": 1
+        },
+        {
+          "item_id": "citrus_peels",
+          "qty": 1
+        }
+      ]
+    },
+    "citrus_broth_thin_noodles": {
+      "recipe_id": "citrus_broth_thin_noodles",
+      "name": "Citrus Broth with Thin Noodles",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_citrus_infused",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_thin",
+          "qty": 1
+        },
+        {
+          "item_id": "citrus_peels",
+          "qty": 1
+        }
+      ]
+    },
+    "citrus_shio_bowl": {
+      "recipe_id": "citrus_shio_bowl",
+      "name": "Citrus Shio Bowl",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_shio",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_fine",
+          "qty": 1
+        },
+        {
+          "item_id": "citrus_slices",
+          "qty": 1
+        }
+      ]
+    },
+    "moonlit_miso": {
+      "recipe_id": "moonlit_miso",
+      "name": "Moonlit Miso",
+      "tier": "epic",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_glowing_miso",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_hand_pulled",
+          "qty": 1
+        },
+        {
+          "item_id": "night_herbs",
+          "qty": 1
+        }
+      ]
+    },
+    "ember_spice_ramen": {
+      "recipe_id": "ember_spice_ramen",
+      "name": "Ember Spice Ramen",
+      "tier": "epic",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_fire",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_spiced",
+          "qty": 1
+        },
+        {
+          "item_id": "ember_peppers",
+          "qty": 1
+        }
+      ]
+    },
+    "mist_garden_udon": {
+      "recipe_id": "mist_garden_udon",
+      "name": "Mist Garden Udon",
+      "tier": "epic",
+      "season": null,
+      "ingredients": [
+        {
+          "item_id": "broth_floral",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_udon",
+          "qty": 1
+        },
+        {
+          "item_id": "dew_greens",
+          "qty": 1
+        }
+      ]
+    },
+    "cherry_blossom_udon": {
+      "recipe_id": "cherry_blossom_udon",
+      "name": "Cherry Blossom Udon",
+      "tier": "seasonal",
+      "season": "spring",
+      "ingredients": [
+        {
+          "item_id": "broth_sakura",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_udon",
+          "qty": 1
+        },
+        {
+          "item_id": "petal_garnish",
+          "qty": 1
+        }
+      ]
+    },
+    "summer_night_market_ramen": {
+      "recipe_id": "summer_night_market_ramen",
+      "name": "Summer Night Market Ramen",
+      "tier": "seasonal",
+      "season": "summer",
+      "ingredients": [
+        {
+          "item_id": "broth_chilled_citrus",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_ramen",
+          "qty": 1
+        },
+        {
+          "item_id": "night_spices",
+          "qty": 1
+        }
+      ]
+    },
+    "autumn_harvest_ramen": {
+      "recipe_id": "autumn_harvest_ramen",
+      "name": "Autumn Harvest Ramen",
+      "tier": "seasonal",
+      "season": "autumn",
+      "ingredients": [
+        {
+          "item_id": "broth_pumpkin",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_thick",
+          "qty": 1
+        },
+        {
+          "item_id": "roasted_roots",
+          "qty": 1
+        }
+      ]
+    },
+    "winter_hearth_noodles": {
+      "recipe_id": "winter_hearth_noodles",
+      "name": "Winter Hearth Noodles",
+      "tier": "seasonal",
+      "season": "winter",
+      "ingredients": [
+        {
+          "item_id": "broth_creamy_hearth",
+          "qty": 1
+        },
+        {
+          "item_id": "noodles_wheat",
+          "qty": 1
+        },
+        {
+          "item_id": "star_anise",
+          "qty": 1
+        }
+      ]
+    }
   },
-  "ginger_soft_noodles": {
-    "recipe_id": "ginger_soft_noodles",
-    "name": "Ginger Broth with Soft Noodles",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_ginger", "qty": 1 },
-      { "item_id": "noodles_soft", "qty": 1 },
-      { "item_id": "spice_sesame_oil", "qty": 1 }
-    ]
-  },
-  "butter_noodles": {
-    "recipe_id": "butter_noodles",
-    "name": "Butter Noodles",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_butter", "qty": 1 },
-      { "item_id": "noodles_wheat", "qty": 1 }
-    ]
-  },
-  "sweet_soy_broth": {
-    "recipe_id": "sweet_soy_broth",
-    "name": "Sweet Soy Broth",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_sweet_soy", "qty": 1 },
-      { "item_id": "noodles_thin", "qty": 1 }
-    ]
-  },
-  "home_style_chicken_noodle": {
-    "recipe_id": "home_style_chicken_noodle",
-    "name": "Home-Style Chicken Noodle",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_chicken", "qty": 1 },
-      { "item_id": "noodles_egg", "qty": 1 },
-      { "item_id": "carrots", "qty": 1 }
-    ]
-  },
-  "slow_simmered_broth": {
-    "recipe_id": "slow_simmered_broth",
-    "name": "Slow-Simmered Broth",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_rich_stock", "qty": 1 },
-      { "item_id": "noodles_thick", "qty": 1 }
-    ]
-  },
-  "hot_pepper_ramen": {
-    "recipe_id": "hot_pepper_ramen",
-    "name": "Hot Pepper Ramen",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_chili", "qty": 1 },
-      { "item_id": "noodles_ramen", "qty": 1 },
-      { "item_id": "topping_chili_flakes", "qty": 1 }
-    ]
-  },
-  "extra_broth_udon": {
-    "recipe_id": "extra_broth_udon",
-    "name": "Extra Broth Udon",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_light", "qty": 1 },
-      { "item_id": "noodles_udon", "qty": 1 },
-      { "item_id": "topping_extra_broth", "qty": 1 }
-    ]
-  },
-  "beef_broth_ramen": {
-    "recipe_id": "beef_broth_ramen",
-    "name": "Beef Broth Ramen",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_beef", "qty": 1 },
-      { "item_id": "noodles_ramen", "qty": 1 },
-      { "item_id": "scallions", "qty": 1 }
-    ]
-  },
-  "hearty_noodle_stew": {
-    "recipe_id": "hearty_noodle_stew",
-    "name": "Hearty Noodle Stew",
-    "tier": "common",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_mixed", "qty": 1 },
-      { "item_id": "noodles_chunky", "qty": 1 },
-      { "item_id": "carrots", "qty": 1 }
-    ]
-  },
-  "herb_hill_udon": {
-    "recipe_id": "herb_hill_udon",
-    "name": "Herb Hill Udon",
-    "tier": "rare",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_herbal", "qty": 1 },
-      { "item_id": "noodles_udon", "qty": 1 },
-      { "item_id": "wild_greens", "qty": 1 }
-    ]
-  },
-  "mushroom_miso": {
-    "recipe_id": "mushroom_miso",
-    "name": "Mushroom Miso",
-    "tier": "rare",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_miso", "qty": 1 },
-      { "item_id": "noodles_wheat", "qty": 1 },
-      { "item_id": "forest_mushrooms", "qty": 1 }
-    ]
-  },
-  "spicy_black_garlic_ramen": {
-    "recipe_id": "spicy_black_garlic_ramen",
-    "name": "Spicy Black Garlic Ramen",
-    "tier": "rare",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_black_garlic", "qty": 1 },
-      { "item_id": "noodles_ramen", "qty": 1 },
-      { "item_id": "spice_chili_oil", "qty": 1 },
-      { "item_id": "black_garlic", "qty": 1 }
-    ]
-  },
-  "charred_pork_noodles": {
-    "recipe_id": "charred_pork_noodles",
-    "name": "Charred Pork Noodles",
-    "tier": "rare",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_soy", "qty": 1 },
-      { "item_id": "noodles_wheat", "qty": 1 },
-      { "item_id": "topping_roasted_pork", "qty": 1 }
-    ]
-  },
-  "clear_shio_bowl": {
-    "recipe_id": "clear_shio_bowl",
-    "name": "Clear Shio Bowl",
-    "tier": "rare",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_shio", "qty": 1 },
-      { "item_id": "noodles_thin", "qty": 1 },
-      { "item_id": "citrus_peels", "qty": 1 }
-    ]
-  },
-  "citrus_broth_thin_noodles": {
-    "recipe_id": "citrus_broth_thin_noodles",
-    "name": "Citrus Broth with Thin Noodles",
-    "tier": "rare",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_citrus_infused", "qty": 1 },
-      { "item_id": "noodles_thin", "qty": 1 },
-      { "item_id": "citrus_peels", "qty": 1 }
-    ]
-  },
-  "citrus_shio_bowl": {
-    "recipe_id": "citrus_shio_bowl",
-    "name": "Citrus Shio Bowl",
-    "tier": "rare",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_shio", "qty": 1 },
-      { "item_id": "noodles_fine", "qty": 1 },
-      { "item_id": "citrus_slices", "qty": 1 }
-    ]
-  },
-
-  "moonlit_miso": {
-    "recipe_id": "moonlit_miso",
-    "name": "Moonlit Miso",
-    "tier": "epic",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_glowing_miso", "qty": 1 },
-      { "item_id": "noodles_hand_pulled", "qty": 1 },
-      { "item_id": "night_herbs", "qty": 1 }
-    ]
-  },
-  "ember_spice_ramen": {
-    "recipe_id": "ember_spice_ramen",
-    "name": "Ember Spice Ramen",
-    "tier": "epic",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_fire", "qty": 1 },
-      { "item_id": "noodles_spiced", "qty": 1 },
-      { "item_id": "ember_peppers", "qty": 1 }
-    ]
-  },
-  "mist_garden_udon": {
-    "recipe_id": "mist_garden_udon",
-    "name": "Mist Garden Udon",
-    "tier": "epic",
-    "season": null,
-    "ingredients": [
-      { "item_id": "broth_floral", "qty": 1 },
-      { "item_id": "noodles_udon", "qty": 1 },
-      { "item_id": "dew_greens", "qty": 1 }
-    ]
-  },
-
-  "cherry_blossom_udon": {
-    "recipe_id": "cherry_blossom_udon",
-    "name": "Cherry Blossom Udon",
-    "tier": "seasonal",
-    "season": "spring",
-    "ingredients": [
-      { "item_id": "broth_sakura", "qty": 1 },
-      { "item_id": "noodles_udon", "qty": 1 },
-      { "item_id": "petal_garnish", "qty": 1 }
-    ]
-  },
-  "summer_night_market_ramen": {
-    "recipe_id": "summer_night_market_ramen",
-    "name": "Summer Night Market Ramen",
-    "tier": "seasonal",
-    "season": "summer",
-    "ingredients": [
-      { "item_id": "broth_chilled_citrus", "qty": 1 },
-      { "item_id": "noodles_ramen", "qty": 1 },
-      { "item_id": "night_spices", "qty": 1 }
-    ]
-  },
-  "autumn_harvest_ramen": {
-    "recipe_id": "autumn_harvest_ramen",
-    "name": "Autumn Harvest Ramen",
-    "tier": "seasonal",
-    "season": "autumn",
-    "ingredients": [
-      { "item_id": "broth_pumpkin", "qty": 1 },
-      { "item_id": "noodles_thick", "qty": 1 },
-      { "item_id": "roasted_roots", "qty": 1 }
-    ]
-  },
-  "winter_hearth_noodles": {
-    "recipe_id": "winter_hearth_noodles",
-    "name": "Winter Hearth Noodles",
-    "tier": "seasonal",
-    "season": "winter",
-    "ingredients": [
-      { "item_id": "broth_creamy_hearth", "qty": 1 },
-      { "item_id": "noodles_wheat", "qty": 1 },
-      { "item_id": "star_anise", "qty": 1 }
-    ]
-  }
-},
   "npcs": {
-  "sleepy_traveler": {
-    "npc_id": "sleepy_traveler",
-    "name": "Sleepy Traveler",
-    "rarity": "common",
-    "flavor": "Yawns into their scarf, grateful for warmth and quiet.",
-    "bonuses": {
-      "first_serve_of_day_rep_flat": 5
-    }
-  },
-  "forest_spirit": {
-    "npc_id": "forest_spirit",
-    "name": "Forest Spirit",
-    "rarity": "rare",
-    "flavor": "A soft glow drifts between the trees, drawn to fragrant steam.",
-    "bonuses": {
-      "rare_topping_sxp_mult": 1.10
-    }
-  },
-  "festival_goer": {
-    "npc_id": "festival_goer",
-    "name": "Festival-Goer",
-    "rarity": "common",
-    "flavor": "Laughing, glitter-dusted, always chasing the next lantern-lit treat.",
-    "bonuses": {
-      "coins_mult_during_events": 1.25
-    }
-  },
-  "night_market_regular": {
-    "npc_id": "night_market_regular",
-    "name": "Night Market Regular",
-    "rarity": "uncommon",
-    "flavor": "Knows every stall, every scent — and always orders in a hurry.",
-    "bonuses": {
-      "speed_bonus_mult": 2.0
-    }
-  },
-  "wandering_scholar": {
-    "npc_id": "wandering_scholar",
-    "name": "Wandering Scholar",
-    "rarity": "uncommon",
-    "flavor": "Takes notes between sips, trading stories for secrets.",
-    "bonuses": {
-      "recipe_clue_drop_chance": 0.10
-    }
-  },
-  "hearth_grandparent": {
-    "npc_id": "hearth_grandparent",
-    "name": "Hearth Grandparent",
-    "rarity": "uncommon",
-    "flavor": "Smiles like a warm lantern — their praise lingers in the air.",
-    "bonuses": {
-      "rep_aura_flat": 2,
-      "rep_aura_duration_minutes": 15
-    }
-  },
-  "rain_soaked_courier": {
-    "npc_id": "rain_soaked_courier",
-    "name": "Rain-Soaked Courier",
-    "rarity": "rare",
-    "flavor": "Dripping cloak, urgent eyes — every order is a timed delivery.",
-    "bonuses": {
-      "always_limited_time": true,
-      "coins_mult": 1.25
-    }
-  },
-  "market_inspector": {
-    "npc_id": "market_inspector",
-    "name": "Market Inspector",
-    "rarity": "rare",
-    "flavor": "A sharp glance, a careful sip — excellence is rewarded (and noted).",
-    "bonuses": {
-      "tier_min_for_bonus": "rare",
-      "rep_flat": 10
-    }
-  },
-  "child_big_scarf": {
-    "npc_id": "child_big_scarf",
-    "name": "Child with Big Scarf",
-    "rarity": "uncommon",
-    "flavor": "Peeks over the counter, eyes sparkling — treasure hunts begin with noodles.",
-    "bonuses": {
-      "cosmetic_token_daily_chance": 0.05
-    }
-  },
-  "traveling_bard": {
-    "npc_id": "traveling_bard",
-    "name": "Traveling Bard",
-    "rarity": "rare",
-    "flavor": "A tune for a topping, a rhyme for a refill — music makes the coins jingle.",
-    "bonuses": {
-      "coins_mult": 1.10,
-      "may_appear_in_pairs_during_festivals": true
-    }
-  },
-  "retired_captain": {
-    "npc_id": "retired_captain",
-    "name": "Retired Captain",
-    "rarity": "uncommon",
-    "flavor": "Likes consistency. Respect is earned with steady hands and familiar bowls.",
-    "bonuses": {
-      "repeat_recipe_sxp_flat": 10
-    }
-  },
-  "curious_apprentice": {
-    "npc_id": "curious_apprentice",
-    "name": "Curious Apprentice",
-    "rarity": "common",
-    "flavor": "Asks questions between bites — curiosity makes discovery bloom.",
-    "bonuses": {
-      "next_roll_discovery_chance_bonus": 0.05
-    }
-  },
-  "moonlit_spirit": {
-    "npc_id": "moonlit_spirit",
-    "name": "Moonlit Spirit",
-    "rarity": "epic",
-    "flavor": "A pale shimmer at midnight — epic bowls earn whispers, scrolls, and wonder.",
-    "bonuses": {
-      "epic_rep_flat": 15,
-      "scroll_drop_chance_small": 0.05
-    }
-  },
-  "seasonal_herald": {
-    "npc_id": "seasonal_herald",
-    "name": "Seasonal Herald",
-    "rarity": "seasonal",
-    "flavor": "Arrives with the season’s first breeze — and leaves a shimmering blessing behind.",
-    "bonuses": {
-      "unlocks_cosmetic_aura_today": true
+    "sleepy_traveler": {
+      "npc_id": "sleepy_traveler",
+      "name": "Sleepy Traveler",
+      "rarity": "common",
+      "flavor": "Yawns into their scarf, grateful for warmth and quiet.",
+      "bonuses": {
+        "first_serve_of_day_rep_flat": 5
+      }
+    },
+    "forest_spirit": {
+      "npc_id": "forest_spirit",
+      "name": "Forest Spirit",
+      "rarity": "rare",
+      "flavor": "A soft glow drifts between the trees, drawn to fragrant steam.",
+      "bonuses": {
+        "rare_topping_sxp_mult": 1.1
+      }
+    },
+    "festival_goer": {
+      "npc_id": "festival_goer",
+      "name": "Festival-Goer",
+      "rarity": "common",
+      "flavor": "Laughing, glitter-dusted, always chasing the next lantern-lit treat.",
+      "bonuses": {
+        "coins_mult_during_events": 1.25
+      }
+    },
+    "night_market_regular": {
+      "npc_id": "night_market_regular",
+      "name": "Night Market Regular",
+      "rarity": "uncommon",
+      "flavor": "Knows every stall, every scent \u2014 and always orders in a hurry.",
+      "bonuses": {
+        "speed_bonus_mult": 2.0
+      }
+    },
+    "wandering_scholar": {
+      "npc_id": "wandering_scholar",
+      "name": "Wandering Scholar",
+      "rarity": "uncommon",
+      "flavor": "Takes notes between sips, trading stories for secrets.",
+      "bonuses": {
+        "recipe_clue_drop_chance": 0.1
+      }
+    },
+    "hearth_grandparent": {
+      "npc_id": "hearth_grandparent",
+      "name": "Hearth Grandparent",
+      "rarity": "uncommon",
+      "flavor": "Smiles like a warm lantern \u2014 their praise lingers in the air.",
+      "bonuses": {
+        "rep_aura_flat": 2,
+        "rep_aura_duration_minutes": 15
+      }
+    },
+    "rain_soaked_courier": {
+      "npc_id": "rain_soaked_courier",
+      "name": "Rain-Soaked Courier",
+      "rarity": "rare",
+      "flavor": "Dripping cloak, urgent eyes \u2014 every order is a timed delivery.",
+      "bonuses": {
+        "always_limited_time": true,
+        "coins_mult": 1.25
+      }
+    },
+    "market_inspector": {
+      "npc_id": "market_inspector",
+      "name": "Market Inspector",
+      "rarity": "rare",
+      "flavor": "A sharp glance, a careful sip \u2014 excellence is rewarded (and noted).",
+      "bonuses": {
+        "tier_min_for_bonus": "rare",
+        "rep_flat": 10
+      }
+    },
+    "child_big_scarf": {
+      "npc_id": "child_big_scarf",
+      "name": "Child with Big Scarf",
+      "rarity": "uncommon",
+      "flavor": "Peeks over the counter, eyes sparkling \u2014 treasure hunts begin with noodles.",
+      "bonuses": {
+        "cosmetic_token_daily_chance": 0.05
+      }
+    },
+    "traveling_bard": {
+      "npc_id": "traveling_bard",
+      "name": "Traveling Bard",
+      "rarity": "rare",
+      "flavor": "A tune for a topping, a rhyme for a refill \u2014 music makes the coins jingle.",
+      "bonuses": {
+        "coins_mult": 1.1,
+        "may_appear_in_pairs_during_festivals": true
+      }
+    },
+    "retired_captain": {
+      "npc_id": "retired_captain",
+      "name": "Retired Captain",
+      "rarity": "uncommon",
+      "flavor": "Likes consistency. Respect is earned with steady hands and familiar bowls.",
+      "bonuses": {
+        "repeat_recipe_sxp_flat": 10
+      }
+    },
+    "curious_apprentice": {
+      "npc_id": "curious_apprentice",
+      "name": "Curious Apprentice",
+      "rarity": "common",
+      "flavor": "Asks questions between bites \u2014 curiosity makes discovery bloom.",
+      "bonuses": {
+        "next_roll_discovery_chance_bonus": 0.05
+      }
+    },
+    "moonlit_spirit": {
+      "npc_id": "moonlit_spirit",
+      "name": "Moonlit Spirit",
+      "rarity": "epic",
+      "flavor": "A pale shimmer at midnight \u2014 epic bowls earn whispers, scrolls, and wonder.",
+      "bonuses": {
+        "epic_rep_flat": 15,
+        "scroll_drop_chance_small": 0.05
+      }
+    },
+    "seasonal_herald": {
+      "npc_id": "seasonal_herald",
+      "name": "Seasonal Herald",
+      "rarity": "seasonal",
+      "flavor": "Arrives with the season\u2019s first breeze \u2014 and leaves a shimmering blessing behind.",
+      "bonuses": {
+        "unlocks_cosmetic_aura_today": true
+      }
     }
   }
-}
 }
