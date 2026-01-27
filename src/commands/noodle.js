@@ -623,8 +623,19 @@ if (sub === "help") {
 if (sub === "profile") {
   const u = opt.getUser("user") ?? interaction.user;
   const p = ensurePlayer(serverId, u.id);
+  
+  // Check if player is in middle of tutorial (active and not completed)
+  const isInTutorial = p.tutorial?.active && (Array.isArray(p.tutorial?.queue) && p.tutorial.queue.length > 0);
+  
+  // Only show embed if not in middle of tutorial
+  if (isInTutorial) {
+    return commit({
+      content: `🍜 **${p.profile.shop_name}** - *${p.profile.tagline}*`,
+      components: [noodleMainMenuRow(userId)]
+    });
+  }
+  
   const embed = renderProfileEmbed(p, u.displayName);
-
   return commit({
     embeds: [embed],
     components: [noodleMainMenuRow(userId)]
@@ -969,7 +980,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (acceptedLines.length) {
       parts.push(
-        "✅ **Your Accepted Orders** *(serve/cancel with buttons below or slash commands)*",
+        "✅ **Your Accepted Orders**",
         acceptedLines.join("\n"),
         ""
       );
