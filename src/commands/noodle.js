@@ -70,19 +70,27 @@ return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🌿 Season").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleSecondaryMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🍂 Season").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:help:${userId}`).setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleOrdersActionRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
+);
+}
+
+function noodleOrdersMenuActionRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
@@ -192,6 +200,25 @@ return embed;
 function resetTutorialState(player) {
 player.tutorial = null;
 ensureTutorial(player);
+}
+
+function completeUserReset(player) {
+// Reset tutorial
+player.tutorial = null;
+ensureTutorial(player);
+
+// Clear inventory
+player.inv_ingredients = {};
+player.inv_bowls = {};
+
+// Reset progress
+player.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
+player.daily = { last_claimed_at: null, streak_days: 0, streak_last_day: null };
+player.quests = { active: {}, completed: [], claimed: [] };
+player.buffs = { rep_aura_expires_at: null, apprentice_bonus_pending: false, last_recipe_served: null, fail_streak: 0 };
+player.cooldowns = {};
+player.clues_owned = {};
+player.scrolls_owned = {};
 }
 
 function tutorialSuffix(player) {
@@ -547,7 +574,7 @@ if (group === "dev" && sub === "reset_tutorial") {
 
   return withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, target.id);
-    resetTutorialState(p);
+    completeUserReset(p);
     upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
 
     const step = getCurrentTutorialStep(p);
@@ -555,7 +582,7 @@ if (group === "dev" && sub === "reset_tutorial") {
     const mention = `<@${target.id}>`;
 
     return commit({
-      content: `🔧 Reset tutorial for ${mention}.${tut ? `\n\n${tut}` : ""}`,
+      content: `🔧 Complete reset for ${mention}.${tut ? `\n\n${tut}` : ""}`,
       ephemeral: true
     });
   });
@@ -957,11 +984,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     return commitState({
       content: parts.join("\n"),
-      components: [noodleOrdersActionRow(userId)]
-    });
-  }
-
-  /* ---------------- ACCEPT ---------------- */
+      components: [noodleOrdersMenuActionRow(userId)]------------ */
   if (sub === "accept") {
     const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
 
