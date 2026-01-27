@@ -272,15 +272,3 @@ export function applyTimeCatchup(player, serverState, settings, content, lastAct
     cooldownStatus
   };
 }
-
-/**
- * Get last active timestamp from database row
- * Helper to extract last_active_at from player record
- */
-export function getLastActiveAt(db, serverId, userId) {
-  const row = db.prepare(
-    "SELECT last_active_at FROM players WHERE server_id=? AND user_id=?"
-  ).get(serverId, userId);
-  
-  return row?.last_active_at || null;
-}
