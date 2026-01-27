@@ -7,6 +7,7 @@
  */
 
 import { nowTs, dayKeyUTC } from "../util/time.js";
+import { MARKET_ITEM_IDS, sellPrice } from "./market.js";
 
 // Constants
 export const FALLBACK_RECIPE_ID = "simple_broth";
@@ -66,9 +67,21 @@ export function detectDeadlock(player, serverState, content) {
 
   if (canBuyAny) return false;
 
-  // Check if player has any sellable items
-  const hasItems = Object.values(inventory).some(qty => qty > 0);
-  if (hasItems) return false;
+  // Check if player has any sellable items (items that can be sold to the market)
+  // Only items in MARKET_ITEM_IDS with a valid sell price count as sellable
+  let hasSellableItems = false;
+  for (const [itemId, qty] of Object.entries(inventory)) {
+    if (qty > 0 && MARKET_ITEM_IDS.includes(itemId)) {
+      // Check if this item actually has a sell price in the current market
+      const price = sellPrice(serverState, itemId);
+      if (price > 0) {
+        hasSellableItems = true;
+        break;
+      }
+    }
+  }
+  
+  if (hasSellableItems) return false;
 
   // DEADLOCK CONFIRMED
   return true;

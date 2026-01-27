@@ -61,6 +61,42 @@ test("B1: detectDeadlock - returns false when player can cook", () => {
   assert.strictEqual(detectDeadlock(player, serverState, content), false);
 });
 
+test("B1: detectDeadlock - returns true when player only has non-sellable forage items", () => {
+  const player = { 
+    coins: 0, 
+    known_recipes: ["test_recipe"], 
+    inv_ingredients: { scallions: 5, carrots: 3 } // forage items not in MARKET_ITEM_IDS
+  };
+  const serverState = { market_prices: { broth_soy: 10, noodles_wheat: 8 } };
+  const content = { 
+    recipes: { 
+      test_recipe: { 
+        ingredients: [{ item_id: "broth_soy", qty: 1 }] // needs market item
+      } 
+    } 
+  };
+  
+  assert.strictEqual(detectDeadlock(player, serverState, content), true);
+});
+
+test("B1: detectDeadlock - returns false when player has sellable market items", () => {
+  const player = { 
+    coins: 0, 
+    known_recipes: ["test_recipe"], 
+    inv_ingredients: { broth_soy: 2, scallions: 5 } // broth_soy is sellable
+  };
+  const serverState = { market_prices: { broth_soy: 10, noodles_wheat: 8 } };
+  const content = { 
+    recipes: { 
+      test_recipe: { 
+        ingredients: [{ item_id: "noodles_wheat", qty: 1 }] // needs different item
+      } 
+    } 
+  };
+  
+  assert.strictEqual(detectDeadlock(player, serverState, content), false);
+});
+
 test("B2: applyFallbackRecipeAccess - grants temporary recipe on first call", () => {
   const player = { known_recipes: ["other_recipe"], resilience: {} };
   const content = { recipes: { [FALLBACK_RECIPE_ID]: { name: "Simple Broth" } } };
