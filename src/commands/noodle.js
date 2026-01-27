@@ -984,7 +984,11 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     return commitState({
       content: parts.join("\n"),
-      components: [noodleOrdersMenuActionRow(userId)]------------ */
+      components: [noodleOrdersMenuActionRow(userId)]
+    });
+  }
+
+  /* ---------------- ACCEPT -------- */
   if (sub === "accept") {
     const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
 
@@ -1162,7 +1166,10 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
-    return commitState({ content: `${msg}${suffix}`, components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)] });
+    const components = [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
+    const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName)] : [];
+
+    return commitState({ content: `${msg}${suffix}`, components, embeds });
   }
 
   return commitState({ content: "That subcommand exists but isn’t implemented yet.", ephemeral: true });
