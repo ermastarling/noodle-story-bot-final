@@ -1,8 +1,9 @@
 import { COIN_BASE, SXP_BASE, REP_BASE, sxpToNext } from "../constants.js";
 import { makeStreamRng, rngBetween } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
+import { getFailStreakBonuses, applyRepFloorBonus } from "./resilience.js";
 
-export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds }) {
+export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds, player }) {
   const dayKey = dayKeyUTC(servedAtMs);
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"serve", serverId, dayKey });
 
@@ -21,6 +22,12 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
 
   if (npcArchetype === "market_inspector") rep += 10;
   if (npcArchetype === "sleepy_traveler") rep += 5;
+
+  // B7: Apply reputation floor bonus if eligible
+  if (player) {
+    const repBonus = applyRepFloorBonus(player);
+    rep += repBonus;
+  }
 
   return { coins, sxp, rep, mSpeed };
 }
