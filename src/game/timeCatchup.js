@@ -7,11 +7,23 @@
  */
 
 import { nowTs, dayKeyUTC } from "../util/time.js";
-import { deterministicRandom } from "../util/rng.js";
+import { makeStreamRng } from "../util/rng.js";
 
 // Inactivity thresholds (in milliseconds)
 const INACTIVE_7D_MS = 7 * 24 * 60 * 60 * 1000;
 const INACTIVE_30D_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Simple deterministic random for spoilage
+ */
+function deterministicRandom(seed) {
+  const rng = makeStreamRng({
+    mode: "seeded",
+    seed,
+    streamName: "spoilage"
+  });
+  return rng();
+}
 
 /**
  * C1: Spoilage While Offline
