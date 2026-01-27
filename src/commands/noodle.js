@@ -286,9 +286,9 @@ if (exp && nowMs > exp) expiredIds.push(fullId);
 
 if (!expiredIds.length) return { expiredIds: [], warning: "" };
 
-// Track fail streak for expired orders (B4)
-if (expiredIds.length > 0) {
-  updateFailStreak(p, false); // failure
+// Track fail streak for each expired order (B4)
+for (let i = 0; i < expiredIds.length; i++) {
+  updateFailStreak(p, false); // failure per order
 }
 
 // Capture snapshots BEFORE delete
