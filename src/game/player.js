@@ -57,7 +57,14 @@ export function newPlayerProfile(userId) {
       coins_earned: 0,
       recipes_cooked: 0,
       npcs_served_unique: 0,
-      npc_seen: {}
+      npc_seen: {},
+      coins_tipped_out: 0,
+      coins_tipped_in: 0
+    },
+
+    social: {
+      active_blessing: null,
+      last_blessing_at: null
     }
   };
 }
