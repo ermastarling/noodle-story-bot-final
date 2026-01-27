@@ -71,3 +71,8 @@ export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null,
   });
   return tx();
 }
+
+export function getLastActiveAt(db, serverId, userId) {
+  const row = db.prepare("SELECT last_active_at FROM players WHERE server_id=? AND user_id=?").get(serverId, userId);
+  return row?.last_active_at || null;
+}

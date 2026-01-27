@@ -73,5 +73,151 @@
     "requires_permission": "manage_guild",
     "restart_required": false,
     "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_ENABLED",
+    "type": "bool",
+    "scope": "server",
+    "default": false,
+    "description": "Enable spoilage mechanics for ingredients.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_APPLY_ON_LOGIN",
+    "type": "bool",
+    "scope": "server",
+    "default": true,
+    "description": "Apply missed spoilage ticks when player returns.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_MAX_CATCHUP_TICKS",
+    "type": "int",
+    "scope": "server",
+    "default": 24,
+    "min": 0,
+    "max": 168,
+    "description": "Maximum number of spoilage ticks to apply on catch-up (caps one day by default).",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_TICK_HOURS",
+    "type": "int",
+    "scope": "server",
+    "default": 1,
+    "min": 1,
+    "max": 24,
+    "description": "Hours between spoilage ticks.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_BASE_CHANCE",
+    "type": "float",
+    "scope": "server",
+    "default": 0.05,
+    "min": 0,
+    "max": 1,
+    "description": "Base chance per tick for spoilable items to spoil.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "DAILY_STACKING_ENABLED",
+    "type": "bool",
+    "scope": "server",
+    "default": false,
+    "description": "Allow unclaimed daily rewards to stack.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "WEEKLY_STACKING_ENABLED",
+    "type": "bool",
+    "scope": "server",
+    "default": false,
+    "description": "Allow unclaimed weekly rewards to stack.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "BLESSING_DURATION_HOURS",
+    "type": "int",
+    "scope": "server",
+    "default": 6,
+    "min": 1,
+    "max": 24,
+    "description": "Duration of shop visit blessings in hours.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "BLESSING_COOLDOWN_HOURS",
+    "type": "int",
+    "scope": "server",
+    "default": 24,
+    "min": 1,
+    "max": 168,
+    "description": "Cooldown between receiving blessings in hours.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "MAX_PARTY_SIZE",
+    "type": "int",
+    "scope": "server",
+    "default": 4,
+    "min": 2,
+    "max": 10,
+    "description": "Maximum number of members in a party.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "MIN_TIP_AMOUNT",
+    "type": "int",
+    "scope": "server",
+    "default": 1,
+    "min": 1,
+    "max": 100,
+    "description": "Minimum tip amount in coins.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "MAX_TIP_AMOUNT",
+    "type": "int",
+    "scope": "server",
+    "default": 10000,
+    "min": 100,
+    "max": 100000,
+    "description": "Maximum tip amount in coins.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SOCIAL_FEATURES_ENABLED",
+    "type": "bool",
+    "scope": "server",
+    "default": true,
+    "description": "Enable social features (parties, tips, visits).",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
   }
 ]

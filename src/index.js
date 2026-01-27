@@ -25,6 +25,7 @@ import { fileURLToPath } from "url";
   const { newPlayerProfile } = await import("./game/player.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
   const { noodleCommand } = await import("./commands/noodle.js");
+  const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
 
   /* ------------------------------------------------------------------ */
   /*  Boot + diagnostics                                                 */
@@ -132,13 +133,14 @@ import { fileURLToPath } from "url";
     const cid = interaction.customId;
     const isCookSelect = cid?.includes("cook_select:");
     const isNoodle = cid?.startsWith("noodle:");
+    const isNoodleSocial = cid?.startsWith("noodle-social:");
     
     const alreadyAck = interaction.deferred || interaction.replied;
 
     // Defer buttons/selects with deferUpdate (updates original message)
     // BUT: Don't defer buttons that will show modals (qty, clear for multibuy)
     if (!alreadyAck && (isBtn || (isSelect && !isCookSelect))) {
-      if (isNoodle) {
+      if (isNoodle || isNoodleSocial) {
         // Check if this button/select will show a modal
         const willShowModal = cid?.includes("multibuy:qty:") || 
                             cid?.includes("pick:cook_select:");
@@ -156,7 +158,7 @@ import { fileURLToPath } from "url";
           }
         }
       }
-    } else if (!alreadyAck && isModal && isNoodle) {
+    } else if (!alreadyAck && isModal && (isNoodle || isNoodleSocial)) {
       const deferStart = Date.now();
       try {
         await interaction.deferReply();
@@ -265,6 +267,10 @@ import { fileURLToPath } from "url";
         if (id.startsWith("noodle:")) {
           // Already deferred at the top of interactionCreate handler
           return await noodleCommand.handleComponent(interaction);
+        }
+        if (id.startsWith("noodle-social:")) {
+          // Already deferred at the top of interactionCreate handler
+          return await noodleSocialCommand.handleComponent(interaction);
         }
       } catch (e) {
         console.error("NOODLE COMPONENT ERROR:", e?.stack ?? e);
