@@ -928,7 +928,11 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const r = content.recipes[recipeId];
     if (!r) return commitState({ content: "That recipe doesn’t exist.", ephemeral: true });
-    if (!p.known_recipes.includes(recipeId)) return commitState({ content: "You don’t know that recipe yet.", ephemeral: true });
+    // Use getAvailableRecipes to include temporary recipes (B2)
+    const availableRecipes = getAvailableRecipes(p);
+    if (!availableRecipes.includes(recipeId)) {
+      return commitState({ content: "You don't know that recipe yet.", ephemeral: true });
+    }
     if (!qty || qty <= 0) return commitState({ content: "Pick a positive quantity.", ephemeral: true });
 
     for (const ing of r.ingredients) {

@@ -83,13 +83,23 @@ test("B2: applyFallbackRecipeAccess - doesn't grant if already known", () => {
 
 test("B3: applyEmergencyGrant - grants ingredients once per day", () => {
   const player = { inv_ingredients: {}, resilience: {} };
+  const content = { 
+    items: { 
+      broth_soy: { name: "Soy Broth" },
+      noodles_wheat: { name: "Wheat Noodles" }
+    } 
+  };
   
-  const result = applyEmergencyGrant(player);
+  const result = applyEmergencyGrant(player, content);
   
   assert.strictEqual(result.granted, true);
   assert.ok(result.message.includes("Emergency Supplies"));
-  assert.strictEqual(player.inv_ingredients.broth_soy, EMERGENCY_GRANT.broth_soy);
-  assert.strictEqual(player.inv_ingredients.noodles_wheat, EMERGENCY_GRANT.noodles_wheat);
+  
+  // Verify using EMERGENCY_GRANT constants
+  for (const [itemId, qty] of Object.entries(EMERGENCY_GRANT)) {
+    assert.strictEqual(player.inv_ingredients[itemId], qty);
+  }
+  
   assert.ok(player.resilience.last_rescue_at > 0);
 });
 

@@ -106,7 +106,7 @@ export function applyFallbackRecipeAccess(player, content) {
  * B3: Emergency Ingredient Grant
  * If deadlocked (once per day): +1 soy_broth, +1 wheat_noodles
  */
-export function applyEmergencyGrant(player) {
+export function applyEmergencyGrant(player, content) {
   const now = nowTs();
   const today = dayKeyUTC(now);
   
@@ -121,11 +121,20 @@ export function applyEmergencyGrant(player) {
     return { granted: false, message: "" };
   }
 
-  // Grant emergency ingredients
+  // Grant emergency ingredients (validate items exist in content)
   if (!player.inv_ingredients) player.inv_ingredients = {};
   
+  let grantedAny = false;
   for (const [itemId, qty] of Object.entries(EMERGENCY_GRANT)) {
-    player.inv_ingredients[itemId] = (player.inv_ingredients[itemId] || 0) + qty;
+    // Only grant if item exists in content bundle
+    if (content && content.items && content.items[itemId]) {
+      player.inv_ingredients[itemId] = (player.inv_ingredients[itemId] || 0) + qty;
+      grantedAny = true;
+    }
+  }
+
+  if (!grantedAny) {
+    return { granted: false, message: "" };
   }
 
   player.resilience.last_rescue_at = now;
@@ -144,11 +153,9 @@ export function updateFailStreak(player, success) {
   if (!player.buffs) player.buffs = {};
   
   if (success) {
-    // Reset fail streak on success
-    player.buffs.fail_streak = 0;
-    // Clear mitigation buff if it exists
-    if (player.buffs.fail_streak_relief) {
-      player.buffs.fail_streak_relief = 0;
+    // Only reset fail streak on success if no relief is active
+    if (!player.buffs.fail_streak_relief || player.buffs.fail_streak_relief <= 0) {
+      player.buffs.fail_streak = 0;
     }
   } else {
     // Increment fail streak
@@ -369,7 +376,7 @@ export function applyResilienceMechanics(player, serverState, content) {
     // B3: Emergency grant (once per day)
     const cooldown = checkRecoveryCooldown(player);
     if (cooldown.available) {
-      const grant = applyEmergencyGrant(player);
+      const grant = applyEmergencyGrant(player, content);
       if (grant.granted) {
         messages.push(grant.message);
         applied = true;
