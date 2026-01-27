@@ -4,7 +4,7 @@
     {
       "id": "intro_order",
       "title": "Your First Customer",
-      "text": "Check today’s order board with `/noodle orders` and accept an order.",
+      "text": "Check today’s order board and accept an order.",
       "complete_on": "accept"
     },
     {
