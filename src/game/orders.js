@@ -76,7 +76,11 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
   const dayKey = dayKeyUTC();
   if (playerState.orders_day === dayKey && Array.isArray(playerState.order_board)) return playerState;
 
-  const playerRecipePool = new Set(playerState.known_recipes || []);
+  // Include temporary recipes in pool (B5: Order Board Guarantee)
+  const permanentRecipes = playerState.known_recipes || [];
+  const tempRecipes = playerState.resilience?.temp_recipes || [];
+  const playerRecipePool = new Set([...permanentRecipes, ...tempRecipes]);
+  
   const seedString = `${serverId}-${userId}`;
   playerState.orders_day = dayKey;
   playerState.order_board = generateOrderBoard({ serverId: seedString, dayKey, settings, content, activeSeason, playerRecipePool });
