@@ -11,6 +11,7 @@ import {
   applyRepFloorBonus,
   getPityDiscount,
   applyMarketPityDiscount,
+  applyResilienceMechanics,
   getAvailableRecipes,
   clearTemporaryRecipes,
   FALLBACK_RECIPE_ID,
@@ -289,4 +290,31 @@ test("B6: applyMarketPityDiscount - does not apply when player can afford items"
   const result = applyMarketPityDiscount(player, serverState, content);
   
   assert.strictEqual(result.applied, false);
+});
+
+test("B7: applyResilienceMechanics - sets rep floor bonus when rep is at 0", () => {
+  const player = { 
+    coins: 10, 
+    rep: 0,
+    known_recipes: ["classic_soy_ramen"],
+    inv_ingredients: { broth_soy: 2 },
+    buffs: {},
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10 } 
+  };
+  const content = { 
+    recipes: { 
+      classic_soy_ramen: { 
+        ingredients: [{ item_id: "broth_soy", qty: 1 }] 
+      } 
+    },
+    items: {}
+  };
+  
+  applyResilienceMechanics(player, serverState, content);
+  
+  // Should set the rep floor bonus flag
+  assert.strictEqual(player.buffs.rep_floor_bonus, true);
 });

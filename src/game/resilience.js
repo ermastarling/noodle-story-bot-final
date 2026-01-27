@@ -421,6 +421,9 @@ export function applyResilienceMechanics(player, serverState, content) {
     }
   }
 
+  // Check reputation floor bonus (B7)
+  checkRepFloorBonus(player);
+
   return {
     applied,
     messages,
