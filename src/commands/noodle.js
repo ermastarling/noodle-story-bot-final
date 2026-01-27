@@ -14,7 +14,7 @@ formatTutorialCompletionMessage
 } from "../game/tutorial.js";
 import { loadContentBundle, loadSettingsCatalog } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
-import { openDb, getPlayer, upsertPlayer, getServer, upsertServer } from "../db/index.js";
+import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile } from "../game/player.js";
@@ -32,6 +32,7 @@ import {
   consumeFailStreakRelief,
   checkRepFloorBonus
 } from "../game/resilience.js";
+import { applyTimeCatchup } from "../game/timeCatchup.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -677,10 +678,19 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let s = ensureServer(serverId);
 
   const now = nowTs();
-  const sweep = sweepExpiredAcceptedOrders(p, s, content, now);
-
+  
+  // C: Apply time catch-up BEFORE any state changes
+  // Get last_active_at from database (before it's updated by upsertPlayer)
+  const lastActiveAt = getLastActiveAt(db, serverId, userId) || now;
+  
   const set = buildSettingsMap(settingsCatalog, s.settings);
   s.season = computeActiveSeason(set);
+  
+  // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
+  const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now);
+  
+  const sweep = sweepExpiredAcceptedOrders(p, s, content, now);
+
   rollMarket({ serverId, content, serverState: s });
   if (!s.market_prices) s.market_prices = {};
   if (!s.market_stock) s.market_stock = {};
@@ -707,8 +717,18 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     upsertServer(db, serverId, s, null);
 
-    // Prepend resilience messages if any
+    // Prepend time catch-up and resilience messages
     let finalContent = replyObj.content || "";
+    
+    // Time catch-up messages first (welcome back, spoilage)
+    if (timeCatchup.messages.length > 0) {
+      const catchupMsg = timeCatchup.messages.join("\n\n");
+      finalContent = finalContent 
+        ? `${catchupMsg}\n\n${finalContent}` 
+        : catchupMsg;
+    }
+    
+    // Then resilience messages
     if (resilience.messages.length > 0 && !finalContent.includes("🆘")) {
       const resilienceMsg = resilience.messages.join("\n\n");
       finalContent = finalContent 

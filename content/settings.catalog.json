@@ -73,5 +73,81 @@
     "requires_permission": "manage_guild",
     "restart_required": false,
     "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_ENABLED",
+    "type": "bool",
+    "scope": "server",
+    "default": false,
+    "description": "Enable spoilage mechanics for ingredients.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_APPLY_ON_LOGIN",
+    "type": "bool",
+    "scope": "server",
+    "default": true,
+    "description": "Apply missed spoilage ticks when player returns.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_MAX_CATCHUP_TICKS",
+    "type": "int",
+    "scope": "server",
+    "default": 24,
+    "min": 0,
+    "max": 168,
+    "description": "Maximum number of spoilage ticks to apply on catch-up (caps one day by default).",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_TICK_HOURS",
+    "type": "int",
+    "scope": "server",
+    "default": 1,
+    "min": 1,
+    "max": 24,
+    "description": "Hours between spoilage ticks.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "SPOILAGE_BASE_CHANCE",
+    "type": "float",
+    "scope": "server",
+    "default": 0.05,
+    "min": 0,
+    "max": 1,
+    "description": "Base chance per tick for spoilable items to spoil.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "DAILY_STACKING_ENABLED",
+    "type": "bool",
+    "scope": "server",
+    "default": false,
+    "description": "Allow unclaimed daily rewards to stack.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
+    "key": "WEEKLY_STACKING_ENABLED",
+    "type": "bool",
+    "scope": "server",
+    "default": false,
+    "description": "Allow unclaimed weekly rewards to stack.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
   }
 ]
