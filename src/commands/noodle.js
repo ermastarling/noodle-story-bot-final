@@ -21,7 +21,7 @@ import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
-import { ensureDailyOrders } from "../game/orders.js";
+import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { nowTs } from "../util/time.js";
 import discordPkg from "discord.js";
@@ -86,7 +86,8 @@ function noodleOrdersActionRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary)
 );
 }
 
@@ -676,12 +677,11 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (!s.market_prices) s.market_prices = {};
   if (!s.market_stock) s.market_stock = {};
 
-  const pool = new Set(p.known_recipes);
-  const prevOrdersDay = s.orders_day;
-  ensureDailyOrders(s, set, content, pool, serverId);
+  const prevOrdersDay = p.orders_day;
+  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
 
   // DM the user when a new day's orders are posted
-  const dayChanged = prevOrdersDay !== s.orders_day;
+  const dayChanged = prevOrdersDay !== p.orders_day;
   if (dayChanged) {
     const guildName = interaction.guild?.name ?? "this server";
     interaction.user?.send?.(
@@ -704,7 +704,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   /* ---------------- FORAGE ---------------- */
   if (sub === "forage") {
-    const cooldownMs = 5 * 60 * 1000;
+    const cooldownMs = 2 * 60 * 1000;
     const chk = canForage(p, now, cooldownMs);
 
     if (!chk.ok) {
@@ -957,6 +957,42 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const sweep2 = sweepExpiredAcceptedOrders(p, s, content, now2);
 
     const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+    
+    // Aggregate ingredients needed across all accepted orders
+    const allNeeded = {};
+    acceptedEntries.forEach(([fullId, a]) => {
+      const snap = a?.order ?? null;
+      const order =
+        snap ??
+        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
+        null;
+      
+      if (order && order.recipe_id) {
+        const recipe = content.recipes[order.recipe_id];
+        if (recipe?.ingredients) {
+          recipe.ingredients.forEach((ing) => {
+            allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + ing.qty;
+          });
+        }
+      }
+    });
+    
+    // Calculate shortages
+    const shortages = Object.entries(allNeeded)
+      .map(([itemId, needed]) => {
+        const have = p.inv_ingredients?.[itemId] ?? 0;
+        const short = Math.max(0, needed - have);
+        return { itemId, needed, have, short };
+      })
+      .filter((s) => s.short > 0);
+    
+    const combinedIngredientsMsg = shortages.length
+      ? shortages.map((s) => {
+          const iName = displayItemName(s.itemId, content);
+          return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
+        }).join("\n")
+      : "_All ingredients ready!_";
+
     const acceptedLines = acceptedEntries.map(([fullId, a]) => {
       const snap = a?.order ?? null;
 
@@ -969,7 +1005,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
       const order =
         snap ??
-        (s.order_board ?? []).find((o) => o.order_id === fullId) ??
+        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
         null;
 
       if (!order) return `✅ \`${shortOrderId(fullId)}\`${timeLeft}`;
@@ -978,7 +1014,12 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const lt = order.is_limited_time ? "⏳" : "•";
 
-      return `✅ \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`;
+      const hasBowl = p.inv_bowls?.[order.recipe_id];
+      const statusMsg = hasBowl
+        ? `\n   🍲 Have **${hasBowl.qty}** bowl(s) ready.`
+        : ``;
+
+      return `✅ \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}${statusMsg}`;
     });
 
     const parts = [];
@@ -986,15 +1027,18 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (acceptedLines.length) {
       parts.push(
-        "✅ **Your Accepted Orders**",
+        "**Your Accepted Orders**",
         acceptedLines.join("\n"),
+        "",
+        "🧺 **Ingredients Needed**",
+        combinedIngredientsMsg,
         ""
       );
     } else {
-      parts.push("✅ **Your Accepted Orders**", "_None right now._", "");
+      parts.push("**Your Accepted Orders**", "_None right now._", "");
     }
 
-    const remaining = (s.order_board ?? []).length;
+    const remaining = (p.order_board ?? []).length;
     if (remaining > 0) {
       parts.push(
         "📋 **Today’s Orders**",
@@ -1012,77 +1056,89 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: parts.join("\n"),
       embeds: [],
-      components: [noodleOrdersMenuActionRow(userId)]
+      components: [noodleOrdersMenuActionRow(userId),noodleMainMenuRow(userId)]
     });
   }
 
   /* ---------------- ACCEPT -------- */
   if (sub === "accept") {
-    const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
+    const rawInput = String(opt.getString("order_id") ?? "").trim();
+    const tokens = rawInput
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
 
-    const order = (s.order_board ?? []).find((o) => {
-      const full = String(o.order_id).toUpperCase();
-      const short = shortOrderId(o.order_id);
-      return full === input || short === input;
-    });
+    if (!tokens.length) return commitState({ content: "Pick at least one order to accept.", ephemeral: true });
 
-    if (!order) return commitState({ content: "That order isn’t on today’s board.", ephemeral: true });
-
-    const cap = 2;
+    const cap = 5;
     const acceptedCount = Object.keys(p.orders?.accepted ?? {}).length;
-    if (acceptedCount >= cap) {
+    const available = Math.max(0, cap - acceptedCount);
+    if (available <= 0) {
       return commitState({ content: `You can only hold ${cap} active orders right now.`, ephemeral: true });
     }
 
     if (!p.orders) p.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
     if (!p.orders.accepted) p.orders.accepted = {};
 
-    if (p.orders.accepted[order.order_id]) {
-      return commitState({ content: "You’ve already accepted that order.", ephemeral: true });
+    const board = p.order_board ?? [];
+    const results = [];
+    let acceptedNow = 0;
+
+    for (const tok of tokens) {
+      if (acceptedNow >= available) {
+        results.push("⚠️ Reached active order cap.");
+        break;
+      }
+
+      const order = board.find((o) => {
+        const full = String(o.order_id).toUpperCase();
+        const short = shortOrderId(o.order_id);
+        return full === tok || short === tok;
+      });
+
+      if (!order) {
+        results.push(`❔ Order \`${tok}\` not found on today's board.`);
+        continue;
+      }
+
+      if (p.orders.accepted[order.order_id]) {
+        results.push(`⏩ Already accepted \`${shortOrderId(order.order_id)}\`.`);
+        continue;
+      }
+
+      const acceptedAt = nowTs();
+      const expiresAt = order.is_limited_time
+        ? acceptedAt + ((order.speed_window_seconds ?? 180) * 1000)
+        : null;
+
+      p.orders.accepted[order.order_id] = {
+        accepted_at: acceptedAt,
+        expires_at: expiresAt,
+        order: {
+          order_id: order.order_id,
+          recipe_id: order.recipe_id,
+          tier: order.tier,
+          npc_archetype: order.npc_archetype,
+          is_limited_time: order.is_limited_time,
+          speed_window_seconds: order.speed_window_seconds
+        }
+      };
+
+      const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
+      const timeNote = expiresAt
+        ? `⏳ ~${Math.ceil((expiresAt - acceptedAt) / 60000)} min to serve.`
+        : `🌿 No rush.`;
+
+      results.push(`✅ Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})`);
+      acceptedNow += 1;
     }
 
-    const acceptedAt = nowTs();
-    const expiresAt = order.is_limited_time
-      ? acceptedAt + ((order.speed_window_seconds ?? 180) * 1000)
-      : null;
-
-    p.orders.accepted[order.order_id] = {
-      accepted_at: acceptedAt,
-      expires_at: expiresAt,
-      order: {
-        order_id: order.order_id,
-        recipe_id: order.recipe_id,
-        tier: order.tier,
-        npc_archetype: order.npc_archetype,
-        is_limited_time: order.is_limited_time,
-        speed_window_seconds: order.speed_window_seconds
-      }
-    };
-
-    advanceTutorial(p, "accept");
-
-    const shown = shortOrderId(order.order_id);
-    const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
-
-    const needs = formatRecipeNeeds({ recipeId: order.recipe_id, content, player: p });
-    
-    // Check if player already has a cooked bowl for this recipe
-    const hasBowl = p.inv_bowls?.[order.recipe_id];
-    const statusMsg = hasBowl
-      ? `🍲 You have **${hasBowl.qty}** cooked bowl${hasBowl.qty > 1 ? "s" : ""}! Ready to serve.`
-      : needs;
-
-    const timeNote = expiresAt
-      ? `
-⏳ Limited-time: **~${Math.ceil((expiresAt - acceptedAt) / 60000)} min** to serve.`
-      : `
-🌿 No rush, this order won't expire.`;
+    if (acceptedNow > 0) advanceTutorial(p, "accept");
 
     return commitState({
-      content:
-        `✅ Accepted order \`${shown}\` — **${rName}**.${timeNote}\n\n${statusMsg}\n${tutorialSuffix(p)}`,
+      content: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
       embeds: [],
-      components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)]
+      components: [noodleOrdersActionRow(userId), noodleSecondaryMenuRow(userId)]
     });
   }
 
@@ -1117,94 +1173,126 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   /* ---------------- SERVE ---------------- */
   if (sub === "serve") {
-    const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
+    const rawInput = String(opt.getString("order_id") ?? "").trim();
     const bowlKey = opt.getString("bowl_key") ?? null;
+    const tokens = rawInput
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
 
-    const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
-    const match = acceptedEntries.find(([fullId]) => {
-      const full = String(fullId).toUpperCase();
-      const short = shortOrderId(fullId);
-      return full === input || short === input;
-    });
+    if (!tokens.length) return commitState({ content: "Pick at least one accepted order to serve.", ephemeral: true });
 
-    if (!match) return commitState({ content: "You haven’t accepted that order.", ephemeral: true });
+    const acceptedMap = p.orders?.accepted ?? {};
+    const results = [];
+    let totalCoins = 0;
+    let totalRep = 0;
+    let totalSxp = 0;
+    let servedCount = 0;
+    let leveledUp = false;
 
-    const [fullOrderId, accepted] = match;
-
-    const now3 = nowTs();
-    if (accepted.expires_at && now3 > accepted.expires_at) {
-      delete p.orders.accepted[fullOrderId];
-      return commitState({
-        content: `⏳ That accepted order \`${shortOrderId(fullOrderId)}\` expired.`,
-        ephemeral: true
+    for (const tok of tokens) {
+      const matchEntry = Object.entries(acceptedMap).find(([fullId]) => {
+        const full = String(fullId).toUpperCase();
+        const short = shortOrderId(fullId);
+        return full === tok || short === tok;
       });
+
+      if (!matchEntry) {
+        results.push(`❔ Order \`${shortOrderId(tok)}\` isn't accepted.`);
+        continue;
+      }
+
+      const [fullOrderId, accepted] = matchEntry;
+      const now3 = nowTs();
+      if (accepted.expires_at && now3 > accepted.expires_at) {
+        delete acceptedMap[fullOrderId];
+        results.push(`⏳ Order \`${shortOrderId(fullOrderId)}\` expired.`);
+        continue;
+      }
+
+      const live = (p.order_board ?? []).find((o) => o.order_id === fullOrderId);
+      const order = live ?? accepted.order;
+      if (!order) {
+        delete acceptedMap[fullOrderId];
+        results.push(`⚠️ Order \`${shortOrderId(fullOrderId)}\` can't be found anymore.`);
+        continue;
+      }
+
+      const key = bowlKey ?? order.recipe_id;
+      const bowl = p.inv_bowls?.[key];
+      if (!bowl || bowl.qty <= 0) {
+        const recipeName = content.recipes?.[key]?.name ?? "that recipe";
+        results.push(`🧺 You don't have a bowl ready for **${recipeName}**.`);
+        continue;
+      }
+      if (bowl.recipe_id !== order.recipe_id) {
+        results.push(`⚠️ Bowl doesn't match recipe for order \`${shortOrderId(fullOrderId)}\`.`);
+        continue;
+      }
+
+      const servedAt = nowTs();
+      const rewards = computeServeRewards({
+        serverId,
+        tier: order.tier,
+        npcArchetype: order.npc_archetype,
+        isLimitedTime: order.is_limited_time,
+        servedAtMs: servedAt,
+        acceptedAtMs: accepted.accepted_at,
+        speedWindowSeconds: order.speed_window_seconds
+      });
+
+      bowl.qty -= 1;
+      if (bowl.qty <= 0) delete p.inv_bowls[key];
+
+      delete acceptedMap[fullOrderId];
+      if (Array.isArray(p.order_board)) {
+        p.order_board = p.order_board.filter((o) => o.order_id !== fullOrderId);
+      }
+
+      p.coins += rewards.coins;
+      p.rep += rewards.rep;
+      p.sxp_total += rewards.sxp;
+      p.sxp_progress += rewards.sxp;
+
+      const leveled = applySxpLevelUp(p);
+      leveledUp = leveledUp || leveled;
+
+      p.lifetime.orders_served += 1;
+      p.lifetime.bowls_served_total += 1;
+      p.lifetime.coins_earned += rewards.coins;
+      if (order.is_limited_time) p.lifetime.limited_time_served += 1;
+      if (order.is_limited_time && (servedAt - accepted.accepted_at) <= (order.speed_window_seconds * 1000)) {
+        p.lifetime.perfect_speed_serves += 1;
+      }
+      p.lifetime.npc_seen[order.npc_archetype] = true;
+
+      totalCoins += rewards.coins;
+      totalRep += rewards.rep;
+      totalSxp += rewards.sxp;
+      servedCount += 1;
+
+      const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
+      const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
+      results.push(`🍜 Served **${rName}** to *${npcName}*.`);
     }
 
-    const live = (s.order_board ?? []).find((o) => o.order_id === fullOrderId);
-    const order = live ?? accepted.order;
-
-    if (!order) {
-      delete p.orders.accepted[fullOrderId];
-      return commitState({ content: "That order can’t be found anymore.", ephemeral: true });
+    if (!servedCount) {
+      return commitState({ content: results.join("\n") || "Nothing served.", ephemeral: true });
     }
 
-    const key = bowlKey ?? order.recipe_id;
-    const bowl = p.inv_bowls?.[key];
-
-    if (!bowl || bowl.qty <= 0) {
-      const recipeName = content.recipes?.[key]?.name ?? "that recipe";
-      return commitState({ content: `You don't have a bowl ready for **${recipeName}**.`, ephemeral: true });
-    }
-    if (bowl.recipe_id !== order.recipe_id) return commitState({ content: "That bowl doesn’t match the order’s recipe.", ephemeral: true });
-
-    const servedAt = nowTs();
-    const rewards = computeServeRewards({
-      serverId,
-      tier: order.tier,
-      npcArchetype: order.npc_archetype,
-      isLimitedTime: order.is_limited_time,
-      servedAtMs: servedAt,
-      acceptedAtMs: accepted.accepted_at,
-      speedWindowSeconds: order.speed_window_seconds
-    });
-
-    bowl.qty -= 1;
-    if (bowl.qty <= 0) delete p.inv_bowls[key];
-
-    delete p.orders.accepted[fullOrderId];
-    if (Array.isArray(s.order_board)) {
-      s.order_board = s.order_board.filter((o) => o.order_id !== fullOrderId);
-    }
-
-    p.coins += rewards.coins;
-    p.rep += rewards.rep;
-    p.sxp_total += rewards.sxp;
-    p.sxp_progress += rewards.sxp;
-
-    const leveled = applySxpLevelUp(p);
-
-    p.lifetime.orders_served += 1;
-    p.lifetime.bowls_served_total += 1;
-    p.lifetime.coins_earned += rewards.coins;
-    if (order.is_limited_time) p.lifetime.limited_time_served += 1;
-    if (order.is_limited_time && (servedAt - accepted.accepted_at) <= (order.speed_window_seconds * 1000)) {
-      p.lifetime.perfect_speed_serves += 1;
-    }
-    p.lifetime.npc_seen[order.npc_archetype] = true;
-
-    const msg = [
-      `🍜 Served **${content.recipes[order.recipe_id]?.name ?? "a dish"}** to *${content.npcs[order.npc_archetype]?.name ?? "a customer"}*.`,
-      `Rewards: **+${rewards.coins}c**, **+${rewards.sxp} SXP**, **+${rewards.rep} REP**.`,
-      leveled ? `✨ Level up! You’re now **Level ${p.shop_level}**.` : null
-    ].filter(Boolean).join("\n");
-
+    const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
+    const levelLine = leveledUp ? `\n✨ Level up! You're now **Level ${p.shop_level}**.` : "";
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
-    const components = [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
+    const components = [noodleOrdersActionRow(userId), noodleSecondaryMenuRow(userId)];
     const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName)] : [];
 
-    return commitState({ content: `${msg}${suffix}`, components, embeds });
+    return commitState({
+      content: `${results.join("\n")}\n\n${summary}${levelLine}${suffix}`,
+      components,
+      embeds
+    });
   }
 
   return commitState({ content: "That subcommand exists but isn’t implemented yet.", ephemeral: true });
@@ -1260,11 +1348,13 @@ if (kind === "pick" && !action.endsWith("_select") && !interaction.isModalSubmit
 // noodle:pick:<what>:<ownerId>
 if (action === "accept") {
 const s = ensureServer(serverId);
+const p = ensurePlayer(serverId, userId);
 const set = buildSettingsMap(settingsCatalog, s.settings);
 s.season = computeActiveSeason(set);
 rollMarket({ serverId, content, serverState: s });
+ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
 
-  const all = s.order_board ?? [];
+  const all = p.order_board ?? [];
   const rawPage = Number(parts[4] ?? 0);
   const pageSize = 25;
   const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
@@ -1282,9 +1372,9 @@ rollMarket({ serverId, content, serverState: s });
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:accept_select:${userId}`)
-    .setPlaceholder("Select an order to accept")
+    .setPlaceholder("Select orders to accept (up to 5)")
     .setMinValues(1)
-    .setMaxValues(1)
+    .setMaxValues(Math.min(5, opts.length))
     .addOptions(opts);
 
   const navRow = new ActionRowBuilder();
@@ -1307,7 +1397,7 @@ rollMarket({ serverId, content, serverState: s });
   if (totalPages > 1) rows.push(navRow);
 
   return componentCommit(interaction, {
-    content: `Select an order to accept (page ${page + 1}/${totalPages}):`,
+    content: `Select orders to accept (page ${page + 1}/${totalPages}):`,
     components: rows
   });
 }
@@ -1331,13 +1421,13 @@ if (action === "cancel" || action === "serve") {
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:${action}_select:${userId}`)
-    .setPlaceholder(action === "serve" ? "Select an order to serve" : "Select an order to cancel")
+    .setPlaceholder(action === "serve" ? "Select orders to serve" : "Select an order to cancel")
     .setMinValues(1)
-    .setMaxValues(1)
+    .setMaxValues(action === "serve" ? Math.min(5, opts.length) : 1)
     .addOptions(opts);
 
   return componentCommit(interaction, {
-    content: action === "serve" ? "Select an accepted order to serve:" : "Select an accepted order to cancel:",
+    content: action === "serve" ? "Select accepted orders to serve:" : "Select an accepted order to cancel:",
     components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)]
   });
 }
@@ -1379,10 +1469,10 @@ const cid = interaction.customId;
 
 // accept picker
 if (cid.startsWith("noodle:pick:accept_select:")) {
-  const orderId = interaction.values?.[0];
+  const orderIds = interaction.values ?? [];
   return runNoodle(interaction, {
     sub: "accept",
-    overrides: { strings: { order_id: orderId } }
+    overrides: { strings: { order_id: orderIds.join(",") } }
   });
 }
 
@@ -1397,10 +1487,10 @@ if (cid.startsWith("noodle:pick:cancel_select:")) {
 
 // serve picker
 if (cid.startsWith("noodle:pick:serve_select:")) {
-  const orderId = interaction.values?.[0];
+  const orderIds = interaction.values ?? [];
   return runNoodle(interaction, {
     sub: "serve",
-    overrides: { strings: { order_id: orderId } }
+    overrides: { strings: { order_id: orderIds.join(",") } }
   });
 }
 

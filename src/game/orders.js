@@ -71,3 +71,14 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
   serverState.order_board = generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool });
   return serverState;
 }
+
+export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId) {
+  const dayKey = dayKeyUTC();
+  if (playerState.orders_day === dayKey && Array.isArray(playerState.order_board)) return playerState;
+
+  const playerRecipePool = new Set(playerState.known_recipes || []);
+  const seedString = `${serverId}-${userId}`;
+  playerState.orders_day = dayKey;
+  playerState.order_board = generateOrderBoard({ serverId: seedString, dayKey, settings, content, activeSeason, playerRecipePool });
+  return playerState;
+}
