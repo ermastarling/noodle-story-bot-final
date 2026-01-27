@@ -10,6 +10,7 @@ import {
   checkRepFloorBonus,
   applyRepFloorBonus,
   getPityDiscount,
+  applyMarketPityDiscount,
   getAvailableRecipes,
   clearTemporaryRecipes,
   FALLBACK_RECIPE_ID,
@@ -238,4 +239,54 @@ test("clearTemporaryRecipes - keeps temp recipes when player has no coins", () =
   clearTemporaryRecipes(player);
   
   assert.strictEqual(player.resilience.temp_recipes.length, 1);
+});
+
+test("B6: applyMarketPityDiscount - applies when player has only non-sellable forage items", () => {
+  const player = { 
+    coins: 5, 
+    inv_ingredients: { scallions: 10, carrots: 5 }, // forage-only items
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10, noodles_wheat: 8 } 
+  };
+  const content = { items: {} };
+  
+  const result = applyMarketPityDiscount(player, serverState, content);
+  
+  assert.strictEqual(result.applied, true);
+  assert.ok(result.discountedItem); // Should get discount
+  assert.ok(result.discountedPrice < result.originalPrice);
+});
+
+test("B6: applyMarketPityDiscount - does not apply when player has sellable items", () => {
+  const player = { 
+    coins: 5, 
+    inv_ingredients: { broth_soy: 2, scallions: 10 }, // broth_soy is sellable
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10, noodles_wheat: 8 } 
+  };
+  const content = { items: {} };
+  
+  const result = applyMarketPityDiscount(player, serverState, content);
+  
+  assert.strictEqual(result.applied, false);
+});
+
+test("B6: applyMarketPityDiscount - does not apply when player can afford items", () => {
+  const player = { 
+    coins: 15, 
+    inv_ingredients: { scallions: 10 },
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10, noodles_wheat: 8 } 
+  };
+  const content = { items: {} };
+  
+  const result = applyMarketPityDiscount(player, serverState, content);
+  
+  assert.strictEqual(result.applied, false);
 });

@@ -234,11 +234,23 @@ export function ensureOrderBoardHasFulfillable(orderBoard, knownRecipes) {
  * If prices exceed coins and no sellables exist, apply pity discount
  */
 export function applyMarketPityDiscount(player, serverState, content) {
-  // Check if player has any items to sell
+  // Check if player has any sellable items (items that can be sold to the market)
+  // Only items in MARKET_ITEM_IDS with a valid sell price count as sellable
   const inventory = player.inv_ingredients || {};
-  const hasItems = Object.values(inventory).some(qty => qty > 0);
+  let hasSellableItems = false;
   
-  if (hasItems) return { applied: false, discountedItem: null };
+  for (const [itemId, qty] of Object.entries(inventory)) {
+    if (qty > 0 && MARKET_ITEM_IDS.includes(itemId)) {
+      // Check if this item actually has a sell price in the current market
+      const price = sellPrice(serverState, itemId);
+      if (price > 0) {
+        hasSellableItems = true;
+        break;
+      }
+    }
+  }
+  
+  if (hasSellableItems) return { applied: false, discountedItem: null };
   
   // Check if all market items are too expensive
   const marketPrices = serverState.market_prices || {};
