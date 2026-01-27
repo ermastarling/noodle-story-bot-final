@@ -286,6 +286,11 @@ if (exp && nowMs > exp) expiredIds.push(fullId);
 
 if (!expiredIds.length) return { expiredIds: [], warning: "" };
 
+// Track fail streak for each expired order (B4)
+for (let i = 0; i < expiredIds.length; i++) {
+  updateFailStreak(p, false); // failure per order
+}
+
 // Capture snapshots BEFORE delete
 const snaps = expiredIds.map((id) => {
 const entry = accepted[id];
@@ -1256,6 +1261,8 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const now3 = nowTs();
       if (accepted.expires_at && now3 > accepted.expires_at) {
         delete acceptedMap[fullOrderId];
+        // Track fail streak for manually expired order (B4)
+        updateFailStreak(p, false); // failure
         results.push(`⏳ Order \`${shortOrderId(fullOrderId)}\` expired.`);
         continue;
       }

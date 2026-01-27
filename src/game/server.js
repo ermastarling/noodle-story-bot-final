@@ -21,6 +21,10 @@ export function newServerState(serverId) {
     staff_day: null,
     staff_pool: [],
 
-    audit_log: []
+    audit_log: [],
+
+    npc_affinity: {},
+    community_events: {},
+    analytics: { visit_log: [] }
   };
 }

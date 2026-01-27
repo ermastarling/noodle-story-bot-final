@@ -10,6 +10,8 @@ import {
   checkRepFloorBonus,
   applyRepFloorBonus,
   getPityDiscount,
+  applyMarketPityDiscount,
+  applyResilienceMechanics,
   getAvailableRecipes,
   clearTemporaryRecipes,
   FALLBACK_RECIPE_ID,
@@ -54,6 +56,42 @@ test("B1: detectDeadlock - returns false when player can cook", () => {
     recipes: { 
       test_recipe: { 
         ingredients: [{ item_id: "item1", qty: 1 }] 
+      } 
+    } 
+  };
+  
+  assert.strictEqual(detectDeadlock(player, serverState, content), false);
+});
+
+test("B1: detectDeadlock - returns true when player only has non-sellable forage items", () => {
+  const player = { 
+    coins: 0, 
+    known_recipes: ["test_recipe"], 
+    inv_ingredients: { scallions: 5, carrots: 3 } // forage items not in MARKET_ITEM_IDS
+  };
+  const serverState = { market_prices: { broth_soy: 10, noodles_wheat: 8 } };
+  const content = { 
+    recipes: { 
+      test_recipe: { 
+        ingredients: [{ item_id: "broth_soy", qty: 1 }] // needs market item
+      } 
+    } 
+  };
+  
+  assert.strictEqual(detectDeadlock(player, serverState, content), true);
+});
+
+test("B1: detectDeadlock - returns false when player has sellable market items", () => {
+  const player = { 
+    coins: 0, 
+    known_recipes: ["test_recipe"], 
+    inv_ingredients: { broth_soy: 2, scallions: 5 } // broth_soy is sellable
+  };
+  const serverState = { market_prices: { broth_soy: 10, noodles_wheat: 8 } };
+  const content = { 
+    recipes: { 
+      test_recipe: { 
+        ingredients: [{ item_id: "noodles_wheat", qty: 1 }] // needs different item
       } 
     } 
   };
@@ -202,4 +240,101 @@ test("clearTemporaryRecipes - keeps temp recipes when player has no coins", () =
   clearTemporaryRecipes(player);
   
   assert.strictEqual(player.resilience.temp_recipes.length, 1);
+});
+
+test("B6: applyMarketPityDiscount - applies when player has only non-sellable forage items", () => {
+  const player = { 
+    coins: 5, 
+    inv_ingredients: { scallions: 10, carrots: 5 }, // forage-only items
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10, noodles_wheat: 8 } 
+  };
+  const content = { items: {} };
+  
+  const result = applyMarketPityDiscount(player, serverState, content);
+  
+  assert.strictEqual(result.applied, true);
+  assert.ok(result.discountedItem); // Should get discount
+  assert.ok(result.discountedPrice < result.originalPrice);
+});
+
+test("B6: applyMarketPityDiscount - does not apply when player has sellable items", () => {
+  const player = { 
+    coins: 5, 
+    inv_ingredients: { broth_soy: 2, scallions: 10 }, // broth_soy is sellable
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10, noodles_wheat: 8 } 
+  };
+  const content = { items: {} };
+  
+  const result = applyMarketPityDiscount(player, serverState, content);
+  
+  assert.strictEqual(result.applied, false);
+});
+
+test("B6: applyMarketPityDiscount - does not apply when player can afford items", () => {
+  const player = { 
+    coins: 15, 
+    inv_ingredients: { scallions: 10 },
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10, noodles_wheat: 8 } 
+  };
+  const content = { items: {} };
+  
+  const result = applyMarketPityDiscount(player, serverState, content);
+  
+  assert.strictEqual(result.applied, false);
+});
+
+test("B7: applyResilienceMechanics - sets rep floor bonus when rep is at 0", () => {
+  const player = { 
+    coins: 10, 
+    rep: 0,
+    known_recipes: ["classic_soy_ramen"],
+    inv_ingredients: { broth_soy: 2 },
+    buffs: {},
+    resilience: {}
+  };
+  const serverState = { 
+    market_prices: { broth_soy: 10 } 
+  };
+  const content = { 
+    recipes: { 
+      classic_soy_ramen: { 
+        ingredients: [{ item_id: "broth_soy", qty: 1 }] 
+      } 
+    },
+    items: {}
+  };
+  
+  applyResilienceMechanics(player, serverState, content);
+  
+  // Should set the rep floor bonus flag
+  assert.strictEqual(player.buffs.rep_floor_bonus, true);
+});
+
+test("B4: updateFailStreak - triggers relief after 3 failures then resets on success", () => {
+  const player = { buffs: { fail_streak: 0 } };
+  
+  // Track 3 failures
+  updateFailStreak(player, false); // 1st failure
+  assert.strictEqual(player.buffs.fail_streak, 1);
+  
+  updateFailStreak(player, false); // 2nd failure
+  assert.strictEqual(player.buffs.fail_streak, 2);
+  
+  updateFailStreak(player, false); // 3rd failure - triggers relief
+  assert.strictEqual(player.buffs.fail_streak, 0);
+  assert.strictEqual(player.buffs.fail_streak_relief, 2);
+  
+  // Success should not reset fail_streak while relief is active
+  updateFailStreak(player, true);
+  assert.strictEqual(player.buffs.fail_streak, 0);
+  assert.strictEqual(player.buffs.fail_streak_relief, 2); // unchanged
 });
