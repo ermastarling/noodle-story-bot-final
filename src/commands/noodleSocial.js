@@ -22,10 +22,82 @@ import {
 } from "../game/social.js";
 import { nowTs } from "../util/time.js";
 
-const { MessageEmbed } = discordPkg;
+const {
+  MessageActionRow,
+  MessageButton,
+  MessageEmbed,
+  Constants
+} = discordPkg;
+
+const ActionRowBuilder = MessageActionRow;
+const ButtonBuilder = MessageButton;
 const EmbedBuilder = MessageEmbed || discordPkg.EmbedBuilder;
+const ButtonStyle = {
+  Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
+  Secondary: Constants?.MessageButtonStyles?.SECONDARY ?? 2,
+  Success: Constants?.MessageButtonStyles?.SUCCESS ?? 3,
+  Danger: Constants?.MessageButtonStyles?.DANGER ?? 4,
+  Link: Constants?.MessageButtonStyles?.LINK ?? 5
+};
 
 const db = openDb();
+
+/* ------------------------------------------------------------------ */
+/*  UI Button Helpers                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Main social menu navigation buttons
+ */
+function socialMainMenuRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:party:${userId}`)
+      .setLabel("🎪 Party")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
+      .setLabel("📊 Leaderboard")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:stats:${userId}`)
+      .setLabel("📈 Stats")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+/**
+ * Party action buttons
+ */
+function partyActionRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:party_info:${userId}`)
+      .setLabel("ℹ️ Party Info")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:party_leave:${userId}`)
+      .setLabel("🚪 Leave Party")
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helper functions                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Commit a component interaction response
+ */
+async function componentCommit(interaction, opts) {
+  if (interaction.deferred) {
+    return interaction.editReply(opts);
+  } else if (interaction.replied) {
+    return interaction.followUp(opts);
+  } else {
+    return interaction.update(opts);
+  }
+}
 
 /**
  * Format a party ID for display (first 8 characters)
@@ -106,7 +178,10 @@ async function handleParty(interaction) {
         )
         .setColor(0x00ff00);
 
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({ 
+        embeds: [embed], 
+        components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+      });
     }
 
     if (action === "join") {
@@ -122,7 +197,10 @@ async function handleParty(interaction) {
           .setDescription(`You've joined the party **${result.partyName}**`)
           .setColor(0x00ff00);
 
-        return interaction.editReply({ embeds: [embed] });
+        return interaction.editReply({ 
+          embeds: [embed], 
+          components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+        });
       } catch (err) {
         return interaction.editReply({ content: `❌ ${err.message}` });
       }
@@ -138,7 +216,8 @@ async function handleParty(interaction) {
         leaveParty(db, currentParty.party_id, userId);
         
         return interaction.editReply({
-          content: `✅ You've left the party **${currentParty.party_name}**.`
+          content: `✅ You've left the party **${currentParty.party_name}**.`,
+          components: [socialMainMenuRow(userId)]
         });
       } catch (err) {
         return interaction.editReply({ content: `❌ ${err.message}` });
@@ -165,7 +244,10 @@ async function handleParty(interaction) {
         )
         .setColor(0x00aeff);
 
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({ 
+        embeds: [embed], 
+        components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+      });
     }
 
     return interaction.editReply({ content: "❌ Unknown party action." });
@@ -222,7 +304,10 @@ async function handleTip(interaction) {
           { name: "Their Balance", value: `${result.receiver.coins}c`, inline: true }
         );
 
-        const replyObj = { embeds: [embed] };
+        const replyObj = { 
+          embeds: [embed], 
+          components: [socialMainMenuRow(userId)] 
+        };
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         return interaction.editReply(replyObj);
       } catch (err) {
@@ -283,7 +368,10 @@ async function handleVisit(interaction) {
         )
         .setColor(0xffaa00);
 
-      const replyObj = { embeds: [embed] };
+      const replyObj = { 
+        embeds: [embed], 
+        components: [socialMainMenuRow(userId)] 
+      };
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
       return interaction.editReply(replyObj);
     } catch (err) {
@@ -350,7 +438,10 @@ async function handleLeaderboard(interaction) {
       .setColor(0x00aaff)
       .setFooter({ text: "Rankings are read-only and for fun!" });
 
-    return interaction.editReply({ embeds: [embed] });
+    return interaction.editReply({ 
+      embeds: [embed], 
+      components: [socialMainMenuRow(interaction.user.id)] 
+    });
   } catch (err) {
     console.error("Leaderboard error:", err);
     return interaction.editReply({ content: `❌ Error loading leaderboard: ${err.message}` });
@@ -413,11 +504,239 @@ async function handleStats(interaction) {
       });
     }
 
-    return interaction.editReply({ embeds: [embed] });
+    return interaction.editReply({ 
+      embeds: [embed], 
+      components: [socialMainMenuRow(userId)] 
+    });
   } catch (err) {
     console.error("Stats error:", err);
     return interaction.editReply({ content: `❌ Error loading stats: ${err.message}` });
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component (Button) Handler                                         */
+/* ------------------------------------------------------------------ */
+
+async function handleComponent(interaction) {
+  const customId = String(interaction.customId || "");
+  const serverId = interaction.guildId;
+  
+  if (!serverId) {
+    return componentCommit(interaction, { 
+      content: "This game runs inside a server (not DMs).", 
+      ephemeral: true 
+    });
+  }
+
+  const userId = interaction.user.id;
+  const parts = customId.split(":"); // noodle-social:<kind>:<action>:<ownerId>
+
+  if (parts[0] !== "noodle-social") {
+    return componentCommit(interaction, { 
+      content: "Unknown component.", 
+      ephemeral: true 
+    });
+  }
+
+  const kind = parts[1] ?? "";
+  const action = parts[2] ?? "";
+  const ownerId = parts[3] ?? "";
+
+  // Lock UI to owner when ownerId is present
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { 
+      content: "That menu isn't for you.", 
+      ephemeral: true 
+    });
+  }
+
+  /* ---------------- NAV BUTTONS ---------------- */
+  if (kind === "nav") {
+    // Navigate to different social views
+    if (action === "party") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in any party. Use `/noodle-social party action:create` to create one.",
+          ephemeral: true
+        });
+      }
+
+      const memberList = party.members
+        .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
+        .join("\n");
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🎪 ${party.party_name}`)
+        .setDescription(`Party ID: ${formatPartyId(party.party_id)}`)
+        .addFields(
+          { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
+          { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
+          { name: "Member List", value: memberList || "No members", inline: false }
+        )
+        .setColor(0x00aeff);
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [partyActionRow(userId), socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "leaderboard") {
+      // Show leaderboard
+      const allPlayers = db.prepare(`
+        SELECT user_id, data_json FROM players 
+        WHERE server_id = ? 
+        ORDER BY last_active_at DESC
+        LIMIT 100
+      `).all(serverId);
+
+      if (allPlayers.length === 0) {
+        return componentCommit(interaction, {
+          content: "❌ No players found in this server yet.",
+          ephemeral: true
+        });
+      }
+
+      const playerData = allPlayers.map(row => ({
+        user_id: row.user_id,
+        ...JSON.parse(row.data_json)
+      }));
+
+      const sortedPlayers = playerData.sort((a, b) => (b.coins || 0) - (a.coins || 0)).slice(0, 10);
+      const leaderboardText = sortedPlayers
+        .map((p, i) => {
+          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+          return `${medal} <@${p.user_id}> — ${p.coins || 0}c`;
+        })
+        .join("\n");
+
+      const embed = new EmbedBuilder()
+        .setTitle("📊 Noodle Story Leaderboard")
+        .setDescription(`**💰 Top Coin Holders**\n\n${leaderboardText}`)
+        .setColor(0x00aaff)
+        .setFooter({ text: "Rankings are read-only and for fun!" });
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "stats") {
+      const player = ensurePlayer(serverId, userId);
+      const tipStats = getUserTipStats(db, serverId, userId);
+      const party = getUserActiveParty(db, userId);
+      const blessing = getActiveBlessing(player);
+
+      const embed = new EmbedBuilder()
+        .setTitle("📊 Your Social Stats")
+        .setColor(0x00ff88);
+
+      embed.addFields({
+        name: "💰 Tips",
+        value: `Sent: ${tipStats.sent.count} tips (${tipStats.sent.total}c)\nReceived: ${tipStats.received.count} tips (${tipStats.received.total}c)`,
+        inline: false
+      });
+
+      if (party) {
+        const memberInfo = party.members.find(m => m.user_id === userId);
+        embed.addFields({
+          name: "🎪 Party",
+          value: `**${party.party_name}**\nYour contributions: ${memberInfo?.contribution_points || 0} points`,
+          inline: false
+        });
+      } else {
+        embed.addFields({
+          name: "🎪 Party",
+          value: "Not in a party",
+          inline: false
+        });
+      }
+
+      if (blessing) {
+        const remainingMs = blessing.expires_at - nowTs();
+        const remainingHours = Math.max(0, Math.ceil(remainingMs / (60 * 60 * 1000)));
+        embed.addFields({
+          name: "✨ Active Blessing",
+          value: `Type: ${blessing.type}\nExpires in: ${remainingHours} hours`,
+          inline: false
+        });
+      } else {
+        embed.addFields({
+          name: "✨ Active Blessing",
+          value: "None",
+          inline: false
+        });
+      }
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [socialMainMenuRow(userId)]
+      });
+    }
+  }
+
+  /* ---------------- ACTION BUTTONS ---------------- */
+  if (kind === "action") {
+    if (action === "party_info") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in any party.",
+          ephemeral: true
+        });
+      }
+
+      const memberList = party.members
+        .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
+        .join("\n");
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🎪 ${party.party_name}`)
+        .setDescription(`Party ID: ${formatPartyId(party.party_id)}`)
+        .addFields(
+          { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
+          { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
+          { name: "Member List", value: memberList || "No members", inline: false }
+        )
+        .setColor(0x00aeff);
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [partyActionRow(userId), socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "party_leave") {
+      const currentParty = getUserActiveParty(db, userId);
+      if (!currentParty) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in any party.",
+          ephemeral: true
+        });
+      }
+
+      try {
+        leaveParty(db, currentParty.party_id, userId);
+        return componentCommit(interaction, {
+          content: `✅ You've left the party **${currentParty.party_name}**.`,
+          components: [socialMainMenuRow(userId)]
+        });
+      } catch (err) {
+        return componentCommit(interaction, {
+          content: `❌ ${err.message}`,
+          ephemeral: true
+        });
+      }
+    }
+  }
+
+  return componentCommit(interaction, {
+    content: "❌ Unknown action.",
+    ephemeral: true
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -514,5 +833,9 @@ export const noodleSocialCommand = {
         return interaction.reply({ content: `❌ ${errorMsg}`, ephemeral: true });
       }
     }
+  },
+
+  async handleComponent(interaction) {
+    return handleComponent(interaction);
   }
 };
