@@ -104,7 +104,7 @@ export function clearExpiredBlessings(player) {
   const now = nowTs();
   if (player.social?.active_blessing) {
     if (player.social.active_blessing.expires_at <= now) {
-      delete player.social.active_blessing;
+      player.social.active_blessing = null;
     }
   }
   return player;
@@ -472,9 +472,6 @@ export function completeSharedOrder(db, sharedOrderId) {
 export function logVisitActivity(serverState, visitorUserId, hostUserId) {
   if (!serverState.analytics) {
     serverState.analytics = { visit_log: [] };
-  }
-  if (!serverState.analytics.visit_log) {
-    serverState.analytics.visit_log = [];
   }
   
   const now = nowTs();

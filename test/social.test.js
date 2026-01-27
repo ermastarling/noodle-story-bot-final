@@ -113,7 +113,7 @@ test("Blessing: clearExpiredBlessings removes expired blessings", () => {
   };
   
   const result = clearExpiredBlessings(player);
-  assert.equal(result.social.active_blessing, undefined);
+  assert.equal(result.social.active_blessing, null);
 });
 
 test("Party: create party successfully", () => {

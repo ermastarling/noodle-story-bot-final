@@ -23,13 +23,16 @@ import {
 import { nowTs } from "../util/time.js";
 
 const { MessageEmbed } = discordPkg;
-const EmbedBuilder = MessageEmbed;
+const EmbedBuilder = MessageEmbed || discordPkg.EmbedBuilder;
 
 const db = openDb();
 
-/* ------------------------------------------------------------------ */
-/*  Helper functions                                                   */
-/* ------------------------------------------------------------------ */
+/**
+ * Format a party ID for display (first 8 characters)
+ */
+function formatPartyId(partyId) {
+  return partyId.substring(0, 8);
+}
 
 function ensureServer(serverId) {
   let s = getServer(db, serverId);
@@ -98,7 +101,7 @@ async function handleParty(interaction) {
         .setTitle("🎉 Party Created!")
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
-          { name: "Party ID", value: result.partyId.substring(0, 8), inline: true },
+          { name: "Party ID", value: formatPartyId(result.partyId), inline: true },
           { name: "Leader", value: `<@${userId}>`, inline: true }
         )
         .setColor(0x00ff00);
@@ -154,7 +157,7 @@ async function handleParty(interaction) {
 
       const embed = new EmbedBuilder()
         .setTitle(`🎪 ${currentParty.party_name}`)
-        .setDescription(`Party ID: ${currentParty.party_id.substring(0, 8)}`)
+        .setDescription(`Party ID: ${formatPartyId(currentParty.party_id)}`)
         .addFields(
           { name: "Leader", value: `<@${currentParty.leader_user_id}>`, inline: true },
           { name: "Members", value: `${currentParty.members.length}/${currentParty.max_members}`, inline: true },
