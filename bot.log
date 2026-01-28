@@ -1,0 +1,190 @@
+nohup: ignoring input
+
+> noodle-story-bot@0.1.0 start
+> node src/index.js
+
+✅ BOOTING FILE: /workspaces/noodle-story-bot-final/src/index.js
+✅ CWD: /workspaces/noodle-story-bot-final
+✅ Logged in as Noodle Story#2573
+✅ Boot marker written: /workspaces/noodle-story-bot-final/boot-ok.log
+NOODLE CMD ERROR: Error: LOCK_BUSY
+    at withLock (file:///workspaces/noodle-story-bot-final/src/infra/locks.js:11:17)
+    at runNoodle (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:489:10)
+    at Object.execute (file:///workspaces/noodle-story-bot-final/src/commands/noodle.js:1655:12)
+    at Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:17)
+    at Client.emit (node:events:508:28)
+    at InteractionCreateAction.handle (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/actions/InteractionCreate.js:83:12)
+    at module.exports [as INTERACTION_CREATE] (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/handlers/INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/WebSocketManager.js:346:31)
+    at WebSocketShard.onPacket (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/WebSocketShard.js:493:22)
+    at WebSocketShard.onMessage (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/client/websocket/WebSocketShard.js:327:10)
+📤 componentCommit, type: CommandInteraction deferred: false replied: false ephemeral: true
+📤 Button/select - deferred: false
+📤 After defer check - deferred: false replied: false
+📤 Using reply (fallback)
+COMMAND ERROR: DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:247:7)
+🧾 Error written to: /workspaces/noodle-story-bot-final/command-errors.log
+❌ Failed to send error reply: Interaction has already been acknowledged.
+📌 Component interaction: noodle:nav:orders:705521883335885031
+🔄 Attempting to defer...
+✅ Deferred successfully
+📤 componentCommit, type: ButtonInteraction deferred: true replied: false ephemeral: false
+📤 Button/select - deferred: true
+📤 After defer check - deferred: true replied: false
+📤 Converting components to JSON
+📤 Using editReply
+📌 Component interaction: noodle:pick:accept:705521883335885031
+🔄 Attempting to defer...
+⚠️ Defer error: Unknown interaction
+📋 Option: {
+  label: '584728 — Classic Soy Ramen (Night Market Regular)',
+  value: '2026-01-21-0-348584728',
+  labelLen: 49,
+  valueLen: 22
+}
+📋 Option: {
+  label: '873043 — Classic Soy Ramen (Festival-Goer)',
+  value: '2026-01-21-1-50873043',
+  labelLen: 42,
+  valueLen: 21
+}
+📋 Option: {
+  label: '913326 — Classic Soy Ramen (Rain-Soaked Courier)',
+  value: '2026-01-21-2-166913326',
+  labelLen: 48,
+  valueLen: 22
+}
+📋 Option: {
+  label: '078346 — Classic Soy Ramen (Moonlit Spirit)',
+  value: '2026-01-21-3-672078346',
+  labelLen: 43,
+  valueLen: 22
+}
+📋 Option: {
+  label: '608591 — Classic Soy Ramen (Seasonal Herald)',
+  value: '2026-01-21-4-667608591',
+  labelLen: 44,
+  valueLen: 22
+}
+📋 Option: {
+  label: '998587 — Classic Soy Ramen (Forest Spirit)',
+  value: '2026-01-21-5-304998587',
+  labelLen: 42,
+  valueLen: 22
+}
+📋 Option: {
+  label: '741766 — Classic Soy Ramen (Traveling Bard)',
+  value: '2026-01-21-6-984741766',
+  labelLen: 43,
+  valueLen: 22
+}
+📋 Option: {
+  label: '218134 — Classic Soy Ramen (Child with Big Scarf)',
+  value: '2026-01-21-7-393218134',
+  labelLen: 49,
+  valueLen: 22
+}
+📋 Creating menu with 8 options
+📤 componentCommit, type: ButtonInteraction deferred: true replied: false ephemeral: false
+📤 Button/select - deferred: true
+📤 After defer check - deferred: true replied: false
+📤 Converting components to JSON
+📤 Select menu options count: 8
+📤 Option 0 : {
+  label: '584728 — Classic Soy Ramen (Night Market Regular)',
+  value: '2026-01-21-0-348584728'
+}
+📤 Option 1 : {
+  label: '873043 — Classic Soy Ramen (Festival-Goer)',
+  value: '2026-01-21-1-50873043'
+}
+📤 Using editReply
+📤 componentCommit, type: CommandInteraction deferred: false replied: false ephemeral: false
+📤 Button/select - deferred: false
+📤 After defer check - deferred: false replied: false
+📤 Converting components to JSON
+📤 Using reply (fallback)
+📌 Component interaction: noodle:nav:orders:705521883335885031
+🔄 Attempting to defer...
+✅ Deferred successfully
+📤 componentCommit, type: ButtonInteraction deferred: true replied: false ephemeral: false
+📤 Button/select - deferred: true
+📤 After defer check - deferred: true replied: false
+📤 Converting components to JSON
+📤 Using editReply
+📌 Component interaction: noodle:pick:accept:705521883335885031
+🔄 Attempting to defer...
+⚠️ Defer error: Unknown interaction
+📋 Option: {
+  label: '584728 — Classic Soy Ramen (Night Market Regular)',
+  value: '2026-01-21-0-348584728',
+  labelLen: 49,
+  valueLen: 22
+}
+📋 Option: {
+  label: '873043 — Classic Soy Ramen (Festival-Goer)',
+  value: '2026-01-21-1-50873043',
+  labelLen: 42,
+  valueLen: 21
+}
+📋 Option: {
+  label: '913326 — Classic Soy Ramen (Rain-Soaked Courier)',
+  value: '2026-01-21-2-166913326',
+  labelLen: 48,
+  valueLen: 22
+}
+📋 Option: {
+  label: '078346 — Classic Soy Ramen (Moonlit Spirit)',
+  value: '2026-01-21-3-672078346',
+  labelLen: 43,
+  valueLen: 22
+}
+📋 Option: {
+  label: '608591 — Classic Soy Ramen (Seasonal Herald)',
+  value: '2026-01-21-4-667608591',
+  labelLen: 44,
+  valueLen: 22
+}
+📋 Option: {
+  label: '998587 — Classic Soy Ramen (Forest Spirit)',
+  value: '2026-01-21-5-304998587',
+  labelLen: 42,
+  valueLen: 22
+}
+📋 Option: {
+  label: '741766 — Classic Soy Ramen (Traveling Bard)',
+  value: '2026-01-21-6-984741766',
+  labelLen: 43,
+  valueLen: 22
+}
+📋 Option: {
+  label: '218134 — Classic Soy Ramen (Child with Big Scarf)',
+  value: '2026-01-21-7-393218134',
+  labelLen: 49,
+  valueLen: 22
+}
+📋 Creating menu with 8 options
+📤 componentCommit, type: ButtonInteraction deferred: true replied: false ephemeral: false
+📤 Button/select - deferred: true
+📤 After defer check - deferred: true replied: false
+📤 Converting components to JSON
+📤 Select menu options count: 8
+📤 Option 0 : {
+  label: '584728 — Classic Soy Ramen (Night Market Regular)',
+  value: '2026-01-21-0-348584728'
+}
+📤 Option 1 : {
+  label: '873043 — Classic Soy Ramen (Festival-Goer)',
+  value: '2026-01-21-1-50873043'
+}
+📤 Using editReply
+📤 componentCommit, type: CommandInteraction deferred: false replied: false ephemeral: false
+📤 Button/select - deferred: false
+📤 After defer check - deferred: false replied: false
+📤 Converting components to JSON
+📤 Using reply (fallback)
