@@ -5,11 +5,13 @@ import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
+import { noodleMainMenuRowNoProfile } from "./noodle.js";
 import {
   grantBlessing,
   getActiveBlessing,
   createParty,
   joinParty,
+  inviteUserToParty,
   leaveParty,
   getParty,
   getUserActiveParty,
@@ -26,12 +28,16 @@ const {
   MessageActionRow,
   MessageButton,
   MessageEmbed,
+  Modal,
+  TextInputComponent,
   Constants
 } = discordPkg;
 
+// Aliases for v14+ compatibility
 const ActionRowBuilder = MessageActionRow;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed || discordPkg.EmbedBuilder;
+const EmbedBuilder = MessageEmbed;
+
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
   Secondary: Constants?.MessageButtonStyles?.SECONDARY ?? 2,
@@ -62,24 +68,115 @@ function socialMainMenuRow(userId) {
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
       .setLabel("📈 Stats")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:profile:${userId}`)
+      .setLabel("🍜 Profile")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function socialMainMenuRowNoProfile(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:party:${userId}`)
+      .setLabel("🎪 Party")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
+      .setLabel("📊 Leaderboard")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:stats:${userId}`)
+      .setLabel("📈 Stats")
       .setStyle(ButtonStyle.Secondary)
   );
 }
 
 /**
- * Party action buttons
+ * Party action buttons (conditional based on party state)
  */
-function partyActionRow(userId) {
+function partyActionRow(userId, inParty, isPartyLeader) {
+  const components = [];
+  
+  // Invite button only if user is party leader
+  if (isPartyLeader) {
+    components.push(
+      new ButtonBuilder()
+        .setCustomId(`noodle-social:action:party_invite:${userId}`)
+        .setLabel("➕ Invite User")
+        .setStyle(ButtonStyle.Primary)
+    );
+  }
+  
+  // Leave button only if in a party
+  if (inParty) {
+    components.push(
+      new ButtonBuilder()
+        .setCustomId(`noodle-social:action:party_leave:${userId}`)
+        .setLabel("🚪 Leave Party")
+        .setStyle(ButtonStyle.Danger)
+    );
+  }
+  
+  return new ActionRowBuilder().addComponents(components);
+}
+
+/**
+ * Party creation buttons (only shown if not in a party)
+ */
+function partyCreationRow(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle-social:action:party_info:${userId}`)
-      .setLabel("ℹ️ Party Info")
+      .setCustomId(`noodle-social:action:party_create:${userId}`)
+      .setLabel("🎪 Create Party")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:action:party_leave:${userId}`)
-      .setLabel("🚪 Leave Party")
-      .setStyle(ButtonStyle.Danger)
+      .setCustomId(`noodle-social:action:party_join:${userId}`)
+      .setLabel("📥 Join Party")
+      .setStyle(ButtonStyle.Primary)
   );
+}
+
+/**
+ * Social stats view buttons (two rows)
+ */
+function statsViewButtons(userId) {
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:party:${userId}`)
+      .setLabel("🎪 Party")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
+      .setLabel("📊 Leaderboard")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:stats:${userId}`)
+      .setLabel("📈 Stats")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:action:orders:${userId}`)
+      .setLabel("📋 Orders")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:action:buy:${userId}`)
+      .setLabel("🛒 Buy")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:action:forage:${userId}`)
+      .setLabel("🌿 Forage")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:profile:${userId}`)
+      .setLabel("🍜 Profile")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return [row1, row2];
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,7 +248,7 @@ async function handleParty(interaction) {
 
   const ownerLock = `discord:${interaction.id}`;
 
-  return withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+  return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     const player = ensurePlayer(serverId, userId);
 
     if (action === "create") {
@@ -180,7 +277,7 @@ async function handleParty(interaction) {
 
       return interaction.editReply({ 
         embeds: [embed], 
-        components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+        components: [partyActionRow(userId, true, true), socialMainMenuRow(userId)] 
       });
     }
 
@@ -199,7 +296,7 @@ async function handleParty(interaction) {
 
         return interaction.editReply({ 
           embeds: [embed], 
-          components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+          components: [partyActionRow(userId, true, false), socialMainMenuRow(userId)] 
         });
       } catch (err) {
         return interaction.editReply({ content: `❌ ${err.message}` });
@@ -244,9 +341,10 @@ async function handleParty(interaction) {
         )
         .setColor(0x00aeff);
 
+      const isLeader = currentParty.leader_user_id === userId;
       return interaction.editReply({ 
         embeds: [embed], 
-        components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+        components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)] 
       });
     }
 
@@ -278,8 +376,8 @@ async function handleTip(interaction) {
 
   const ownerLock = `discord:${interaction.id}`;
 
-  return withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
-    return withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
+  return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+    return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
       let sender = ensurePlayer(serverId, userId);
       let receiver = ensurePlayer(serverId, targetUser.id);
 
@@ -339,7 +437,7 @@ async function handleVisit(interaction) {
 
   const ownerLock = `discord:${interaction.id}`;
 
-  return withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+  return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     let serverState = ensureServer(serverId);
     let visitor = ensurePlayer(serverId, userId);
 
@@ -540,11 +638,9 @@ async function handleComponent(interaction) {
         return interaction.reply({ content: "❌ Party name cannot be empty.", ephemeral: true });
       }
 
-      await interaction.deferReply({ ephemeral: false });
-
       const ownerLock = `discord:${interaction.id}`;
 
-      return withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const result = createParty(db, serverId, userId, partyName);
 
@@ -559,7 +655,7 @@ async function handleComponent(interaction) {
 
           return interaction.editReply({ 
             embeds: [embed], 
-            components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+            components: [partyActionRow(userId, true, true), socialMainMenuRow(userId)] 
           });
         } catch (err) {
           return interaction.editReply({ content: `❌ ${err.message}` });
@@ -574,13 +670,11 @@ async function handleComponent(interaction) {
         return interaction.reply({ content: "❌ Party ID cannot be empty.", ephemeral: true });
       }
 
-      await interaction.deferReply({ ephemeral: false });
-
       const ownerLock = `discord:${interaction.id}`;
 
-      return withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
-          const result = joinParty(db, partyId, userId);
+          const result = joinParty(db, serverId, partyId, userId);
           
           const embed = new EmbedBuilder()
             .setTitle("🎊 Joined Party!")
@@ -589,12 +683,99 @@ async function handleComponent(interaction) {
 
           return interaction.editReply({ 
             embeds: [embed], 
-            components: [partyActionRow(userId), socialMainMenuRow(userId)] 
+            components: [partyActionRow(userId, true, false), socialMainMenuRow(userId)] 
           });
         } catch (err) {
           return interaction.editReply({ content: `❌ ${err.message}` });
         }
       });
+    }
+
+    if (customId.startsWith("noodle-social:modal:invite_user:")) {
+      const nameInput = interaction.fields.getTextInputValue("name");
+
+      if (!nameInput || nameInput.trim().length === 0) {
+        return interaction.reply({ content: "❌ Name cannot be empty.", ephemeral: true });
+      }
+
+      const searchName = nameInput.trim().toLowerCase();
+      const ownerLock = `discord:${interaction.id}`;
+
+      try {
+        return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+          try {
+            // Only allow inviting users in this server
+            const guild = interaction.guild;
+            if (!guild) {
+              return interaction.editReply({ content: "❌ This command only works in a server." });
+            }
+
+            let targetMember = null;
+            
+            // Search guild cache first
+            for (const member of guild.members.cache.values()) {
+              const nickname = member.nickname?.toLowerCase();
+              const username = member.user.username?.toLowerCase();
+              const displayName = member.displayName?.toLowerCase();
+              const globalName = member.user.globalName?.toLowerCase();
+              
+              if (nickname === searchName || username === searchName || displayName === searchName || globalName === searchName) {
+                console.log(`✅ Found user in cache: ${member.displayName}`);
+                targetMember = member;
+                break;
+              }
+            }
+
+            // If not in cache, try to search with a query (limited fetch)
+            if (!targetMember) {
+              try {
+                console.log(`🔍 Searching for user: ${searchName}`);
+                const searchResults = await guild.members.search({ query: searchName, limit: 10 });
+                console.log(`📋 Found ${searchResults.size} search results`);
+                if (searchResults.size > 0) {
+                  targetMember = searchResults.first();
+                  console.log(`✅ Found via search: ${targetMember.displayName}`);
+                }
+              } catch (e) {
+                console.log(`⚠️ Member search failed:`, e?.message);
+              }
+            }
+
+            if (!targetMember) {
+              return interaction.editReply({ content: `❌ User **${searchName}** not found. Make sure they're in this server and try their exact username or nickname.` });
+            }
+            const inviteTargetId = targetMember.user.id;
+            const currentParty = getUserActiveParty(db, userId);
+            if (!currentParty) {
+              return interaction.editReply({ content: "❌ You're not in a party anymore." });
+            }
+
+            console.log(`🎪 Inviting to party: ${currentParty.party_name}`);
+            const result = inviteUserToParty(db, serverId, currentParty.party_id, inviteTargetId);
+            console.log(`✅ Invite successful, sending response`);
+            
+            const embed = new EmbedBuilder()
+              .setTitle("✅ User Invited!")
+              .setDescription(`**${targetMember.displayName}** has been invited to **${result.partyName}**`)
+              .setColor(0x00ff00);
+
+            return interaction.editReply({ 
+              embeds: [embed], 
+              components: [partyActionRow(userId, true, true), socialMainMenuRow(userId)] 
+            });
+          } catch (err) {
+            console.error(`❌ Error in invite handler:`, err);
+            return interaction.editReply({ content: `❌ ${err.message}` });
+          }
+        });
+      } catch (err) {
+        console.error(`❌ withLock failed:`, err);
+        try {
+          return interaction.editReply({ content: `❌ ${err.message}` });
+        } catch (e) {
+          console.log(`⚠️ editReply also failed:`, e?.message);
+        }
+      }
     }
   }
 
@@ -626,8 +807,9 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in any party. Create one!",
-          ephemeral: true
+          content: "You're not in any party. Create or join one!",
+          components: [partyCreationRow(userId), socialMainMenuRow(userId)],
+          ephemeral: false
         });
       }
 
@@ -645,9 +827,10 @@ async function handleComponent(interaction) {
         )
         .setColor(0x00aeff);
 
+      const isLeader = party.leader_user_id === userId;
       return componentCommit(interaction, {
         embeds: [embed],
-        components: [partyActionRow(userId), socialMainMenuRow(userId)]
+        components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)]
       });
     }
 
@@ -741,7 +924,41 @@ async function handleComponent(interaction) {
 
       return componentCommit(interaction, {
         embeds: [embed],
-        components: [socialMainMenuRow(userId)]
+        components: statsViewButtons(userId)
+      });
+    }
+
+    if (action === "profile") {
+      const player = ensurePlayer(serverId, userId);
+      const party = getUserActiveParty(db, userId);
+      
+      if (!player.profile) {
+        player.profile = {
+          shop_name: "My Noodle Shop",
+          tagline: "A tiny shop with a big simmer."
+        };
+      }
+      
+      let description = `*${player.profile.tagline}*`;
+      if (party) {
+        description += `\n\n🎪 **${party.party_name}**`;
+      }
+      
+      const embed = new EmbedBuilder()
+        .setTitle(`🍜 ${player.profile.shop_name}`)
+        .setDescription(description)
+        .addFields(
+          { name: "⭐ Bowls Served", value: String(player.lifetime?.bowls_served_total || 0), inline: true },
+          { name: "Level", value: String(player.shop_level || 1), inline: true },
+          { name: "REP", value: String(player.rep || 0), inline: true },
+          { name: "Coins", value: `${player.coins || 0}c`, inline: true }
+        )
+        .setColor(0x00ff88)
+        .setFooter({ text: `Owner: ${interaction.user.displayName}` });
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId)]
       });
     }
   }
@@ -773,7 +990,7 @@ async function handleComponent(interaction) {
 
       return componentCommit(interaction, {
         embeds: [embed],
-        components: [partyActionRow(userId), socialMainMenuRow(userId)]
+        components: [socialMainMenuRow(userId)]
       });
     }
 
@@ -800,6 +1017,51 @@ async function handleComponent(interaction) {
       }
     }
 
+    if (action === "party_invite") {
+      const currentParty = getUserActiveParty(db, userId);
+      if (!currentParty) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in any party.",
+          ephemeral: true
+        });
+      }
+
+      if (currentParty.leader_user_id !== userId) {
+        return componentCommit(interaction, {
+          content: "❌ Only the party leader can invite members.",
+          ephemeral: true
+        });
+      }
+
+      try {
+        return await interaction.showModal({
+          customId: `noodle-social:modal:invite_user:${userId}`,
+          title: "Invite User to Party",
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  customId: "name",
+                  label: "Nickname or Username",
+                  style: 1,
+                  required: true,
+                  maxLength: 32
+                }
+              ]
+            }
+          ]
+        });
+      } catch (e) {
+        console.log(`⚠️ showModal failed for party_invite:`, e?.message);
+        return componentCommit(interaction, { 
+          content: "⚠️ Discord couldn't show the modal.", 
+          ephemeral: true 
+        });
+      }
+    }
+
     if (action === "party_create") {
       const currentParty = getUserActiveParty(db, userId);
       if (currentParty) {
@@ -809,20 +1071,37 @@ async function handleComponent(interaction) {
         });
       }
 
-      const modal = new (await import("discord.js")).ModalBuilder()
-        .setCustomId(`noodle-social:modal:create_party:${userId}`)
-        .setTitle("Create Party");
+      if (interaction.deferred || interaction.replied) {
+        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      }
 
-      const { TextInputBuilder, ActionRowBuilder: ARB } = await import("discord.js");
-      const partyNameInput = new TextInputBuilder()
-        .setCustomId("party_name")
-        .setLabel("Party Name")
-        .setStyle(1)
-        .setRequired(true)
-        .setMaxLength(32);
-
-      modal.addComponents(new ARB().addComponents(partyNameInput));
-      return await interaction.showModal(modal);
+      try {
+        return await interaction.showModal({
+          customId: `noodle-social:modal:create_party:${userId}`,
+          title: "Create Party",
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  customId: "party_name",
+                  label: "Party Name",
+                  style: 1,
+                  required: true,
+                  maxLength: 32
+                }
+              ]
+            }
+          ]
+        });
+      } catch (e) {
+        console.log(`⚠️ showModal failed for party_create:`, e?.message);
+        return componentCommit(interaction, { 
+          content: "⚠️ Discord couldn't show the modal. Try using `/noodle-social party` command instead.", 
+          ephemeral: true 
+        });
+      }
     }
 
     if (action === "party_join") {
@@ -834,20 +1113,37 @@ async function handleComponent(interaction) {
         });
       }
 
-      const modal = new (await import("discord.js")).ModalBuilder()
-        .setCustomId(`noodle-social:modal:join_party:${userId}`)
-        .setTitle("Join Party");
+      if (interaction.deferred || interaction.replied) {
+        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      }
 
-      const { TextInputBuilder, ActionRowBuilder: ARB } = await import("discord.js");
-      const partyIdInput = new TextInputBuilder()
-        .setCustomId("party_id")
-        .setLabel("Party ID")
-        .setStyle(1)
-        .setRequired(true)
-        .setMaxLength(8);
-
-      modal.addComponents(new ARB().addComponents(partyIdInput));
-      return await interaction.showModal(modal);
+      try {
+        return await interaction.showModal({
+          customId: `noodle-social:modal:join_party:${userId}`,
+          title: "Join Party",
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  customId: "party_id",
+                  label: "Party ID",
+                  style: 1,
+                  required: true,
+                  maxLength: 8
+                }
+              ]
+            }
+          ]
+        });
+      } catch (e) {
+        console.log(`⚠️ showModal failed for party_join:`, e?.message);
+        return componentCommit(interaction, { 
+          content: "⚠️ Discord couldn't show the modal. Try using `/noodle-social party` command instead.", 
+          ephemeral: true 
+        });
+      }
     }
   }
 
@@ -957,3 +1253,5 @@ export const noodleSocialCommand = {
     return handleComponent(interaction);
   }
 };
+
+export { socialMainMenuRow, socialMainMenuRowNoProfile };

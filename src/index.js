@@ -143,7 +143,11 @@ import { fileURLToPath } from "url";
       if (isNoodle || isNoodleSocial) {
         // Check if this button/select will show a modal
         const willShowModal = cid?.includes("multibuy:qty:") || 
-                            cid?.includes("pick:cook_select:");
+                            cid?.includes("pick:cook_select:") ||
+                            cid?.includes("sell:qty:") ||
+                            cid?.includes("action:party_create") ||
+                            cid?.includes("action:party_join") ||
+                            cid?.includes("action:party_invite");
         if (willShowModal) {
           console.log(`⏭️  Skipping defer for modal-showing button: ${cid}`);
         }

@@ -24,6 +24,8 @@ import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { nowTs } from "../util/time.js";
+import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
+import { getUserActiveParty } from "../game/social.js";
 import {
   applyResilienceMechanics,
   getAvailableRecipes,
@@ -80,6 +82,14 @@ new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Or
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
+);
+}
+
+function noodleMainMenuRowNoProfile(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -160,10 +170,20 @@ function displayItemName(id) {
     .replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown item";
 }
 
-function renderProfileEmbed(player, displayName) {
+function renderProfileEmbed(player, displayName, partyName) {
+if (!player.profile) {
+  player.profile = {
+    shop_name: "My Noodle Shop",
+    tagline: "A tiny shop with a big simmer."
+  };
+}
+let description = `*${player.profile.tagline}*`;
+if (partyName) {
+  description += `\n\n🎪 **${partyName}**`;
+}
 const embed = new EmbedBuilder()
 .setTitle(`🍜 ${player.profile.shop_name}`)
-.setDescription(`*${player.profile.tagline}*`)
+.setDescription(description)
 .addFields(
 { name: "⭐ Bowls Served", value: String(player.lifetime.bowls_served_total), inline: true },
 { name: "Level", value: String(player.shop_level), inline: true },
@@ -213,22 +233,9 @@ ensureTutorial(player);
 }
 
 function completeUserReset(player) {
-// Reset tutorial
-player.tutorial = null;
-ensureTutorial(player);
-
-// Clear inventory
-player.inv_ingredients = {};
-player.inv_bowls = {};
-
-// Reset progress
-player.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
-player.daily = { last_claimed_at: null, streak_days: 0, streak_last_day: null };
-player.quests = { active: {}, completed: [], claimed: [] };
-player.buffs = { rep_aura_expires_at: null, apprentice_bonus_pending: false, last_recipe_served: null, fail_streak: 0 };
-player.cooldowns = {};
-player.clues_owned = {};
-player.scrolls_owned = {};
+  // Only reset tutorial - preserve all other progress including coins
+  player.tutorial = null;
+  ensureTutorial(player);
 }
 
 function tutorialSuffix(player) {
@@ -598,7 +605,7 @@ if (group === "dev" && sub === "reset_tutorial") {
     return commit({ content: "Pick a user to reset.", ephemeral: true });
   }
 
-  return withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
+  return await withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, target.id);
     completeUserReset(p);
     upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
@@ -619,7 +626,7 @@ const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 
 /* ---------------- START ---------------- */
 if (sub === "start") {
-  return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+  return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const embed = renderProfileEmbed(p, interaction.user.displayName);
     const step = getCurrentTutorialStep(p);
@@ -649,19 +656,13 @@ if (sub === "help") {
 if (sub === "profile") {
   const u = opt.getUser("user") ?? interaction.user;
   const p = ensurePlayer(serverId, u.id);
+  const party = getUserActiveParty(db, u.id);
   
-  const embed = renderProfileEmbed(p, u.displayName);
-  
-  const socialStatsButton = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:social_stats:${userId}`)
-      .setLabel("📊 Social Stats")
-      .setStyle(ButtonStyle.Secondary)
-  );
+  const embed = renderProfileEmbed(p, u.displayName, party?.party_name);
   
   return commit({
     embeds: [embed],
-    components: [noodleMainMenuRow(userId), socialStatsButton]
+    components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId)]
   });
 }
 
@@ -686,7 +687,7 @@ const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: in
 const cached = getIdempotentResult(db, idemKey);
 if (cached) return commit(cached);
 
-return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let p = ensurePlayer(serverId, userId);
   let s = ensureServer(serverId);
 
@@ -1405,99 +1406,6 @@ if (ownerId && ownerId !== userId && (kind === "nav" || kind === "pick" || kind 
 return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
 }
 
-/* -------- SPECIAL SOCIAL STATS NAV HANDLER -------- */
-if (kind === "nav" && action === "social_stats") {
-  // Import social functions
-  const { getActiveBlessing, getUserActiveParty, getUserTipStats } = await import("../game/social.js");
-  
-  const p = ensurePlayer(serverId, userId);
-  const tipStats = getUserTipStats(db, serverId, userId);
-  const party = getUserActiveParty(db, userId);
-  const blessing = getActiveBlessing(p);
-
-  const embed = new EmbedBuilder()
-    .setTitle("📊 Your Social Stats")
-    .setColor(0x00ff88);
-
-  embed.addFields({
-    name: "💰 Tips",
-    value: `Sent: ${tipStats.sent.count} tips (${tipStats.sent.total}c)\nReceived: ${tipStats.received.count} tips (${tipStats.received.total}c)`,
-    inline: false
-  });
-
-  if (party) {
-    const memberInfo = party.members.find(m => m.user_id === userId);
-    embed.addFields({
-      name: "🎪 Party",
-      value: `**${party.party_name}**\nYour contributions: ${memberInfo?.contribution_points || 0} points`,
-      inline: false
-    });
-  } else {
-    embed.addFields({
-      name: "🎪 Party",
-      value: "Not in a party",
-      inline: false
-    });
-  }
-
-  if (blessing) {
-    const remainingMs = blessing.expires_at - nowTs();
-    const remainingHours = Math.max(0, Math.ceil(remainingMs / (60 * 60 * 1000)));
-    embed.addFields({
-      name: "✨ Active Blessing",
-      value: `Type: ${blessing.type}\nExpires in: ${remainingHours} hours`,
-      inline: false
-    });
-  } else {
-    embed.addFields({
-      name: "✨ Active Blessing",
-      value: "None",
-      inline: false
-    });
-  }
-
-  const socialMenuRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:party:${userId}`)
-      .setLabel("🎪 Party")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
-      .setLabel("📊 Leaderboard")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:stats:${userId}`)
-      .setLabel("📈 Stats")
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  const partyActionsRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:action:party_create:${userId}`)
-      .setLabel("➕ Create Party")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:action:party_join:${userId}`)
-      .setLabel("🚪 Join Party")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:action:party_info:${userId}`)
-      .setLabel("ℹ️ Party Info")
-      .setStyle(ButtonStyle.Secondary),
-    ...(party ? [
-      new ButtonBuilder()
-        .setCustomId(`noodle-social:action:party_leave:${userId}`)
-        .setLabel("🚪 Leave Party")
-        .setStyle(ButtonStyle.Danger)
-    ] : [])
-  );
-
-  return componentCommit(interaction, {
-    embeds: [embed],
-    components: [socialMenuRow, partyActionsRow, noodleMainMenuRow(userId)]
-  });
-}
-
 /* -------- SPECIAL SELL NAV HANDLER -------- */
 if (kind === "nav" && action === "sell") {
   const s = ensureServer(serverId);
@@ -1865,7 +1773,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       const ownerLock = `discord:${interaction.id}`;
 
-      return withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
 
@@ -2004,7 +1912,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     const ownerLock = `discord:${interaction.id}`;
 
-    return withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+    return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
       let s = ensureServer(serverId);
       let p2 = ensurePlayer(serverId, userId);
 
@@ -2170,7 +2078,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       if (cached) return componentCommit(interaction, cached);
 
       const owner2 = `discord:${interaction.id}`;
-      return withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
+      return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
 
@@ -2237,7 +2145,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     if (cached) return componentCommit(interaction, cached);
 
     const owner2 = `discord:${interaction.id}`;
-    return withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
+    return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
       let s = ensureServer(serverId);
       let p2 = ensurePlayer(serverId, userId);
 
@@ -2407,4 +2315,6 @@ export const noodleCommand = {
     return handleComponent(interaction);
   }
 };
+
+export { noodleMainMenuRow, noodleMainMenuRowNoProfile };
 

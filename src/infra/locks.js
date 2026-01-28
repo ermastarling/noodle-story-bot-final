@@ -1,6 +1,6 @@
 import { nowTs } from "../util/time.js";
 
-export function withLock(db, key, owner, ttlMs, fn) {
+export async function withLock(db, key, owner, ttlMs, fn) {
   // clean expired
   db.prepare("DELETE FROM locks WHERE expires_at <= ?").run(nowTs());
 
@@ -15,7 +15,7 @@ export function withLock(db, key, owner, ttlMs, fn) {
   }
 
   try {
-    return fn();
+    return await fn();
   } finally {
     db.prepare("DELETE FROM locks WHERE key=? AND owner=?").run(key, owner);
   }

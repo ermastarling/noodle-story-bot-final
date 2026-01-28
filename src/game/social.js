@@ -138,23 +138,23 @@ export function createParty(db, serverId, leaderUserId, partyName) {
 /**
  * Join an existing party
  */
-export function joinParty(db, partyId, userId) {
+export function joinParty(db, serverId, partyIdPrefix, userId) {
   const now = nowTs();
   
-  // Check if party exists and is active
-  const party = db.prepare("SELECT * FROM guild_parties WHERE party_id = ? AND status = 'active'").get(partyId);
+  // Check if party exists and is active in this server (match by prefix)
+  const party = db.prepare("SELECT * FROM guild_parties WHERE party_id LIKE ? AND server_id = ? AND status = 'active'").get(partyIdPrefix + '%', serverId);
   if (!party) {
     throw new Error("Party not found or inactive");
   }
   
   // Check party size
-  const memberCount = db.prepare("SELECT COUNT(*) as count FROM party_members WHERE party_id = ? AND left_at IS NULL").get(partyId);
+  const memberCount = db.prepare("SELECT COUNT(*) as count FROM party_members WHERE party_id = ? AND left_at IS NULL").get(party.party_id);
   if (memberCount.count >= party.max_members) {
     throw new Error("Party is full");
   }
   
   // Check if already a member
-  const existing = db.prepare("SELECT * FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL").get(partyId, userId);
+  const existing = db.prepare("SELECT * FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL").get(party.party_id, userId);
   if (existing) {
     throw new Error("Already a party member");
   }
@@ -163,9 +163,9 @@ export function joinParty(db, partyId, userId) {
   db.prepare(`
     INSERT INTO party_members (party_id, user_id, joined_at, contribution_points)
     VALUES (?, ?, ?, 0)
-  `).run(partyId, userId, now);
+  `).run(party.party_id, userId, now);
   
-  return { partyId, partyName: party.party_name };
+  return { partyId: party.party_id, partyName: party.party_name };
 }
 
 /**
@@ -194,6 +194,45 @@ export function leaveParty(db, partyId, userId) {
       db.prepare("UPDATE guild_parties SET status = 'disbanded', disbanded_at = ? WHERE party_id = ?").run(now, partyId);
     }
   }
+}
+
+/**
+ * Invite a user to a party
+ */
+export function inviteUserToParty(db, serverId, partyId, inviteTargetId) {
+  const now = nowTs();
+  
+  // Check if party exists and is active
+  const party = db.prepare("SELECT * FROM guild_parties WHERE party_id = ? AND server_id = ? AND status = 'active'").get(partyId, serverId);
+  if (!party) {
+    throw new Error("Party not found or inactive");
+  }
+  
+  // Check party size
+  const memberCount = db.prepare("SELECT COUNT(*) as count FROM party_members WHERE party_id = ? AND left_at IS NULL").get(partyId);
+  if (memberCount.count >= party.max_members) {
+    throw new Error("Party is full");
+  }
+  
+  // Check if already a member (including those who left)
+  const existing = db.prepare("SELECT * FROM party_members WHERE party_id = ? AND user_id = ?").get(partyId, inviteTargetId);
+  if (existing && existing.left_at === null) {
+    throw new Error("User is already a party member");
+  }
+  
+  // Add user to party or re-invite if they left
+  if (existing && existing.left_at !== null) {
+    // Update the existing record to rejoin
+    db.prepare("UPDATE party_members SET left_at = NULL, joined_at = ? WHERE party_id = ? AND user_id = ?").run(now, partyId, inviteTargetId);
+  } else {
+    // Insert new member
+    db.prepare(`
+      INSERT INTO party_members (party_id, user_id, joined_at, contribution_points)
+      VALUES (?, ?, ?, 0)
+    `).run(partyId, inviteTargetId, now);
+  }
+  
+  return { partyId, partyName: party.party_name };
 }
 
 /**
