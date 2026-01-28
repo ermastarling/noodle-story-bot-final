@@ -159,11 +159,23 @@ export function joinParty(db, serverId, partyIdPrefix, userId) {
     throw new Error("Already a party member");
   }
   
-  // Join party
-  db.prepare(`
-    INSERT INTO party_members (party_id, user_id, joined_at, contribution_points)
-    VALUES (?, ?, ?, 0)
-  `).run(party.party_id, userId, now);
+  // Check if user previously left this party
+  const previousMember = db.prepare("SELECT * FROM party_members WHERE party_id = ? AND user_id = ?").get(party.party_id, userId);
+  
+  if (previousMember) {
+    // Rejoin by updating the existing row
+    db.prepare(`
+      UPDATE party_members 
+      SET joined_at = ?, left_at = NULL, contribution_points = 0
+      WHERE party_id = ? AND user_id = ?
+    `).run(now, party.party_id, userId);
+  } else {
+    // Join party for the first time
+    db.prepare(`
+      INSERT INTO party_members (party_id, user_id, joined_at, contribution_points)
+      VALUES (?, ?, ?, 0)
+    `).run(party.party_id, userId, now);
+  }
   
   return { partyId: party.party_id, partyName: party.party_name };
 }
