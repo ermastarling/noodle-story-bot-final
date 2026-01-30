@@ -105,8 +105,7 @@ function noodleOrdersActionRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
 );
 }
 
@@ -684,8 +683,14 @@ if (sub === "event") {
 
 const action = sub;
 const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-const cached = getIdempotentResult(db, idemKey);
-if (cached) return commit(cached);
+
+// Skip idempotency check for component interactions to avoid stale cached responses
+const isComponent = interaction.isButton?.() || interaction.isSelectMenu?.() || interaction.isModalSubmit?.();
+const cached = isComponent ? null : getIdempotentResult(db, idemKey);
+
+if (cached) {
+  return commit(cached);
+}
 
 return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let p = ensurePlayer(serverId, userId);
@@ -1050,12 +1055,38 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       })
       .filter((s) => s.short > 0);
     
-    const combinedIngredientsMsg = shortages.length
-      ? shortages.map((s) => {
-          const iName = displayItemName(s.itemId, content);
-          return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
-        }).join("\n")
-      : "_All ingredients ready!_";
+    // Check if there are any ready bowls for accepted orders (deduplicate by recipe)
+    const uniqueRecipes = new Set();
+    acceptedEntries.forEach(([fullId, a]) => {
+      const snap = a?.order ?? null;
+      const order =
+        snap ??
+        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
+        null;
+      if (order?.recipe_id) {
+        uniqueRecipes.add(order.recipe_id);
+      }
+    });
+
+    const readyBowls = Array.from(uniqueRecipes)
+      .map((recipeId) => {
+        const bowl = p.inv_bowls?.[recipeId];
+        if (bowl && bowl.qty > 0) {
+          const rName = content.recipes[recipeId]?.name ?? "a dish";
+          return `• **${rName}** — **${bowl.qty}** bowl(s) ready`;
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    const statusMsg = readyBowls.length > 0
+      ? `🍲 **Bowls Ready**\n${readyBowls.join("\n")}`
+      : (shortages.length
+          ? `🧺 **Ingredients Needed**\n${shortages.map((s) => {
+              const iName = displayItemName(s.itemId, content);
+              return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
+            }).join("\n")}`
+          : `🧺 **Ingredients Needed**\n_All ingredients ready!_`);
 
     const acceptedLines = acceptedEntries.map(([fullId, a]) => {
       const snap = a?.order ?? null;
@@ -1078,12 +1109,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const lt = order.is_limited_time ? "⏳" : "•";
 
-      const hasBowl = p.inv_bowls?.[order.recipe_id];
-      const statusMsg = hasBowl
-        ? `\n   🍲 Have **${hasBowl.qty}** bowl(s) ready.`
-        : ``;
-
-      return `✅ \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}${statusMsg}`;
+      return `✅ \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`;
     });
 
     const parts = [];
@@ -1094,8 +1120,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         "**Your Accepted Orders**",
         acceptedLines.join("\n"),
         "",
-        "🧺 **Ingredients Needed**",
-        combinedIngredientsMsg,
+        statusMsg,
         ""
       );
     } else {
@@ -1202,7 +1227,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
       embeds: [],
-      components: [noodleOrdersActionRow(userId), noodleSecondaryMenuRow(userId)]
+      components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)]
     });
   }
 
@@ -1334,6 +1359,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       if (order.is_limited_time && (servedAt - accepted.accepted_at) <= (order.speed_window_seconds * 1000)) {
         p.lifetime.perfect_speed_serves += 1;
       }
+      if (!p.lifetime.npc_seen) p.lifetime.npc_seen = {};
       p.lifetime.npc_seen[order.npc_archetype] = true;
 
       totalCoins += rewards.coins;
@@ -1355,7 +1381,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
-    const components = [noodleOrdersActionRow(userId)];
+    const components = [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
     const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName)] : [];
 
     return commitState({
@@ -1517,7 +1543,7 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
   if (totalPages > 1) rows.push(navRow);
 
   return componentCommit(interaction, {
-    content: `Select orders to accept (page ${page + 1}/${totalPages}):`,
+    content: `Select orders to accept (page ${page + 1}/${totalPages}):\nWhen you're done selecting, if on Desktop, press **Esc** to continue.`,
     components: rows
   });
 }
@@ -1547,7 +1573,9 @@ if (action === "cancel" || action === "serve") {
     .addOptions(opts);
 
   return componentCommit(interaction, {
-    content: action === "serve" ? "Select accepted orders to serve:" : "Select an accepted order to cancel:",
+    content: action === "serve" 
+      ? "Select accepted orders to serve:\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
+      : "Select an accepted order to cancel:\nWhen you're done selecting, if on Desktop, press **Esc** to continue.",
     components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)]
   });
 }
@@ -1590,7 +1618,7 @@ const cid = interaction.customId;
 // accept picker
 if (cid.startsWith("noodle:pick:accept_select:")) {
   const orderIds = interaction.values ?? [];
-  return runNoodle(interaction, {
+  return await runNoodle(interaction, {
     sub: "accept",
     overrides: { strings: { order_id: orderIds.join(",") } }
   });
@@ -1599,7 +1627,7 @@ if (cid.startsWith("noodle:pick:accept_select:")) {
 // cancel picker
 if (cid.startsWith("noodle:pick:cancel_select:")) {
   const orderId = interaction.values?.[0];
-  return runNoodle(interaction, {
+  return await runNoodle(interaction, {
     sub: "cancel",
     overrides: { strings: { order_id: orderId } }
   });
@@ -1608,7 +1636,7 @@ if (cid.startsWith("noodle:pick:cancel_select:")) {
 // serve picker
 if (cid.startsWith("noodle:pick:serve_select:")) {
   const orderIds = interaction.values ?? [];
-  return runNoodle(interaction, {
+  return await runNoodle(interaction, {
     sub: "serve",
     overrides: { strings: { order_id: orderIds.join(",") } }
   });
