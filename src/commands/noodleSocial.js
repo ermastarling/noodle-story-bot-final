@@ -1191,7 +1191,7 @@ export const noodleSocialCommand = {
             .setDescription("Amount of coins to tip")
             .setRequired(true)
             .setMinValue(1)
-            .setMaxValue(10000)
+            .setMaxValue(100)
         )
         .addStringOption(o => o.setName("message").setDescription("Optional message").setRequired(false))
     )
