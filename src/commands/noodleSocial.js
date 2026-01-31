@@ -20,7 +20,8 @@ import {
   logVisitActivity,
   getVisitPatternSummary,
   BLESSING_DURATION_HOURS,
-  BLESSING_COOLDOWN_HOURS
+  BLESSING_COOLDOWN_HOURS,
+  BLESSING_TYPES
 } from "../game/social.js";
 import { nowTs } from "../util/time.js";
 
@@ -93,11 +94,56 @@ function socialMainMenuRowNoProfile(userId) {
   );
 }
 
+async function resolveUserIdFromInput(input, interaction) {
+  const raw = String(input ?? "").trim();
+  if (!raw) return null;
+  // Try mention/id first (for safety)
+  const mentionMatch = raw.match(/^<@!?([0-9]{17,20})>$/);
+  if (mentionMatch) return mentionMatch[1];
+  const idMatch = raw.match(/^([0-9]{17,20})$/);
+  if (idMatch) return idMatch[1];
+
+  const guild = interaction.guild;
+  if (!guild) return null;
+
+  const query = raw.toLowerCase();
+  const cached = guild.members.cache.find((m) => {
+    const nick = m.nickname?.toLowerCase();
+    const user = m.user?.username?.toLowerCase();
+    const global = m.user?.globalName?.toLowerCase();
+    return nick === query || user === query || global === query;
+  });
+  if (cached) return cached.user.id;
+
+  // Fallback: search by username/nickname
+  const results = await guild.members.search({ query: raw, limit: 5 }).catch(() => null);
+  if (!results || results.size === 0) return null;
+  const exact = results.find((m) => {
+    const nick = m.nickname?.toLowerCase();
+    const user = m.user?.username?.toLowerCase();
+    const global = m.user?.globalName?.toLowerCase();
+    return nick === query || user === query || global === query;
+  });
+  return (exact ?? results.first())?.user?.id ?? null;
+}
+
 /**
  * Party action buttons (conditional based on party state)
  */
 function partyActionRow(userId, inParty, isPartyLeader) {
   const components = [];
+
+  // Tip + Bless buttons (always available from party menu)
+  components.push(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:tip:${userId}`)
+      .setLabel("💰 Tip")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:bless:${userId}`)
+      .setLabel("✨ Bless")
+      .setStyle(ButtonStyle.Secondary)
+  );
   
   // Invite button only if user is party leader
   if (isPartyLeader) {
@@ -127,6 +173,14 @@ function partyActionRow(userId, inParty, isPartyLeader) {
  */
 function partyCreationRow(userId) {
   return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:tip:${userId}`)
+      .setLabel("💰 Tip")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:bless:${userId}`)
+      .setLabel("✨ Bless")
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:party_create:${userId}`)
       .setLabel("🎪 Create Party")
@@ -438,33 +492,45 @@ async function handleVisit(interaction) {
   const ownerLock = `discord:${interaction.id}`;
 
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
-    let serverState = ensureServer(serverId);
-    let visitor = ensurePlayer(serverId, userId);
+    return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
+      let serverState = ensureServer(serverId);
+      let visitor = ensurePlayer(serverId, userId);
+      let targetPlayer = ensurePlayer(serverId, targetUser.id);
 
-    try {
-      // Grant a random blessing (for simplicity, using "discovery_chance_add")
-      const blessingType = "discovery_chance_add";
-      visitor = grantBlessing(visitor, targetUser.id, blessingType);
+      try {
+        // Grant a random blessing
+        const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
+        targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
 
-      // Log visit for analytics (D6)
-      serverState = logVisitActivity(serverState, userId, targetUser.id);
+        // Log visit for analytics (D6)
+        serverState = logVisitActivity(serverState, userId, targetUser.id);
 
-      // Save state
-      upsertPlayer(db, serverId, userId, visitor, null, visitor.schema_version);
-      upsertServer(db, serverId, serverState, null);
+        // Save state
+        upsertPlayer(db, serverId, targetUser.id, targetPlayer, null, targetPlayer.schema_version);
+        upsertServer(db, serverId, serverState, null);
 
-      const blessing = getActiveBlessing(visitor);
-      const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
+        const blessing = getActiveBlessing(targetPlayer);
+        const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
 
-      const embed = new EmbedBuilder()
-        .setTitle("🌟 Shop Visit!")
-        .setDescription(
-          `<@${userId}> visited <@${targetUser.id}>'s shop and received a **Blessing**!\n\n` +
-          `✨ **Effect**: Enhanced discovery chance\n` +
-          `⏰ **Duration**: ${expiresInHours} hours\n` +
-          `🔄 **Cooldown**: ${BLESSING_COOLDOWN_HOURS} hours after expiry`
-        )
-        .setColor(0xffaa00);
+        const blessingNames = {
+          discovery_chance_add: "Enhanced Discovery",
+          limited_time_window_add: "Extended Time Window",
+          quality_shift: "Quality Boost",
+          npc_weight_mult: "Customer Favor",
+          coin_bonus: "Coin Bonus",
+          rep_bonus: "Reputation Bonus"
+        };
+        const blessingName = blessingNames[blessingType] || blessingType;
+
+        const embed = new EmbedBuilder()
+          .setTitle("🌟 Shop Visit!")
+          .setDescription(
+            `<@${userId}> visited <@${targetUser.id}>'s shop and granted them a **Blessing**!\n\n` +
+            `✨ **Effect**: ${blessingName}\n` +
+            `⏰ **Duration**: ${expiresInHours} hours\n` +
+            `🔄 **Cooldown**: ${BLESSING_COOLDOWN_HOURS} hours after expiry`
+          )
+          .setColor(0xffaa00);
 
       const replyObj = { 
         embeds: [embed], 
@@ -475,6 +541,7 @@ async function handleVisit(interaction) {
     } catch (err) {
       return interaction.editReply({ content: `❌ ${err.message}` });
     }
+    });
   });
 }
 
@@ -589,9 +656,18 @@ async function handleStats(interaction) {
     if (blessing) {
       const remainingMs = blessing.expires_at - nowTs();
       const remainingHours = Math.max(0, Math.ceil(remainingMs / (60 * 60 * 1000)));
+      const blessingNames = {
+          discovery_chance_add: "Enhanced Discovery",
+          limited_time_window_add: "Extended Time Window",
+          quality_shift: "Quality Boost",
+          npc_weight_mult: "Customer Favor",
+        coin_bonus: "Coin Bonus",
+        rep_bonus: "Reputation Bonus"
+      };
+      const blessingName = blessingNames[blessing.type] || blessing.type;
       embed.addFields({
         name: "✨ Active Blessing",
-        value: `Type: ${blessing.type}\nExpires in: ${remainingHours} hours`,
+        value: `**${blessingName}**\nExpires in: ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`,
         inline: false
       });
     } else {
@@ -777,6 +853,134 @@ async function handleComponent(interaction) {
         }
       }
     }
+
+    if (customId.startsWith("noodle-social:modal:tip:")) {
+      const targetInput = interaction.fields.getTextInputValue("target_user");
+      const amountInput = interaction.fields.getTextInputValue("amount");
+
+      const targetId = await resolveUserIdFromInput(targetInput, interaction);
+      if (!targetId) {
+        return interaction.editReply({ content: "❌ Enter a nickname or username.", ephemeral: true });
+      }
+      if (targetId === userId) {
+        return interaction.editReply({ content: "❌ You cannot tip yourself!", ephemeral: true });
+      }
+
+      const amount = Number.parseInt(String(amountInput ?? "").trim(), 10);
+      if (!Number.isFinite(amount)) {
+        return interaction.editReply({ content: "❌ Enter a valid amount.", ephemeral: true });
+      }
+
+      const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
+      if (!targetUser) {
+        return interaction.editReply({ content: "❌ User not found.", ephemeral: true });
+      }
+
+      const ownerLock = `discord:${interaction.id}`;
+
+      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+        return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
+          let sender = ensurePlayer(serverId, userId);
+          let receiver = ensurePlayer(serverId, targetId);
+
+          try {
+            const result = transferTip(db, serverId, sender, receiver, amount, null);
+
+            upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
+            upsertPlayer(db, serverId, targetId, result.receiver, null, result.receiver.schema_version);
+
+            const party = getUserActiveParty(db, userId);
+            const isLeader = party?.leader_user_id === userId;
+            const partyRow = party ? partyActionRow(userId, true, isLeader) : partyCreationRow(userId);
+
+            const embed = new EmbedBuilder()
+              .setTitle("💰 Tip Sent!")
+              .setDescription(`<@${userId}> tipped <@${targetId}> **${amount} coins**!`)
+              .setColor(0xffd700);
+
+            embed.addFields(
+              { name: "Your Balance", value: `${result.sender.coins}c`, inline: true },
+              { name: "Their Balance", value: `${result.receiver.coins}c`, inline: true }
+            );
+
+            return interaction.editReply({
+              embeds: [embed],
+              components: [partyRow, socialMainMenuRow(userId)]
+            });
+          } catch (err) {
+            return interaction.editReply({ content: `❌ ${err.message}` });
+          }
+        });
+      });
+    }
+
+    if (customId.startsWith("noodle-social:modal:bless:")) {
+      const targetInput = interaction.fields.getTextInputValue("target_user");
+      const targetId = await resolveUserIdFromInput(targetInput, interaction);
+      if (!targetId) {
+        return interaction.editReply({ content: "❌ Enter a nickname or username.", ephemeral: true });
+      }
+      if (targetId === userId) {
+        return interaction.editReply({ content: "❌ You cannot bless yourself!", ephemeral: true });
+      }
+
+      const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
+      if (!targetUser) {
+        return interaction.editReply({ content: "❌ User not found.", ephemeral: true });
+      }
+
+      const ownerLock = `discord:${interaction.id}`;
+
+      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+        return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
+          let serverState = ensureServer(serverId);
+          let targetPlayer = ensurePlayer(serverId, targetId);
+
+          try {
+            const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
+            targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+
+            serverState = logVisitActivity(serverState, userId, targetId);
+
+            upsertPlayer(db, serverId, targetId, targetPlayer, null, targetPlayer.schema_version);
+            upsertServer(db, serverId, serverState, null);
+
+            const blessing = getActiveBlessing(targetPlayer);
+            const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
+            const blessingNames = {
+              discovery_chance_add: "Enhanced Discovery",
+              limited_time_window_add: "Extended Time Window",
+              quality_shift: "Quality Boost",
+              npc_weight_mult: "Customer Favor",
+              coin_bonus: "Coin Bonus",
+              rep_bonus: "Reputation Bonus"
+            };
+            const blessingName = blessingNames[blessingType] || blessingType;
+
+            const party = getUserActiveParty(db, userId);
+            const isLeader = party?.leader_user_id === userId;
+            const partyRow = party ? partyActionRow(userId, true, isLeader) : partyCreationRow(userId);
+
+            const embed = new EmbedBuilder()
+              .setTitle("🌟 Blessing Granted!")
+              .setDescription(
+                `<@${userId}> blessed <@${targetId}>!\n\n` +
+                `✨ **Effect**: ${blessingName}\n` +
+                `⏰ **Duration**: ${expiresInHours} hours\n` +
+                `🔄 **Cooldown**: ${BLESSING_COOLDOWN_HOURS} hours after expiry`
+              )
+              .setColor(0xffaa00);
+
+            return interaction.editReply({
+              embeds: [embed],
+              components: [partyRow, socialMainMenuRow(userId)]
+            });
+          } catch (err) {
+            return interaction.editReply({ content: `❌ ${err.message}` });
+          }
+        });
+      });
+    }
   }
 
   const parts = customId.split(":"); // noodle-social:<kind>:<action>:<ownerId>
@@ -909,9 +1113,18 @@ async function handleComponent(interaction) {
       if (blessing) {
         const remainingMs = blessing.expires_at - nowTs();
         const remainingHours = Math.max(0, Math.ceil(remainingMs / (60 * 60 * 1000)));
+        const blessingNames = {
+          discovery_chance_add: "Enhanced Discovery",
+          limited_time_window_add: "Extended Time Window",
+          quality_shift: "Quality Boost",
+          npc_weight_mult: "Customer Favor",
+          coin_bonus: "Coin Bonus",
+          rep_bonus: "Reputation Bonus"
+        };
+        const blessingName = blessingNames[blessing.type] || blessing.type;
         embed.addFields({
           name: "✨ Active Blessing",
-          value: `Type: ${blessing.type}\nExpires in: ${remainingHours} hours`,
+          value: `**${blessingName}**\nExpires in: ${remainingHours} hour${remainingHours !== 1 ? "s" : ""}`,
           inline: false
         });
       } else {
@@ -965,6 +1178,87 @@ async function handleComponent(interaction) {
 
   /* ---------------- ACTION BUTTONS ---------------- */
   if (kind === "action") {
+    if (action === "tip") {
+      if (interaction.deferred || interaction.replied) {
+        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      }
+
+      try {
+        return await interaction.showModal({
+          customId: `noodle-social:modal:tip:${userId}`,
+          title: "Send a Tip",
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  customId: "target_user",
+                  label: "Nickname or username",
+                  style: 1,
+                  required: true,
+                  maxLength: 32
+                }
+              ]
+            },
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  customId: "amount",
+                  label: "Amount (coins up to 100)",
+                  style: 1,
+                  required: true,
+                  maxLength: 8
+                }
+              ]
+            }
+          ]
+        });
+      } catch (e) {
+        console.log(`⚠️ showModal failed for tip:`, e?.message);
+        return componentCommit(interaction, { 
+          content: "⚠️ Discord couldn't show the modal.", 
+          ephemeral: true 
+        });
+      }
+    }
+
+    if (action === "bless") {
+      if (interaction.deferred || interaction.replied) {
+        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      }
+
+      try {
+        return await interaction.showModal({
+          customId: `noodle-social:modal:bless:${userId}`,
+          title: "Grant a Blessing",
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  customId: "target_user",
+                  label: "Nickname or username",
+                  style: 1,
+                  required: true,
+                  maxLength: 32
+                }
+              ]
+            }
+          ]
+        });
+      } catch (e) {
+        console.log(`⚠️ showModal failed for bless:`, e?.message);
+        return componentCommit(interaction, { 
+          content: "⚠️ Discord couldn't show the modal.", 
+          ephemeral: true 
+        });
+      }
+    }
+
     if (action === "party_info") {
       const party = getUserActiveParty(db, userId);
       if (!party) {

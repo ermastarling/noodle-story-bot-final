@@ -48,7 +48,7 @@ export function getPlayer(db, serverId, userId) {
   const row = db.prepare("SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
     .get(serverId, userId);
   if (!row) return null;
-  return { ...JSON.parse(row.data_json), state_rev: row.state_rev, schema_version: row.schema_version };
+  return { ...JSON.parse(row.data_json), user_id: userId, state_rev: row.state_rev, schema_version: row.schema_version };
 }
 
 export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null, schemaVersion=1) {

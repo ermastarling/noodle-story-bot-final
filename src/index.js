@@ -147,7 +147,9 @@ import { fileURLToPath } from "url";
                             cid?.includes("sell:qty:") ||
                             cid?.includes("action:party_create") ||
                             cid?.includes("action:party_join") ||
-                            cid?.includes("action:party_invite");
+                            cid?.includes("action:party_invite") ||
+                            cid?.includes("action:tip") ||
+                            cid?.includes("action:bless");
         if (willShowModal) {
           console.log(`⏭️  Skipping defer for modal-showing button: ${cid}`);
         }
@@ -158,6 +160,11 @@ import { fileURLToPath } from "url";
             console.log(`✅ Deferred button/select in ${Date.now() - deferStart}ms`);
           } catch (e) {
             console.log(`⚠️ Button/select defer failed (age was ${age}ms):`, e?.message);
+            // If defer failed due to unknown interaction, skip processing
+            if (e?.message?.includes("Unknown interaction") || e?.code === 10062) {
+              console.log(`⏭️  Skipping handler - interaction expired`);
+              return;
+            }
             // Continue processing - handler may be able to respond directly
           }
         }
@@ -169,6 +176,11 @@ import { fileURLToPath } from "url";
         console.log(`✅ Deferred modal in ${Date.now() - deferStart}ms`);
       } catch (e) {
         console.log(`⚠️ Modal defer failed (age was ${age}ms):`, e?.message);
+        // If defer failed due to unknown interaction, skip processing
+        if (e?.message?.includes("Unknown interaction") || e?.code === 10062) {
+          console.log(`⏭️  Skipping handler - interaction expired`);
+          return;
+        }
         // Continue so handler can attempt a followUp or reply
       }
     }
@@ -278,6 +290,12 @@ import { fileURLToPath } from "url";
         }
       } catch (e) {
         console.error("NOODLE COMPONENT ERROR:", e?.stack ?? e);
+        // Don't try to respond if interaction is already acknowledged or unknown
+        if (e?.code === 10062 || e?.message?.includes("Unknown interaction") || 
+            e?.message?.includes("already been acknowledged")) {
+          console.log(`⏭️  Skipping error reply - interaction invalid or already handled`);
+          return;
+        }
         try {
           if (!interaction.replied && !interaction.deferred) {
             return interaction.reply({ content: "Something went a little sideways, try again.", flags: MessageFlags.Ephemeral });
