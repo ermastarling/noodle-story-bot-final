@@ -513,6 +513,13 @@ export function completeSharedOrder(db, sharedOrderId) {
     .run(now, sharedOrderId);
 }
 
+/**
+ * Get active shared order for a party
+ */
+export function getActiveSharedOrderByParty(db, partyId) {
+  return db.prepare("SELECT * FROM shared_orders WHERE party_id = ? AND status = 'active' LIMIT 1").get(partyId);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Anti-Exploitation Analytics (D6)                                   */
 /* ------------------------------------------------------------------ */

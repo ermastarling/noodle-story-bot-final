@@ -219,7 +219,7 @@ if (player.inv_ingredients && Object.keys(player.inv_ingredients).length > 0) {
     .map(({ name, qty }) => `• **${name}**: ${qty}`)
     .join("\n");
 
-  if (ingLines) embed.addFields({ name: "🥕 Ingredients", value: ingLines, inline: false });
+  if (ingLines) embed.addFields({ name: "🧺 Ingredients", value: ingLines, inline: false });
 }
 
 embed.setFooter({ text: `Owner: ${displayName}` });
