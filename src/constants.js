@@ -19,3 +19,31 @@ export const REP_BASE  = { common: 3,  rare: 7,  epic: 15, seasonal: 20 };
 export function sxpToNext(level) {
   return 100 + 25 * level;
 }
+
+// Recipe Discovery System (Phase 15)
+export const DISCOVERY_HOOKS = { 
+  on_serve: true, 
+  on_forage: false, 
+  on_quest_complete: true 
+};
+
+export const DISCOVERY_CHANCE_BASE = { 
+  serve: 0.02, 
+  quest_complete: 0.10 
+};
+
+export const CLUE_DUPLICATE_COINS = 25;
+export const SCROLL_DUPLICATE_TOKEN_CHANCE = 0.50;
+export const SCROLL_DUPLICATE_COINS = 80;
+
+export const DISCOVERY_TIER_UNLOCK_LEVEL = { 
+  rare: 5, 
+  epic: 10, 
+  seasonal: 12 
+};
+
+export const DISCOVERY_TIER_UNLOCK_REP = { 
+  rare: 25, 
+  epic: 100, 
+  seasonal: 150 
+};

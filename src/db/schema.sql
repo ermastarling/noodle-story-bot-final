@@ -102,3 +102,32 @@ CREATE INDEX IF NOT EXISTS idx_party_members_user ON party_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_shared_orders_party ON shared_orders(party_id, status);
 CREATE INDEX IF NOT EXISTS idx_tips_server ON tips(server_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_tips_users ON tips(from_user_id, to_user_id);
+
+-- Recipe Discovery Tables (Phase 15)
+
+CREATE TABLE IF NOT EXISTS recipes (
+  recipe_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  tier TEXT NOT NULL,
+  ingredients TEXT NOT NULL,
+  unlock_conditions TEXT
+);
+
+CREATE TABLE IF NOT EXISTS recipe_clues (
+  clue_id TEXT PRIMARY KEY,
+  recipe_id TEXT NOT NULL,
+  hint_text TEXT NOT NULL,
+  source TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS recipe_scrolls (
+  scroll_id TEXT PRIMARY KEY,
+  recipe_id TEXT NOT NULL,
+  rarity TEXT NOT NULL,
+  source TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_recipe_clues_recipe ON recipe_clues(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_scrolls_recipe ON recipe_scrolls(recipe_id);

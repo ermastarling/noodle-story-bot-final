@@ -36,6 +36,9 @@ import {
   checkRepFloorBonus
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
+import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
+import { makeStreamRng } from "../util/rng.js";
+import { dayKeyUTC } from "../util/time.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -1335,7 +1338,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     p.lifetime.limited_time_served = p.lifetime.limited_time_served ?? 0;
     p.lifetime.perfect_speed_serves = p.lifetime.perfect_speed_serves ?? 0;
     if (!p.lifetime.npc_seen) p.lifetime.npc_seen = {};
+    if (!p.daily) p.daily = {};
+    if (!p.buffs) p.buffs = {};
+    
     const results = [];
+    const discoveryMessages = [];
     let totalCoins = 0;
     let totalRep = 0;
     let totalSxp = 0;
@@ -1385,6 +1392,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
 
       const servedAt = nowTs();
+      const recipe = content.recipes?.[order.recipe_id];
       const rewards = computeServeRewards({
         serverId,
         tier: order.tier,
@@ -1393,7 +1401,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         servedAtMs: servedAt,
         acceptedAtMs: accepted.accepted_at,
         speedWindowSeconds: order.speed_window_seconds,
-        player: p
+        player: p,
+        recipe,
+        content
       });
 
       // Consume fail-streak relief after successful serve (B4)
@@ -1425,6 +1435,46 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       if (!p.lifetime.npc_seen) p.lifetime.npc_seen = {};
       p.lifetime.npc_seen[order.npc_archetype] = true;
 
+      // Update daily tracking for Sleepy Traveler
+      const dayKey = dayKeyUTC(servedAt);
+      p.daily.last_serve_day = dayKey;
+      
+      // Track last recipe served for Retired Captain
+      if (p.buffs) {
+        p.buffs.last_recipe_served = order.recipe_id;
+      }
+      
+      // Apply NPC discovery buffs for next serve
+      applyNpcDiscoveryBuff(p, order.npc_archetype);
+
+      // Roll for recipe discovery
+      // Note: Uses same seed (12345) as serve rewards for consistency,
+      // but different streamName and extra parameters ensure independence
+      const discoveryRng = makeStreamRng({ 
+        mode: "seeded", 
+        seed: 12345, 
+        streamName: "discovery", 
+        serverId, 
+        dayKey,
+        extra: `${fullOrderId}_${servedAt}` 
+      });
+      const discovery = rollRecipeDiscovery({
+        player: p,
+        content,
+        npcArchetype: order.npc_archetype,
+        tier: order.tier,
+        rng: discoveryRng
+      });
+      
+      if (discovery) {
+        const result = applyDiscovery(p, discovery);
+        if (result.message) {
+          discoveryMessages.push(result.message);
+        } else if (result.isDuplicate && result.reward) {
+          discoveryMessages.push(`✨ ${result.reward}`);
+        }
+      }
+
       totalCoins += rewards.coins;
       totalRep += rewards.rep;
       totalSxp += rewards.sxp;
@@ -1433,6 +1483,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
       results.push(`🍜 Served **${rName}** to *${npcName}*.`);
+      
+      if (rewards.repAuraGranted) {
+        results.push(`  ✨ *Hearth Grandparent left a warm aura (+2 REP for 15 min)*`);
+      }
     }
 
     if (!servedCount) {
@@ -1441,6 +1495,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
     const levelLine = leveledUp ? `\n✨ Level up! You're now **Level ${p.shop_level}**.` : "";
+    const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.join("\n")}` : "";
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
@@ -1448,7 +1503,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName)] : [];
 
     return commitState({
-      content: `${results.join("\n")}\n\n${summary}${levelLine}${suffix}`,
+      content: `${results.join("\n")}\n\n${summary}${levelLine}${discoveryLine}${suffix}`,
       components,
       embeds
     });
