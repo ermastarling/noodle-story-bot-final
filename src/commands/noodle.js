@@ -1448,6 +1448,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       applyNpcDiscoveryBuff(p, order.npc_archetype);
 
       // Roll for recipe discovery
+      // Note: Uses same seed (12345) as serve rewards for consistency,
+      // but different streamName and extra parameters ensure independence
       const discoveryRng = makeStreamRng({ 
         mode: "seeded", 
         seed: 12345, 

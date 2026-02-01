@@ -1,8 +1,7 @@
 import { COIN_BASE, SXP_BASE, REP_BASE, sxpToNext } from "../constants.js";
 import { makeStreamRng, rngBetween } from "../util/rng.js";
-import { dayKeyUTC } from "../util/time.js";
+import { dayKeyUTC, nowTs } from "../util/time.js";
 import { getFailStreakBonuses, applyRepFloorBonus } from "./resilience.js";
-import { nowTs } from "../util/time.js";
 
 export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds, player, recipe, content }) {
   const dayKey = dayKeyUTC(servedAtMs);
