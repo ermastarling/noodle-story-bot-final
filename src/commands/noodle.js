@@ -439,9 +439,9 @@ if (interaction.deferred || interaction.replied) {
 
 // Last resort fallback - not deferred/replied yet
 try {
-  return await interaction.reply(finalOptions);
+  return await interaction.update(finalOptions);
 } catch (e) {
-  console.log(`⚠️ Component reply failed:`, e?.message);
+  console.log(`⚠️ Component update failed:`, e?.message);
   return;
 }
 }
@@ -593,6 +593,19 @@ const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...re
 if (interaction.deferred || interaction.replied) return interaction.editReply(options);
 return interaction.reply(options);
 }
+
+// If a modal submit supplied a target message id, edit that message directly
+if (overrides?.messageId && !payload?.ephemeral) {
+  try {
+    const target = await interaction.channel?.messages?.fetch(overrides.messageId);
+    if (target) {
+      return target.edit(payload);
+    }
+  } catch (e) {
+    // fall through to componentCommit
+  }
+}
+
 // Components: editReply flow
 return componentCommit(interaction, payload);
 };
@@ -1186,13 +1199,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!tokens.length) return commitState({ content: "Pick at least one order to accept.", ephemeral: true });
 
     const cap = 5;
+    // Ensure orders is a valid object (handle case where it might be an array or null)
+    if (!p.orders || typeof p.orders !== 'object' || Array.isArray(p.orders)) {
+      p.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
+    }
+    
     const acceptedCount = Object.keys(p.orders?.accepted ?? {}).length;
     const available = Math.max(0, cap - acceptedCount);
     if (available <= 0) {
       return commitState({ content: `You can only hold ${cap} active orders right now.`, ephemeral: true });
     }
 
-    if (!p.orders) p.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
     if (!p.orders.accepted) p.orders.accepted = {};
 
     const board = p.order_board ?? [];
@@ -1261,7 +1278,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "cancel") {
     const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
 
-    if (!p.orders) p.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
+    // Ensure orders is a valid object (handle case where it might be an array or null)
+    if (!p.orders || typeof p.orders !== 'object' || Array.isArray(p.orders)) {
+      p.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
+    }
     if (!p.orders.accepted) p.orders.accepted = {};
     const accepted = p.orders.accepted;
 
@@ -1694,8 +1714,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
   }
 
+  const sourceMessageId = interaction.message?.id ?? "none";
   const modal = new ModalBuilder()
-    .setCustomId(`noodle:pick:cook_qty:${userId}:${recipeId}`)
+    .setCustomId(`noodle:pick:cook_qty:${userId}:${recipeId}:${sourceMessageId}`)
     .setTitle("Cook bowls");
 
   const input = new TextInputBuilder()
@@ -1723,9 +1744,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   /* ---------------- COOK QTY MODAL ---------------- */
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:pick:cook_qty:")) {
     const parts2 = interaction.customId.split(":");
-    // noodle:pick:cook_qty:<ownerId>:<recipeId>
+    // noodle:pick:cook_qty:<ownerId>:<recipeId>:<messageId>
     const owner = parts2[3];
-    const recipeId = parts2.slice(4).join(":"); // recipeId safe (no ':' expected but safe)
+    const recipeId = parts2[4];
+    const messageId = parts2[5] && parts2[5] !== "none" ? parts2[5] : null;
 
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That cooking prompt isn’t for you.", ephemeral: true });
@@ -1738,10 +1760,28 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       return componentCommit(interaction, { content: "Enter a whole number quantity (1–99).", ephemeral: true });
     }
 
-    return runNoodle(interaction, {
+    if (messageId) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const result = await runNoodle(interaction, {
       sub: "cook",
-      overrides: { strings: { recipe: recipeId }, integers: { quantity: qty } }
+      overrides: { strings: { recipe: recipeId }, integers: { quantity: qty }, messageId }
     });
+
+    if (messageId) {
+      try {
+        await interaction.deleteReply();
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return result;
   }
 
   /* ---------------- MULTI-BUY SELECT MENU ---------------- */

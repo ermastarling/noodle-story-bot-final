@@ -343,10 +343,8 @@ async function componentCommit(interaction, opts) {
     return interaction.reply({ ...rest, ephemeral: true });
   }
 
-  if (interaction.deferred) {
+  if (interaction.deferred || interaction.replied) {
     return interaction.editReply(rest);
-  } else if (interaction.replied) {
-    return interaction.followUp(rest);
   }
   return interaction.update(rest);
 }
@@ -1161,12 +1159,12 @@ async function handleComponent(interaction) {
             contributions: updatedContributions
           });
 
-          return await interaction.reply({
+          return componentCommit(interaction, {
             embeds: [embed],
             components: [sharedOrderActionRow(userId, true, isLeader, updatedProgress.isComplete), socialMainMenuRow(userId)]
           });
         } catch (err) {
-          return interaction.editReply({ content: `❌ ${err.message}`, ephemeral: true });
+          return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
         }
       });
     }
