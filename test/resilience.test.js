@@ -3,7 +3,6 @@ import assert from "node:assert";
 import {
   detectDeadlock,
   applyFallbackRecipeAccess,
-  applyEmergencyGrant,
   getFailStreakBonuses,
   consumeFailStreakRelief,
   updateFailStreak,
@@ -15,8 +14,7 @@ import {
   getAvailableRecipes,
   clearTemporaryRecipes,
   FALLBACK_RECIPE_ID,
-  FAIL_STREAK_TRIGGER,
-  EMERGENCY_GRANT
+  FAIL_STREAK_TRIGGER
 } from "../src/game/resilience.js";
 
 test("B1: detectDeadlock - returns false when player has coins", () => {
@@ -117,28 +115,6 @@ test("B2: applyFallbackRecipeAccess - doesn't grant if already known", () => {
   const result = applyFallbackRecipeAccess(player, content);
   
   assert.strictEqual(result.granted, false);
-});
-
-test("B3: applyEmergencyGrant - grants ingredients once per day", () => {
-  const player = { inv_ingredients: {}, resilience: {} };
-  const content = { 
-    items: { 
-      broth_soy: { name: "Soy Broth" },
-      noodles_wheat: { name: "Wheat Noodles" }
-    } 
-  };
-  
-  const result = applyEmergencyGrant(player, content);
-  
-  assert.strictEqual(result.granted, true);
-  assert.ok(result.message.includes("Emergency Supplies"));
-  
-  // Verify using EMERGENCY_GRANT constants
-  for (const [itemId, qty] of Object.entries(EMERGENCY_GRANT)) {
-    assert.strictEqual(player.inv_ingredients[itemId], qty);
-  }
-  
-  assert.ok(player.resilience.last_rescue_at > 0);
 });
 
 test("B4: updateFailStreak - increments on failure", () => {

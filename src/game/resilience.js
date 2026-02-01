@@ -16,12 +16,6 @@ export const RECOVERY_COOLDOWN_HOURS = 24;
 export const MARKET_PITY_DISCOUNT = 0.50;
 export const REP_FLOOR = 0;
 
-// Emergency grant quantities
-export const EMERGENCY_GRANT = {
-  broth_soy: 1,
-  noodles_wheat: 1
-};
-
 /**
  * B1: Economic Deadlock Detection
  * DEADLOCK = (coins == 0) AND (no cookable recipes) AND (no market buy possible)
@@ -115,15 +109,6 @@ export function applyFallbackRecipeAccess(player, content) {
     };
   }
 
-  return { granted: false, message: "" };
-}
-
-/**
- * B3: Emergency Ingredient Grant (DISABLED)
- * Replaced with forage-based recovery
- */
-export function applyEmergencyGrant(player, content) {
-  // No longer grants ingredients - player must forage
   return { granted: false, message: "" };
 }
 
@@ -366,8 +351,6 @@ export function applyResilienceMechanics(player, serverState, content) {
       messages.push(fallback.message);
       applied = true;
     }
-    
-    // B3: Emergency grant disabled - player must forage for ingredients
   }
 
   // Check market pity discount (B6)
