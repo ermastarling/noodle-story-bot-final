@@ -1546,13 +1546,15 @@ if (kind === "nav" && action === "sell") {
 /* ---------------- NAV BUTTONS ---------------- */
 if (kind === "nav") {
 const sub = action;
-return runNoodle(interaction, { sub, group: null, overrides: {} });
+const sourceMessageId = interaction.message?.id;
+return runNoodle(interaction, { sub, group: null, overrides: { messageId: sourceMessageId } });
 }
 
 /* ---------------- LEGACY ACTION BUTTONS ---------------- */
 if (kind === "action") {
   const sub = action;
-  return runNoodle(interaction, { sub, group: null, overrides: {} });
+  const sourceMessageId = interaction.message?.id;
+  return runNoodle(interaction, { sub, group: null, overrides: { messageId: sourceMessageId } });
 }
 
 /* ---------------- QUICK PICKERS (BUTTONS ONLY) ---------------- */
@@ -1837,8 +1839,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
       }
 
+      const sourceMessageId = interaction.message?.id ?? "";
       const modal = new ModalBuilder()
-        .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${selectedIds.join(",")}`)
+        .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${selectedIds.join(",")}:${sourceMessageId}`)
         .setTitle("Multi-buy quantities");
 
       const pickedNames = selectedIds.map((id) => content.items?.[id]?.name ?? displayItemName(id));
@@ -1878,9 +1881,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     // Buy 1 each -> perform purchase
     if (mode === "buy1") {
-      // Immediately acknowledge button click + remove components
-      await componentCommit(interaction, { content: "🛒 Buying **1 each**…", components: [] });
-
+      const sourceMessageId = interaction.message?.id;
       const action = "multibuy_buy1";
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = getIdempotentResult(db, idemKey);
@@ -1960,6 +1961,19 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         };
 
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        
+        // Edit original message if we have the messageId
+        if (sourceMessageId) {
+          try {
+            const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
+            if (targetMsg) {
+              return await targetMsg.edit(replyObj);
+            }
+          } catch (e) {
+            console.log(`⚠️ Failed to edit message ${sourceMessageId}:`, e?.message);
+          }
+        }
+        
         return componentCommit(interaction, replyObj);
       });
     }
@@ -1970,10 +1984,18 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   /* ---------------- MULTI-BUY QTY MODAL SUBMIT ---------------- */
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:multibuy:qty:")) {
     const parts2 = interaction.customId.split(":");
-    // noodle:multibuy:qty:<ownerId>:<id1,id2,...>
+    // noodle:multibuy:qty:<ownerId>:<id1,id2,...>:<messageId>
     const owner = parts2[3];
-    const idsPart = parts2.slice(4).join(":");
-    const selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
+    const idsPart4 = parts2.slice(4).join(":");
+    const lastColonIdx = idsPart4.lastIndexOf(":");
+    let selectedIds, sourceMessageId;
+    if (lastColonIdx > -1) {
+      selectedIds = idsPart4.slice(0, lastColonIdx).split(",").filter(Boolean).slice(0, 5);
+      sourceMessageId = idsPart4.slice(lastColonIdx + 1);
+    } else {
+      selectedIds = idsPart4.split(",").filter(Boolean).slice(0, 5);
+      sourceMessageId = null;
+    }
 
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That purchase isn’t for you.", ephemeral: true });
@@ -2016,9 +2038,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     if (!Object.keys(want).length) {
       return componentCommit(interaction, { content: "No quantities provided.", ephemeral: true });
     }
-
-    // Send immediate acknowledgment before DB work to avoid timeout
-    await componentCommit(interaction, { content: "🛒 Processing your purchase…", components: [] });
 
     // Idempotency (prevents double submit)
     const action = "multibuy";
@@ -2099,6 +2118,19 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       };
 
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+      
+      // Edit original message if we have the messageId
+      if (sourceMessageId) {
+        try {
+          const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
+          if (targetMsg) {
+            return await targetMsg.edit(replyObj);
+          }
+        } catch (e) {
+          console.log(`⚠️ Failed to edit message ${sourceMessageId}:`, e?.message);
+        }
+      }
+      
       return componentCommit(interaction, replyObj);
     });
   }
