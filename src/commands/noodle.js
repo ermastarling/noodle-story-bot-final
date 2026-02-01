@@ -36,6 +36,9 @@ import {
   checkRepFloorBonus
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
+import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
+import { makeStreamRng } from "../util/rng.js";
+import { dayKeyUTC } from "../util/time.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -1345,11 +1348,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     let totalSxp = 0;
     let servedCount = 0;
     let leveledUp = false;
-
-    // Import discovery functions at the top of the file (add this to imports)
-    const { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } = await import("../game/discovery.js");
-    const { makeStreamRng } = await import("../util/rng.js");
-    const { dayKeyUTC } = await import("../util/time.js");
 
     for (const tok of tokens) {
       const matchEntry = Object.entries(acceptedMap).find(([fullId]) => {

@@ -135,7 +135,7 @@ function rollScroll(player, content, rng) {
 /**
  * Apply discovery to player state
  */
-export function applyDiscovery(player, discovery) {
+export function applyDiscovery(player, discovery, rng = Math.random) {
   if (!discovery) return { isDuplicate: false, reward: null };
   
   if (discovery.type === "clue") {
@@ -173,7 +173,7 @@ export function applyDiscovery(player, discovery) {
     const scrollKey = discovery.recipeId;
     if (player.scrolls_owned[scrollKey]) {
       // Duplicate scroll - 50% chance for token, otherwise coins
-      const tokenRoll = Math.random();
+      const tokenRoll = rng();
       if (tokenRoll < SCROLL_DUPLICATE_TOKEN_CHANCE) {
         // Add cosmetic token (not implemented yet, just return message)
         return { 

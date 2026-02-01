@@ -8,6 +8,9 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   const dayKey = dayKeyUTC(servedAtMs);
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"serve", serverId, dayKey });
 
+  // Ensure player.buffs exists
+  if (!player.buffs) player.buffs = {};
+
   const coinsBase = Math.floor(COIN_BASE[tier] * rngBetween(rng, 0.90, 1.10));
   let mSpeed = (isLimitedTime && speedWindowSeconds && acceptedAtMs)
     ? (1 + 0.20 * Math.max(0, Math.min(1, (speedWindowSeconds*1000 - (servedAtMs - acceptedAtMs)) / (speedWindowSeconds*1000))))
@@ -41,7 +44,7 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   
   // Retired Captain: repeated recipe grants +10 SXP
   if (npcArchetype === "retired_captain" && player && recipe) {
-    if (player.buffs?.last_recipe_served === recipe.recipe_id) {
+    if (player.buffs.last_recipe_served === recipe.recipe_id) {
       sxp += 10;
     }
   }
@@ -75,7 +78,6 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   // Hearth Grandparent: +2 REP aura for 15 minutes after serve
   let repAuraGranted = false;
   if (npcArchetype === "hearth_grandparent") {
-    if (!player.buffs) player.buffs = {};
     player.buffs.rep_aura_expires_at = nowTs() + 15 * 60 * 1000;
     repAuraGranted = true;
   }
