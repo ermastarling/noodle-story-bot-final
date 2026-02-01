@@ -1157,18 +1157,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const parts = [];
     if (sweep2.warning) parts.push(sweep2.warning, "");
 
-    if (acceptedLines.length) {
-      parts.push(
-        "**Your Accepted Orders**",
-        acceptedLines.join("\n"),
-        "",
-        statusMsg,
-        ""
-      );
-    } else {
-      parts.push("**Your Accepted Orders**", "_None right now._", "");
-    }
-
     const remaining = (p.order_board ?? []).length;
     if (remaining > 0) {
       parts.push(
@@ -1179,6 +1167,20 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       parts.push("📋 **Today’s Orders**", "No new orders left today. Finish your accepted ones and come back tomorrow.");
     } else {
       parts.push("🎉 You’ve completed all of today’s orders! Come back tomorrow for more.");
+    }
+
+
+    if (acceptedLines.length) {
+      parts.push(
+        "",
+        "**Your Accepted Orders**",
+        acceptedLines.join("\n"),
+        "",
+        statusMsg,
+        ""
+      );
+    } else {
+      parts.push("", "**Your Accepted Orders**", "_None right now._", "");
     }
 
     const tutSuffix = tutorialSuffix(p);
@@ -2478,5 +2480,5 @@ export const noodleCommand = {
   }
 };
 
-export { noodleMainMenuRow, noodleMainMenuRowNoProfile };
+export { noodleMainMenuRow, noodleMainMenuRowNoProfile, displayItemName };
 

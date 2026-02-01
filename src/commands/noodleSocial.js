@@ -7,7 +7,7 @@ import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
 import { loadContentBundle } from "../content/index.js";
-import { noodleMainMenuRowNoProfile } from "./noodle.js";
+import { noodleMainMenuRowNoProfile, displayItemName } from "./noodle.js";
 import {
   grantBlessing,
   getActiveBlessing,
@@ -1512,8 +1512,41 @@ async function handleComponent(interaction) {
           { name: "REP", value: String(player.rep || 0), inline: true },
           { name: "Coins", value: `${player.coins || 0}c`, inline: true }
         )
-        .setColor(0x00ff88)
-        .setFooter({ text: `Owner: ${interaction.user.displayName}` });
+        .setColor(0x00ff88);
+
+      // Add cooked bowls inventory
+      if (player.inv_bowls && Object.keys(player.inv_bowls).length > 0) {
+        const bowlLines = Object.entries(player.inv_bowls)
+          .map(([key, bowl]) => {
+            const recipeName = content.recipes?.[bowl.recipe_id]?.name ?? bowl.recipe_id;
+            return `• **${recipeName}**: ${bowl.qty}`;
+          })
+          .join("\n");
+        embed.addFields({ name: "🍲 Cooked Bowls", value: bowlLines || "None", inline: false });
+      }
+
+      // Add ingredients inventory
+      if (player.inv_ingredients && Object.keys(player.inv_ingredients).length > 0) {
+        // Aggregate quantities by display name to avoid duplicates (e.g., soy_broth vs Soy Broth)
+        const agg = new Map();
+        for (const [id, qty] of Object.entries(player.inv_ingredients)) {
+          if (!qty || qty <= 0) continue; // skip zeros
+          const name = displayItemName(id);
+          const key = name.toLowerCase();
+          const cur = agg.get(key) ?? { name, qty: 0 };
+          cur.qty += qty;
+          agg.set(key, cur);
+        }
+
+        const ingLines = [...agg.values()]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(({ name, qty }) => `• **${name}**: ${qty}`)
+          .join("\n");
+
+        if (ingLines) embed.addFields({ name: "🧺 Ingredients", value: ingLines, inline: false });
+      }
+
+      embed.setFooter({ text: `Owner: ${interaction.user.displayName}` });
 
       return componentCommit(interaction, {
         embeds: [embed],
