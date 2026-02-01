@@ -117,6 +117,35 @@ test("B2: applyFallbackRecipeAccess - doesn't grant if already known", () => {
   assert.strictEqual(result.granted, false);
 });
 
+test("B3: Emergency recovery is now forage-based - player must gather scallions to cook simple broth", () => {
+  // This test documents the new behavior: no ingredient grants
+  // Instead, players in deadlock get temporary access to simple_broth recipe
+  // and must forage for scallions to cook it
+  const player = { 
+    coins: 0, 
+    known_recipes: [], 
+    inv_ingredients: {},
+    resilience: {}
+  };
+  const content = { 
+    recipes: { 
+      [FALLBACK_RECIPE_ID]: { 
+        name: "Simple Broth",
+        ingredients: [{ item_id: "scallions", qty: 3 }]
+      } 
+    }
+  };
+  
+  // When deadlocked, player gets temporary access to simple_broth
+  const result = applyFallbackRecipeAccess(player, content);
+  assert.strictEqual(result.granted, true);
+  assert.ok(result.message.includes("forage")); // Message tells them to forage
+  assert.ok(player.resilience.temp_recipes.includes(FALLBACK_RECIPE_ID));
+  
+  // Player must forage for scallions (no automatic ingredient grant)
+  assert.deepStrictEqual(player.inv_ingredients, {});
+});
+
 test("B4: updateFailStreak - increments on failure", () => {
   const player = { buffs: { fail_streak: 0 } };
   
