@@ -23,6 +23,7 @@ import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
+import { STARTER_PROFILE } from "../constants.js";
 import { nowTs } from "../util/time.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty } from "../game/social.js";
@@ -157,6 +158,10 @@ p = newPlayerProfile(userId);
 upsertPlayer(db, serverId, userId, p, null, p.schema_version);
 p = getPlayer(db, serverId, userId);
 }
+// Backfill missing starter recipes for legacy/partial profiles
+if (!Array.isArray(p.known_recipes) || p.known_recipes.length === 0) {
+  p.known_recipes = [...(STARTER_PROFILE.known_recipes || [])];
+}
 return p;
 }
 
@@ -180,14 +185,17 @@ let description = `*${player.profile.tagline}*`;
 if (partyName) {
   description += `\n\n🎪 **${partyName}**`;
 }
+if (!player.lifetime) {
+  player.lifetime = { bowls_served_total: 0 };
+}
 const embed = new EmbedBuilder()
 .setTitle(`🍜 ${player.profile.shop_name}`)
 .setDescription(description)
 .addFields(
-{ name: "⭐ Bowls Served", value: String(player.lifetime.bowls_served_total), inline: true },
-{ name: "Level", value: String(player.shop_level), inline: true },
-{ name: "REP", value: String(player.rep), inline: true },
-{ name: "Coins", value: `${player.coins}c`, inline: true }
+{ name: "⭐ Bowls Served", value: String(player.lifetime.bowls_served_total || 0), inline: true },
+{ name: "Level", value: String(player.shop_level || 1), inline: true },
+{ name: "REP", value: String(player.rep || 0), inline: true },
+{ name: "Coins", value: `${player.coins || 0}c`, inline: true }
 );
 
 // Add cooked bowls inventory
@@ -245,7 +253,8 @@ return msg ? `\n\n${msg}` : "";
 
 function getUnlockedIngredientIds(player, contentBundle) {
 const out = new Set();
-const known = Array.isArray(player?.known_recipes) ? player.known_recipes : [];
+// Use getAvailableRecipes to include both permanent and temporary recipes
+const known = getAvailableRecipes(player);
 
 for (const recipeId of known) {
 const r = contentBundle.recipes?.[recipeId];
@@ -332,6 +341,13 @@ const { ephemeral, ...rest } = payload ?? {};
 const shouldBeEphemeral = ephemeral === true && !rest.components;
 const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
+if (shouldBeEphemeral) {
+  if (interaction.deferred || interaction.replied) {
+    return interaction.followUp({ ...rest, ephemeral: true });
+  }
+  return interaction.reply({ ...rest, ephemeral: true });
+}
+
 // Modal submits: deferred in index.js, so use editReply
 if (interaction.isModalSubmit?.()) {
 if (interaction.deferred || interaction.replied) {
@@ -404,17 +420,8 @@ if (finalOptions.embeds) {
   finalOptions.embeds = finalOptions.embeds.map(embed => embed.toJSON?.() ?? embed);
 }
 
-// Use editReply for components that were deferred, or followUp for ephemeral  
+// Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
-  if (shouldBeEphemeral === true) {
-    console.log("🔄 Component followUp, embeds:", finalOptions.embeds?.length ?? "none");
-    try {
-      return await interaction.followUp(finalOptions);
-    } catch (e) {
-      console.log(`⚠️ Component followUp failed:`, e?.message);
-      return;
-    }
-  }
   console.log("🔄 Component editReply, embeds:", finalOptions.embeds?.length ?? "none");
   try {
     return await interaction.editReply(finalOptions);
@@ -729,9 +736,22 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   // Apply resilience mechanics (B1-B9)
   const resilience = applyResilienceMechanics(p, s, content);
 
+  // If resilience granted temporary recipes, regenerate order board to include them
+  if (resilience.applied && p.resilience?.temp_recipes?.length > 0) {
+    p.orders_day = null; // Force regeneration
+    ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+  }
+
   const commitState = async (replyObj) => {
     // Clear temporary recipes if player has coins again (B2)
+    const hadTempRecipes = (p.resilience?.temp_recipes?.length || 0) > 0;
     clearTemporaryRecipes(p);
+    const clearedTempRecipes = hadTempRecipes && (p.resilience?.temp_recipes?.length || 0) === 0;
+    if (clearedTempRecipes) {
+      // Regenerate orders for normal play after recovery
+      p.orders_day = null;
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+    }
     
     upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     upsertServer(db, serverId, s, null);
@@ -753,6 +773,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       finalContent = finalContent 
         ? `${resilienceMsg}\n\n${finalContent}` 
         : resilienceMsg;
+    }
+
+    if (clearedTempRecipes) {
+      const recoveryMsg = "✅ **Recovery complete**: You’re back to normal play and your full recipe pool is restored.";
+      finalContent = finalContent ? `${finalContent}\n\n${recoveryMsg}` : recoveryMsg;
     }
 
     const out = {
@@ -1007,7 +1032,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const have = p.inv_bowls[bowlKey].qty;
 
     advanceTutorial(p, "cook");
-    p.lifetime.recipes_cooked += 1;
+    if (!p.lifetime) p.lifetime = { recipes_cooked: 0 };
+    p.lifetime.recipes_cooked = (p.lifetime.recipes_cooked || 0) + 1;
 
     return commitState({
       content: [
@@ -1272,6 +1298,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!tokens.length) return commitState({ content: "Pick at least one accepted order to serve.", ephemeral: true });
 
     const acceptedMap = p.orders?.accepted ?? {};
+    // Ensure core stats and lifetime tracking exist
+    p.coins = Number.isFinite(p.coins) ? p.coins : 0;
+    p.rep = Number.isFinite(p.rep) ? p.rep : 0;
+    p.sxp_total = Number.isFinite(p.sxp_total) ? p.sxp_total : 0;
+    p.sxp_progress = Number.isFinite(p.sxp_progress) ? p.sxp_progress : 0;
+    if (!p.lifetime) p.lifetime = {};
+    p.lifetime.orders_served = p.lifetime.orders_served ?? 0;
+    p.lifetime.bowls_served_total = p.lifetime.bowls_served_total ?? 0;
+    p.lifetime.coins_earned = p.lifetime.coins_earned ?? 0;
+    p.lifetime.limited_time_served = p.lifetime.limited_time_served ?? 0;
+    p.lifetime.perfect_speed_serves = p.lifetime.perfect_speed_serves ?? 0;
+    if (!p.lifetime.npc_seen) p.lifetime.npc_seen = {};
     const results = [];
     let totalCoins = 0;
     let totalRep = 0;
@@ -1488,6 +1526,12 @@ const sub = action;
 return runNoodle(interaction, { sub, group: null, overrides: {} });
 }
 
+/* ---------------- LEGACY ACTION BUTTONS ---------------- */
+if (kind === "action") {
+  const sub = action;
+  return runNoodle(interaction, { sub, group: null, overrides: {} });
+}
+
 /* ---------------- QUICK PICKERS (BUTTONS ONLY) ---------------- */
 // Skip modals - they're handled separately below
 if (kind === "pick" && !action.endsWith("_select") && !interaction.isModalSubmit?.()) {
@@ -1583,10 +1627,10 @@ if (action === "cancel" || action === "serve") {
 if (action === "cook") {
   // select a recipe from known_recipes, then modal for qty
   const p = ensurePlayer(serverId, userId);
-  const known = Array.isArray(p.known_recipes) ? p.known_recipes : [];
-  const opts = known.slice(0, 25).map((rid) => {
+  const available = getAvailableRecipes(p);
+  const opts = available.slice(0, 25).map((rid) => {
     const r = content.recipes?.[rid];
-    const labelRaw = r ? `${r.name} (${r.tier})` : rid;
+    const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     return { label, value: rid };
   });

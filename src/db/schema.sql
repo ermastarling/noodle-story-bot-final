@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS shared_orders (
   party_id TEXT NOT NULL,
   order_id TEXT NOT NULL,
   server_id TEXT NOT NULL,
+  servings INTEGER NOT NULL DEFAULT 5,
   created_at INTEGER NOT NULL,
   completed_at INTEGER,
   status TEXT NOT NULL DEFAULT 'active'

@@ -621,12 +621,8 @@
       "season": null,
       "ingredients": [
         {
-          "item_id": "broth_soy",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_wheat",
-          "qty": 1
+          "item_id": "scallions",
+          "qty": 3
         }
       ]
     },

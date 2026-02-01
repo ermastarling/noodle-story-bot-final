@@ -438,16 +438,16 @@ export function checkEventMilestones(serverState, eventId, milestones) {
 /**
  * Create a shared order for a party
  */
-export function createSharedOrder(db, partyId, orderId, serverId) {
+export function createSharedOrder(db, partyId, recipeId, serverId, servings = 5) {
   const sharedOrderId = crypto.randomUUID();
   const now = nowTs();
   
   db.prepare(`
-    INSERT INTO shared_orders (shared_order_id, party_id, order_id, server_id, created_at, status)
-    VALUES (?, ?, ?, ?, ?, 'active')
-  `).run(sharedOrderId, partyId, orderId, serverId, now);
+    INSERT INTO shared_orders (shared_order_id, party_id, order_id, server_id, created_at, status, servings)
+    VALUES (?, ?, ?, ?, ?, 'active', ?)
+  `).run(sharedOrderId, partyId, recipeId, serverId, now, servings);
   
-  return { sharedOrderId };
+  return { sharedOrderId, servings };
 }
 
 /**
@@ -510,6 +510,15 @@ export function getSharedOrderContributions(db, sharedOrderId) {
 export function completeSharedOrder(db, sharedOrderId) {
   const now = nowTs();
   db.prepare("UPDATE shared_orders SET status = 'completed', completed_at = ? WHERE shared_order_id = ?")
+    .run(now, sharedOrderId);
+}
+
+/**
+ * Cancel a shared order
+ */
+export function cancelSharedOrder(db, sharedOrderId) {
+  const now = nowTs();
+  db.prepare("UPDATE shared_orders SET status = 'cancelled', completed_at = ? WHERE shared_order_id = ?")
     .run(now, sharedOrderId);
 }
 

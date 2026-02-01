@@ -143,17 +143,28 @@ import { fileURLToPath } from "url";
       if (isNoodle || isNoodleSocial) {
         // Check if this button/select will show a modal
         const willShowModal = cid?.includes("multibuy:qty:") || 
-                            cid?.includes("pick:cook_select:") ||
-                            cid?.includes("sell:qty:") ||
-                            cid?.includes("action:party_create") ||
-                            cid?.includes("action:party_join") ||
-                            cid?.includes("action:party_invite") ||
-                            cid?.includes("action:tip") ||
-                            cid?.includes("action:bless");
+                cid?.includes("pick:cook_select:") ||
+                cid?.includes("sell:qty:") ||
+                cid?.includes("action:party_create") ||
+                cid?.includes("action:party_join") ||
+                cid?.includes("action:party_invite") ||
+                cid?.includes("action:tip") ||
+                cid?.includes("action:bless") ||
+                cid?.includes("action:shared_order_contribute") ||
+                cid?.includes("select:shared_order_ingredient");
+        
+        // Buttons that update message immediately without database operations
+        const skipDeferButtons = cid?.includes("action:shared_order_confirm_complete") ||
+                cid?.includes("action:shared_order_abort_cancel") ||
+                cid?.includes("action:shared_order_cancel_complete");
+        
         if (willShowModal) {
           console.log(`⏭️  Skipping defer for modal-showing button: ${cid}`);
         }
-        if (!willShowModal) {
+        if (skipDeferButtons) {
+          console.log(`⏭️  Skipping defer for immediate-response button: ${cid}`);
+        }
+        if (!willShowModal && !skipDeferButtons) {
           const deferStart = Date.now();
           try {
             await interaction.deferUpdate();
@@ -201,7 +212,10 @@ import { fileURLToPath } from "url";
           if (!serverId) return interaction.respond([]);
 
           const p = getPlayer(db, serverId, userId) ?? newPlayerProfile(userId);
-          const known = Array.isArray(p.known_recipes) ? p.known_recipes : [];
+          // Include temporary recipes from resilience
+          const permanent = p.known_recipes || [];
+          const temporary = p.resilience?.temp_recipes || [];
+          const known = [...new Set([...permanent, ...temporary])];
 
           const results = known
             .map((id) => {

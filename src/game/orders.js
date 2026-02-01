@@ -42,8 +42,11 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
     });
   }
 
-  const baselineId = "classic_soy_ramen";
-  if (!board.some(o => o.recipe_id === baselineId)) {
+  const baselineId = playerRecipePool.has("classic_soy_ramen")
+    ? "classic_soy_ramen"
+    : (playerRecipePool.has("simple_broth") ? "simple_broth" : null);
+  // Only add baseline if player has it in their recipe pool
+  if (baselineId && !board.some(o => o.recipe_id === baselineId)) {
     board.unshift({
       order_id: `${dayKey}-baseline-${Math.floor(rng()*1e9)}`,
       tier: "common",
@@ -74,13 +77,20 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
 
 export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId) {
   const dayKey = dayKeyUTC();
-  if (playerState.orders_day === dayKey && Array.isArray(playerState.order_board)) return playerState;
-
   // Include temporary recipes in pool (B5: Order Board Guarantee)
   const permanentRecipes = playerState.known_recipes || [];
   const tempRecipes = playerState.resilience?.temp_recipes || [];
-  const playerRecipePool = new Set([...permanentRecipes, ...tempRecipes]);
-  
+  // If temporary recipes exist (recovery mode), use them as the pool
+  const playerRecipePool = new Set(
+    tempRecipes.length > 0 ? tempRecipes : [...permanentRecipes, ...tempRecipes]
+  );
+
+  if (playerState.orders_day === dayKey && Array.isArray(playerState.order_board)) {
+    // Regenerate if no orders match the player's current recipe pool
+    const hasPoolOrder = playerState.order_board.some((o) => playerRecipePool.has(o.recipe_id));
+    if (hasPoolOrder) return playerState;
+  }
+
   const seedString = `${serverId}-${userId}`;
   playerState.orders_day = dayKey;
   playerState.order_board = generateOrderBoard({ serverId: seedString, dayKey, settings, content, activeSeason, playerRecipePool });

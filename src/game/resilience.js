@@ -95,6 +95,9 @@ export function applyFallbackRecipeAccess(player, content) {
   const fallbackRecipe = content.recipes?.[FALLBACK_RECIPE_ID];
   if (!fallbackRecipe) return { granted: false, message: "" };
 
+  // Ensure known_recipes array exists
+  if (!player.known_recipes) player.known_recipes = [];
+
   // Check if player already knows this recipe permanently
   if (player.known_recipes.includes(FALLBACK_RECIPE_ID)) {
     return { granted: false, message: "" };
@@ -108,7 +111,7 @@ export function applyFallbackRecipeAccess(player, content) {
     player.resilience.temp_recipes.push(FALLBACK_RECIPE_ID);
     return { 
       granted: true, 
-      message: "🆘 **Rescue Mode**: You can temporarily cook a simple broth to get back on your feet." 
+      message: "🆘 **Rescue Mode**: You can temporarily cook a simple broth. Use /noodle forage to gather 3 scallions, then cook and serve it to get back on your feet." 
     };
   }
 
@@ -116,46 +119,12 @@ export function applyFallbackRecipeAccess(player, content) {
 }
 
 /**
- * B3: Emergency Ingredient Grant
- * If deadlocked (once per day): +1 soy_broth, +1 wheat_noodles
+ * B3: Emergency Ingredient Grant (DISABLED)
+ * Replaced with forage-based recovery
  */
 export function applyEmergencyGrant(player, content) {
-  const now = nowTs();
-  const today = dayKeyUTC(now);
-  
-  if (!player.resilience) player.resilience = {};
-  
-  // Check last rescue
-  const lastRescue = player.resilience.last_rescue_at || 0;
-  const lastRescueDay = lastRescue ? dayKeyUTC(lastRescue) : null;
-  
-  // Only grant once per day
-  if (lastRescueDay === today) {
-    return { granted: false, message: "" };
-  }
-
-  // Grant emergency ingredients (validate items exist in content)
-  if (!player.inv_ingredients) player.inv_ingredients = {};
-  
-  let grantedAny = false;
-  for (const [itemId, qty] of Object.entries(EMERGENCY_GRANT)) {
-    // Only grant if item exists in content bundle
-    if (content && content.items && content.items[itemId]) {
-      player.inv_ingredients[itemId] = (player.inv_ingredients[itemId] || 0) + qty;
-      grantedAny = true;
-    }
-  }
-
-  if (!grantedAny) {
-    return { granted: false, message: "" };
-  }
-
-  player.resilience.last_rescue_at = now;
-
-  return { 
-    granted: true, 
-    message: "🆘 **Emergency Supplies**: You've received some basic ingredients to help you recover." 
-  };
+  // No longer grants ingredients - player must forage
+  return { granted: false, message: "" };
 }
 
 /**
@@ -398,15 +367,7 @@ export function applyResilienceMechanics(player, serverState, content) {
       applied = true;
     }
     
-    // B3: Emergency grant (once per day)
-    const cooldown = checkRecoveryCooldown(player);
-    if (cooldown.available) {
-      const grant = applyEmergencyGrant(player, content);
-      if (grant.granted) {
-        messages.push(grant.message);
-        applied = true;
-      }
-    }
+    // B3: Emergency grant disabled - player must forage for ingredients
   }
 
   // Check market pity discount (B6)

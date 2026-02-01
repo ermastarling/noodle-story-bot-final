@@ -25,6 +25,7 @@ import {
   contributeToSharedOrder,
   getSharedOrderContributions,
   completeSharedOrder,
+  cancelSharedOrder,
   getActiveSharedOrderByParty,
   BLESSING_DURATION_HOURS,
   BLESSING_COOLDOWN_HOURS,
@@ -34,6 +35,7 @@ import { nowTs } from "../util/time.js";
 
 const {
   MessageActionRow,
+  MessageSelectMenu,
   MessageButton,
   MessageEmbed,
   Modal,
@@ -43,8 +45,11 @@ const {
 
 // Aliases for v14+ compatibility
 const ActionRowBuilder = MessageActionRow;
+const StringSelectMenuBuilder = MessageSelectMenu;
 const ButtonBuilder = MessageButton;
 const EmbedBuilder = MessageEmbed;
+const ModalBuilder = Modal;
+const TextInputBuilder = TextInputComponent;
 
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
@@ -160,15 +165,13 @@ function partyActionRow(userId, inParty, isPartyLeader) {
       .setStyle(ButtonStyle.Secondary)
   );
   
-  // Shared Order button (available to leader)
-  if (isPartyLeader) {
-    components.push(
-      new ButtonBuilder()
-        .setCustomId(`noodle-social:action:shared_order:${userId}`)
-        .setLabel("🍜 Shared Order")
-        .setStyle(ButtonStyle.Primary)
-    );
-  }
+  // Shared Order button (available to all party members)
+  components.push(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:shared_order:${userId}`)
+      .setLabel("🍜 Shared Order")
+      .setStyle(ButtonStyle.Primary)
+  );
   
   // Invite button only if user is party leader
   if (isPartyLeader) {
@@ -191,6 +194,71 @@ function partyActionRow(userId, inParty, isPartyLeader) {
   }
   
   return new ActionRowBuilder().addComponents(components);
+}
+
+function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete = false) {
+  const components = [];
+
+  if (hasActiveOrder) {
+    components.push(
+      new ButtonBuilder()
+        .setCustomId(`noodle-social:action:shared_order_contribute:${userId}`)
+        .setLabel("🥕 Contribute")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    if (isPartyLeader) {
+      components.push(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:shared_order_cancel:${userId}`)
+          .setLabel("🧹 Cancel Order")
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      if (canComplete) {
+        components.push(
+          new ButtonBuilder()
+            .setCustomId(`noodle-social:action:shared_order_complete:${userId}`)
+            .setLabel("✅ Complete Order")
+            .setStyle(ButtonStyle.Success)
+        );
+      }
+    }
+  } else {
+    if (isPartyLeader) {
+      components.push(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:shared_order_create:${userId}`)
+          .setLabel("🍜 Create Shared Order")
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+  }
+
+  return new ActionRowBuilder().addComponents(components);
+}
+
+function buildSharedOrderProgress({ recipe, servings, contributions }) {
+  const contribByIngredient = {};
+  for (const c of contributions ?? []) {
+    if (!c?.ingredient_id) continue;
+    contribByIngredient[c.ingredient_id] = (contribByIngredient[c.ingredient_id] ?? 0) + (c.quantity ?? 0);
+  }
+
+  const items = (recipe?.ingredients ?? []).map((ing) => {
+    const required = (ing.qty ?? 0) * servings;
+    const contributed = contribByIngredient[ing.item_id] ?? 0;
+    const remaining = Math.max(0, required - contributed);
+    return {
+      ingredientId: ing.item_id,
+      required,
+      contributed,
+      remaining
+    };
+  });
+
+  const isComplete = items.every((i) => i.remaining <= 0);
+  return { items, isComplete };
 }
 
 /**
@@ -238,15 +306,15 @@ function statsViewButtons(userId) {
 
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:action:orders:${userId}`)
+      .setCustomId(`noodle:nav:orders:${userId}`)
       .setLabel("📋 Orders")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`noodle:action:buy:${userId}`)
+      .setCustomId(`noodle:nav:buy:${userId}`)
       .setLabel("🛒 Buy")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`noodle:action:forage:${userId}`)
+      .setCustomId(`noodle:nav:forage:${userId}`)
       .setLabel("🌿 Forage")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
@@ -266,13 +334,21 @@ function statsViewButtons(userId) {
  * Commit a component interaction response
  */
 async function componentCommit(interaction, opts) {
-  if (interaction.deferred) {
-    return interaction.editReply(opts);
-  } else if (interaction.replied) {
-    return interaction.followUp(opts);
-  } else {
-    return interaction.update(opts);
+  const { ephemeral, ...rest } = opts ?? {};
+
+  if (ephemeral) {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.followUp({ ...rest, ephemeral: true });
+    }
+    return interaction.reply({ ...rest, ephemeral: true });
   }
+
+  if (interaction.deferred) {
+    return interaction.editReply(rest);
+  } else if (interaction.replied) {
+    return interaction.followUp(rest);
+  }
+  return interaction.update(rest);
 }
 
 /**
@@ -332,7 +408,7 @@ async function handleParty(interaction) {
 
     if (action === "create") {
       if (!partyName) {
-        return interaction.editReply({ content: "❌ Please provide a party name." });
+        return interaction.editReply({ content: "❌ Please provide a party name.", ephemeral: true });
       }
 
       // Check if already in a party
@@ -362,7 +438,7 @@ async function handleParty(interaction) {
 
     if (action === "join") {
       if (!partyId) {
-        return interaction.editReply({ content: "❌ Please provide a party ID to join." });
+        return interaction.editReply({ content: "❌ Please provide a party ID to join.", ephemeral: true });
       }
 
       try {
@@ -378,14 +454,14 @@ async function handleParty(interaction) {
           components: [partyActionRow(userId, true, false), socialMainMenuRow(userId)] 
         });
       } catch (err) {
-        return interaction.editReply({ content: `❌ ${err.message}` });
+        return interaction.editReply({ content: `❌ ${err.message}`, ephemeral: true });
       }
     }
 
     if (action === "leave") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return interaction.editReply({ content: "❌ You're not in any party." });
+        return interaction.editReply({ content: "❌ You're not in any party.", ephemeral: true });
       }
 
       try {
@@ -396,14 +472,14 @@ async function handleParty(interaction) {
           components: [socialMainMenuRow(userId)]
         });
       } catch (err) {
-        return interaction.editReply({ content: `❌ ${err.message}` });
+        return interaction.editReply({ content: `❌ ${err.message}`, ephemeral: true });
       }
     }
 
     if (action === "info") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return interaction.editReply({ content: "❌ You're not in any party." });
+        return interaction.editReply({ content: "❌ You're not in any party.", ephemeral: true });
       }
 
       const memberList = currentParty.members
@@ -427,7 +503,7 @@ async function handleParty(interaction) {
       });
     }
 
-    return interaction.editReply({ content: "❌ Unknown party action." });
+    return interaction.editReply({ content: "❌ Unknown party action.", ephemeral: true });
   });
 }
 
@@ -439,11 +515,11 @@ async function handleTip(interaction) {
   const message = interaction.options.getString("message");
 
   if (!targetUser) {
-    return interaction.reply({ content: "❌ Please specify a user to tip.", ephemeral: false });
+    return interaction.reply({ content: "❌ Please specify a user to tip.", ephemeral: true });
   }
 
   if (targetUser.id === userId) {
-    return interaction.reply({ content: "❌ You cannot tip yourself!", ephemeral: false });
+    return interaction.reply({ content: "❌ You cannot tip yourself!", ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: false });
@@ -500,11 +576,11 @@ async function handleVisit(interaction) {
   const targetUser = interaction.options.getUser("user");
 
   if (!targetUser) {
-    return interaction.reply({ content: "❌ Please specify a user to visit.", ephemeral: false });
+    return interaction.reply({ content: "❌ Please specify a user to visit.", ephemeral: true });
   }
 
   if (targetUser.id === userId) {
-    return interaction.reply({ content: "❌ You cannot visit yourself!", ephemeral: false });
+    return interaction.reply({ content: "❌ You cannot visit yourself!", ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: false });
@@ -564,7 +640,7 @@ async function handleVisit(interaction) {
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
       return interaction.editReply(replyObj);
     } catch (err) {
-      return interaction.editReply({ content: `❌ ${err.message}` });
+      return interaction.editReply({ content: `❌ ${err.message}`, ephemeral: true });
     }
     });
   });
@@ -586,7 +662,7 @@ async function handleLeaderboard(interaction) {
     `).all(serverId);
 
     if (allPlayers.length === 0) {
-      return interaction.editReply({ content: "❌ No players found in this server yet." });
+      return interaction.editReply({ content: "❌ No players found in this server yet.", ephemeral: true });
     }
 
     // Parse and sort
@@ -612,7 +688,7 @@ async function handleLeaderboard(interaction) {
       fieldName = "🍜 Most Bowls Served";
       fieldValue = player => `${player.lifetime?.bowls_served_total || 0} bowls`;
     } else {
-      return interaction.editReply({ content: "❌ Unknown leaderboard type." });
+      return interaction.editReply({ content: "❌ Unknown leaderboard type.", ephemeral: true });
     }
 
     const leaderboardText = sortedPlayers
@@ -634,7 +710,7 @@ async function handleLeaderboard(interaction) {
     });
   } catch (err) {
     console.error("Leaderboard error:", err);
-    return interaction.editReply({ content: `❌ Error loading leaderboard: ${err.message}` });
+    return interaction.editReply({ content: `❌ Error loading leaderboard: ${err.message}`, ephemeral: true });
   }
 }
 
@@ -709,7 +785,7 @@ async function handleStats(interaction) {
     });
   } catch (err) {
     console.error("Stats error:", err);
-    return interaction.editReply({ content: `❌ Error loading stats: ${err.message}` });
+    return interaction.editReply({ content: `❌ Error loading stats: ${err.message}`, ephemeral: true });
   }
 }
 
@@ -759,7 +835,7 @@ async function handleComponent(interaction) {
             components: [partyActionRow(userId, true, true), socialMainMenuRow(userId)] 
           });
         } catch (err) {
-          return interaction.editReply({ content: `❌ ${err.message}` });
+          return interaction.editReply({ content: `❌ ${err.message}`, ephemeral: true });
         }
       });
     }
@@ -787,7 +863,7 @@ async function handleComponent(interaction) {
             components: [partyActionRow(userId, true, false), socialMainMenuRow(userId)] 
           });
         } catch (err) {
-          return interaction.editReply({ content: `❌ ${err.message}` });
+          return interaction.editReply({ content: `❌ ${err.message}`, ephemeral: true });
         }
       });
     }
@@ -1007,89 +1083,28 @@ async function handleComponent(interaction) {
       });
     }
 
-    if (customId.startsWith("noodle-social:modal:create_shared_order:")) {
-      const recipeInput = interaction.fields.getTextInputValue("recipe_id");
-      const servingsInput = interaction.fields.getTextInputValue("servings");
+    // Removed old modal handler - now using select menus for shared orders
 
-      const servings = Number.parseInt(String(servingsInput ?? "").trim(), 10);
-      if (!Number.isFinite(servings) || servings < SHARED_ORDER_MIN_SERVINGS) {
-        return interaction.editReply({ 
-          content: `❌ Servings must be at least ${SHARED_ORDER_MIN_SERVINGS}.`, 
-          ephemeral: true 
-        });
+    if (customId.startsWith("noodle-social:modal:contribute_shared_order_qty:")) {
+
+
+      const parts2 = customId.split(":");
+      const ownerId = parts2[3];
+      const ingredientId = parts2.slice(4).join(":");
+
+      if (ownerId && ownerId !== userId) {
+        return componentCommit(interaction, { content: "That contribution prompt isn’t for you.", ephemeral: true });
       }
 
-      const recipe = content.recipes[recipeInput];
-      if (!recipe) {
-        return interaction.editReply({ content: "❌ Recipe not found.", ephemeral: true });
-      }
-
-      const ownerLock = `discord:${interaction.id}`;
-
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
-        try {
-          const party = getUserActiveParty(db, userId);
-          if (!party) {
-            return interaction.editReply({ content: "❌ You're not in a party.", ephemeral: true });
-          }
-
-          if (party.leader_user_id !== userId) {
-            return interaction.editReply({ content: "❌ Only the party leader can create shared orders.", ephemeral: true });
-          }
-
-          // Check if there's already an active shared order
-          const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
-          if (existingOrder) {
-            return interaction.editReply({ 
-              content: "❌ Your party already has an active shared order. Complete it first.", 
-              ephemeral: true 
-            });
-          }
-
-          // Create the shared order
-          const result = createSharedOrder(db, party.party_id, recipe.recipe_id, serverId);
-
-          const ingredientList = recipe.ingredients
-            .map(ing => `• ${content.items[ing.item_id]?.name || ing.item_id} × ${ing.qty * servings}`)
-            .join("\n");
-
-          const embed = new EmbedBuilder()
-            .setTitle("🍜 Shared Order Created!")
-            .setDescription(
-              `**${recipe.name}**\n\n` +
-              `📦 **Servings**: ${servings}\n` +
-              `👥 **Ingredients Needed**:\n${ingredientList}`
-            )
-            .addFields({
-              name: "💡 How It Works",
-              value: "Party members can contribute ingredients. When all ingredients are gathered, the order completes and everyone gets rewarded!",
-              inline: false
-            })
-            .setColor(0x00ff88);
-
-          const isLeader = party.leader_user_id === userId;
-          return interaction.editReply({
-            embeds: [embed],
-            components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)]
-          });
-        } catch (err) {
-          return interaction.editReply({ content: `❌ ${err.message}` });
-        }
-      });
-    }
-
-    if (customId.startsWith("noodle-social:modal:contribute_shared_order:")) {
-      const ingredientIdInput = interaction.fields.getTextInputValue("ingredient_id");
       const quantityInput = interaction.fields.getTextInputValue("quantity");
-
       const quantity = Number.parseInt(String(quantityInput ?? "").trim(), 10);
       if (!Number.isFinite(quantity) || quantity < 1) {
-        return interaction.editReply({ content: "❌ Quantity must be at least 1.", ephemeral: true });
+        return componentCommit(interaction, { content: "❌ Quantity must be at least 1.", ephemeral: true });
       }
 
-      const ingredient = content.items[ingredientIdInput];
+      const ingredient = content.items[ingredientId];
       if (!ingredient) {
-        return interaction.editReply({ content: "❌ Ingredient not found.", ephemeral: true });
+        return componentCommit(interaction, { content: "❌ Ingredient not found.", ephemeral: true });
       }
 
       const ownerLock = `discord:${interaction.id}`;
@@ -1098,16 +1113,37 @@ async function handleComponent(interaction) {
         try {
           const party = getUserActiveParty(db, userId);
           if (!party) {
-            return interaction.editReply({ content: "❌ You're not in a party.", ephemeral: true });
+            return componentCommit(interaction, { content: "❌ You're not in a party.", ephemeral: true });
           }
 
           const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
           if (!sharedOrder) {
-            return interaction.editReply({ content: "❌ No active shared order.", ephemeral: true });
+            return componentCommit(interaction, { content: "❌ No active shared order.", ephemeral: true });
+          }
+
+          const recipe = content.recipes[sharedOrder.order_id];
+          if (!recipe) {
+            return componentCommit(interaction, { content: "❌ Recipe not found.", ephemeral: true });
+          }
+
+          const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+          const progress = buildSharedOrderProgress({
+            recipe,
+            servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+            contributions
+          });
+
+          const selected = progress.items.find((i) => i.ingredientId === ingredientId);
+          if (!selected || selected.remaining <= 0) {
+            return componentCommit(interaction, { content: "✅ That ingredient is already covered.", ephemeral: true });
+          }
+
+          if (quantity > selected.remaining) {
+            return componentCommit(interaction, { content: `❌ Max remaining is ${selected.remaining}.`, ephemeral: true });
           }
 
           // Contribute to shared order
-          contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientIdInput, quantity);
+          contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity);
 
           const embed = new EmbedBuilder()
             .setTitle("✅ Contribution Recorded!")
@@ -1118,12 +1154,19 @@ async function handleComponent(interaction) {
             .setColor(0x00ff88);
 
           const isLeader = party.leader_user_id === userId;
-          return interaction.editReply({
+          const updatedContributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+          const updatedProgress = buildSharedOrderProgress({
+            recipe,
+            servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+            contributions: updatedContributions
+          });
+
+          return await interaction.reply({
             embeds: [embed],
-            components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)]
+            components: [sharedOrderActionRow(userId, true, isLeader, updatedProgress.isComplete), socialMainMenuRow(userId)]
           });
         } catch (err) {
-          return interaction.editReply({ content: `❌ ${err.message}` });
+          return interaction.editReply({ content: `❌ ${err.message}`, ephemeral: true });
         }
       });
     }
@@ -1148,6 +1191,165 @@ async function handleComponent(interaction) {
       content: "That menu isn't for you.", 
       ephemeral: true 
     });
+  }
+
+  /* ---------------- SELECT MENUS ---------------- */
+  if (kind === "select") {
+    if (action === "shared_order_recipe") {
+      const selectedRecipe = interaction.values?.[0];
+      if (!selectedRecipe || !content.recipes[selectedRecipe]) {
+        return componentCommit(interaction, {
+          content: "❌ Invalid recipe selection.",
+          ephemeral: true
+        });
+      }
+
+      // Show servings picker
+      const servingOptions = [
+        { label: "5 servings", value: "5", description: "Minimum for shared orders" },
+        { label: "10 servings", value: "10", description: "Good for medium parties" },
+        { label: "15 servings", value: "15", description: "Great for larger groups" },
+        { label: "20 servings", value: "20", description: "Maximum team effort!" }
+      ];
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`noodle-social:select:shared_order_confirm:${userId}:${selectedRecipe}`)
+        .setPlaceholder("Choose how many servings to make")
+        .addOptions(servingOptions);
+
+      const recipe = content.recipes[selectedRecipe];
+      return componentCommit(interaction, {
+        content: `🍜 **Create Shared Order**\n\n**Recipe**: ${recipe.name}\n\nStep 2: How many servings should your party make?`,
+        components: [new ActionRowBuilder().addComponents(menu)]
+      });
+    }
+
+    if (action === "shared_order_confirm") {
+      const recipeId = parts[4];
+      const selectedServings = interaction.values?.[0];
+      const servings = Number.parseInt(selectedServings, 10);
+
+      if (!recipeId || !content.recipes[recipeId] || !Number.isFinite(servings)) {
+        return componentCommit(interaction, {
+          content: "❌ Invalid selection.",
+          ephemeral: true
+        });
+      }
+
+      const recipe = content.recipes[recipeId];
+      const ownerLock = `discord:${interaction.id}`;
+
+      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+        try {
+          const party = getUserActiveParty(db, userId);
+          if (!party) {
+            return componentCommit(interaction, { content: "❌ You're not in a party.", ephemeral: true });
+          }
+
+          if (party.leader_user_id !== userId) {
+            return componentCommit(interaction, { content: "❌ Only the party leader can create shared orders.", ephemeral: true });
+          }
+
+          // Check if there's already an active shared order
+          const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
+          if (existingOrder) {
+            return componentCommit(interaction, { 
+              content: "❌ Your party already has an active shared order. Complete it first.", 
+              ephemeral: true 
+            });
+          }
+
+          // Create the shared order
+          const result = createSharedOrder(db, party.party_id, recipeId, serverId, servings);
+
+          const ingredientList = recipe.ingredients
+            .map(ing => `• ${content.items[ing.item_id]?.name || ing.item_id} × ${ing.qty * servings}`)
+            .join("\n");
+
+            const totalReward = servings * SHARED_ORDER_REWARD.coinsPerServing;
+          const embed = new EmbedBuilder()
+            .setTitle("🍜 Shared Order Created!")
+            .setDescription(
+              `**${recipe.name}**\n\n` +
+              `📦 **Servings**: ${servings}\n` +
+                `💰 **Reward**: ${totalReward} coins (${SHARED_ORDER_REWARD.coinsPerServing}c per serving)\n` +
+              `👥 **Ingredients Needed**:\n${ingredientList}`
+            )
+            .addFields({
+              name: "💡 How It Works",
+              value: "Party members tap **Contribute** to add ingredients. When complete, everyone who helped gets rewarded!",
+              inline: false
+            })
+            .setColor(0x00ff88);
+
+          const isLeader = party.leader_user_id === userId;
+          return componentCommit(interaction, {
+            embeds: [embed],
+            components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)]
+          });
+        } catch (err) {
+          return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
+        }
+      });
+    }
+
+    if (action === "shared_order_ingredient") {
+      const ingredientId = interaction.values?.[0];
+
+      if (!ingredientId) {
+        return componentCommit(interaction, { content: "❌ Invalid selection.", ephemeral: true });
+      }
+
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, { content: "❌ You're not in a party.", ephemeral: true });
+      }
+
+      const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
+      if (!sharedOrder) {
+        return componentCommit(interaction, { content: "❌ No active shared order.", ephemeral: true });
+      }
+
+      const recipe = content.recipes[sharedOrder.order_id];
+      if (!recipe) {
+        return componentCommit(interaction, { content: "❌ Recipe not found.", ephemeral: true });
+      }
+
+      const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+      const progress = buildSharedOrderProgress({
+        recipe,
+        servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+        contributions
+      });
+
+      const selected = progress.items.find((i) => i.ingredientId === ingredientId);
+      if (!selected || selected.remaining <= 0) {
+        return componentCommit(interaction, { content: "✅ That ingredient is already covered.", ephemeral: true });
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId(`noodle-social:modal:contribute_shared_order_qty:${userId}:${ingredientId}`)
+        .setTitle("Contribute Ingredient");
+
+      const input = new TextInputBuilder()
+        .setCustomId("quantity")
+        .setLabel(`Quantity (max ${selected.remaining})`)
+        .setStyle(1)
+        .setRequired(true)
+        .setPlaceholder("1");
+
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+
+      try {
+        return await interaction.showModal(modal);
+      } catch (e) {
+        console.log(`⚠️ showModal failed for shared_order_contribute:`, e?.message);
+        return componentCommit(interaction, {
+          content: "⚠️ Discord couldn't show the modal.",
+          ephemeral: true
+        });
+      }
+    }
   }
 
   /* ---------------- NAV BUTTONS ---------------- */
@@ -1414,6 +1616,72 @@ async function handleComponent(interaction) {
         });
       }
 
+      const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
+      const hasActiveOrder = !!existingOrder;
+      const isLeader = party.leader_user_id === userId;
+      let canComplete = false;
+      let embed = null;
+
+      if (existingOrder) {
+        const recipe = content.recipes[existingOrder.order_id];
+        if (recipe) {
+          const contributions = getSharedOrderContributions(db, existingOrder.shared_order_id);
+          const progress = buildSharedOrderProgress({
+            recipe,
+            servings: existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+            contributions
+          });
+          canComplete = progress.isComplete;
+
+          // Build ingredient progress display
+          const ingredientLines = progress.items.map(item => {
+            const itemData = content.items[item.ingredientId];
+            const itemName = itemData?.name || `Item #${item.ingredientId}`;
+            const bar = item.remaining > 0 
+              ? `[${item.contributed}/${item.required}]` 
+              : `✅ [${item.required}/${item.required}]`;
+            return `${itemName} ${bar}`;
+          }).join('\n');
+
+          embed = new EmbedBuilder()
+            .setTitle(`🍜 ${recipe.name}`)
+            .setDescription(`**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
+            .addFields(
+              {
+                name: "📦 Ingredients",
+                value: ingredientLines || "No ingredients",
+                inline: false
+              }
+            )
+            .setColor(canComplete ? 0x00ff00 : 0xffaa00)
+            .setFooter({ text: canComplete ? "✅ Ready to complete!" : "⏳ In progress..." });
+        }
+      }
+
+      const replyObj = {
+        components: [sharedOrderActionRow(userId, hasActiveOrder, isLeader, canComplete), socialMainMenuRow(userId)]
+      };
+
+      if (embed) {
+        replyObj.embeds = [embed];
+      } else {
+        replyObj.content = isLeader
+          ? "🍜 **Shared Order**\n\nNo active order. Click **Create Shared Order** to start one."
+          : "🍜 **Shared Order**\n\nNo active order yet. Ask your party leader to create one!";
+      }
+
+      return componentCommit(interaction, replyObj);
+    }
+
+    if (action === "shared_order_create") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in a party.",
+          ephemeral: true
+        });
+      }
+
       if (party.leader_user_id !== userId) {
         return componentCommit(interaction, {
           content: "❌ Only the party leader can create shared orders.",
@@ -1421,7 +1689,6 @@ async function handleComponent(interaction) {
         });
       }
 
-      // Check if there's already an active shared order
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (existingOrder) {
         return componentCommit(interaction, {
@@ -1430,50 +1697,43 @@ async function handleComponent(interaction) {
         });
       }
 
-      if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      // Get recipes known by party members
+      const partyMemberIds = party.members.map(m => m.user_id);
+      const knownRecipeIds = new Set();
+    
+      for (const memberId of partyMemberIds) {
+        const memberPlayer = getPlayer(db, serverId, memberId);
+        if (memberPlayer && Array.isArray(memberPlayer.known_recipes)) {
+          memberPlayer.known_recipes.forEach(recipeId => knownRecipeIds.add(recipeId));
+        }
       }
 
-      try {
-        return await interaction.showModal({
-          customId: `noodle-social:modal:create_shared_order:${userId}`,
-          title: "Create Shared Order",
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "recipe_id",
-                  label: "Recipe ID (e.g., classic_soy_ramen)",
-                  style: 1,
-                  required: true,
-                  maxLength: 32
-                }
-              ]
-            },
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "servings",
-                  label: `Servings (min ${SHARED_ORDER_MIN_SERVINGS})`,
-                  style: 1,
-                  required: true,
-                  maxLength: 8
-                }
-              ]
-            }
-          ]
-        });
-      } catch (e) {
-        console.log(`⚠️ showModal failed for shared_order:`, e?.message);
-        return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal.", 
-          ephemeral: true 
+      // Show recipe picker (only recipes known by party members)
+      const recipeOptions = Object.entries(content.recipes)
+        .filter(([id]) => knownRecipeIds.has(id))
+        .slice(0, 25) // Discord limit
+        .map(([id, recipe]) => ({
+          label: recipe.name.length > 100 ? recipe.name.slice(0, 97) + "..." : recipe.name,
+          value: id,
+          description: `${recipe.ingredients.length} ingredients`
+        }));
+
+      if (!recipeOptions.length) {
+        return componentCommit(interaction, {
+          content: "❌ No recipes available. Party members need to unlock recipes first!",
+          ephemeral: true
         });
       }
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`noodle-social:select:shared_order_recipe:${userId}`)
+        .setPlaceholder("Choose a recipe for the shared order")
+        .addOptions(recipeOptions);
+
+      return componentCommit(interaction, {
+        content: "🍜 **Create Shared Order**\n\nStep 1: Pick a recipe that your party members know.",
+        components: [new ActionRowBuilder().addComponents(menu)]
+      });
     }
 
     if (action === "party_info") {
@@ -1598,50 +1858,45 @@ async function handleComponent(interaction) {
         });
       }
 
-      if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+      const progress = buildSharedOrderProgress({
+        recipe,
+        servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+        contributions
+      });
+
+      const ingredientOptions = progress.items
+        .filter((i) => i.remaining > 0)
+        .slice(0, 25)
+        .map((i) => {
+          const name = content.items?.[i.ingredientId]?.name ?? i.ingredientId;
+          const labelRaw = `${name} — need ${i.remaining}`;
+          return {
+            label: labelRaw.length > 100 ? labelRaw.slice(0, 97) + "..." : labelRaw,
+            value: i.ingredientId,
+            description: `Required ${i.required}, contributed ${i.contributed}`
+          };
+        });
+
+      if (!ingredientOptions.length) {
+        return componentCommit(interaction, {
+          content: "✅ All ingredients are already covered!",
+          ephemeral: true
+        });
       }
 
-      try {
-        return await interaction.showModal({
-          customId: `noodle-social:modal:contribute_shared_order:${userId}`,
-          title: "Contribute to Shared Order",
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "ingredient_id",
-                  label: "Ingredient ID (e.g., scallions)",
-                  style: 1,
-                  required: true,
-                  maxLength: 32
-                }
-              ]
-            },
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "quantity",
-                  label: "Quantity",
-                  style: 1,
-                  required: true,
-                  maxLength: 8
-                }
-              ]
-            }
-          ]
-        });
-      } catch (e) {
-        console.log(`⚠️ showModal failed for shared_order_contribute:`, e?.message);
-        return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal.", 
-          ephemeral: true 
-        });
-      }
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`noodle-social:select:shared_order_ingredient:${userId}`)
+        .setPlaceholder("Choose an ingredient to contribute")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(ingredientOptions);
+
+      const isLeader = party.leader_user_id === userId;
+      return componentCommit(interaction, {
+        content: "🥕 **Contribute Ingredients**\n\nPick an ingredient to add:",
+        components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, progress.isComplete), socialMainMenuRow(userId)]
+      });
     }
 
     if (action === "shared_order_complete") {
@@ -1668,6 +1923,23 @@ async function handleComponent(interaction) {
         });
       }
 
+      const recipe = content.recipes[sharedOrder.order_id];
+      if (recipe) {
+        const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+        const progress = buildSharedOrderProgress({
+          recipe,
+          servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+          contributions
+        });
+
+        if (!progress.isComplete) {
+          return componentCommit(interaction, {
+            content: "❌ The order isn’t complete yet. Add all required ingredients first.",
+            ephemeral: true
+          });
+        }
+      }
+
       // Confirm completion
       return componentCommit(interaction, {
         content: "⚠️ Mark this shared order as complete? This will distribute rewards to all contributors.",
@@ -1686,7 +1958,56 @@ async function handleComponent(interaction) {
       });
     }
 
+    if (action === "shared_order_cancel") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in a party.",
+          ephemeral: true
+        });
+      }
+
+      if (party.leader_user_id !== userId) {
+        return componentCommit(interaction, {
+          content: "❌ Only the party leader can cancel shared orders.",
+          ephemeral: true
+        });
+      }
+
+      const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
+      if (!sharedOrder) {
+        return componentCommit(interaction, {
+          content: "❌ No active shared order to cancel.",
+          ephemeral: true
+        });
+      }
+
+      return componentCommit(interaction, {
+        content: "⚠️ Cancel this shared order? Contributors will not receive rewards.",
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`noodle-social:action:shared_order_confirm_cancel:${userId}`)
+              .setLabel("🧹 Confirm Cancel")
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId(`noodle-social:action:shared_order_abort_cancel:${userId}`)
+              .setLabel("Keep Order")
+              .setStyle(ButtonStyle.Secondary)
+          )
+        ]
+      });
+    }
+
     if (action === "shared_order_confirm_complete") {
+      if (!interaction.deferred && !interaction.replied) {
+        try {
+          await interaction.deferUpdate();
+        } catch (err) {
+          return;
+        }
+      }
+
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
@@ -1712,79 +2033,101 @@ async function handleComponent(interaction) {
 
       const ownerLock = `discord:${interaction.id}`;
 
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
-        try {
-          // Get recipe to determine servings
-          const recipe = content.recipes[sharedOrder.order_id];
-          if (!recipe) {
-            return componentCommit(interaction, {
-              content: "❌ Recipe not found.",
-              ephemeral: true
-            });
-          }
-
-          // Get contributions
-          const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
-
-          // Mark order complete
-          completeSharedOrder(db, sharedOrder.shared_order_id);
-
-          // Calculate total servings from contributions
-          // We need to determine servings from recipe - infer from total quantities
-          // For now, use the number of contributions as servings approximation
-          const servings = contributions.length > 0 ? Math.max(SHARED_ORDER_MIN_SERVINGS, contributions.length) : SHARED_ORDER_MIN_SERVINGS;
-
-          // Calculate and distribute rewards
-          const totalCoins = SHARED_ORDER_REWARD.coinsPerServing * servings;
-          const totalRep = SHARED_ORDER_REWARD.repPerServing * servings;
-          const totalSxp = SHARED_ORDER_REWARD.sxpPerServing * servings;
-
-          const contributorIds = new Set(contributions.map(c => c.user_id));
-          const coinsPerContributor = Math.floor(totalCoins / contributorIds.size);
-          const repPerContributor = Math.floor(totalRep / contributorIds.size);
-          const sxpPerContributor = Math.floor(totalSxp / contributorIds.size);
-
-          // Lock and update all contributors
-          for (const contributorId of contributorIds) {
-            await withLock(db, `lock:user:${contributorId}`, ownerLock, 8000, async () => {
-              let player = ensurePlayer(serverId, contributorId);
-              player.coins = (player.coins || 0) + coinsPerContributor;
-              player.rep = (player.rep || 0) + repPerContributor;
-              player.sxp = (player.sxp || 0) + sxpPerContributor;
-
-              // Apply SXP level up
-              player = applySxpLevelUp(player);
-
-              upsertPlayer(db, serverId, contributorId, player, null, player.schema_version);
-            });
-          }
-
-          // Build reward message
-          const rewardText = contributorIds.size > 0
-            ? `Each contributor earned:\n💰 ${coinsPerContributor}c | ⭐ ${repPerContributor} REP | ✨ ${sxpPerContributor} SXP`
-            : "No contributions recorded.";
-
-          const embed = new EmbedBuilder()
-            .setTitle("🎉 Shared Order Complete!")
-            .setDescription(
-              `**${recipe.name}** (${servings} servings)\n\n` +
-              `👥 **Contributors**: ${contributorIds.size}\n` +
-              rewardText
-            )
-            .setColor(0x00ff00);
-
-          const isLeader = party.leader_user_id === userId;
+      try {
+        // Get recipe to determine servings
+        const recipe = content.recipes[sharedOrder.order_id];
+        if (!recipe) {
           return componentCommit(interaction, {
-            embeds: [embed],
-            components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)]
-          });
-        } catch (err) {
-          return componentCommit(interaction, {
-            content: `❌ ${err.message}`,
+            content: "❌ Recipe not found.",
             ephemeral: true
           });
         }
-      });
+
+        // Get contributions
+        const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+        
+        // Use the actual servings from the order
+        const servings = sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS;
+
+        // Calculate total rewards based on servings
+        const totalCoins = SHARED_ORDER_REWARD.coinsPerServing * servings;
+        const totalRep = SHARED_ORDER_REWARD.repPerServing * servings;
+        const totalSxp = SHARED_ORDER_REWARD.sxpPerServing * servings;
+
+        // Calculate total quantity contributed
+        const totalQuantity = contributions.reduce((sum, c) => sum + c.quantity, 0);
+
+        // Build map of contributor ID -> total quantity they contributed
+        const contributorQuantities = {};
+        for (const contrib of contributions) {
+          if (!contributorQuantities[contrib.user_id]) {
+            contributorQuantities[contrib.user_id] = 0;
+          }
+          contributorQuantities[contrib.user_id] += contrib.quantity;
+        }
+
+        // Lock and update all contributors with scaled rewards
+        const contributorLocks = [];
+        const contributorRewards = {}; // For reward message
+        for (const [contributorId, quantity] of Object.entries(contributorQuantities)) {
+          // Scale rewards proportionally to contribution amount
+          const scaleFactor = totalQuantity > 0 ? quantity / totalQuantity : 0;
+          const coinsReward = Math.floor(totalCoins * scaleFactor);
+          const repReward = Math.floor(totalRep * scaleFactor);
+          const sxpReward = Math.floor(totalSxp * scaleFactor);
+
+          contributorRewards[contributorId] = { coinsReward, repReward, sxpReward };
+
+          contributorLocks.push(
+            withLock(db, `lock:user:${contributorId}`, ownerLock, 8000, async () => {
+              let player = ensurePlayer(serverId, contributorId);
+              player.coins = (player.coins || 0) + coinsReward;
+              player.rep = (player.rep || 0) + repReward;
+              player.sxp_progress = (player.sxp_progress || 0) + sxpReward;
+
+              // Apply SXP level up (modifies player in place)
+              applySxpLevelUp(player);
+
+              upsertPlayer(db, serverId, contributorId, player, null, player.schema_version);
+            })
+          );
+        }
+
+        // Wait for all contributor updates
+        await Promise.all(contributorLocks);
+
+        // Mark order complete (after all rewards distributed)
+        completeSharedOrder(db, sharedOrder.shared_order_id);
+
+        // Build reward message with individual scaled amounts
+        const rewardLines = Object.entries(contributorRewards).map(([cId, rewards]) => {
+          const contributionQty = contributorQuantities[cId];
+          return `<@${cId}>: 💰 ${rewards.coinsReward}c | ⭐ ${rewards.repReward} REP | ✨ ${rewards.sxpReward} SXP (contributed ${contributionQty} ingredient${contributionQty !== 1 ? 's' : ''})`;
+        });
+        const rewardText = rewardLines.length > 0
+          ? rewardLines.join("\n")
+          : "No contributions recorded.";
+
+        const embed = new EmbedBuilder()
+          .setTitle("🎉 Shared Order Complete!")
+          .setDescription(
+            `**${recipe.name}** (${servings} servings)\n\n` +
+            `👥 **Contributors**: ${Object.keys(contributorQuantities).length}\n` +
+            `📊 **Rewards**:\n${rewardText}`
+          )
+          .setColor(0x00ff00);
+
+        const isLeader = party.leader_user_id === userId;
+        return componentCommit(interaction, {
+          embeds: [embed],
+          components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)]
+        });
+      } catch (err) {
+        return componentCommit(interaction, {
+          content: `❌ ${err.message}`,
+          ephemeral: true
+        });
+      }
     }
 
     if (action === "shared_order_cancel_complete") {
@@ -1800,6 +2143,68 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         content: "Cancelled.",
         components: [partyActionRow(userId, true, isLeader), socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "shared_order_confirm_cancel") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in a party.",
+          ephemeral: true
+        });
+      }
+
+      if (party.leader_user_id !== userId) {
+        return componentCommit(interaction, {
+          content: "❌ Only the party leader can cancel shared orders.",
+          ephemeral: true
+        });
+      }
+
+      const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
+      if (!sharedOrder) {
+        return componentCommit(interaction, {
+          content: "❌ No active shared order to cancel.",
+          ephemeral: true
+        });
+      }
+
+      cancelSharedOrder(db, sharedOrder.shared_order_id);
+
+      return componentCommit(interaction, {
+        content: "🧹 Shared order cancelled.",
+        components: [sharedOrderActionRow(userId, false, true), socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "shared_order_abort_cancel") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: "❌ You're not in a party.",
+          ephemeral: true
+        });
+      }
+
+      const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
+      const isLeader = party.leader_user_id === userId;
+      let canComplete = false;
+      if (existingOrder) {
+        const recipe = content.recipes[existingOrder.order_id];
+        if (recipe) {
+          const contributions = getSharedOrderContributions(db, existingOrder.shared_order_id);
+          const progress = buildSharedOrderProgress({
+            recipe,
+            servings: existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+            contributions
+          });
+          canComplete = progress.isComplete;
+        }
+      }
+      return componentCommit(interaction, {
+        content: "Keeping the shared order active.",
+        components: [sharedOrderActionRow(userId, !!existingOrder, isLeader, canComplete), socialMainMenuRow(userId)]
       });
     }
 
@@ -1976,16 +2381,16 @@ export const noodleSocialCommand = {
         case "stats":
           return await handleStats(interaction);
         default:
-          return interaction.reply({ content: "❌ Unknown subcommand.", ephemeral: false });
+          return interaction.reply({ content: "❌ Unknown subcommand.", ephemeral: true });
       }
     } catch (err) {
       console.error(`Error in noodle-social ${sub}:`, err);
       const errorMsg = cozyError(err);
       
       if (interaction.deferred) {
-        return interaction.editReply({ content: `❌ ${errorMsg}` });
+        return interaction.editReply({ content: `❌ ${errorMsg}`, ephemeral: true });
       } else {
-        return interaction.reply({ content: `❌ ${errorMsg}`, ephemeral: false });
+        return interaction.reply({ content: `❌ ${errorMsg}`, ephemeral: true });
       }
     }
   },
