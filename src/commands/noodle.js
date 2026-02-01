@@ -1882,10 +1882,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     // Buy 1 each -> perform purchase
     if (mode === "buy1") {
       const sourceMessageId = interaction.message?.id;
-      
-      // Defer with ephemeral so we can delete it later
-      await interaction.deferReply({ ephemeral: true });
-      
       const action = "multibuy_buy1";
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = getIdempotentResult(db, idemKey);
@@ -1972,12 +1968,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
             const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
             if (targetMsg) {
               await targetMsg.edit(replyObj);
-              // Delete the ephemeral defer message
-              try {
-                await interaction.deleteReply();
-              } catch (e) {
-                console.log(`⚠️ Could not delete defer reply:`, e?.message);
-              }
+              // Acknowledge the button interaction
+              await interaction.update({});
               return;
             }
           } catch (e) {
@@ -2049,9 +2041,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     if (!Object.keys(want).length) {
       return componentCommit(interaction, { content: "No quantities provided.", ephemeral: true });
     }
-
-    // Defer with ephemeral so we can delete it later
-    await interaction.deferReply({ ephemeral: true });
 
     // Idempotency (prevents double submit)
     const action = "multibuy";
@@ -2139,12 +2128,15 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
           if (targetMsg) {
             await targetMsg.edit(replyObj);
-            // Delete the ephemeral defer message
-            try {
-              await interaction.deleteReply();
-            } catch (e) {
-              console.log(`⚠️ Could not delete defer reply:`, e?.message);
-            }
+            // Reply to modal with ephemeral message then delete it
+            await interaction.reply({ content: "✓", ephemeral: true });
+            setTimeout(async () => {
+              try {
+                await interaction.deleteReply();
+              } catch (e) {
+                // Ignore - message already gone
+              }
+            }, 100);
             return;
           }
         } catch (e) {
