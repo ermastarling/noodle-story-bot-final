@@ -20,7 +20,7 @@ import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "..
 import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { computeActiveSeason } from "../game/seasons.js";
-import { rollMarket, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
+import { rollMarket, rollPlayerMarketStock, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { STARTER_PROFILE } from "../constants.js";
@@ -479,7 +479,7 @@ return null;
 
 async function renderMultiBuyPicker({ interaction, userId, s, p }) {
 if (!s.market_prices) s.market_prices = {};
-if (!s.market_stock) s.market_stock = {};
+if (!p.market_stock) p.market_stock = {};
 
 const allowed = getUnlockedIngredientIds(p, content);
 
@@ -491,7 +491,7 @@ if (!allowed.has(id)) return null;
   if (!it) return null;
 
   const price = s.market_prices?.[id] ?? it.base_price ?? 0;
-  const stock = s.market_stock?.[id] ?? 0;
+  const stock = p.market_stock?.[id] ?? 0;
   if (stock <= 0) return null;
 
   const labelRaw = `${it.name} — ${price}c (stock ${stock})`;
@@ -732,7 +732,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   rollMarket({ serverId, content, serverState: s });
   if (!s.market_prices) s.market_prices = {};
-  if (!s.market_stock) s.market_stock = {};
+  
+  // Roll per-player market stock daily
+  rollPlayerMarketStock({ userId, serverId, content, playerState: p });
+  if (!p.market_stock) p.market_stock = {};
 
   const prevOrdersDay = p.orders_day;
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
@@ -895,7 +898,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           if (!it) return null;
 
           const price = s.market_prices?.[id] ?? it.base_price ?? 0;
-          const stock = s.market_stock?.[id] ?? 0;
+          const stock = p.market_stock?.[id] ?? 0;
           if (stock <= 0) return null;
 
           const labelRaw = `${it.name} — ${price}c (stock ${stock})`;
@@ -951,7 +954,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     // Check for pity discount (B6)
     const pityPrice = getPityDiscount(p, itemId);
     const price = pityPrice ?? (s.market_prices?.[itemId] ?? item.base_price);
-    const stock = s.market_stock?.[itemId] ?? 0;
+    const stock = p.market_stock?.[itemId] ?? 0;
     const cost = price * qty;
 
     if (stock < qty) {
@@ -962,7 +965,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     p.coins -= cost;
     p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qty;
-    s.market_stock[itemId] = stock - qty;
+    p.market_stock[itemId] = stock - qty;
 
     advanceTutorial(p, "buy");
 
@@ -1894,7 +1897,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         s.season = computeActiveSeason(set);
         rollMarket({ serverId, content, serverState: s });
         if (!s.market_prices) s.market_prices = {};
-        if (!s.market_stock) s.market_stock = {};
+        rollPlayerMarketStock({ userId, serverId, content, playerState: p2 });
+        if (!p2.market_stock) p2.market_stock = {};
 
         const want = {};
         for (const id3 of selectedIds) want[id3] = 1;
@@ -1915,7 +1919,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           }
 
           const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
-          const stock = s.market_stock?.[id3] ?? 0;
+          const stock = p2.market_stock?.[id3] ?? 0;
 
           if (stock < qty3) {
             const friendly = displayItemName(id3);
@@ -1939,7 +1943,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         for (const x of buyLines) {
           p2.inv_ingredients[x.id] = (p2.inv_ingredients[x.id] ?? 0) + x.qty;
-          s.market_stock[x.id] = (s.market_stock[x.id] ?? 0) - x.qty;
+          p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
         }
 
         advanceTutorial(p2, "buy");
@@ -2034,7 +2038,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       rollMarket({ serverId, content, serverState: s });
       if (!s.market_prices) s.market_prices = {};
-      if (!s.market_stock) s.market_stock = {};
+      rollPlayerMarketStock({ userId, serverId, content, playerState: p2 });
+      if (!p2.market_stock) p2.market_stock = {};
 
       // Validate stock + compute cost
       let totalCost = 0;
@@ -2053,7 +2058,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         }
 
         const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
-        const stock = s.market_stock?.[id3] ?? 0;
+        const stock = p2.market_stock?.[id3] ?? 0;
 
         if (stock < qty3) {
           const friendly = displayItemName(id3);
@@ -2077,7 +2082,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       for (const x of buyLines) {
         p2.inv_ingredients[x.id] = (p2.inv_ingredients[x.id] ?? 0) + x.qty;
-        s.market_stock[x.id] = (s.market_stock[x.id] ?? 0) - x.qty;
+        p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
       }
 
       advanceTutorial(p2, "buy");

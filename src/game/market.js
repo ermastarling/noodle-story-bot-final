@@ -65,13 +65,11 @@ export function rollMarket({ serverId, content, serverState }) {
   const dayKey = dayKeyUTC();
   if (
   serverState.market_day === dayKey &&
-  serverState.market_prices &&
-  serverState.market_stock
+  serverState.market_prices
 ) return serverState;
 
   const rng = makeStreamRng({ mode:"seeded", seed:12345, streamName:"market", serverId, dayKey });
   const prices = {};
-  const stock = {};
 
   // ✅ Roll only the explicitly-allowed market items
   for (const itemId of MARKET_ITEM_IDS) {
@@ -86,19 +84,38 @@ export function rollMarket({ serverId, content, serverState }) {
       Math.floor(item.base_price * rngBetween(rng, MARKET_ROLL_MIN, MARKET_ROLL_MAX))
     );
     prices[itemId] = price;
-
-    // Stock defaults if not yet defined in content
-    const min = item.stock_min ?? 10;
-    const max = item.stock_max ?? 40;
-    stock[itemId] = (max > 0) ? rngInt(rng, min, max) : 0;
   }
 
   serverState.market_day = dayKey;
   serverState.market_prices = prices;
-  serverState.market_stock = stock;
   serverState.market_specials = [];
   serverState.market_wanted = [];
   return serverState;
+}
+
+// Roll per-player market stock (called once per day per player)
+export function rollPlayerMarketStock({ userId, serverId, content, playerState }) {
+  const dayKey = dayKeyUTC();
+  if (playerState.market_stock_day === dayKey && playerState.market_stock) {
+    return playerState;
+  }
+
+  const rng = makeStreamRng({ mode:"seeded", seed:54321, streamName:"player_market", serverId, userId, dayKey });
+  const stock = {};
+
+  for (const itemId of MARKET_ITEM_IDS) {
+    const item = content.items?.[itemId];
+    if (!item || !item.base_price) continue;
+
+    // Stock defaults with higher minimum (100-150 instead of 10-40)
+    const min = item.stock_min ?? 100;
+    const max = item.stock_max ?? 150;
+    stock[itemId] = (max > 0) ? rngInt(rng, min, max) : 0;
+  }
+
+  playerState.market_stock = stock;
+  playerState.market_stock_day = dayKey;
+  return playerState;
 }
 
 export function sellPrice(serverState, itemId) {
