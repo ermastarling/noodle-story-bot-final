@@ -1882,6 +1882,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     // Buy 1 each -> perform purchase
     if (mode === "buy1") {
       const sourceMessageId = interaction.message?.id;
+      
+      // Defer with ephemeral so we can delete it later
+      await interaction.deferReply({ ephemeral: true });
+      
       const action = "multibuy_buy1";
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = getIdempotentResult(db, idemKey);
@@ -1967,7 +1971,14 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           try {
             const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
             if (targetMsg) {
-              return await targetMsg.edit(replyObj);
+              await targetMsg.edit(replyObj);
+              // Delete the ephemeral defer message
+              try {
+                await interaction.deleteReply();
+              } catch (e) {
+                console.log(`⚠️ Could not delete defer reply:`, e?.message);
+              }
+              return;
             }
           } catch (e) {
             console.log(`⚠️ Failed to edit message ${sourceMessageId}:`, e?.message);
@@ -2038,6 +2049,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     if (!Object.keys(want).length) {
       return componentCommit(interaction, { content: "No quantities provided.", ephemeral: true });
     }
+
+    // Defer with ephemeral so we can delete it later
+    await interaction.deferReply({ ephemeral: true });
 
     // Idempotency (prevents double submit)
     const action = "multibuy";
@@ -2124,7 +2138,14 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         try {
           const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
           if (targetMsg) {
-            return await targetMsg.edit(replyObj);
+            await targetMsg.edit(replyObj);
+            // Delete the ephemeral defer message
+            try {
+              await interaction.deleteReply();
+            } catch (e) {
+              console.log(`⚠️ Could not delete defer reply:`, e?.message);
+            }
+            return;
           }
         } catch (e) {
           console.log(`⚠️ Failed to edit message ${sourceMessageId}:`, e?.message);
