@@ -136,7 +136,7 @@ test("Party: join party successfully", () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
   
-  joinParty(db, partyId, "user2");
+  joinParty(db, "server1", partyId, "user2");
   
   const party = getParty(db, partyId);
   assert.equal(party.members.length, 2);
@@ -150,12 +150,12 @@ test("Party: cannot join full party", () => {
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
   
   // Fill the party (max 4 members)
-  joinParty(db, partyId, "user2");
-  joinParty(db, partyId, "user3");
-  joinParty(db, partyId, "user4");
+  joinParty(db, "server1", partyId, "user2");
+  joinParty(db, "server1", partyId, "user3");
+  joinParty(db, "server1", partyId, "user4");
   
   assert.throws(() => {
-    joinParty(db, partyId, "user5");
+    joinParty(db, "server1", partyId, "user5");
   }, /Party is full/);
   
   db.close();
@@ -164,7 +164,7 @@ test("Party: cannot join full party", () => {
 test("Party: leave party successfully", () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
-  joinParty(db, partyId, "user2");
+  joinParty(db, "server1", partyId, "user2");
   
   leaveParty(db, partyId, "user2");
   
@@ -178,7 +178,7 @@ test("Party: leave party successfully", () => {
 test("Party: leader leaving promotes another member", () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
-  joinParty(db, partyId, "user2");
+  joinParty(db, "server1", partyId, "user2");
   
   leaveParty(db, partyId, "leader1");
   
