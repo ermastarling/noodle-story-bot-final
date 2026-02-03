@@ -7,10 +7,12 @@ import {
   SCROLL_DUPLICATE_TOKEN_CHANCE,
   SCROLL_DUPLICATE_COINS,
   DISCOVERY_TIER_UNLOCK_LEVEL,
-  DISCOVERY_TIER_UNLOCK_REP
+  DISCOVERY_TIER_UNLOCK_REP,
+  DISCOVERY_RECIPE_TIER_WEIGHTS
 } from "../constants.js";
 import { nowTs } from "../util/time.js";
 import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
+import { weightedPick } from "../util/rng.js";
 
 /**
  * Check if player can discover recipes of a given tier
@@ -44,6 +46,21 @@ export function getDiscoverableRecipes(player, content) {
     
     return true;
   });
+}
+
+function pickDiscoverableRecipe(player, content, rng) {
+  const discoverableRecipes = getDiscoverableRecipes(player, content);
+  if (discoverableRecipes.length === 0) return null;
+
+  const weights = Object.fromEntries(
+    discoverableRecipes.map((recipe) => {
+      const weight = DISCOVERY_RECIPE_TIER_WEIGHTS[recipe.tier] ?? 1;
+      return [recipe.recipe_id, Math.max(0.01, weight)];
+    })
+  );
+
+  const pickedId = weightedPick(rng, weights);
+  return discoverableRecipes.find((r) => r.recipe_id === pickedId) ?? discoverableRecipes[0];
 }
 
 /**
@@ -122,10 +139,8 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng }
  * Roll a recipe clue
  */
 function rollClue(player, content, rng) {
-  const discoverableRecipes = getDiscoverableRecipes(player, content);
-  if (discoverableRecipes.length === 0) return null;
-  
-  const recipe = discoverableRecipes[Math.floor(rng() * discoverableRecipes.length)];
+  const recipe = pickDiscoverableRecipe(player, content, rng);
+  if (!recipe) return null;
   const clueId = `clue_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   
   return {
@@ -141,10 +156,8 @@ function rollClue(player, content, rng) {
  * Roll a recipe scroll
  */
 function rollScroll(player, content, rng) {
-  const discoverableRecipes = getDiscoverableRecipes(player, content);
-  if (discoverableRecipes.length === 0) return null;
-  
-  const recipe = discoverableRecipes[Math.floor(rng() * discoverableRecipes.length)];
+  const recipe = pickDiscoverableRecipe(player, content, rng);
+  if (!recipe) return null;
   const scrollId = `scroll_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   
   // Determine rarity based on recipe tier

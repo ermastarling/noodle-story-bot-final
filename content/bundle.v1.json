@@ -1084,7 +1084,7 @@
       "npc_id": "sleepy_traveler",
       "name": "Sleepy Traveler",
       "rarity": "common",
-      "flavor": "Yawns into their scarf, grateful for warmth and quiet.",
+      "flavor": "A soft-spoken wanderer who’s been on the road since before dawn. Yawns into their scarf, grateful for warmth and quiet.",
       "bonuses": {
         "first_serve_of_day_rep_flat": 5
       }
@@ -1093,7 +1093,7 @@
       "npc_id": "forest_spirit",
       "name": "Forest Spirit",
       "rarity": "rare",
-      "flavor": "A soft glow drifts between the trees, drawn to fragrant steam.",
+      "flavor": "A soft glow drifts between the trees, drawn to fragrant steam. Leaves sometimes fall where they step. Praise from them feels like sunlight through branches.",
       "bonuses": {
         "rare_topping_sxp_mult": 1.1
       }
@@ -1102,7 +1102,7 @@
       "npc_id": "festival_goer",
       "name": "Festival-Goer",
       "rarity": "common",
-      "flavor": "Laughing, glitter-dusted, always chasing the next lantern-lit treat.",
+      "flavor": "Laughing, glitter-dusted, always chasing the next lantern-lit treat. They’ll remember your shop as “that place with the happy noodles.”",
       "bonuses": {
         "coins_mult_during_events": 1.25
       }
@@ -1111,7 +1111,7 @@
       "npc_id": "night_market_regular",
       "name": "Night Market Regular",
       "rarity": "uncommon",
-      "flavor": "Knows every stall, every scent \u2014 and always orders in a hurry.",
+      "flavor": "Knows every stall, every scent, and always orders in a hurry. If you get it right, they nod once, high praise.",
       "bonuses": {
         "speed_bonus_mult": 2.0
       }
@@ -1120,7 +1120,7 @@
       "npc_id": "wandering_scholar",
       "name": "Wandering Scholar",
       "rarity": "uncommon",
-      "flavor": "Takes notes between sips, trading stories for secrets.",
+      "flavor": "Carries notebooks filled with half-finished thoughts and margin doodles. They ask about ingredients like they’re tracing a lineage. If inspired, they’ll mutter theories between bites.",
       "bonuses": {
         "recipe_clue_drop_chance": 0.1
       }
@@ -1129,7 +1129,7 @@
       "npc_id": "hearth_grandparent",
       "name": "Hearth Grandparent",
       "rarity": "uncommon",
-      "flavor": "Smiles like a warm lantern \u2014 their praise lingers in the air.",
+      "flavor": "Smiles like a warm lantern, their praise lingers in the air. Compliments are gentle but sincere, and their approval seems to wrap the room in comfort.",
       "bonuses": {
         "rep_aura_flat": 2,
         "rep_aura_duration_minutes": 15
@@ -1139,7 +1139,7 @@
       "npc_id": "rain_soaked_courier",
       "name": "Rain-Soaked Courier",
       "rarity": "rare",
-      "flavor": "Dripping cloak, urgent eyes \u2014 every order is a timed delivery.",
+      "flavor": "Dripping cloak, urgent eyes, every order is a timed delivery. Gratitude is brief but intense.",
       "bonuses": {
         "always_limited_time": true,
         "coins_mult": 1.25
@@ -1149,7 +1149,7 @@
       "npc_id": "market_inspector",
       "name": "Market Inspector",
       "rarity": "rare",
-      "flavor": "A sharp glance, a careful sip \u2014 excellence is rewarded (and noted).",
+      "flavor": "A sharp glance, a careful sip, excellence is rewarded (and noted). They notice garnish placement, broth clarity, and consistency.",
       "bonuses": {
         "tier_min_for_bonus": "rare",
         "rep_flat": 10
@@ -1159,7 +1159,7 @@
       "npc_id": "child_big_scarf",
       "name": "Child with Big Scarf",
       "rarity": "uncommon",
-      "flavor": "Peeks over the counter, eyes sparkling \u2014 treasure hunts begin with noodles.",
+      "flavor": "Peeks over the counter, eyes sparkling, half-hidden behind wool and curiosity. Treasure hunts begin with noodles!",
       "bonuses": {
         "cosmetic_token_daily_chance": 0.05
       }
@@ -1168,7 +1168,7 @@
       "npc_id": "traveling_bard",
       "name": "Traveling Bard",
       "rarity": "rare",
-      "flavor": "A tune for a topping, a rhyme for a refill \u2014 music makes the coins jingle.",
+      "flavor": "A tune for a topping, a rhyme for a refill, music makes the coins jingle. They compose verses about broth depth and noodle bounce. Tip jars mysteriously fill when they’re around.",
       "bonuses": {
         "coins_mult": 1.1,
         "may_appear_in_pairs_during_festivals": true
@@ -1178,7 +1178,7 @@
       "npc_id": "retired_captain",
       "name": "Retired Captain",
       "rarity": "uncommon",
-      "flavor": "Likes consistency. Respect is earned with steady hands and familiar bowls.",
+      "flavor": "Likes consistency, once they approve of a recipe, they’ll order it forever. Respect is earned with steady hands and familiar bowls.",
       "bonuses": {
         "repeat_recipe_sxp_flat": 10
       }
@@ -1187,7 +1187,7 @@
       "npc_id": "curious_apprentice",
       "name": "Curious Apprentice",
       "rarity": "common",
-      "flavor": "Asks questions between bites \u2014 curiosity makes discovery bloom.",
+      "flavor": "Bright-eyed and endlessly inquisitive. They ask why one broth tastes deeper than another. They’re here as much to learn as to eat.",
       "bonuses": {
         "next_roll_discovery_chance_bonus": 0.05
       }
@@ -1196,7 +1196,7 @@
       "npc_id": "moonlit_spirit",
       "name": "Moonlit Spirit",
       "rarity": "epic",
-      "flavor": "A pale shimmer at midnight \u2014 epic bowls earn whispers, scrolls, and wonder.",
+      "flavor": "Appears only under silver light. Speaks softly, if at all. When satisfied, strange insights seem to linger in the air after they leave.",
       "bonuses": {
         "epic_rep_flat": 15,
         "scroll_drop_chance_small": 0.05
@@ -1206,7 +1206,7 @@
       "npc_id": "seasonal_herald",
       "name": "Seasonal Herald",
       "rarity": "seasonal",
-      "flavor": "Arrives with the season\u2019s first breeze \u2014 and leaves a shimmering blessing behind.",
+      "flavor": "Arrives with the season's first breeze and leaves a shimmering blessing behind. They embody the turning of the year, carrying news of what’s to come. Their visit feels ceremonial.",
       "bonuses": {
         "unlocks_cosmetic_aura_today": true
       }

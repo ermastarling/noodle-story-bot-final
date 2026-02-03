@@ -23,7 +23,7 @@ import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, rollPlayerMarketStock, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
-import { STARTER_PROFILE } from "../constants.js";
+import { STARTER_PROFILE, CLUES_TO_UNLOCK_RECIPE } from "../constants.js";
 import { nowTs } from "../util/time.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, BLESSING_EFFECTS } from "../game/social.js";
@@ -84,9 +84,13 @@ const db = openDb();
 /*  UI helpers                                                         */
 /* ------------------------------------------------------------------ */
 
-function ownerFooterText(user) {
-  const tag = user?.tag ?? user?.username ?? "Unknown";
-  return `Owner: ${tag}`;
+function ownerFooterText(userOrMember) {
+  const member = userOrMember?.user ? userOrMember : null;
+  const fallbackUser = member?.user ?? userOrMember;
+  const displayName = member?.displayName ?? userOrMember?.displayName ?? userOrMember?.nickname ?? null;
+  const tag = fallbackUser?.tag ?? fallbackUser?.username ?? "Unknown";
+  const name = displayName ?? fallbackUser?.globalName ?? tag;
+  return `Owner: ${name}`;
 }
 
 function applyOwnerFooter(embed, user) {
@@ -117,6 +121,13 @@ new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Or
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary)
+);
+}
+
+function noodleRecipesMenuRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("📖 Recipes").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("🧑‍🍳 Regulars").setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -189,6 +200,24 @@ const s = String(orderId)
 .replace(/^ord_/, "")
 .replace(/[^a-zA-Z0-9]/g, "");
 return s.slice(-6).toUpperCase();
+}
+
+function formatBonusValue(key, value) {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") {
+    if (key.includes("_mult")) return `×${value}`;
+    if (key.includes("_chance")) return value <= 1 ? `${Math.round(value * 100)}%` : `${value}%`;
+    if (key.includes("_minutes")) return `${value} min`;
+    if (key.includes("_flat")) return value >= 0 ? `+${value}` : `${value}`;
+  }
+  if (Array.isArray(value)) return value.join(", ");
+  return String(value);
+}
+
+function formatBonusLabel(key) {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function getLimitedTimeWindowSeconds(player, baseSeconds) {
@@ -264,17 +293,6 @@ const embed = new EmbedBuilder()
 { name: "REP", value: String(player.rep || 0), inline: true },
 { name: "Coins", value: `${player.coins || 0}c`, inline: true }
 );
-
-// Add cooked bowls inventory
-if (player.inv_bowls && Object.keys(player.inv_bowls).length > 0) {
-  const bowlLines = Object.entries(player.inv_bowls)
-    .map(([key, bowl]) => {
-      const recipeName = content.recipes?.[bowl.recipe_id]?.name ?? bowl.recipe_id;
-      return `• **${recipeName}**: ${bowl.qty}`;
-    })
-    .join("\n");
-  embed.addFields({ name: "🍲 Cooked Bowls", value: bowlLines || "None", inline: false });
-}
 
 applyOwnerFooter(embed, ownerUser);
 return embed;
@@ -627,7 +645,7 @@ content: " ",
 embeds: [buildMenuEmbed({
   title: "🛒 Multi-buy",
   description: "Select up to **5** items.\nWhen you’re done selecting, if on Desktop, press **Esc** to continue.",
-  user: interaction.user
+  user: interaction.member ?? interaction.user
 })],
 components: [
   new ActionRowBuilder().addComponents(menu),
@@ -803,7 +821,7 @@ const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 if (sub === "start") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
-    const embed = renderProfileEmbed(p, interaction.user.displayName, null, interaction.user);
+    const embed = renderProfileEmbed(p, interaction.user.displayName, null, interaction.member ?? interaction.user);
     const step = getCurrentTutorialStep(p);
     const tut = formatTutorialMessage(step);
 
@@ -833,7 +851,7 @@ if (sub === "profile") {
   const p = ensurePlayer(serverId, u.id);
   const party = getUserActiveParty(db, u.id);
   
-  const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.user);
+  const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
   
   return commit({
     embeds: [embed],
@@ -870,16 +888,158 @@ if (sub === "pantry") {
     })
     .filter(Boolean);
 
+  const bowlLines = Object.entries(p.inv_bowls ?? {})
+    .filter(([, bowl]) => bowl?.qty > 0)
+    .map(([, bowl]) => {
+      const recipeName = content.recipes?.[bowl.recipe_id]?.name ?? bowl.recipe_id;
+      return `• ${recipeName}: **${bowl.qty}**`;
+    })
+    .join("\n");
+  const bowlsBlock = bowlLines ? `**🍲 Cooked Bowls**\n${bowlLines}` : "**🍲 Cooked Bowls**\n_None yet._";
+
+  const pantryDescription = [
+    categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
+    bowlsBlock
+  ].join("\n\n");
+
   const pantryEmbed = buildMenuEmbed({
     title: "🧺 Pantry",
-    description: categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
-    user: interaction.user
+    description: pantryDescription,
+    user: interaction.member ?? interaction.user
   });
 
   return commit({
     content: " ",
     embeds: [pantryEmbed],
-    components: [noodleMainMenuRowNoPantry(userId)]
+    components: [noodleMainMenuRowNoPantry(userId), noodleRecipesMenuRow(userId)]
+  });
+}
+
+/* ---------------- RECIPES ---------------- */
+if (sub === "recipes") {
+  const p = ensurePlayer(serverId, userId);
+  const knownIds = getAvailableRecipes(p);
+  const knownRecipes = knownIds
+    .map((id) => content.recipes?.[id])
+    .filter(Boolean)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  const knownLines = knownRecipes.map((r) => {
+    const tier = r.tier ? ` (${r.tier})` : "";
+    const ingredients = (r.ingredients ?? [])
+      .map((ing) => displayItemName(ing.item_id))
+      .join(", ");
+    const ingredientLine = ingredients ? ingredients : "_No ingredients listed._";
+    return `• **${r.name}**${tier}\n  ${ingredientLine}`;
+  });
+
+  const cluesMap = p.clues_owned ?? {};
+  const clueEntries = Object.values(cluesMap).filter(Boolean);
+  const clueLines = clueEntries
+    .map((entry) => {
+      const recipeId = entry.recipe_id;
+      const recipe = content.recipes?.[recipeId];
+      const name = recipe?.name ?? recipeId ?? "Unknown recipe";
+      const tier = recipe?.tier ? ` (${recipe.tier})` : "";
+      const count = entry.count ?? 0;
+      const revealed = entry.revealed_ingredients ?? [];
+      const revealedNames = revealed.length
+        ? revealed.map((id) => displayItemName(id)).join(", ")
+        : "_No ingredients revealed yet._";
+      return `• **${name}**${tier}\n **${count}/${CLUES_TO_UNLOCK_RECIPE}** Clues revealed: ${revealedNames}`;
+    })
+    .sort((a, b) => a.localeCompare(b));
+
+  const totalRecipes = Object.keys(content.recipes ?? {}).length;
+  const totalPages = 2;
+  const rawPage = opt.getInteger("page") ?? 0;
+  const page = Math.min(Math.max(rawPage, 0), totalPages - 1);
+
+  const pageTitle = page === 0
+    ? `**Unlocked Recipes (${knownRecipes.length}/${totalRecipes})**`
+    : `**Clues Collected (${clueEntries.length})**`;
+  const pageBody = page === 0
+    ? (knownLines.length ? knownLines.join("\n\n") : "_None yet._")
+    : (clueLines.length ? clueLines.join("\n\n") : "_No clues yet._");
+
+  const section = `${pageTitle}\n${pageBody}\n\n*(page ${page + 1}/${totalPages})*`;
+
+  const recipesEmbed = buildMenuEmbed({
+    title: "📖 **Recipes**",
+    description: section,
+    user: interaction.member ?? interaction.user
+  });
+
+  const navRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:recipes:${userId}:${page - 1}`)
+      .setLabel("◀ Prev")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page <= 0),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:recipes:${userId}:${page + 1}`)
+      .setLabel("Next ▶")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page >= totalPages - 1)
+  );
+
+  return commit({
+    content: " ",
+    embeds: [recipesEmbed],
+    components: [noodleMainMenuRow(userId), navRow]
+  });
+}
+
+/* ---------------- REGULARS ---------------- */
+if (sub === "regulars") {
+  const npcs = Object.values(content.npcs ?? {})
+    .filter(Boolean)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  const pageSize = 5;
+  const maxPages = 3;
+  const totalPages = Math.max(1, Math.min(maxPages, Math.ceil(npcs.length / pageSize)));
+  const rawPage = opt.getInteger("page") ?? 0;
+  const page = Math.min(Math.max(rawPage, 0), totalPages - 1);
+  const pageItems = npcs.slice(page * pageSize, (page + 1) * pageSize);
+
+  const lines = pageItems.map((npc) => {
+    const rarity = npc.rarity ? ` (${npc.rarity})` : "";
+    const flavor = npc.flavor ? `_${npc.flavor}_` : "_No flavor text._";
+    const bonuses = npc.bonuses && Object.keys(npc.bonuses).length
+      ? Object.entries(npc.bonuses)
+          .map(([key, value]) => `• ${formatBonusLabel(key)}: **${formatBonusValue(key, value)}**`)
+          .join("\n")
+      : "• _No bonuses listed._";
+
+    return `**${npc.name}**${rarity}\n${flavor}\n${bonuses}`;
+  });
+
+  const regularsEmbed = buildMenuEmbed({
+    title: "🧑‍🍳 Regulars",
+    description: lines.length
+      ? `${lines.join("\n\n")}\n\n*(page ${page + 1}/${totalPages})*`
+      : "No regulars found.",
+    user: interaction.member ?? interaction.user
+  });
+
+  const navRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:regulars:${userId}:${page - 1}`)
+      .setLabel("◀ Prev")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page <= 0),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:regulars:${userId}:${page + 1}`)
+      .setLabel("Next ▶")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page >= totalPages - 1)
+  );
+
+  return commit({
+    content: " ",
+    embeds: [regularsEmbed],
+    components: totalPages > 1 ? [noodleMainMenuRow(userId), navRow] : [noodleMainMenuRow(userId)]
   });
 }
 
@@ -1035,7 +1195,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ...replyObj,
       content: finalContent,
       ephemeral: replyObj.ephemeral ?? false,
-      components: replyObj.ephemeral ? (replyObj.components ?? []) : (replyObj.components ?? [noodleMainMenuRow(userId)])
+      components: replyObj.ephemeral
+        ? (replyObj.components ?? [])
+        : (replyObj.components ?? [noodleMainMenuRow(userId)])
     };
 
     putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
@@ -1054,7 +1216,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const cooldownEmbed = buildMenuEmbed({
         title: "🌿 Forage Cooldown",
         description: `You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`,
-        user: interaction.user
+        user: interaction.member ?? interaction.user
       });
       return commitState({
         content: " ",
@@ -1117,7 +1279,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const forageEmbed = buildMenuEmbed({
       title: "🌿 Forage",
       description: `${header}${lines.join("\n")}${tutorialSuffix(p)}`,
-      user: interaction.user
+      user: interaction.member ?? interaction.user
     });
     return commitState({
       content: " ",
@@ -1172,7 +1334,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         description:
           "Select up to **5** items\n" +
           "When you’re done selecting, if on Desktop, press **Esc** to continue\n",
-        user: interaction.user
+        user: interaction.member ?? interaction.user
       });
 
       return commit({
@@ -1321,7 +1483,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
       ].filter(Boolean).join("\n"),
-      user: interaction.user
+      user: interaction.member ?? interaction.user
     });
 
     return commitState({
@@ -1468,7 +1630,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const menuEmbed = buildMenuEmbed({
       title: "📋 Orders",
       description: parts.join("\n"),
-      user: interaction.user
+      user: interaction.member ?? interaction.user
     });
     return commitState({
       content: " ",
@@ -1585,7 +1747,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const acceptEmbed = buildMenuEmbed({
       title: "✅ Orders Accepted",
       description: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
-      user: interaction.user
+      user: interaction.member ?? interaction.user
     });
     return commitState({
       content: " ",
@@ -1848,12 +2010,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
     const components = [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
-    const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName, null, interaction.user)] : [];
+    const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName, null, interaction.member ?? interaction.user)] : [];
 
     const serveEmbed = buildMenuEmbed({
       title: "🍜 Orders Served",
       description: `${results.join("\n")}\n\n${summary}${levelLine}${discoveryLine}${suffix}`,
-      user: interaction.user
+      user: interaction.member ?? interaction.user
     });
 
     return commitState({
@@ -1955,7 +2117,7 @@ if (kind === "nav" && action === "sell") {
     description:
       "Select up to **5** items to sell\n" +
       "When you’re done selecting, if on Desktop, press **Esc** to continue",
-    user: interaction.user
+    user: interaction.member ?? interaction.user
   });
 
   return componentCommit(interaction, {
@@ -1972,7 +2134,15 @@ if (kind === "nav" && action === "sell") {
 if (kind === "nav") {
 const sub = action;
 const sourceMessageId = interaction.message?.id;
-return runNoodle(interaction, { sub, group: null, overrides: { messageId: sourceMessageId } });
+const page = parts[4] ? Number(parts[4]) : null;
+return runNoodle(interaction, {
+  sub,
+  group: null,
+  overrides: {
+    messageId: sourceMessageId,
+    integers: page !== null && Number.isFinite(page) ? { page } : undefined
+  }
+});
 }
 
 /* ---------------- LEGACY ACTION BUTTONS ---------------- */
@@ -2039,7 +2209,7 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
   const acceptEmbed = buildMenuEmbed({
     title: "✅ Accept Orders",
     description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.\n\n(page ${page + 1}/${totalPages})`,
-    user: interaction.user
+    user: interaction.member ?? interaction.user
   });
 
   return componentCommit(interaction, {
@@ -2077,7 +2247,7 @@ if (action === "cancel" || action === "serve") {
   const actionDesc = action === "serve"
     ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
     : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
-  const actionEmbed = buildMenuEmbed({ title: actionTitle, description: actionDesc, user: interaction.user });
+  const actionEmbed = buildMenuEmbed({ title: actionTitle, description: actionDesc, user: interaction.member ?? interaction.user });
 
   return componentCommit(interaction, {
     content: " ",
@@ -2112,7 +2282,7 @@ if (action === "cook") {
   const cookEmbed = buildMenuEmbed({
     title: "🍲 Cook",
     description: "Select a recipe to cook:",
-    user: interaction.user
+    user: interaction.member ?? interaction.user
   });
 
   return componentCommit(interaction, {
@@ -2260,7 +2430,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const selectionEmbed = buildMenuEmbed({
       title: "🛒 Multi-buy",
       description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to buy:`,
-      user: interaction.user
+      user: interaction.member ?? interaction.user
     });
 
     return componentCommit(interaction, {
@@ -2450,7 +2620,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         const buyEmbed = buildMenuEmbed({
           title: "🛒 Purchase Complete",
           description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${tutorialSuffix(p2)}`,
-          user: interaction.user
+          user: interaction.member ?? interaction.user
         });
 
         const replyObj = {
@@ -2622,7 +2792,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const buyEmbed = buildMenuEmbed({
         title: "🛒 Purchase Complete",
         description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.`,
-        user: interaction.user
+        user: interaction.member ?? interaction.user
       });
 
       const replyObj = {
@@ -2895,6 +3065,8 @@ export const noodleCommand = {
     )
     .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
     .addSubcommand((sc) => sc.setName("pantry").setDescription("View your ingredient pantry."))
+    .addSubcommand((sc) => sc.setName("recipes").setDescription("View your unlocked recipes and clues."))
+    .addSubcommand((sc) => sc.setName("regulars").setDescription("View regular NPCs and their bonuses."))
     .addSubcommand((sc) => sc.setName("status").setDescription("Show reset timestamps (debug info)."))
     .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
     .addSubcommandGroup((group) =>

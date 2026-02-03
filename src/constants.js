@@ -54,3 +54,11 @@ export const DISCOVERY_TIER_UNLOCK_REP = {
   epic: 100, 
   seasonal: 150 
 };
+
+// Recipe discovery weighting by tier (lower weight = rarer to discover)
+export const DISCOVERY_RECIPE_TIER_WEIGHTS = {
+  common: 1,
+  rare: 0.45,
+  epic: 0.2,
+  seasonal: 0.1
+};

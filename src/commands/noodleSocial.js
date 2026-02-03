@@ -76,9 +76,13 @@ const SHARED_ORDER_REWARD = {
 /*  UI Button Helpers                                                  */
 /* ------------------------------------------------------------------ */
 
-function ownerFooterText(user) {
-  const tag = user?.tag ?? user?.username ?? "Unknown";
-  return `Owner: ${tag}`;
+function ownerFooterText(userOrMember) {
+  const member = userOrMember?.user ? userOrMember : null;
+  const fallbackUser = member?.user ?? userOrMember;
+  const displayName = member?.displayName ?? userOrMember?.displayName ?? userOrMember?.nickname ?? null;
+  const tag = fallbackUser?.tag ?? fallbackUser?.username ?? "Unknown";
+  const name = displayName ?? fallbackUser?.globalName ?? tag;
+  return `Owner: ${name}`;
 }
 
 function applyOwnerFooter(embed, user) {
@@ -351,13 +355,32 @@ function statsViewButtons(userId) {
  * Commit a component interaction response
  */
 async function componentCommit(interaction, opts) {
-  const { ephemeral, ...rest } = opts ?? {};
+  const { ephemeral, targetMessageId, ...rest } = opts ?? {};
 
   if (ephemeral) {
     if (interaction.deferred || interaction.replied) {
       return interaction.followUp({ ...rest, ephemeral: true });
     }
     return interaction.reply({ ...rest, ephemeral: true });
+  }
+
+  if (targetMessageId) {
+    try {
+      const target = await interaction.channel?.messages?.fetch(targetMessageId);
+      if (target) {
+        const result = await target.edit(rest);
+        if (interaction.deferred || interaction.replied) {
+          try {
+            await interaction.deleteReply();
+          } catch (e) {
+            // ignore if already deleted
+          }
+        }
+        return result;
+      }
+    } catch (e) {
+      // fall through to default reply flow
+    }
   }
 
   if (interaction.deferred || interaction.replied) {
@@ -454,7 +477,7 @@ async function handleParty(interaction) {
         )
         .setColor(0x00ff00);
 
-      applyOwnerFooter(embed, interaction.user);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       await ensurePublicReply();
       return interaction.editReply({ 
@@ -476,7 +499,7 @@ async function handleParty(interaction) {
           .setDescription(`You've joined the party **${result.partyName}**`)
           .setColor(0x00ff00);
 
-        applyOwnerFooter(embed, interaction.user);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         await ensurePublicReply();
         return interaction.editReply({ 
@@ -528,7 +551,7 @@ async function handleParty(interaction) {
         )
         .setColor(0x00aeff);
 
-      applyOwnerFooter(embed, interaction.user);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       const isLeader = currentParty.leader_user_id === userId;
       await ensurePublicReply();
@@ -685,7 +708,7 @@ async function handleTip(interaction) {
           { name: "Their Balance", value: `${result.receiver.coins}c`, inline: true }
         );
 
-        applyOwnerFooter(embed, interaction.user);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = { 
           embeds: [embed], 
@@ -763,7 +786,7 @@ async function handleVisit(interaction) {
           )
           .setColor(0xffaa00);
 
-        applyOwnerFooter(embed, interaction.user);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       const replyObj = { 
         embeds: [embed], 
@@ -834,7 +857,7 @@ async function handleLeaderboard(interaction) {
       .setTitle("📊 Noodle Story Leaderboard")
       .setDescription(`**${fieldName}**\n\n${leaderboardText}`)
       .setColor(0x00aaff)
-      .setFooter({ text: `${ownerFooterText(interaction.user)} • Rankings are read-only and for fun!` });
+      .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • Rankings are read-only and for fun!` });
 
     return interaction.editReply({ 
       embeds: [embed], 
@@ -862,7 +885,7 @@ async function handleStats(interaction) {
       .setTitle("📊 Your Social Stats")
       .setColor(0x00ff88);
 
-    applyOwnerFooter(embed, interaction.user);
+    applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
     // Tips
     embed.addFields({
@@ -971,7 +994,7 @@ async function handleComponent(interaction) {
             )
             .setColor(0x00ff00);
 
-          applyOwnerFooter(embed, interaction.user);
+          applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
           return interaction.editReply({ 
             embeds: [embed], 
@@ -1009,7 +1032,7 @@ async function handleComponent(interaction) {
             .setDescription(`You've joined the party **${result.partyName}**`)
             .setColor(0x00ff00);
 
-          applyOwnerFooter(embed, interaction.user);
+          applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
           if (sourceMessageId && interaction.channel?.messages) {
             try {
@@ -1103,7 +1126,7 @@ async function handleComponent(interaction) {
               .setDescription(`**${targetMember.displayName}** has been invited to **${result.partyName}**`)
               .setColor(0x00ff00);
 
-            applyOwnerFooter(embed, interaction.user);
+            applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
             const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
             return interaction.editReply({ 
@@ -1126,6 +1149,8 @@ async function handleComponent(interaction) {
     }
 
     if (customId.startsWith("noodle-social:modal:tip:")) {
+      const parts = customId.split(":");
+      const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : null;
       const targetInput = interaction.fields.getTextInputValue("target_user");
       const amountInput = interaction.fields.getTextInputValue("amount");
 
@@ -1175,11 +1200,12 @@ async function handleComponent(interaction) {
               { name: "Their Balance", value: `${result.receiver.coins}c`, inline: true }
             );
 
-            applyOwnerFooter(embed, interaction.user);
+            applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-            return interaction.editReply({
+            return componentCommit(interaction, {
               embeds: [embed],
-              components: [partyRow, socialMainMenuRow(userId)]
+              components: [partyRow, socialMainMenuRow(userId)],
+              targetMessageId: sourceMessageId
             });
           } catch (err) {
             return errorReply(interaction, `❌ ${err.message}`);
@@ -1189,6 +1215,8 @@ async function handleComponent(interaction) {
     }
 
     if (customId.startsWith("noodle-social:modal:bless:")) {
+      const parts = customId.split(":");
+      const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : null;
       const targetInput = interaction.fields.getTextInputValue("target_user");
       const targetId = await resolveUserIdFromInput(targetInput, interaction);
       if (!targetId) {
@@ -1246,11 +1274,12 @@ async function handleComponent(interaction) {
               )
               .setColor(0xffaa00);
 
-            applyOwnerFooter(embed, interaction.user);
+            applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-            return interaction.editReply({
+            return componentCommit(interaction, {
               embeds: [embed],
-              components: [partyRow, socialMainMenuRow(userId)]
+              components: [partyRow, socialMainMenuRow(userId)],
+              targetMessageId: sourceMessageId
             });
           } catch (err) {
             return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
@@ -1338,7 +1367,7 @@ async function handleComponent(interaction) {
             )
             .setColor(0x00ff88);
 
-          applyOwnerFooter(embed, interaction.user);
+          applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
           const isLeader = party.leader_user_id === userId;
           const updatedContributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
@@ -1469,7 +1498,7 @@ async function handleComponent(interaction) {
             })
             .setColor(0x00ff88);
 
-          applyOwnerFooter(embed, interaction.user);
+          applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
           const isLeader = party.leader_user_id === userId;
           return componentCommit(interaction, {
@@ -1569,9 +1598,9 @@ async function handleComponent(interaction) {
         )
         .setColor(0x00aeff);
 
-      applyOwnerFooter(embed, interaction.user);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-      applyOwnerFooter(embed, interaction.user);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       const isLeader = party.leader_user_id === userId;
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
@@ -1630,7 +1659,7 @@ async function handleComponent(interaction) {
         .setTitle("📊 Noodle Story Leaderboard")
         .setDescription(`**💰 Top Coin Holders**\n\n${leaderboardText}`)
         .setColor(0x00aaff)
-        .setFooter({ text: `${ownerFooterText(interaction.user)} • Rankings are read-only and for fun!` });
+        .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • Rankings are read-only and for fun!` });
 
       return componentCommit(interaction, {
         embeds: [embed],
@@ -1648,7 +1677,7 @@ async function handleComponent(interaction) {
         .setTitle("📊 Your Social Stats")
         .setColor(0x00ff88);
 
-      applyOwnerFooter(embed, interaction.user);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       embed.addFields({
         name: "💰 Tips",
@@ -1729,39 +1758,7 @@ async function handleComponent(interaction) {
         )
         .setColor(0x00ff88);
 
-      applyOwnerFooter(embed, interaction.user);
-
-      // Add cooked bowls inventory
-      if (player.inv_bowls && Object.keys(player.inv_bowls).length > 0) {
-        const bowlLines = Object.entries(player.inv_bowls)
-          .map(([key, bowl]) => {
-            const recipeName = content.recipes?.[bowl.recipe_id]?.name ?? bowl.recipe_id;
-            return `• **${recipeName}**: ${bowl.qty}`;
-          })
-          .join("\n");
-        embed.addFields({ name: "🍲 Cooked Bowls", value: bowlLines || "None", inline: false });
-      }
-
-      // Add ingredients inventory
-      if (player.inv_ingredients && Object.keys(player.inv_ingredients).length > 0) {
-        // Aggregate quantities by display name to avoid duplicates (e.g., soy_broth vs Soy Broth)
-        const agg = new Map();
-        for (const [id, qty] of Object.entries(player.inv_ingredients)) {
-          if (!qty || qty <= 0) continue; // skip zeros
-          const name = displayItemName(id);
-          const key = name.toLowerCase();
-          const cur = agg.get(key) ?? { name, qty: 0 };
-          cur.qty += qty;
-          agg.set(key, cur);
-        }
-
-        const ingLines = [...agg.values()]
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map(({ name, qty }) => `• **${name}**: ${qty}`)
-          .join("\n");
-
-        if (ingLines) embed.addFields({ name: "🧺 Ingredients", value: ingLines, inline: false });
-      }
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
         embeds: [embed],
@@ -1778,8 +1775,9 @@ async function handleComponent(interaction) {
       }
 
       try {
+        const sourceMessageId = interaction.message?.id ?? "none";
         return await interaction.showModal({
-          customId: `noodle-social:modal:tip:${userId}`,
+          customId: `noodle-social:modal:tip:${userId}:${sourceMessageId}`,
           title: "Send a Tip",
           components: [
             {
@@ -1825,8 +1823,9 @@ async function handleComponent(interaction) {
       }
 
       try {
+        const sourceMessageId = interaction.message?.id ?? "none";
         return await interaction.showModal({
-          customId: `noodle-social:modal:bless:${userId}`,
+          customId: `noodle-social:modal:bless:${userId}:${sourceMessageId}`,
           title: "Grant a Blessing",
           components: [
             {
@@ -1900,7 +1899,7 @@ async function handleComponent(interaction) {
               }
             )
             .setColor(canComplete ? 0x00ff00 : 0xffaa00)
-            .setFooter({ text: `${ownerFooterText(interaction.user)} • ${canComplete ? "✅ Ready to complete!" : "⏳ In progress..."}` });
+            .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • ${canComplete ? "✅ Ready to complete!" : "⏳ In progress..."}` });
         }
       }
 
@@ -2366,7 +2365,7 @@ async function handleComponent(interaction) {
           )
           .setColor(0x00ff00);
 
-        applyOwnerFooter(embed, interaction.user);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const isLeader = party.leader_user_id === userId;
         const existingOrder = getActiveSharedOrderByParty(db, party.party_id);

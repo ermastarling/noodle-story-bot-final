@@ -56,10 +56,10 @@
     "scope": "server",
     "default": {
       "common": 1,
-      "uncommon": 1,
-      "rare": 1,
-      "epic": 1,
-      "seasonal": 1
+      "uncommon": 0.6,
+      "rare": 0.3,
+      "epic": 0.12,
+      "seasonal": 0.06
     },
     "description": "Base NPC rarity weights for order generation.",
     "requires_permission": "manage_guild",
