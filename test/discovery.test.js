@@ -13,22 +13,35 @@ const mockContent = {
     classic_soy_ramen: {
       recipe_id: "classic_soy_ramen",
       name: "Classic Soy Ramen",
-      tier: "common"
+      tier: "common",
+      ingredients: [
+        { item_id: "soy_broth", qty: 1 }
+      ]
     },
     fancy_ramen: {
       recipe_id: "fancy_ramen",
       name: "Fancy Ramen",
-      tier: "rare"
+      tier: "rare",
+      ingredients: [
+        { item_id: "soy_broth", qty: 1 },
+        { item_id: "rare_mushroom", qty: 1 }
+      ]
     },
     epic_ramen: {
       recipe_id: "epic_ramen",
       name: "Epic Ramen",
-      tier: "epic"
+      tier: "epic",
+      ingredients: [
+        { item_id: "soy_broth", qty: 1 }
+      ]
     },
     seasonal_ramen: {
       recipe_id: "seasonal_ramen",
       name: "Seasonal Ramen",
-      tier: "seasonal"
+      tier: "seasonal",
+      ingredients: [
+        { item_id: "soy_broth", qty: 1 }
+      ]
     }
   },
   items: {
@@ -104,7 +117,7 @@ test("Discovery: applyDiscovery - new clue is added", () => {
     recipeTier: "rare"
   };
   
-  const result = applyDiscovery(player, discovery);
+  const result = applyDiscovery(player, discovery, mockContent);
   
   assert.strictEqual(result.isDuplicate, false);
   assert.ok(result.message.includes("Fancy Ramen"));
@@ -117,6 +130,7 @@ test("Discovery: applyDiscovery - duplicate clue gives coins", () => {
     clues_owned: {
       fancy_ramen: { clue_id: "clue_old", recipe_id: "fancy_ramen", obtained_at: 123 }
     },
+    known_recipes: ["fancy_ramen"],
     coins: 100
   };
   const discovery = {
@@ -127,7 +141,7 @@ test("Discovery: applyDiscovery - duplicate clue gives coins", () => {
     recipeTier: "rare"
   };
   
-  const result = applyDiscovery(player, discovery);
+  const result = applyDiscovery(player, discovery, mockContent);
   
   assert.strictEqual(result.isDuplicate, true);
   assert.ok(result.reward.includes("25 coins"));
@@ -149,7 +163,7 @@ test("Discovery: applyDiscovery - new scroll learns recipe", () => {
     rarity: "rare"
   };
   
-  const result = applyDiscovery(player, discovery);
+  const result = applyDiscovery(player, discovery, mockContent);
   
   assert.strictEqual(result.isDuplicate, false);
   assert.ok(result.message.includes("Learned"));
@@ -174,7 +188,7 @@ test("Discovery: applyDiscovery - duplicate scroll gives coins", () => {
     rarity: "rare"
   };
   
-  const result = applyDiscovery(player, discovery);
+  const result = applyDiscovery(player, discovery, mockContent);
   
   assert.strictEqual(result.isDuplicate, true);
   // 50% chance for token or coins, but we'll just check it's a duplicate
