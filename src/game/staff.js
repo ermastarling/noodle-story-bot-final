@@ -1,4 +1,4 @@
-import { makeStreamRng, rngBetween, pickWeighted } from "../util/rng.js";
+import { makeStreamRng, rngBetween, weightedPick } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
 
 /**
@@ -30,7 +30,7 @@ export function rollDailyStaffPool({ serverId, staffContent }) {
   const pool = [];
   for (let i = 0; i < poolSize; i++) {
     // Pick rarity based on weights
-    const rarity = pickWeighted(rng, rarityWeights);
+    const rarity = weightedPick(rng, rarityWeights);
     const candidates = staffByRarity[rarity] || [];
     
     if (candidates.length === 0) continue;
