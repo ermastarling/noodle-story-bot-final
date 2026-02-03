@@ -102,6 +102,10 @@ function socialMainMenuRow(userId) {
       .setLabel("🎪 Party")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
+      .setCustomId(`noodle-upgrades:category:${userId}:all`)
+      .setLabel("🔧 Upgrades")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
       .setLabel("📈 Stats")
       .setStyle(ButtonStyle.Secondary),
@@ -118,6 +122,10 @@ function socialMainMenuRowNoProfile(userId) {
       .setCustomId(`noodle-social:nav:party:${userId}`)
       .setLabel("🎪 Party")
       .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-upgrades:category:${userId}:all`)
+      .setLabel("🔧 Upgrades")
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
       .setLabel("📈 Stats")

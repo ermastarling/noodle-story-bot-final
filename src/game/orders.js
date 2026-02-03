@@ -1,6 +1,12 @@
 import { makeStreamRng, weightedPick } from "../util/rng.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
+import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
+import { calculateCombinedEffects } from "./upgrades.js";
+import { calculateStaffEffects } from "./staff.js";
+
+const upgradesContent = loadUpgradesContent();
+const staffContent = loadStaffContent();
 
 export function generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool, player }) {
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"orders", serverId, dayKey });
@@ -27,12 +33,19 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
     seasonal: 1
   };
 
+  const combinedEffects = player
+    ? calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects)
+    : null;
+  const varietyBonus = combinedEffects?.npc_variety_bonus || 0;
+  const rarityBoosts = { common: 0, uncommon: 0.5, rare: 1, epic: 1.5, seasonal: 2 };
+
   const npcWeights = Object.fromEntries(
     Object.values(content.npcs).map((npc) => {
       const rarity = npc?.rarity ?? "common";
       const baseWeight = npcRarityWeights[rarity] ?? 1;
       const rarityMult = npcBlessingActive ? (npcRarityMultipliers[rarity] ?? 1) : 1;
-      return [npc.npc_id, Math.max(0.01, baseWeight * rarityMult)];
+      const varietyMult = 1 + varietyBonus * (rarityBoosts[rarity] ?? 0);
+      return [npc.npc_id, Math.max(0.01, baseWeight * rarityMult * varietyMult)];
     })
   );
 

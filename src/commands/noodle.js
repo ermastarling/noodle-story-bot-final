@@ -12,7 +12,7 @@ getCurrentTutorialStep,
 formatTutorialMessage,
 formatTutorialCompletionMessage
 } from "../game/tutorial.js";
-import { loadContentBundle, loadSettingsCatalog } from "../content/index.js";
+import { loadContentBundle, loadSettingsCatalog, loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
@@ -40,6 +40,14 @@ import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
+import {
+  calculateCombinedEffects,
+  applyCooldownReduction,
+  applyMarketDiscount,
+  rollIngredientSave,
+  rollDoubleCraft
+} from "../game/upgrades.js";
+import { calculateStaffEffects } from "../game/staff.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -78,6 +86,8 @@ const TextInputStyle = {
 
 const content = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();
+const upgradesContent = loadUpgradesContent();
+const staffContent = loadStaffContent();
 const db = openDb();
 
 /* ------------------------------------------------------------------ */
@@ -1147,6 +1157,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let s = ensureServer(serverId);
 
   const now = nowTs();
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
   
   // C: Apply time catch-up BEFORE any state changes
   // Get last_active_at from database (before it's updated by upsertPlayer)
@@ -1156,7 +1167,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   s.season = computeActiveSeason(set);
   
   // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
-  const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now);
+  const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
   
   const sweep = sweepExpiredAcceptedOrders(p, s, content, now);
 
@@ -1246,7 +1257,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   /* ---------------- FORAGE ---------------- */
   if (sub === "forage") {
-    const cooldownMs = 2 * 60 * 1000;
+    const baseCooldownMs = 2 * 60 * 1000;
+    const cooldownMs = applyCooldownReduction(baseCooldownMs, combinedEffects);
     const chk = canForage(p, now, cooldownMs);
 
     if (!chk.ok) {
@@ -1267,6 +1279,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const itemId = opt.getString("item") ?? null;
     const qtyRaw = opt.getInteger("quantity") ?? 1;
     const quantity = Math.max(1, Math.min(5, qtyRaw));
+    const bonusItems = Math.max(0, Math.floor(combinedEffects.forage_bonus_items || 0));
 
     const allowed = getUnlockedIngredientIds(p, content);
     const allowedForage = new Set((FORAGE_ITEM_IDS ?? []).filter((id) => allowed.has(id)));
@@ -1282,7 +1295,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       drops = rollForageDrops({
         serverId,
         userId: interaction.user.id,
-        picks: 2,
+        picks: 2 + bonusItems,
         itemId,
         quantity,
         allowedItemIds: [...allowedForage]
@@ -1302,6 +1315,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({
         content: `That isn't a valid forage item for your unlocked recipes. Try one of: ${suggestions}`
       });
+    }
+
+    if (itemId && bonusItems > 0) {
+      drops[itemId] = (drops[itemId] ?? 0) + bonusItems;
     }
 
     applyDropsToInventory(p, drops);
@@ -1416,7 +1433,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     // Check for pity discount (B6)
     const pityPrice = getPityDiscount(p, itemId);
-    const price = pityPrice ?? (s.market_prices?.[itemId] ?? item.base_price);
+    const basePrice = pityPrice ?? (s.market_prices?.[itemId] ?? item.base_price);
+    const price = applyMarketDiscount(basePrice, combinedEffects);
     const stock = p.market_stock?.[itemId] ?? 0;
     const cost = price * qty;
 
@@ -1499,8 +1517,21 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
     }
 
+    const cookRng = makeStreamRng({ mode: "secure", streamName: "cook", serverId, userId });
+    const savedLines = [];
     for (const ing of r.ingredients) {
-      p.inv_ingredients[ing.item_id] -= ing.qty * qty;
+      const need = ing.qty * qty;
+      let saved = 0;
+      if (combinedEffects.ingredient_save_chance > 0) {
+        for (let i = 0; i < need; i += 1) {
+          if (rollIngredientSave(combinedEffects, cookRng)) saved += 1;
+        }
+      }
+      const consume = Math.max(0, need - saved);
+      p.inv_ingredients[ing.item_id] -= consume;
+      if (saved > 0) {
+        savedLines.push(`🧺 Saved **${saved}× ${displayItemName(ing.item_id)}**`);
+      }
     }
 
     const bowlKey = recipeId;
@@ -1519,6 +1550,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       existing.qty += qty;
     }
 
+    const doubleCrafted = combinedEffects.double_craft_chance > 0 && rollDoubleCraft(combinedEffects, cookRng);
+    if (doubleCrafted) {
+      p.inv_bowls[bowlKey].qty += qty;
+    }
+
     const have = p.inv_bowls[bowlKey].qty;
 
     advanceTutorial(p, "cook");
@@ -1529,6 +1565,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       title: "🍲 Cooked",
       description: [
         `You cooked **${qty}× ${r.name}**.`,
+        doubleCrafted ? `✨ Double craft! **+${qty}** extra bowl(s).` : null,
+        savedLines.length ? savedLines.join("\n") : null,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
       ].filter(Boolean).join("\n"),
@@ -1936,7 +1974,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         speedWindowSeconds,
         player: p,
         recipe,
-        content
+        content,
+        effects: combinedEffects
       });
 
       // Consume fail-streak relief after successful serve (B4)

@@ -38,7 +38,7 @@ function deterministicRandom(seed) {
  * @param {number} now - Current timestamp
  * @returns {Object} - Spoilage results with messages
  */
-export function applySpoilageCatchup(player, settings, content, lastActiveAt, now) {
+export function applySpoilageCatchup(player, settings, content, lastActiveAt, now, effects = null) {
   // If spoilage is disabled, skip
   if (!settings.SPOILAGE_ENABLED) {
     return { applied: false, spoiled: {}, messages: [] };
@@ -52,6 +52,8 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
   const tickHours = settings.SPOILAGE_TICK_HOURS ?? 1;
   const maxCatchupTicks = settings.SPOILAGE_MAX_CATCHUP_TICKS ?? 24;
   const baseChance = settings.SPOILAGE_BASE_CHANCE ?? 0.05;
+  const reduction = Math.max(0, Math.min(0.95, effects?.spoilage_reduction || 0));
+  const adjustedBaseChance = baseChance * (1 - reduction);
 
   // Calculate elapsed time and number of ticks
   const elapsedMs = now - lastActiveAt;
@@ -92,7 +94,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       const isProtected = isItemProtected(item, coldCellarLevel, secureCratesLevel);
 
       // Protected items still evaluated per tick, but with reduced chance
-      const spoilChance = isProtected ? baseChance * 0.5 : baseChance;
+      const spoilChance = isProtected ? adjustedBaseChance * 0.5 : adjustedBaseChance;
 
       // Deterministic random based on player, item, and tick
       const seed = `spoilage:${player.user_id}:${itemId}:${lastActiveAt}:${tick}`;
@@ -240,7 +242,7 @@ export function generateWelcomeBackMessage(inactivityStatus, serverState, conten
  * @param {number} now - Current timestamp
  * @returns {Object} - Catch-up results with messages
  */
-export function applyTimeCatchup(player, serverState, settings, content, lastActiveAt, now) {
+export function applyTimeCatchup(player, serverState, settings, content, lastActiveAt, now, effects = null) {
   const messages = [];
   let applied = false;
 
@@ -255,7 +257,7 @@ export function applyTimeCatchup(player, serverState, settings, content, lastAct
   }
 
   // C1: Apply spoilage catch-up
-  const spoilage = applySpoilageCatchup(player, settings, content, lastActiveAt, now);
+  const spoilage = applySpoilageCatchup(player, settings, content, lastActiveAt, now, effects);
   if (spoilage.applied) {
     messages.push(...spoilage.messages);
     applied = true;

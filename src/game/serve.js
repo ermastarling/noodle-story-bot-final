@@ -2,8 +2,14 @@ import { COIN_BASE, SXP_BASE, REP_BASE, sxpToNext } from "../constants.js";
 import { makeStreamRng, rngBetween } from "../util/rng.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { getFailStreakBonuses, applyRepFloorBonus } from "./resilience.js";
+import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
+import { calculateCombinedEffects, applyReputationBonus } from "./upgrades.js";
+import { calculateStaffEffects } from "./staff.js";
 
-export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds, player, recipe, content }) {
+const upgradesContent = loadUpgradesContent();
+const staffContent = loadStaffContent();
+
+export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds, player, recipe, content, effects = null }) {
   const dayKey = dayKeyUTC(servedAtMs);
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"serve", serverId, dayKey });
 
@@ -31,7 +37,7 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   const mFestival = (npcArchetype === "festival_goer") ? 1.25 : 1;
   if (mFestival > 1) npcModifier = "coins_festival";
 
-  const coins = Math.floor(coinsBase * mSpeed * mEvent * mCourier * mBard * mFestival);
+  let coins = Math.floor(coinsBase * mSpeed * mEvent * mCourier * mBard * mFestival);
   
   let sxp = Math.floor(SXP_BASE[tier]);
   
@@ -76,6 +82,20 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   if (npcArchetype === "moonlit_spirit" && tier === "epic") {
     rep += 15;
     npcModifier = "rep_moonlit";
+  }
+
+  // Apply upgrade + staff effects
+  const combinedEffects = effects ?? calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
+  if (combinedEffects?.order_quality_bonus) {
+    const orderQualityMult = 1 + combinedEffects.order_quality_bonus;
+    coins = Math.floor(coins * orderQualityMult);
+    rep = Math.floor(rep * orderQualityMult);
+  }
+  if (combinedEffects?.sxp_bonus_percent) {
+    sxp = Math.floor(sxp * (1 + combinedEffects.sxp_bonus_percent));
+  }
+  if (combinedEffects) {
+    rep = applyReputationBonus(rep, combinedEffects, tier);
   }
 
   // B7: Apply reputation floor bonus if eligible

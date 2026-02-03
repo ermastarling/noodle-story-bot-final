@@ -296,19 +296,31 @@ import { fileURLToPath } from "url";
         if (id.startsWith("noodle-staff:")) {
           const result = await noodleStaffInteractionHandler(interaction);
           if (result) {
+            if (result.ephemeral) {
+              if (interaction.replied || interaction.deferred) {
+                return await interaction.followUp({ ...result, ephemeral: true });
+              }
+              return await interaction.reply({ ...result, ephemeral: true });
+            }
             if (interaction.replied || interaction.deferred) {
               return await interaction.editReply(result);
             }
-            return await interaction.reply(result);
+            return await interaction.update(result);
           }
         }
         if (id.startsWith("noodle-upgrades:")) {
           const result = await noodleUpgradesInteractionHandler(interaction);
           if (result) {
+            if (result.ephemeral) {
+              if (interaction.replied || interaction.deferred) {
+                return await interaction.followUp({ ...result, ephemeral: true });
+              }
+              return await interaction.reply({ ...result, ephemeral: true });
+            }
             if (interaction.replied || interaction.deferred) {
               return await interaction.editReply(result);
             }
-            return await interaction.reply(result);
+            return await interaction.update(result);
           }
         }
       } catch (e) {
