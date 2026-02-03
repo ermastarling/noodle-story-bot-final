@@ -96,7 +96,9 @@ export function rollMarket({ serverId, content, serverState }) {
 // Roll per-player market stock (called once per day per player)
 export function rollPlayerMarketStock({ userId, serverId, content, playerState }) {
   const dayKey = dayKeyUTC();
-  if (playerState.market_stock_day === dayKey && playerState.market_stock) {
+  const hasStock = playerState.market_stock && Object.values(playerState.market_stock).some((qty) => Number(qty) > 0);
+  
+  if (playerState.market_stock_day === dayKey && hasStock) {
     return playerState;
   }
 
@@ -110,7 +112,10 @@ export function rollPlayerMarketStock({ userId, serverId, content, playerState }
     // Stock defaults with higher minimum (100-150 instead of 10-40)
     const min = item.stock_min ?? 100;
     const max = item.stock_max ?? 150;
-    stock[itemId] = (max > 0) ? rngInt(rng, min, max) : 0;
+    if (max <= 0) continue;
+    
+    const qty = rngInt(rng, min, max);
+    stock[itemId] = qty;
   }
 
   playerState.market_stock = stock;

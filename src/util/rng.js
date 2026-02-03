@@ -6,7 +6,8 @@ export function makeStreamRng({
   streamName = "default",
   serverId = "0",
   dayKey = "1970-01-01",
-  userId = null
+  userId = null,
+  extra = null
 }) {
   // secure mode: non-deterministic
   if (mode !== "seeded") {
@@ -23,6 +24,10 @@ export function makeStreamRng({
 
   if (userId !== null && userId !== undefined) {
     hasher.update(String(userId));
+  }
+
+  if (extra !== null && extra !== undefined) {
+    hasher.update(String(extra));
   }
 
   const h = hasher.digest();

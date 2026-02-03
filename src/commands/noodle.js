@@ -33,7 +33,8 @@ import {
   clearTemporaryRecipes,
   getPityDiscount,
   consumeFailStreakRelief,
-  checkRepFloorBonus
+  checkRepFloorBonus,
+  updateFailStreak
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
@@ -52,6 +53,9 @@ Modal,
 TextInputComponent,
 Constants
 } = discordPkg;
+
+// Temporary cache for multibuy selections to avoid custom ID length limits
+const multibuyCacheV2 = new Map();
 
 // Aliases for v14+ compatibility in code
 const ActionRowBuilder = MessageActionRow;
@@ -113,13 +117,29 @@ new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Se
 );
 }
 
-function noodleOrdersMenuActionRow(userId) {
+function noodleOrdersActionRowWithBack(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:cancel:${userId}`).setLabel("❌ Cancel").setStyle(ButtonStyle.Danger)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
 );
+}
+
+function noodleOrdersMenuActionRow(userId, { showCancel = false } = {}) {
+const row = new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
+);
+
+if (showCancel) {
+  row.addComponents(
+    new ButtonBuilder().setCustomId(`noodle:pick:cancel:${userId}`).setLabel("❌ Cancel").setStyle(ButtonStyle.Danger)
+  );
+}
+
+return row;
 }
 
 /* ------------------------------------------------------------------ */
@@ -338,10 +358,61 @@ warning: `${lines.join("\n")}${more}`
 /* ------------------------------------------------------------------ */
 
 async function componentCommit(interaction, payload) {
-const { ephemeral, ...rest } = payload ?? {};
+const { ephemeral, targetMessageId, ...rest } = payload ?? {};
+
+// Force ephemeral responses for modal submits when requested
+if (interaction.isModalSubmit?.() && ephemeral === true) {
+  if (interaction.deferred || interaction.replied) {
+    try {
+      return await interaction.followUp({ ...rest, ephemeral: true });
+    } catch (e) {
+      console.log(`⚠️ Modal followUp failed:`, e?.message);
+      return;
+    }
+  }
+  try {
+    return await interaction.reply({ ...rest, ephemeral: true });
+  } catch (e) {
+    console.log(`⚠️ Modal reply failed:`, e?.message);
+    return;
+  }
+}
+
+// If targetMessageId is provided and not ephemeral, edit that message instead
+if (targetMessageId && !ephemeral) {
+  try {
+    const target = await interaction.channel?.messages?.fetch(targetMessageId);
+    if (target) {
+      // Convert components to JSON if they're builder objects
+      let editPayload = { ...rest };
+      if (editPayload.components) {
+        editPayload.components = editPayload.components.map(row => {
+          if (row.components) {
+            return { type: 1, components: row.components.map(comp => comp.toJSON?.() ?? comp) };
+          }
+          return row;
+        });
+      }
+      // Dismiss the modal/interaction response
+      if (interaction.deferred || interaction.replied) {
+        try {
+          await interaction.deleteReply();
+        } catch (e) {
+          // Ignore if already deleted
+        }
+      }
+      return target.edit(editPayload);
+    }
+  } catch (e) {
+    console.log(`⚠️ Failed to edit target message ${targetMessageId}:`, e?.message);
+    // Fall through to normal response
+  }
+}
+
 // Default: non-ephemeral UNLESS explicitly marked as ephemeral
 // If payload has components (select menus, etc), don't make it ephemeral unless explicitly requested
-const shouldBeEphemeral = ephemeral === true && !rest.components;
+const hasComponents = Array.isArray(rest.components) ? rest.components.length > 0 : Boolean(rest.components);
+const shouldBeEphemeral = ephemeral === true && !hasComponents;
 const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
 if (shouldBeEphemeral) {
@@ -351,29 +422,46 @@ if (shouldBeEphemeral) {
   return interaction.reply({ ...rest, ephemeral: true });
 }
 
-// Modal submits: deferred in index.js, so use editReply
+// Modal submits: deferred in index.js, so use editReply unless ephemeral
 if (interaction.isModalSubmit?.()) {
-if (interaction.deferred || interaction.replied) {
-  try {
-    return await interaction.editReply(rest);
-  } catch (e) {
-    console.log(`⚠️ Modal editReply failed:`, e?.message);
-    // If edit fails, try followUp as last resort
+  if (shouldBeEphemeral) {
+    if (interaction.deferred || interaction.replied) {
+      try {
+        return await interaction.followUp({ ...rest, ephemeral: true });
+      } catch (e) {
+        console.log(`⚠️ Modal followUp failed:`, e?.message);
+        return;
+      }
+    }
     try {
-      return await interaction.followUp({ ...rest, ephemeral: true });
-    } catch (e2) {
-      console.log(`⚠️ Modal followUp also failed:`, e2?.message);
+      return await interaction.reply({ ...rest, ephemeral: true });
+    } catch (e) {
+      console.log(`⚠️ Modal reply failed:`, e?.message);
       return;
     }
   }
-}
-// If not deferred/replied, try regular reply (shouldn't happen but safety net)
-try {
-  return await interaction.reply(options);
-} catch (e) {
-  console.log(`⚠️ Modal reply failed:`, e?.message);
-  return;
-}
+
+  if (interaction.deferred || interaction.replied) {
+    try {
+      return await interaction.editReply(rest);
+    } catch (e) {
+      console.log(`⚠️ Modal editReply failed:`, e?.message);
+      // If edit fails, try followUp as last resort
+      try {
+        return await interaction.followUp({ ...rest, ephemeral: true });
+      } catch (e2) {
+        console.log(`⚠️ Modal followUp also failed:`, e2?.message);
+        return;
+      }
+    }
+  }
+  // If not deferred/replied, try regular reply (shouldn't happen but safety net)
+  try {
+    return await interaction.reply(options);
+  } catch (e) {
+    console.log(`⚠️ Modal reply failed:`, e?.message);
+    return;
+  }
 }
 
 // Slash commands: use deferReply (not deferUpdate)
@@ -529,19 +617,28 @@ components: [new ActionRowBuilder().addComponents(menu)]
 });
 }
 
-function buildMultiBuyButtonsRow(userId, selectedIds) {
+function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId) {
 const pickedNames = selectedIds.map((id) => displayItemName(id));
+const msgId = sourceMessageId || "none";
 const btnRow = new ActionRowBuilder().addComponents(
 new ButtonBuilder()
-.setCustomId(`noodle:multibuy:buy1:${userId}:${selectedIds.join(",")}`)
+.setCustomId(`noodle:multibuy:buy1:${userId}:${msgId}`)
 .setLabel("Buy 1 each")
 .setStyle(ButtonStyle.Success),
 new ButtonBuilder()
-.setCustomId(`noodle:multibuy:qty:${userId}:${selectedIds.join(",")}`)
+.setCustomId(`noodle:multibuy:buy5:${userId}:${msgId}`)
+.setLabel("Buy 5 each")
+.setStyle(ButtonStyle.Primary),
+new ButtonBuilder()
+.setCustomId(`noodle:multibuy:buy10:${userId}:${msgId}`)
+.setLabel("Buy 10 each")
+.setStyle(ButtonStyle.Primary),
+new ButtonBuilder()
+.setCustomId(`noodle:multibuy:qty:${userId}:${msgId}`)
 .setLabel("Enter quantities")
 .setStyle(ButtonStyle.Secondary),
 new ButtonBuilder()
-.setCustomId(`noodle:multibuy:clear:${userId}:${selectedIds.join(",")}`)
+.setCustomId(`noodle:multibuy:clear:${userId}:${msgId}`)
 .setLabel("Clear")
 .setStyle(ButtonStyle.Danger)
 );
@@ -564,9 +661,14 @@ flags: MessageFlags.Ephemeral
 
 const userId = interaction.user.id;
 
+// Check if this is the status command (which needs ephemeral defer)
+const subCmd = interaction.options?.getSubcommand?.();
+const isStatusCmd = subCmd === "status";
+
 // Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
-if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !interaction.deferred && !interaction.replied) {
+// Skip defer for status command - it will defer with ephemeral flag
+if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !interaction.deferred && !interaction.replied && !isStatusCmd) {
   try {
     await interaction.deferReply();
   } catch (e) {
@@ -591,7 +693,16 @@ const commit = async (payload) => {
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
-const options = ephemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
+// For ephemeral messages after a non-ephemeral defer, delete original and send ephemeral followUp
+if (ephemeral && (interaction.deferred || interaction.replied)) {
+  try {
+    await interaction.deleteReply();
+  } catch (e) {
+    // Ignore errors if already deleted
+  }
+  return interaction.followUp({ ...rest, ephemeral: true });
+}
+const options = ephemeral ? { ...rest, ephemeral: true } : { ...rest };
 // If deferred, use editReply. Otherwise use reply (shouldn't happen but safety)
 if (interaction.deferred || interaction.replied) return interaction.editReply(options);
 return interaction.reply(options);
@@ -602,7 +713,17 @@ if (overrides?.messageId && !payload?.ephemeral) {
   try {
     const target = await interaction.channel?.messages?.fetch(overrides.messageId);
     if (target) {
-      return target.edit(payload);
+      // Convert components to JSON if they're builder objects
+      let editPayload = { ...payload };
+      if (editPayload.components) {
+        editPayload.components = editPayload.components.map(row => {
+          if (row.components) {
+            return { type: 1, components: row.components.map(comp => comp.toJSON?.() ?? comp) };
+          }
+          return row;
+        });
+      }
+      return target.edit(editPayload);
     }
   } catch (e) {
     // fall through to componentCommit
@@ -696,6 +817,38 @@ if (sub === "season") {
   });
 }
 
+/* ---------------- STATUS (DEBUG) ------------ */
+if (sub === "status") {
+  const p = ensurePlayer(serverId, userId);
+  const ordersDay = p.orders_day ?? "unknown";
+  const marketDay = server.market_day ?? "unknown";
+  
+  // Format as timestamp - these are day keys in YYYY-MM-DD format, assume midnight UTC
+  const ordersTimestamp = ordersDay !== "unknown" ? new Date(`${ordersDay}T00:00:00Z`).getTime() / 1000 : "unknown";
+  const marketTimestamp = marketDay !== "unknown" ? new Date(`${marketDay}T00:00:00Z`).getTime() / 1000 : "unknown";
+  
+  const ordersStr = ordersTimestamp !== "unknown" ? `<t:${Math.floor(ordersTimestamp)}:f>` : "unknown";
+  const marketStr = marketTimestamp !== "unknown" ? `<t:${Math.floor(marketTimestamp)}:f>` : "unknown";
+  
+  const statusInfo = [
+    `📅 Orders last reset: ${ordersStr}`,
+    `🛒 Market last rolled: ${marketStr}`
+  ].join("\n");
+  
+  // Defer as ephemeral, then editReply with the info
+  if (!interaction.deferred && !interaction.replied) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  return await interaction.editReply({
+    content: statusInfo
+  });
+}
+
 /* ---------------- EVENT ---------------- */
 if (sub === "event") {
   return commit({
@@ -746,6 +899,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   // DM the user when a new day's orders are posted
   const dayChanged = prevOrdersDay !== p.orders_day;
   if (dayChanged) {
+    // Force market stock refresh to align with daily order reset
+    p.market_stock_day = null;
+    p.market_stock = null;
+    rollPlayerMarketStock({ userId, serverId, content, playerState: p });
+
     const guildName = interaction.guild?.name ?? "this server";
     interaction.user?.send?.(
       `📬 New daily orders are up in **${guildName}**! Open /noodle orders to accept them.`
@@ -802,7 +960,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const out = {
       ...replyObj,
       content: finalContent,
-      components: replyObj.components ?? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+      ephemeral: replyObj.ephemeral ?? false,
+      components: replyObj.ephemeral ? (replyObj.components ?? []) : (replyObj.components ?? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)])
     };
 
     putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
@@ -817,9 +976,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!chk.ok) {
       const msLeft = chk.nextAt - now;
       const mins = Math.ceil(msLeft / 60000);
+      const nextAtTs = Math.floor(chk.nextAt / 1000);
       return commitState({
-        content: `🌿 You’ve foraged recently. Try again in **~${mins} min**.`,
-        ephemeral: true
+        content: `🌿 You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`
       });
     }
 
@@ -832,8 +991,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (itemId && !allowedForage.has(itemId)) {
       return commitState({
-        content: "You can only forage ingredients used by recipes you’ve unlocked.",
-        ephemeral: true
+        content: "You can only forage ingredients used by recipes you’ve unlocked."
       });
     }
 
@@ -851,8 +1009,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const unlockedForageIds = (FORAGE_ITEM_IDS ?? []).filter((id) => allowed.has(id));
       if (!unlockedForageIds.length) {
         return commitState({
-          content: "🌿 You haven’t unlocked any forageable ingredients yet. Unlock a recipe first!",
-          ephemeral: true
+          content: "🌿 You haven’t unlocked any forageable ingredients yet. Unlock a recipe first!"
         });
       }
 
@@ -861,8 +1018,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         .join(", ");
 
       return commitState({
-        content: `That isn’t a valid forage item for your unlocked recipes. Try one of: ${suggestions}`,
-        ephemeral: true
+        content: `That isn't a valid forage item for your unlocked recipes. Try one of: ${suggestions}`
       });
     }
 
@@ -964,7 +1120,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const friendly = displayItemName(itemId);
       return commitState({ content: `Only ${stock} in stock today for **${friendly}**.`, ephemeral: true });
     }
-    if (p.coins < cost) return commitState({ content: "Not enough coins for that purchase.", ephemeral: true });
+    if (p.coins < cost) return commitState({ content: "Not enough coins for that purchase." });
 
     p.coins -= cost;
     p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qty;
@@ -1020,9 +1176,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     for (const ing of r.ingredients) {
       const haveIng = p.inv_ingredients?.[ing.item_id] ?? 0;
-      if (haveIng < ing.qty * qty) {
+      const need = ing.qty * qty;
+      if (haveIng < need) {
+        const missing = need - haveIng;
         return commitState({
-          content: `You’re missing **${displayItemName(ing.item_id)}**.`,
+          content: `You’re missing **${displayItemName(ing.item_id)}** — need **${missing}** more (have ${haveIng}/${need}).`,
           ephemeral: true
         });
       }
@@ -1060,7 +1218,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
       ].filter(Boolean).join("\n"),
-      embeds: [],
       components: [noodleOrdersActionRow(userId)]
     });
   }
@@ -1189,10 +1346,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const tutSuffix = tutorialSuffix(p);
     if (tutSuffix) parts.push("", tutSuffix);
 
+    const showCancel = acceptedEntries.length > 0;
     return commitState({
       content: parts.join("\n"),
       embeds: [],
-      components: [noodleOrdersMenuActionRow(userId),noodleMainMenuRow(userId)]
+      components: [noodleOrdersMenuActionRow(userId, { showCancel }), noodleMainMenuRow(userId)]
     });
   }
 
@@ -1323,7 +1481,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       .map((t) => t.trim().toUpperCase())
       .filter(Boolean);
 
-    if (!tokens.length) return commitState({ content: "Pick at least one accepted order to serve.", ephemeral: true });
+    if (!tokens.length) return commitState({ content: "Pick at least one accepted order to serve." });
 
     const acceptedMap = p.orders?.accepted ?? {};
     // Ensure core stats and lifetime tracking exist
@@ -1348,6 +1506,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     let totalSxp = 0;
     let servedCount = 0;
     let leveledUp = false;
+    let recipeUnlocked = false;
 
     for (const tok of tokens) {
       const matchEntry = Object.entries(acceptedMap).find(([fullId]) => {
@@ -1458,7 +1617,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         dayKey,
         extra: `${fullOrderId}_${servedAt}` 
       });
-      const discovery = rollRecipeDiscovery({
+      const discoveries = rollRecipeDiscovery({
         player: p,
         content,
         npcArchetype: order.npc_archetype,
@@ -1466,12 +1625,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         rng: discoveryRng
       });
       
-      if (discovery) {
-        const result = applyDiscovery(p, discovery);
+      for (const discovery of discoveries ?? []) {
+        const result = applyDiscovery(p, discovery, content, discoveryRng);
         if (result.message) {
           discoveryMessages.push(result.message);
         } else if (result.isDuplicate && result.reward) {
           discoveryMessages.push(`✨ ${result.reward}`);
+        }
+        
+        // Track if a new recipe was unlocked
+        if (result.recipeUnlocked) {
+          recipeUnlocked = true;
         }
       }
 
@@ -1482,15 +1646,41 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
-      results.push(`🍜 Served **${rName}** to *${npcName}*.`);
+      
+      // Build the serve message with bonus on same line
+      let serveMsg = `🍜 Served **${rName}** to *${npcName}*.`;
+      if (rewards.npcModifier === "coins_courier") serveMsg += ` 🌧️ +25% coins`;
+      if (rewards.npcModifier === "coins_bard") serveMsg += ` 🎵 +10% coins`;
+      if (rewards.npcModifier === "coins_festival") serveMsg += ` 🎉 +25% coins`;
+      if (rewards.npcModifier === "speed") serveMsg += ` 🌙 Doubled speed bonus`;
+      if (rewards.npcModifier === "sxp_forest") serveMsg += ` 🌲 +10% SXP`;
+      if (rewards.npcModifier === "sxp_captain") serveMsg += ` ⛵ +10 SXP`;
+      if (rewards.npcModifier === "rep_inspector") serveMsg += ` 📋 +10 REP`;
+      if (rewards.npcModifier === "rep_sleepy") serveMsg += ` 😴 +5 REP`;
+      if (rewards.npcModifier === "rep_moonlit") serveMsg += ` 🌙 +15 REP`;
       
       if (rewards.repAuraGranted) {
-        results.push(`  ✨ *Hearth Grandparent left a warm aura (+2 REP for 15 min)*`);
+        // Check if aura already active
+        const auraExpiry = p.buffs?.repAuraExpiry ?? 0;
+        const now3_aura = nowTs();
+        if (auraExpiry > now3_aura) {
+          serveMsg += ` ✨ Aura buff doesn't stack (active for another ${Math.ceil((auraExpiry - now3_aura) / 1000 / 60)} min)`;
+        } else {
+          serveMsg += ` ✨ +2 REP for 15 min`;
+        }
       }
+      
+      results.push(serveMsg);
     }
 
     if (!servedCount) {
-      return commitState({ content: results.join("\n") || "Nothing served.", ephemeral: true });
+      return commitState({ content: results.join("\n") || "Nothing served." });
+    }
+    
+    // If a recipe was unlocked, force regenerate order board to include new recipe
+    if (recipeUnlocked) {
+      delete p.orders_day; // Force regeneration by clearing day marker
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
     }
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
@@ -1591,12 +1781,20 @@ if (kind === "nav" && action === "sell") {
     .setMaxValues(Math.min(5, opts.length))
     .addOptions(opts);
 
+  const cancelButton = new ButtonBuilder()
+    .setCustomId(`noodle:nav:profile:${userId}`)
+    .setLabel("Cancel")
+    .setStyle(ButtonStyle.Secondary);
+
   return componentCommit(interaction, {
     content:
       "💰 **Sell Items**\n" +
       "1) Select items to sell\n" +
       "2) Choose to sell 1 each or enter custom quantities",
-    components: [new ActionRowBuilder().addComponents(menu)]
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      new ActionRowBuilder().addComponents(cancelButton)
+    ]
   });
 }
 
@@ -1665,7 +1863,7 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
     );
   }
 
-  const rows = [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)];
+  const rows = [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)];
   if (totalPages > 1) rows.push(navRow);
 
   return componentCommit(interaction, {
@@ -1702,7 +1900,10 @@ if (action === "cancel" || action === "serve") {
     content: action === "serve" 
       ? "Select accepted orders to serve:\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
       : "Select an accepted order to cancel:\nWhen you're done selecting, if on Desktop, press **Esc** to continue.",
-    components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)]
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      action === "serve" ? noodleOrdersActionRowWithBack(userId) : noodleOrdersActionRow(userId)
+    ]
   });
 }
 
@@ -1728,7 +1929,7 @@ if (action === "cook") {
 
   return componentCommit(interaction, {
     content: "Select a recipe to cook:",
-    components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRow(userId)]
+    components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)]
   });
 }
 
@@ -1835,14 +2036,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       overrides: { strings: { recipe: recipeId }, integers: { quantity: qty }, messageId }
     });
 
-    if (messageId) {
-      try {
-        await interaction.deleteReply();
-      } catch (e) {
-        // ignore
-      }
-    }
-
     return result;
   }
 
@@ -1858,7 +2051,15 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       return componentCommit(interaction, { content: "Pick at least one item.", ephemeral: true });
     }
 
-    const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked);
+    const sourceMessageId = interaction.message?.id ?? "none";
+    const cacheKey = `${interaction.user.id}:${sourceMessageId}`;
+    multibuyCacheV2.set(cacheKey, {
+      selectedIds: picked.slice(0, 5),
+      sourceMessageId: sourceMessageId === "none" ? null : sourceMessageId,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    });
+
+    const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId);
 
     const sellButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -1876,11 +2077,23 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   /* ---------------- MULTI-BUY BUTTONS ---------------- */
   if (interaction.isButton?.() && interaction.customId.startsWith("noodle:multibuy:")) {
     const parts2 = interaction.customId.split(":");
-    // noodle:multibuy:<mode>:<ownerId>:<id1,id2,...>
+    // noodle:multibuy:<mode>:<ownerId>:<messageId>
     const mode = parts2[2];
     const owner = parts2[3];
-    const idsPart = parts2.slice(4).join(":");
-    const selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
+    const sourceMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
+    const cacheKey = `${interaction.user.id}:${sourceMessageId || "none"}`;
+    const cacheEntry = multibuyCacheV2.get(cacheKey);
+
+    if (!cacheEntry) {
+      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
+    }
+
+    if (cacheEntry.expiresAt < Date.now()) {
+      multibuyCacheV2.delete(cacheKey);
+      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
+    }
+
+    const selectedIds = (cacheEntry.selectedIds ?? []).slice(0, 5);
 
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
@@ -1892,14 +2105,29 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     // Enter quantities -> show modal IMMEDIATELY (before any DB work to avoid timeout)
     if (mode === "qty") {
+      // Check if interaction is still valid before attempting modal
       if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+        // If already deferred/replied, we can't show a modal - try to defer and use reply instead
+        try {
+          await interaction.deferReply({ ephemeral: true });
+          return componentCommit(interaction, { 
+            content: "⚠️ Discord couldn't show the modal. Try using `/noodle buy` with individual items instead.", 
+            ephemeral: true 
+          });
+        } catch (e) {
+          return componentCommit(interaction, { 
+            content: "⚠️ Discord couldn't show the modal. Try using `/noodle buy` with individual items instead.", 
+            ephemeral: true 
+          });
+        }
       }
 
       const sourceMessageId = interaction.message?.id ?? "";
       const modal = new ModalBuilder()
-        .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${selectedIds.join(",")}:${sourceMessageId}`)
+        .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${sourceMessageId || "none"}`)
         .setTitle("Multi-buy quantities");
+
+      console.log(`📝 Creating multibuy modal with sourceMessageId="${sourceMessageId}", button message id: ${interaction.message?.id}`);
 
       const pickedNames = selectedIds.map((id) => content.items?.[id]?.name ?? displayItemName(id));
 
@@ -1912,10 +2140,26 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       modal.addComponents(new ActionRowBuilder().addComponents(input));
       
+      // Store the selected items in cache to avoid custom ID length limit
+      const cacheKey = `${interaction.user.id}:${sourceMessageId || "none"}`;
+      multibuyCacheV2.set(cacheKey, {
+        selectedIds: selectedIds.slice(0, 5),
+        sourceMessageId: sourceMessageId || null,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      });
+      
       try {
         return await interaction.showModal(modal);
       } catch (e) {
         console.log(`⚠️ showModal failed for multibuy:`, e?.message);
+        // If modal fails, try to acknowledge and give user a fallback message
+        try {
+          if (!interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ ephemeral: true });
+          }
+        } catch (defer_err) {
+          // Ignore defer errors
+        }
         return componentCommit(interaction, { 
           content: "⚠️ Discord couldn't show the modal. Try using `/noodle buy` with individual items instead.", 
           ephemeral: true 
@@ -1933,13 +2177,15 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     // Clear -> re-render picker
     if (mode === "clear") {
+      multibuyCacheV2.delete(cacheKey);
       return renderMultiBuyPicker({ interaction, userId, s: serverState, p });
     }
 
-    // Buy 1 each -> perform purchase
-    if (mode === "buy1") {
+    // Buy N each -> perform purchase
+    if (mode === "buy1" || mode === "buy5" || mode === "buy10") {
+      const qtyEach = mode === "buy10" ? 10 : mode === "buy5" ? 5 : 1;
       const sourceMessageId = interaction.message?.id;
-      const action = "multibuy_buy1";
+      const action = `multibuy_buy${qtyEach}`;
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = getIdempotentResult(db, idemKey);
       if (cached) return componentCommit(interaction, cached);
@@ -1959,7 +2205,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         if (!p2.market_stock) p2.market_stock = {};
 
         const want = {};
-        for (const id3 of selectedIds) want[id3] = 1;
+        for (const id3 of selectedIds) want[id3] = qtyEach;
 
         let totalCost = 0;
         const buyLines = [];
@@ -2044,22 +2290,27 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   /* ---------------- MULTI-BUY QTY MODAL SUBMIT ---------------- */
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:multibuy:qty:")) {
     const parts2 = interaction.customId.split(":");
-    // noodle:multibuy:qty:<ownerId>:<id1,id2,...>:<messageId>
+    // noodle:multibuy:qty:<ownerId>:<messageId>
     const owner = parts2[3];
-    const idsPart4 = parts2.slice(4).join(":");
-    const lastColonIdx = idsPart4.lastIndexOf(":");
-    let selectedIds, sourceMessageId;
-    if (lastColonIdx > -1) {
-      selectedIds = idsPart4.slice(0, lastColonIdx).split(",").filter(Boolean).slice(0, 5);
-      sourceMessageId = idsPart4.slice(lastColonIdx + 1);
-    } else {
-      selectedIds = idsPart4.split(",").filter(Boolean).slice(0, 5);
-      sourceMessageId = null;
-    }
+    const sourceMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
 
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That purchase isn’t for you.", ephemeral: true });
     }
+
+    const cacheKey = `${interaction.user.id}:${sourceMessageId || "none"}`;
+    const cacheEntry = multibuyCacheV2.get(cacheKey);
+    if (!cacheEntry) {
+      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
+    }
+
+    if (cacheEntry.expiresAt < Date.now()) {
+      multibuyCacheV2.delete(cacheKey);
+      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
+    }
+
+    const { selectedIds, sourceMessageId: cachedSourceMessageId } = cacheEntry;
+    const sourceMessageIdFinal = cachedSourceMessageId ?? sourceMessageId;
 
     const raw = String(interaction.fields.getTextInputValue("lines") ?? "").trim();
     const want = {};
@@ -2173,33 +2424,12 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
       const replyObj = {
-        content: `🛒 Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${tutorialSuffix(p2)}`,
-        components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+        content: `🛒 Bought:\n${pretty}\n\nTotal: **${totalCost}c**.`,
+        components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)],
+        targetMessageId: sourceMessageIdFinal // Edit the original message
       };
 
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-      
-      // Edit original message if we have the messageId
-      if (sourceMessageId) {
-        try {
-          const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
-          if (targetMsg) {
-            await targetMsg.edit(replyObj);
-            // Reply to modal with ephemeral message then delete it
-            await interaction.reply({ content: "✓", ephemeral: true });
-            setTimeout(async () => {
-              try {
-                await interaction.deleteReply();
-              } catch (e) {
-                // Ignore - message already gone
-              }
-            }, 100);
-            return;
-          }
-        } catch (e) {
-          console.log(`⚠️ Failed to edit message ${sourceMessageId}:`, e?.message);
-        }
-      }
       
       return componentCommit(interaction, replyObj);
     });
@@ -2461,6 +2691,7 @@ export const noodleCommand = {
         .addUserOption((o) => o.setName("user").setDescription("User").setRequired(false))
     )
     .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
+    .addSubcommand((sc) => sc.setName("status").setDescription("Show reset timestamps (debug info)."))
     .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
     .addSubcommandGroup((group) =>
       group

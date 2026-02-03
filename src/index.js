@@ -131,15 +131,14 @@ import { fileURLToPath } from "url";
     const isSelect = interaction.isSelectMenu?.();
     const isModal = interaction.isModalSubmit?.();
     const cid = interaction.customId;
-    const isCookSelect = cid?.includes("cook_select:");
     const isNoodle = cid?.startsWith("noodle:");
     const isNoodleSocial = cid?.startsWith("noodle-social:");
     
     const alreadyAck = interaction.deferred || interaction.replied;
 
     // Defer buttons/selects with deferUpdate (updates original message)
-    // BUT: Don't defer buttons that will show modals (qty, clear for multibuy)
-    if (!alreadyAck && (isBtn || (isSelect && !isCookSelect))) {
+    // BUT: Don't defer buttons/selects that will show modals
+    if (!alreadyAck && (isBtn || isSelect)) {
       if (isNoodle || isNoodleSocial) {
         // Check if this button/select will show a modal
         const willShowModal = cid?.includes("multibuy:qty:") || 
@@ -159,7 +158,7 @@ import { fileURLToPath } from "url";
                 cid?.includes("action:shared_order_cancel_complete");
         
         if (willShowModal) {
-          console.log(`⏭️  Skipping defer for modal-showing button: ${cid}`);
+          console.log(`⏭️  Skipping defer for modal-showing button/select: ${cid}`);
         }
         if (skipDeferButtons) {
           console.log(`⏭️  Skipping defer for immediate-response button: ${cid}`);
@@ -179,20 +178,6 @@ import { fileURLToPath } from "url";
             // Continue processing - handler may be able to respond directly
           }
         }
-      }
-    } else if (!alreadyAck && isModal && (isNoodle || isNoodleSocial)) {
-      const deferStart = Date.now();
-      try {
-        await interaction.deferReply();
-        console.log(`✅ Deferred modal in ${Date.now() - deferStart}ms`);
-      } catch (e) {
-        console.log(`⚠️ Modal defer failed (age was ${age}ms):`, e?.message);
-        // If defer failed due to unknown interaction, skip processing
-        if (e?.message?.includes("Unknown interaction") || e?.code === 10062) {
-          console.log(`⏭️  Skipping handler - interaction expired`);
-          return;
-        }
-        // Continue so handler can attempt a followUp or reply
       }
     }
 

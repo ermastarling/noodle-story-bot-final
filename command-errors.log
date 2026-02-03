@@ -420,3 +420,19 @@ DiscordAPIError: Interaction has already been acknowledged.
     at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
     at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
     at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:294:7)
+
+[2026-02-01T09:14:02.848Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:330:7)
+
+[2026-02-01T09:14:02.857Z]
+DiscordAPIError: Unknown interaction
+    at RequestHandler.execute (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RequestHandler.push (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/rest/RequestHandler.js:51:14)
+    at async CommandInteraction.reply (/workspaces/noodle-story-bot-final/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:103:5)
+    at async Client.<anonymous> (file:///workspaces/noodle-story-bot-final/src/index.js:330:7)

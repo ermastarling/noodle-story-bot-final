@@ -1,6 +1,8 @@
 import { 
   DISCOVERY_HOOKS, 
   DISCOVERY_CHANCE_BASE, 
+  DISCOVERY_SCROLL_CHANCE_BASE,
+  CLUES_TO_UNLOCK_RECIPE,
   CLUE_DUPLICATE_COINS,
   SCROLL_DUPLICATE_TOKEN_CHANCE,
   SCROLL_DUPLICATE_COINS,
@@ -47,44 +49,65 @@ export function getDiscoverableRecipes(player, content) {
  * Roll for recipe discovery after a serve
  */
 export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng }) {
-  if (!DISCOVERY_HOOKS.on_serve) return null;
-  
-  let baseChance = DISCOVERY_CHANCE_BASE.serve;
-  
-  // Wandering Scholar: 10% chance to drop a recipe clue
-  if (npcArchetype === "wandering_scholar") {
-    const clueRoll = rng();
-    if (clueRoll < 0.10) {
-      return rollClue(player, content, rng);
-    }
-  }
-  
-  // Curious Apprentice: +5% discovery chance to next roll
+  if (!DISCOVERY_HOOKS.on_serve) return [];
+
+  const discoveries = [];
+  let clueChance = DISCOVERY_CHANCE_BASE.serve;
+  let scrollChance = DISCOVERY_SCROLL_CHANCE_BASE.serve;
+
+  // Check discoverable recipes first
+  const discoverableRecipes = getDiscoverableRecipes(player, content);
+  console.log(`🔍 Discovery roll: ${discoverableRecipes.length} discoverable recipes available`);
+
+  // Curious Apprentice: +5% discovery chance to next roll (applies to both)
   if (player.buffs?.apprentice_bonus_pending) {
-    baseChance += 0.05;
+    clueChance += 0.05;
+    scrollChance += 0.05;
     player.buffs.apprentice_bonus_pending = false;
   }
-  
-  // Moonlit Spirit: small scroll chance on Epic tier
+
+  // Wandering Scholar: extra independent 10% chance to drop a clue
+  if (npcArchetype === "wandering_scholar") {
+    const roll = rng();
+    console.log(`🔍 Scholar roll: ${roll.toFixed(4)} vs 0.10`);
+    if (roll < 0.10) {
+      const clue = rollClue(player, content, rng);
+      if (clue) discoveries.push(clue);
+    }
+  }
+
+  // Moonlit Spirit: extra independent 5% scroll chance on Epic tier
   if (npcArchetype === "moonlit_spirit" && tier === "epic") {
-    const scrollRoll = rng();
-    if (scrollRoll < 0.05) {
-      return rollScroll(player, content, rng);
+    const roll = rng();
+    console.log(`🔍 Moonlit roll: ${roll.toFixed(4)} vs 0.05`);
+    if (roll < 0.05) {
+      const scroll = rollScroll(player, content, rng);
+      if (scroll) discoveries.push(scroll);
     }
   }
-  
-  // Base discovery roll
-  const discoveryRoll = rng();
-  if (discoveryRoll < baseChance) {
-    // 50/50 between clue and scroll
-    if (rng() < 0.5) {
-      return rollClue(player, content, rng);
-    } else {
-      return rollScroll(player, content, rng);
+
+  // Base independent rolls (clue + scroll can both happen)
+  const clueRoll = rng();
+  console.log(`🔍 Clue roll: ${clueRoll.toFixed(4)} vs ${clueChance.toFixed(4)}`);
+  if (clueRoll < clueChance) {
+    const clue = rollClue(player, content, rng);
+    if (clue) {
+      console.log(`✅ Clue rolled: ${clue.recipeName}`);
+      discoveries.push(clue);
     }
   }
-  
-  return null;
+
+  const scrollRoll = rng();
+  console.log(`🔍 Scroll roll: ${scrollRoll.toFixed(4)} vs ${scrollChance.toFixed(4)}`);
+  if (scrollRoll < scrollChance) {
+    const scroll = rollScroll(player, content, rng);
+    if (scroll) {
+      console.log(`✅ Scroll rolled: ${scroll.recipeName}`);
+      discoveries.push(scroll);
+    }
+  }
+
+  return discoveries;
 }
 
 /**
@@ -135,16 +158,14 @@ function rollScroll(player, content, rng) {
 /**
  * Apply discovery to player state
  */
-export function applyDiscovery(player, discovery, rng = Math.random) {
+export function applyDiscovery(player, discovery, content, rng = Math.random) {
   if (!discovery) return { isDuplicate: false, reward: null };
   
   if (discovery.type === "clue") {
-    // Check if player already has this clue
-    if (!player.clues_owned) player.clues_owned = {};
-    
-    const clueKey = discovery.recipeId;
-    if (player.clues_owned[clueKey]) {
-      // Duplicate clue - give coins
+    // Check if player already knows this recipe
+    if (!player.known_recipes) player.known_recipes = [];
+    if (player.known_recipes.includes(discovery.recipeId)) {
+      // Already unlocked - give coins for duplicate
       player.coins = (player.coins || 0) + CLUE_DUPLICATE_COINS;
       return { 
         isDuplicate: true, 
@@ -152,17 +173,86 @@ export function applyDiscovery(player, discovery, rng = Math.random) {
       };
     }
     
-    // New clue
-    player.clues_owned[clueKey] = {
-      clue_id: discovery.clueId,
-      recipe_id: discovery.recipeId,
-      obtained_at: nowTs()
-    };
+    // Get recipe details to find ingredients
+    const recipe = content.recipes[discovery.recipeId];
+    if (!recipe || !recipe.ingredients || recipe.ingredients.length === 0) {
+      return { isDuplicate: false, reward: null };
+    }
     
+    // Initialize clues tracking
+    if (!player.clues_owned) player.clues_owned = {};
+    const clueKey = discovery.recipeId;
+    
+    // Track clue count for this recipe
+    if (!player.clues_owned[clueKey]) {
+      player.clues_owned[clueKey] = {
+        recipe_id: discovery.recipeId,
+        count: 0,
+        revealed_ingredients: [],
+        first_obtained_at: nowTs()
+      };
+    }
+    
+    // Backfill ingredients for pre-existing clues (migration)
+    if (!player.clues_owned[clueKey].revealed_ingredients) {
+      player.clues_owned[clueKey].revealed_ingredients = [];
+    }
+    const existingCount = player.clues_owned[clueKey].count || 0;
+    const revealedIngredients = player.clues_owned[clueKey].revealed_ingredients;
+    const allIngredientIds = recipe.ingredients.map(ing => ing.item_id);
+    
+    // If we have clues but no revealed ingredients, backfill them
+    if (existingCount > 0 && revealedIngredients.length < existingCount) {
+      const needed = existingCount - revealedIngredients.length;
+      const unrevealedIngredients = allIngredientIds.filter(id => !revealedIngredients.includes(id));
+      for (let i = 0; i < needed && i < unrevealedIngredients.length; i++) {
+        const idx = Math.floor(rng() * unrevealedIngredients.length);
+        const ingredientId = unrevealedIngredients.splice(idx, 1)[0];
+        revealedIngredients.push(ingredientId);
+      }
+    }
+    
+    const unrevealedIngredients = allIngredientIds.filter(id => !revealedIngredients.includes(id));
+    
+    let newIngredient = null;
+    if (unrevealedIngredients.length > 0) {
+      // Pick a random unrevealed ingredient
+      const idx = Math.floor(rng() * unrevealedIngredients.length);
+      newIngredient = unrevealedIngredients[idx];
+      revealedIngredients.push(newIngredient);
+      player.clues_owned[clueKey].revealed_ingredients = revealedIngredients;
+    }
+    
+    player.clues_owned[clueKey].count += 1;
+    const clueCount = player.clues_owned[clueKey].count;
+    
+    // Build ingredient reveal message
+    let ingredientMsg = "";
+    if (newIngredient) {
+      const itemName = content.items[newIngredient]?.name || newIngredient;
+      ingredientMsg = ` - revealed ingredient: **${itemName}**`;
+    }
+    
+    // Check if we have enough clues to unlock
+    if (clueCount >= CLUES_TO_UNLOCK_RECIPE) {
+      player.known_recipes.push(discovery.recipeId);
+      delete player.clues_owned[clueKey]; // Remove clues once recipe learned
+      
+      return { 
+        isDuplicate: false,
+        recipeUnlocked: true,
+        reward: null,
+        message: `🔍✨ Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}`
+      };
+    }
+    
+    // Still need more clues
+    const remaining = CLUES_TO_UNLOCK_RECIPE - clueCount;
     return { 
-      isDuplicate: false, 
+      isDuplicate: false,
+      recipeUnlocked: false,
       reward: null,
-      message: `🔍 Discovered a clue for **${discovery.recipeName}**!`
+      message: `🔍 Clue ${clueCount}/${CLUES_TO_UNLOCK_RECIPE} for **${discovery.recipeName}** (${remaining} more)${ingredientMsg}`
     };
   }
   
@@ -189,6 +279,16 @@ export function applyDiscovery(player, discovery, rng = Math.random) {
       }
     }
     
+    // Get recipe details to show ingredients
+    const recipe = content.recipes[discovery.recipeId];
+    let ingredientsText = "";
+    if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
+      const ingredientNames = recipe.ingredients
+        .map(ing => content.items[ing.item_id]?.name || ing.item_id)
+        .join(", ");
+      ingredientsText = `\nIngredients: ${ingredientNames}`;
+    }
+    
     // New scroll - learn recipe immediately
     player.scrolls_owned[scrollKey] = {
       scroll_id: discovery.scrollId,
@@ -203,9 +303,10 @@ export function applyDiscovery(player, discovery, rng = Math.random) {
     }
     
     return { 
-      isDuplicate: false, 
+      isDuplicate: false,
+      recipeUnlocked: true,
       reward: null,
-      message: `📜 Learned **${discovery.recipeName}** from a scroll!`
+      message: `📜 Learned **${discovery.recipeName}** from a scroll!${ingredientsText}`
     };
   }
   

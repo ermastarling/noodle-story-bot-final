@@ -1,5 +1,7 @@
 # Phase 15: NPC Registry + Recipe Discovery Implementation
 
+**Status:** ✅ Complete (2026-02-03)
+
 ## Overview
 This implementation adds the NPC Registry with archetypes and modifiers, and the Recipe Discovery system as specified in Issue 13, Phase 15.
 
@@ -14,7 +16,8 @@ Added three new tables for recipe discovery:
 ### 2. Constants (constants.js)
 Added discovery system constants:
 - `DISCOVERY_HOOKS`: Defines where discovery can occur (serve: true, forage: false, quest_complete: true)
-- `DISCOVERY_CHANCE_BASE`: Base chances for discovery (serve: 2%, quest_complete: 10%)
+- `DISCOVERY_CHANCE_BASE`: Base chances for discovery (serve: 4%, quest_complete: 10%)
+- `DISCOVERY_SCROLL_CHANCE_BASE`: Base scroll chances (serve: 1.5%, quest_complete: 0%)
 - `CLUE_DUPLICATE_COINS`: Coins awarded for duplicate clues (25)
 - `SCROLL_DUPLICATE_TOKEN_CHANCE`: Token chance for duplicate scrolls (50%)
 - `SCROLL_DUPLICATE_COINS`: Coins for duplicate scrolls (80)
@@ -96,7 +99,7 @@ When serving orders, players may:
 5. Earn coins/tokens from duplicate discoveries
 
 ### Discovery Chances
-Base discovery on serve: 2%
+Base discovery on serve: 4% (clues), 1.5% (scrolls)
 - Boosted by Curious Apprentice: +5%
 - Wandering Scholar: 10% clue chance
 - Moonlit Spirit: 5% scroll chance on Epic

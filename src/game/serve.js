@@ -16,15 +16,20 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
     : 1;
 
   // Night Market Regular: doubles speed bonus
+  let npcModifier = null;
   if (npcArchetype === "night_market_regular" && mSpeed > 1) {
     mSpeed = 1 + (mSpeed - 1) * 2.0;
+    npcModifier = "speed";
   }
 
   const mEvent = 1;
   const mCourier = (npcArchetype === "rain_soaked_courier") ? 1.25 : 1;
+  if (mCourier > 1) npcModifier = "coins_courier";
   const mBard = (npcArchetype === "traveling_bard") ? 1.10 : 1;
+  if (mBard > 1) npcModifier = "coins_bard";
   // Festival-Goer: +25% coins during events (not implemented yet, mEvent placeholder)
   const mFestival = (npcArchetype === "festival_goer") ? 1.25 : 1;
+  if (mFestival > 1) npcModifier = "coins_festival";
 
   const coins = Math.floor(coinsBase * mSpeed * mEvent * mCourier * mBard * mFestival);
   
@@ -38,6 +43,7 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
     });
     if (hasRareTopping) {
       sxp = Math.floor(sxp * 1.10);
+      npcModifier = "sxp_forest";
     }
   }
   
@@ -45,6 +51,7 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   if (npcArchetype === "retired_captain" && player && recipe) {
     if (player.buffs.last_recipe_served === recipe.recipe_id) {
       sxp += 10;
+      npcModifier = "sxp_captain";
     }
   }
   
@@ -53,6 +60,7 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   // Market Inspector: Rare+ grants +10 REP
   if (npcArchetype === "market_inspector" && (tier === "rare" || tier === "epic" || tier === "seasonal")) {
     rep += 10;
+    npcModifier = "rep_inspector";
   }
   
   // Sleepy Traveler: first serve of day grants +5 REP
@@ -60,12 +68,14 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
     const isFirstServeToday = !player?.daily?.last_serve_day || player.daily.last_serve_day !== dayKey;
     if (isFirstServeToday) {
       rep += 5;
+      npcModifier = "rep_sleepy";
     }
   }
   
   // Moonlit Spirit: +15 REP on Epic tier
   if (npcArchetype === "moonlit_spirit" && tier === "epic") {
     rep += 15;
+    npcModifier = "rep_moonlit";
   }
 
   // B7: Apply reputation floor bonus if eligible
@@ -79,6 +89,7 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   if (npcArchetype === "hearth_grandparent") {
     player.buffs.rep_aura_expires_at = nowTs() + 15 * 60 * 1000;
     repAuraGranted = true;
+    npcModifier = "rep_aura";
   }
   
   // Apply active REP aura if present
@@ -86,7 +97,7 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
     rep += 2;
   }
 
-  return { coins, sxp, rep, mSpeed, repAuraGranted };
+  return { coins, sxp, rep, mSpeed, repAuraGranted, npcModifier };
 }
 
 export function applySxpLevelUp(player) {

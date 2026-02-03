@@ -28,10 +28,17 @@ export const DISCOVERY_HOOKS = {
 };
 
 export const DISCOVERY_CHANCE_BASE = { 
-  serve: 0.02, 
+  serve: 0.04, 
   quest_complete: 0.10 
 };
 
+// Scroll discovery has its own base chance (independent from clues)
+export const DISCOVERY_SCROLL_CHANCE_BASE = {
+  serve: 0.015,
+  quest_complete: 0.00
+};
+
+export const CLUES_TO_UNLOCK_RECIPE = 3;
 export const CLUE_DUPLICATE_COINS = 25;
 export const SCROLL_DUPLICATE_TOKEN_CHANCE = 0.50;
 export const SCROLL_DUPLICATE_COINS = 80;
