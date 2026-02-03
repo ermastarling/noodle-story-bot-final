@@ -1,0 +1,176 @@
+{
+  "upgrades": {
+    "u_prep": {
+      "upgrade_id": "u_prep",
+      "name": "Prep Station",
+      "category": "kitchen",
+      "description": "Improved prep area for faster cooking.",
+      "max_level": 20,
+      "base_cost": 200,
+      "cost_scaling": 1.35,
+      "effects_per_level": {
+        "cooking_speed_bonus": 0.02
+      }
+    },
+    "u_stoves": {
+      "upgrade_id": "u_stoves",
+      "name": "Stove Quality",
+      "category": "kitchen",
+      "description": "Better stoves for more efficient cooking.",
+      "max_level": 20,
+      "base_cost": 250,
+      "cost_scaling": 1.40,
+      "effects_per_level": {
+        "ingredient_save_chance": 0.005
+      }
+    },
+    "u_ladles": {
+      "upgrade_id": "u_ladles",
+      "name": "Premium Ladles",
+      "category": "kitchen",
+      "description": "Professional tools improve precision.",
+      "max_level": 20,
+      "base_cost": 150,
+      "cost_scaling": 1.30,
+      "effects_per_level": {
+        "bowl_capacity_bonus": 1
+      }
+    },
+    "u_pantry": {
+      "upgrade_id": "u_pantry",
+      "name": "Pantry Expansion",
+      "category": "storage",
+      "description": "Larger storage for ingredients.",
+      "max_level": 50,
+      "base_cost": 180,
+      "cost_scaling": 1.25,
+      "effects_per_level": {
+        "ingredient_capacity": 5
+      }
+    },
+    "u_cold_cellar": {
+      "upgrade_id": "u_cold_cellar",
+      "name": "Cold Cellar",
+      "category": "storage",
+      "description": "Keep ingredients fresh longer.",
+      "max_level": 50,
+      "base_cost": 300,
+      "cost_scaling": 1.30,
+      "effects_per_level": {
+        "spoilage_reduction": 0.01
+      }
+    },
+    "u_secure_crates": {
+      "upgrade_id": "u_secure_crates",
+      "name": "Secure Crates",
+      "category": "storage",
+      "description": "Better storage for completed bowls.",
+      "max_level": 50,
+      "base_cost": 220,
+      "cost_scaling": 1.28,
+      "effects_per_level": {
+        "bowl_storage_capacity": 2
+      }
+    },
+    "u_seating": {
+      "upgrade_id": "u_seating",
+      "name": "Seating Comfort",
+      "category": "service",
+      "description": "Comfortable seating improves customer experience.",
+      "max_level": 20,
+      "base_cost": 280,
+      "cost_scaling": 1.35,
+      "effects_per_level": {
+        "rep_bonus_flat": 0.5
+      }
+    },
+    "u_hospitality": {
+      "upgrade_id": "u_hospitality",
+      "name": "Hospitality Training",
+      "category": "service",
+      "description": "Better service techniques.",
+      "max_level": 20,
+      "base_cost": 350,
+      "cost_scaling": 1.40,
+      "effects_per_level": {
+        "rep_bonus_percent": 0.01
+      }
+    },
+    "u_lantern": {
+      "upgrade_id": "u_lantern",
+      "name": "Ambient Lighting",
+      "category": "ambience",
+      "description": "Warm lighting creates cozy atmosphere.",
+      "max_level": 50,
+      "base_cost": 150,
+      "cost_scaling": 1.22,
+      "effects_per_level": {
+        "order_quality_bonus": 0.002
+      }
+    },
+    "u_decor": {
+      "upgrade_id": "u_decor",
+      "name": "Decor & Art",
+      "category": "ambience",
+      "description": "Beautiful decorations attract customers.",
+      "max_level": 50,
+      "base_cost": 200,
+      "cost_scaling": 1.25,
+      "effects_per_level": {
+        "npc_variety_bonus": 0.01
+      }
+    },
+    "u_staff_quarters": {
+      "upgrade_id": "u_staff_quarters",
+      "name": "Staff Quarters",
+      "category": "staff",
+      "description": "Better accommodations attract quality staff.",
+      "max_level": 20,
+      "base_cost": 400,
+      "cost_scaling": 1.45,
+      "effects_per_level": {
+        "staff_pool_quality": 0.05,
+        "staff_capacity": 0.5
+      }
+    },
+    "u_manuals": {
+      "upgrade_id": "u_manuals",
+      "name": "Training Manuals",
+      "category": "staff",
+      "description": "Documented procedures improve staff efficiency.",
+      "max_level": 20,
+      "base_cost": 300,
+      "cost_scaling": 1.38,
+      "effects_per_level": {
+        "staff_effect_multiplier": 0.03
+      }
+    }
+  },
+  "upgrade_categories": {
+    "kitchen": {
+      "display_name": "Kitchen",
+      "icon": "🍳",
+      "description": "Upgrades that improve cooking operations"
+    },
+    "storage": {
+      "display_name": "Storage",
+      "icon": "📦",
+      "description": "Upgrades that increase capacity"
+    },
+    "service": {
+      "display_name": "Service",
+      "icon": "🍜",
+      "description": "Upgrades that enhance customer experience"
+    },
+    "ambience": {
+      "display_name": "Ambience",
+      "icon": "✨",
+      "description": "Upgrades that improve shop atmosphere"
+    },
+    "staff": {
+      "display_name": "Staff",
+      "icon": "👥",
+      "description": "Upgrades that enhance staff performance"
+    }
+  }
+}

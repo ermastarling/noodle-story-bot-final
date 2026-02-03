@@ -26,7 +26,7 @@ export function newPlayerProfile(userId) {
     clues_owned: {},
     scrolls_owned: {},
 
-    staff_hired: {},
+    staff_levels: {},
 
     daily: { last_claimed_at: null, streak_days: 0, streak_last_day: null },
     quests: { active: {}, completed: [], claimed: [] },

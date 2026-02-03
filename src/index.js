@@ -26,6 +26,8 @@ import { fileURLToPath } from "url";
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
+  const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
+  const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
 
   /* ------------------------------------------------------------------ */
   /*  Boot + diagnostics                                                 */
@@ -157,13 +159,17 @@ import { fileURLToPath } from "url";
                 cid?.includes("action:shared_order_abort_cancel") ||
                 cid?.includes("action:shared_order_cancel_complete");
         
+        // Don't defer for noodle-staff and noodle-upgrades interactions
+        const isNoodleStaff = cid?.startsWith("noodle-staff:");
+        const isNoodleUpgrades = cid?.startsWith("noodle-upgrades:");
+        
         if (willShowModal) {
           console.log(`⏭️  Skipping defer for modal-showing button/select: ${cid}`);
         }
         if (skipDeferButtons) {
           console.log(`⏭️  Skipping defer for immediate-response button: ${cid}`);
         }
-        if (!willShowModal && !skipDeferButtons) {
+        if (!willShowModal && !skipDeferButtons && !isNoodleStaff && !isNoodleUpgrades) {
           const deferStart = Date.now();
           try {
             await interaction.deferUpdate();
@@ -286,6 +292,24 @@ import { fileURLToPath } from "url";
         if (id.startsWith("noodle-social:")) {
           // Already deferred at the top of interactionCreate handler
           return await noodleSocialCommand.handleComponent(interaction);
+        }
+        if (id.startsWith("noodle-staff:")) {
+          const result = await noodleStaffInteractionHandler(interaction);
+          if (result) {
+            if (interaction.replied || interaction.deferred) {
+              return await interaction.editReply(result);
+            }
+            return await interaction.reply(result);
+          }
+        }
+        if (id.startsWith("noodle-upgrades:")) {
+          const result = await noodleUpgradesInteractionHandler(interaction);
+          if (result) {
+            if (interaction.replied || interaction.deferred) {
+              return await interaction.editReply(result);
+            }
+            return await interaction.reply(result);
+          }
         }
       } catch (e) {
         console.error("NOODLE COMPONENT ERROR:", e?.stack ?? e);

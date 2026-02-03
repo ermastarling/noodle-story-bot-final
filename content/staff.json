@@ -1,0 +1,168 @@
+{
+  "staff_members": {
+    "prep_chef": {
+      "staff_id": "prep_chef",
+      "name": "Prep Chef",
+      "description": "Speeds up ingredient prep, improving cooking efficiency.",
+      "category": "kitchen",
+      "rarity": "common",
+      "max_level": 20,
+      "base_cost": 300,
+      "cost_scaling": 1.35,
+      "effects_per_level": {
+        "cooking_speed_bonus": 0.05
+      }
+    },
+    "sous_chef": {
+      "staff_id": "sous_chef",
+      "name": "Sous Chef",
+      "description": "Expert technique reduces ingredient waste.",
+      "category": "kitchen",
+      "rarity": "rare",
+      "max_level": 20,
+      "base_cost": 800,
+      "cost_scaling": 1.40,
+      "effects_per_level": {
+        "ingredient_save_chance": 0.10
+      }
+    },
+    "master_chef": {
+      "staff_id": "master_chef",
+      "name": "Master Chef",
+      "description": "Occasionally crafts double portions from a single recipe.",
+      "category": "kitchen",
+      "rarity": "epic",
+      "max_level": 10,
+      "base_cost": 2000,
+      "cost_scaling": 1.50,
+      "effects_per_level": {
+        "double_craft_chance": 0.08
+      }
+    },
+    "server": {
+      "staff_id": "server",
+      "name": "Server",
+      "description": "Friendly service increases customer satisfaction.",
+      "category": "service",
+      "rarity": "common",
+      "max_level": 20,
+      "base_cost": 250,
+      "cost_scaling": 1.30,
+      "effects_per_level": {
+        "rep_bonus_flat": 1
+      }
+    },
+    "host": {
+      "staff_id": "host",
+      "name": "Host",
+      "description": "Welcoming presence attracts more customers.",
+      "category": "service",
+      "rarity": "rare",
+      "max_level": 20,
+      "base_cost": 700,
+      "cost_scaling": 1.38,
+      "effects_per_level": {
+        "order_quality_bonus": 0.05
+      }
+    },
+    "manager": {
+      "staff_id": "manager",
+      "name": "Manager",
+      "description": "Optimizes operations, slightly reducing all cooldowns.",
+      "category": "service",
+      "rarity": "epic",
+      "max_level": 10,
+      "base_cost": 1800,
+      "cost_scaling": 1.48,
+      "effects_per_level": {
+        "cooldown_reduction": 0.10
+      }
+    },
+    "dishwasher": {
+      "staff_id": "dishwasher",
+      "name": "Dishwasher",
+      "description": "Keeps the kitchen running smoothly.",
+      "category": "kitchen",
+      "rarity": "common",
+      "max_level": 20,
+      "base_cost": 200,
+      "cost_scaling": 1.28,
+      "effects_per_level": {
+        "bowl_capacity_bonus": 2
+      }
+    },
+    "forager": {
+      "staff_id": "forager",
+      "name": "Forager",
+      "description": "Knows the best spots for wild ingredients.",
+      "category": "support",
+      "rarity": "rare",
+      "max_level": 20,
+      "base_cost": 750,
+      "cost_scaling": 1.40,
+      "effects_per_level": {
+        "forage_bonus_items": 5
+      }
+    },
+    "merchant": {
+      "staff_id": "merchant",
+      "name": "Merchant",
+      "description": "Negotiates better market deals.",
+      "category": "support",
+      "rarity": "rare",
+      "max_level": 20,
+      "base_cost": 850,
+      "cost_scaling": 1.38,
+      "effects_per_level": {
+        "market_discount": 0.08
+      }
+    },
+    "apprentice": {
+      "staff_id": "apprentice",
+      "name": "Apprentice",
+      "description": "Eager learner who helps with basic tasks.",
+      "category": "kitchen",
+      "rarity": "common",
+      "max_level": 20,
+      "base_cost": 150,
+      "cost_scaling": 1.25,
+      "effects_per_level": {
+        "sxp_bonus_percent": 0.03
+      }
+    },
+    "storyteller": {
+      "staff_id": "storyteller",
+      "name": "Storyteller",
+      "description": "Entertains guests with tales, improving their experience.",
+      "category": "service",
+      "rarity": "epic",
+      "max_level": 10,
+      "base_cost": 2200,
+      "cost_scaling": 1.50,
+      "effects_per_level": {
+        "rep_bonus_percent": 0.12
+      }
+    },
+    "sommelier": {
+      "staff_id": "sommelier",
+      "name": "Sommelier",
+      "description": "Expertise in pairings enhances rare and epic dishes.",
+      "category": "service",
+      "rarity": "epic",
+      "max_level": 10,
+      "base_cost": 2500,
+      "cost_scaling": 1.52,
+      "effects_per_level": {
+        "rare_epic_rep_bonus": 3
+      }
+    }
+  },
+  "pool_config": {
+    "pool_size": 4,
+    "rarity_weights": {
+      "common": 60,
+      "rare": 30,
+      "epic": 10
+    }
+  }
+}
