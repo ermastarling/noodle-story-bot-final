@@ -14,3 +14,13 @@ export function loadSettingsCatalog() {
   const p = path.join(__dirname, "..", "..", "content", "settings.catalog.json");
   return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
+
+export function loadStaffContent() {
+  const p = path.join(__dirname, "..", "..", "content", "staff.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadUpgradesContent() {
+  const p = path.join(__dirname, "..", "..", "content", "upgrades.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
