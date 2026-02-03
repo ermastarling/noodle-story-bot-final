@@ -203,6 +203,9 @@ function rollScroll(player, content, rng, activeSeason = null) {
  * Apply discovery to player state
  */
 export function applyDiscovery(player, discovery, content, rng = Math.random) {
+  const safeContent = content ?? {};
+  const recipes = safeContent.recipes ?? {};
+  const items = safeContent.items ?? {};
   if (!discovery) return { isDuplicate: false, reward: null };
   
   if (discovery.type === "clue") {
@@ -218,7 +221,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random) {
     }
     
     // Get recipe details to find ingredients
-    const recipe = content.recipes[discovery.recipeId];
+    const recipe = recipes[discovery.recipeId];
     if (!recipe || !recipe.ingredients || recipe.ingredients.length === 0) {
       return { isDuplicate: false, reward: null };
     }
@@ -273,7 +276,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random) {
     // Build ingredient reveal message
     let ingredientMsg = "";
     if (newIngredient) {
-      const itemName = content.items[newIngredient]?.name || newIngredient;
+      const itemName = items[newIngredient]?.name || newIngredient;
       ingredientMsg = ` - revealed ingredient: **${itemName}**`;
     }
     
@@ -324,11 +327,11 @@ export function applyDiscovery(player, discovery, content, rng = Math.random) {
     }
     
     // Get recipe details to show ingredients
-    const recipe = content.recipes[discovery.recipeId];
+    const recipe = recipes[discovery.recipeId];
     let ingredientsText = "";
     if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
       const ingredientNames = recipe.ingredients
-        .map(ing => content.items[ing.item_id]?.name || ing.item_id)
+        .map(ing => items[ing.item_id]?.name || ing.item_id)
         .join(", ");
       ingredientsText = `\nIngredients: ${ingredientNames}`;
     }
