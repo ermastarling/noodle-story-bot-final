@@ -102,10 +102,6 @@ function socialMainMenuRow(userId) {
       .setLabel("🎪 Party")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
-      .setLabel("📊 Leaderboard")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
       .setLabel("📈 Stats")
       .setStyle(ButtonStyle.Secondary),
@@ -123,12 +119,12 @@ function socialMainMenuRowNoProfile(userId) {
       .setLabel("🎪 Party")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
-      .setLabel("📊 Leaderboard")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
       .setLabel("📈 Stats")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:season:${userId}`)
+      .setLabel("🍂 Season")
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -318,10 +314,6 @@ function statsViewButtons(userId) {
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
       .setLabel("📊 Leaderboard")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:stats:${userId}`)
-      .setLabel("📈 Stats")
       .setStyle(ButtonStyle.Secondary)
   );
 

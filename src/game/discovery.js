@@ -12,6 +12,7 @@ import {
 } from "../constants.js";
 import { nowTs } from "../util/time.js";
 import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
+import { FALLBACK_RECIPE_ID } from "./resilience.js";
 import { weightedPick } from "../util/rng.js";
 
 /**
@@ -33,14 +34,29 @@ export function canDiscoverTier(player, tier) {
 /**
  * Get list of recipes player can potentially discover
  */
-export function getDiscoverableRecipes(player, content) {
-  const knownRecipes = new Set(player.known_recipes || []);
+export function getDiscoverableRecipes(player, content, { excludeCompletedClues = false, activeSeason = null } = {}) {
+  const knownRecipes = new Set([
+    ...(player.known_recipes || []),
+    ...(player.resilience?.temp_recipes || []),
+    ...Object.keys(player.scrolls_owned || {})
+  ]);
   const allRecipes = Object.values(content.recipes || {});
+  const cluesOwned = player.clues_owned || {};
   
   return allRecipes.filter(recipe => {
-    // Skip if already known
+    if (recipe.recipe_id === FALLBACK_RECIPE_ID) return false;
+    // Skip if already known (including temp/scroll unlocks)
     if (knownRecipes.has(recipe.recipe_id)) return false;
+
+    if (excludeCompletedClues) {
+      const clueCount = cluesOwned[recipe.recipe_id]?.count ?? 0;
+      if (clueCount >= CLUES_TO_UNLOCK_RECIPE) return false;
+    }
     
+    if (recipe.tier === "seasonal") {
+      if (!activeSeason || recipe.season !== activeSeason) return false;
+    }
+
     // Check tier unlock requirements
     if (!canDiscoverTier(player, recipe.tier)) return false;
     
@@ -48,8 +64,8 @@ export function getDiscoverableRecipes(player, content) {
   });
 }
 
-function pickDiscoverableRecipe(player, content, rng) {
-  const discoverableRecipes = getDiscoverableRecipes(player, content);
+function pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues = false, activeSeason = null } = {}) {
+  const discoverableRecipes = getDiscoverableRecipes(player, content, { excludeCompletedClues, activeSeason });
   if (discoverableRecipes.length === 0) return null;
 
   const weights = Object.fromEntries(
@@ -66,12 +82,15 @@ function pickDiscoverableRecipe(player, content, rng) {
 /**
  * Roll for recipe discovery after a serve
  */
-export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng }) {
+export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, activeSeason = null }) {
   if (!DISCOVERY_HOOKS.on_serve) return [];
 
   const discoveries = [];
   let clueChance = DISCOVERY_CHANCE_BASE.serve;
   let scrollChance = DISCOVERY_SCROLL_CHANCE_BASE.serve;
+  const dropRateMult = 0.5;
+  clueChance *= dropRateMult;
+  scrollChance *= dropRateMult;
 
   const blessing = getActiveBlessing(player);
   if (blessing?.type === "discovery_chance_add") {
@@ -81,54 +100,58 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng }
   }
 
   // Check discoverable recipes first
-  const discoverableRecipes = getDiscoverableRecipes(player, content);
+  const discoverableRecipes = getDiscoverableRecipes(player, content, { activeSeason });
   console.log(`🔍 Discovery roll: ${discoverableRecipes.length} discoverable recipes available`);
 
-  // Curious Apprentice: +5% discovery chance to next roll (applies to both)
+  // Curious Apprentice: +1% discovery chance to next roll (applies to both)
   if (player.buffs?.apprentice_bonus_pending) {
-    clueChance += 0.05;
-    scrollChance += 0.05;
+    clueChance += 0.01;
+    scrollChance += 0.01;
     player.buffs.apprentice_bonus_pending = false;
   }
 
-  // Wandering Scholar: extra independent 10% chance to drop a clue
+  // Wandering Scholar: extra independent 1% chance to drop a clue
   if (npcArchetype === "wandering_scholar") {
     const roll = rng();
-    console.log(`🔍 Scholar roll: ${roll.toFixed(4)} vs 0.10`);
-    if (roll < 0.10) {
-      const clue = rollClue(player, content, rng);
+    console.log(`🔍 Scholar roll: ${roll.toFixed(4)} vs 0.01`);
+    if (roll < 0.01) {
+      const clue = rollClue(player, content, rng, activeSeason);
       if (clue) discoveries.push(clue);
     }
   }
 
-  // Moonlit Spirit: extra independent 5% scroll chance on Epic tier
+  if (discoveries.length > 0) return discoveries;
+
+  // Moonlit Spirit: extra independent 1% scroll chance on Epic tier
   if (npcArchetype === "moonlit_spirit" && tier === "epic") {
     const roll = rng();
-    console.log(`🔍 Moonlit roll: ${roll.toFixed(4)} vs 0.05`);
-    if (roll < 0.05) {
-      const scroll = rollScroll(player, content, rng);
+    console.log(`🔍 Moonlit roll: ${roll.toFixed(4)} vs 0.01`);
+    if (roll < 0.01) {
+      const scroll = rollScroll(player, content, rng, activeSeason);
       if (scroll) discoveries.push(scroll);
     }
   }
 
-  // Base independent rolls (clue + scroll can both happen)
-  const clueRoll = rng();
-  console.log(`🔍 Clue roll: ${clueRoll.toFixed(4)} vs ${clueChance.toFixed(4)}`);
-  if (clueRoll < clueChance) {
-    const clue = rollClue(player, content, rng);
-    if (clue) {
-      console.log(`✅ Clue rolled: ${clue.recipeName}`);
-      discoveries.push(clue);
-    }
-  }
+  if (discoveries.length > 0) return discoveries;
 
-  const scrollRoll = rng();
-  console.log(`🔍 Scroll roll: ${scrollRoll.toFixed(4)} vs ${scrollChance.toFixed(4)}`);
-  if (scrollRoll < scrollChance) {
-    const scroll = rollScroll(player, content, rng);
-    if (scroll) {
-      console.log(`✅ Scroll rolled: ${scroll.recipeName}`);
-      discoveries.push(scroll);
+  // Base roll: only one drop (clue OR scroll)
+  const totalChance = clueChance + scrollChance;
+  const dropRoll = rng();
+  console.log(`🔍 Drop roll: ${dropRoll.toFixed(4)} vs ${totalChance.toFixed(4)}`);
+  if (dropRoll < totalChance) {
+    const pick = rng();
+    if (pick < (clueChance / totalChance)) {
+      const clue = rollClue(player, content, rng, activeSeason);
+      if (clue) {
+        console.log(`✅ Clue rolled: ${clue.recipeName}`);
+        discoveries.push(clue);
+      }
+    } else {
+      const scroll = rollScroll(player, content, rng, activeSeason);
+      if (scroll) {
+        console.log(`✅ Scroll rolled: ${scroll.recipeName}`);
+        discoveries.push(scroll);
+      }
     }
   }
 
@@ -138,8 +161,8 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng }
 /**
  * Roll a recipe clue
  */
-function rollClue(player, content, rng) {
-  const recipe = pickDiscoverableRecipe(player, content, rng);
+function rollClue(player, content, rng, activeSeason = null) {
+  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason });
   if (!recipe) return null;
   const clueId = `clue_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   
@@ -155,8 +178,8 @@ function rollClue(player, content, rng) {
 /**
  * Roll a recipe scroll
  */
-function rollScroll(player, content, rng) {
-  const recipe = pickDiscoverableRecipe(player, content, rng);
+function rollScroll(player, content, rng, activeSeason = null) {
+  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason });
   if (!recipe) return null;
   const scrollId = `scroll_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   

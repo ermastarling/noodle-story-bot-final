@@ -1122,7 +1122,7 @@
       "rarity": "uncommon",
       "flavor": "Carries notebooks filled with half-finished thoughts and margin doodles. They ask about ingredients like they’re tracing a lineage. If inspired, they’ll mutter theories between bites.",
       "bonuses": {
-        "recipe_clue_drop_chance": 0.1
+        "recipe_clue_drop_chance": 0.01
       }
     },
     "hearth_grandparent": {
@@ -1189,7 +1189,7 @@
       "rarity": "common",
       "flavor": "Bright-eyed and endlessly inquisitive. They ask why one broth tastes deeper than another. They’re here as much to learn as to eat.",
       "bonuses": {
-        "next_roll_discovery_chance_bonus": 0.05
+        "next_roll_discovery_chance_bonus": 0.01
       }
     },
     "moonlit_spirit": {
@@ -1199,7 +1199,7 @@
       "flavor": "Appears only under silver light. Speaks softly, if at all. When satisfied, strange insights seem to linger in the air after they leave.",
       "bonuses": {
         "epic_rep_flat": 15,
-        "scroll_drop_chance_small": 0.05
+        "scroll_drop_chance_small": 0.01
       }
     },
     "seasonal_herald": {

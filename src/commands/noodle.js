@@ -1045,9 +1045,49 @@ if (sub === "regulars") {
 
 /* ---------------- SEASON ---------------- */
 if (sub === "season") {
+  const p = ensurePlayer(serverId, userId);
+  const availableRecipes = getAvailableRecipes(p);
+  const seasonalRecipes = Object.values(content.recipes ?? {})
+    .filter((recipe) => recipe?.tier === "seasonal" && recipe?.season === server.season);
+  const seasonalLine = seasonalRecipes.length
+    ? seasonalRecipes
+        .map((recipe) => {
+          const unlocked = availableRecipes.includes(recipe.recipe_id)
+            ? "You have discovered this recipe!"
+            : "You have not discovered this yet!";
+          return `• **${recipe.name}** — ${unlocked}`;
+        })
+        .join("\n")
+    : "_No seasonal recipe found for this season._";
+
+  const seasonEmbed = buildMenuEmbed({
+    title: "🍂 Season",
+    description: [
+      `The world is currently in **${server.season}**.`,
+      "",
+      "**Seasonal Recipe**",
+      seasonalLine
+    ].join("\n"),
+    user: interaction.member ?? interaction.user
+  });
+
+  const primaryRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary)
+  );
+
+  const secondaryRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:help:${userId}`).setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
+  );
+
   return commit({
-    content: `🌿 The world is currently in **${server.season}**.`,
-    components: [noodleMainMenuRow(userId)]
+    content: " ",
+    embeds: [seasonEmbed],
+    components: [primaryRow, secondaryRow]
   });
 }
 
@@ -1436,6 +1476,15 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!availableRecipes.includes(recipeId)) {
       return commitState({ content: "You don't know that recipe yet.", ephemeral: true });
     }
+    if (r.tier === "seasonal") {
+      const activeSeason = s?.season ?? null;
+      if (!activeSeason || r.season !== activeSeason) {
+        return commitState({
+          content: `That recipe can only be cooked during **${r.season ?? "its season"}**. The current season is **${activeSeason ?? "unknown"}**.`,
+          ephemeral: true
+        });
+      }
+    }
     if (!qty || qty <= 0) return commitState({ content: "Pick a positive quantity.", ephemeral: true });
 
     for (const ing of r.ingredients) {
@@ -1553,6 +1602,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       .filter(Boolean);
 
     const statusParts = [];
+    if (readyBowls.length > 0) {
+      statusParts.push(`🍲 **Bowls Ready**\n${readyBowls.join("\n")}`);
+    }
+
     if (shortages.length) {
       statusParts.push(
         `🧺 **Ingredients Needed**\n${shortages.map((s) => {
@@ -1562,10 +1615,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       );
     } else {
       statusParts.push(`🧺 **Ingredients Needed**\n_All ingredients ready to cook!_`);
-    }
-
-    if (readyBowls.length > 0) {
-      statusParts.push(`🍲 **Bowls Ready**\n${readyBowls.join("\n")}`);
     }
 
     const statusMsg = statusParts.join("\n\n");
@@ -1727,8 +1776,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         const needs = formatRecipeNeeds({ recipeId: order.recipe_id, content, player: p });
         if (needs) {
           results.push(needs, "");
-        } else {
-          results.push("✅ All ingredients ready to cook!", "");
         }
       }
       acceptedNow += 1;
@@ -1783,8 +1830,15 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     delete accepted[fullId];
 
+    const cancelMsg = `❌ Canceled order \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
+    const cancelEmbed = buildMenuEmbed({
+      title: "❌ Order Canceled",
+      description: cancelMsg,
+      user: interaction.member ?? interaction.user
+    });
     return commitState({
-      content: `❌ Canceled order \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`
+      content: " ",
+      embeds: [cancelEmbed]
     });
   }
 
@@ -1942,7 +1996,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         content,
         npcArchetype: order.npc_archetype,
         tier: order.tier,
-        rng: discoveryRng
+        rng: discoveryRng,
+        activeSeason: s.season
       });
       
       for (const discovery of discoveries ?? []) {
@@ -2263,14 +2318,26 @@ if (action === "cook") {
   // select a recipe from known_recipes, then modal for qty
   const p = ensurePlayer(serverId, userId);
   const available = getAvailableRecipes(p);
-  const opts = available.slice(0, 25).map((rid) => {
+  const activeSeason = s?.season ?? null;
+  const seasonFiltered = available.filter((rid) => {
+    const r = content.recipes?.[rid];
+    if (!r) return true;
+    if (r.tier !== "seasonal") return true;
+    return !!activeSeason && r.season === activeSeason;
+  });
+  const opts = seasonFiltered.slice(0, 25).map((rid) => {
     const r = content.recipes?.[rid];
     const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     return { label, value: rid };
   });
 
-  if (!opts.length) return componentCommit(interaction, { content: "You don’t know any recipes yet.", ephemeral: true });
+  if (!opts.length) {
+    const msg = available.length > 0
+      ? "You don’t have any recipes available to cook this season."
+      : "You don’t know any recipes yet.";
+    return componentCommit(interaction, { content: msg, ephemeral: true });
+  }
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:cook_select:${userId}`)

@@ -19,7 +19,7 @@ export const BLESSING_TYPES = [
 ];
 
 export const BLESSING_EFFECTS = {
-  discovery_chance_add: { clueBonus: 0.05, scrollBonus: 0.05 },
+  discovery_chance_add: { clueBonus: 0.01, scrollBonus: 0.01 },
   limited_time_window_add: { speedWindowMult: 1.25 },
   npc_weight_mult: {
     rarityMultipliers: {
