@@ -10,6 +10,7 @@ import {
   DISCOVERY_TIER_UNLOCK_REP
 } from "../constants.js";
 import { nowTs } from "../util/time.js";
+import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
 
 /**
  * Check if player can discover recipes of a given tier
@@ -54,6 +55,13 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng }
   const discoveries = [];
   let clueChance = DISCOVERY_CHANCE_BASE.serve;
   let scrollChance = DISCOVERY_SCROLL_CHANCE_BASE.serve;
+
+  const blessing = getActiveBlessing(player);
+  if (blessing?.type === "discovery_chance_add") {
+    const bonus = BLESSING_EFFECTS.discovery_chance_add;
+    clueChance += bonus?.clueBonus ?? 0;
+    scrollChance += bonus?.scrollBonus ?? 0;
+  }
 
   // Check discoverable recipes first
   const discoverableRecipes = getDiscoverableRecipes(player, content);

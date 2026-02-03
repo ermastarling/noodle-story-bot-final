@@ -296,9 +296,10 @@ import { fileURLToPath } from "url";
           return;
         }
         try {
-          if (!interaction.replied && !interaction.deferred) {
-            return interaction.reply({ content: "Something went a little sideways, try again.", flags: MessageFlags.Ephemeral });
+          if (interaction.replied || interaction.deferred) {
+            return interaction.followUp({ content: "Something went a little sideways, try again.", ephemeral: true });
           }
+          return interaction.reply({ content: "Something went a little sideways, try again.", flags: MessageFlags.Ephemeral });
         } catch {}
         return;
       }

@@ -51,6 +51,22 @@
     "is_secret": false
   },
   {
+    "key": "NPC_RARITY_WEIGHTS",
+    "type": "json",
+    "scope": "server",
+    "default": {
+      "common": 1,
+      "uncommon": 1,
+      "rare": 1,
+      "epic": 1,
+      "seasonal": 1
+    },
+    "description": "Base NPC rarity weights for order generation.",
+    "requires_permission": "manage_guild",
+    "restart_required": false,
+    "is_secret": false
+  },
+  {
     "key": "ORDERS_BASE_COUNT",
     "type": "int",
     "scope": "server",

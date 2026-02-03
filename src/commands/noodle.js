@@ -26,7 +26,7 @@ import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import { STARTER_PROFILE } from "../constants.js";
 import { nowTs } from "../util/time.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
-import { getUserActiveParty } from "../game/social.js";
+import { getUserActiveParty, getActiveBlessing, BLESSING_EFFECTS } from "../game/social.js";
 import {
   applyResilienceMechanics,
   getAvailableRecipes,
@@ -83,6 +83,23 @@ const db = openDb();
 /* ------------------------------------------------------------------ */
 /*  UI helpers                                                         */
 /* ------------------------------------------------------------------ */
+
+function ownerFooterText(user) {
+  const tag = user?.tag ?? user?.username ?? "Unknown";
+  return `Owner: ${tag}`;
+}
+
+function applyOwnerFooter(embed, user) {
+  if (embed && user) {
+    embed.setFooter({ text: ownerFooterText(user) });
+  }
+  return embed;
+}
+
+function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
+  const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
+  return applyOwnerFooter(embed, user);
+}
 
 function noodleMainMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
@@ -154,6 +171,13 @@ const s = String(orderId)
 return s.slice(-6).toUpperCase();
 }
 
+function getLimitedTimeWindowSeconds(player, baseSeconds) {
+const blessing = getActiveBlessing(player);
+if (blessing?.type !== "limited_time_window_add") return baseSeconds;
+const mult = BLESSING_EFFECTS.limited_time_window_add?.speedWindowMult ?? 1;
+return Math.max(1, Math.ceil(baseSeconds * mult));
+}
+
 function cozyError(errOrCode) {
 const code = typeof errOrCode === "string" ? errOrCode : errOrCode?.code;
 const map = {
@@ -197,7 +221,7 @@ function displayItemName(id) {
     .replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown item";
 }
 
-function renderProfileEmbed(player, displayName, partyName) {
+function renderProfileEmbed(player, displayName, partyName, ownerUser) {
 if (!player.profile) {
   player.profile = {
     shop_name: "My Noodle Shop",
@@ -253,19 +277,13 @@ if (player.inv_ingredients && Object.keys(player.inv_ingredients).length > 0) {
   if (ingLines) embed.addFields({ name: "🧺 Ingredients", value: ingLines, inline: false });
 }
 
-embed.setFooter({ text: `Owner: ${displayName}` });
+applyOwnerFooter(embed, ownerUser);
 return embed;
 }
 
 function resetTutorialState(player) {
 player.tutorial = null;
 ensureTutorial(player);
-}
-
-function completeUserReset(player) {
-  // Only reset tutorial - preserve all other progress including coins
-  player.tutorial = null;
-  ensureTutorial(player);
 }
 
 function tutorialSuffix(player) {
@@ -296,21 +314,18 @@ function formatRecipeNeeds({ recipeId, content: contentBundle, player }) {
 const r = contentBundle.recipes?.[recipeId];
 if (!r) return "";
 
-  const lines = (r.ingredients ?? []).map((ing) => {
-  const need = ing.qty ?? 0;
-  const have = player.inv_ingredients?.[ing.item_id] ?? 0;
+  const missing = (r.ingredients ?? [])
+    .map((ing) => {
+      const need = ing.qty ?? 0;
+      const have = player.inv_ingredients?.[ing.item_id] ?? 0;
+      if (have >= need) return null;
+      const itemName = displayItemName(ing.item_id);
+      return `${itemName} ${need} (have ${have})`;
+    })
+    .filter(Boolean);
 
-  const itemName = displayItemName(ing.item_id);
-  const ok = have >= need;
-
-  const marker = ok ? "✅" : "🧺";
-  const shortage = ok ? "" : ` (need ${need - have} more)`;
-
-  return `${marker} **${itemName}** — need **${need}**, you have **${have}**${shortage}`;
-
-  });
-
-return ["🧾 **Ingredients needed:**", ...lines].join("\n");
+  if (!missing.length) return "";
+  return `🧾 **Ingredients Needed:** ${missing.join(" · ")}`;
 }
 
 function sweepExpiredAcceptedOrders(p, _s, contentBundle, nowMs) {
@@ -609,11 +624,21 @@ const menu = new StringSelectMenuBuilder()
 .addOptions(opts);
 
 return componentCommit(interaction, {
-content:
-"🛒 **Multi-buy**\n" +
-"Select up to **5** items.\n" +
-"When you’re done selecting, if on Desktop, press **Esc** to continue.",
-components: [new ActionRowBuilder().addComponents(menu)]
+content: " ",
+embeds: [buildMenuEmbed({
+  title: "🛒 Multi-buy",
+  description: "Select up to **5** items.\nWhen you’re done selecting, if on Desktop, press **Esc** to continue.",
+  user: interaction.user
+})],
+components: [
+  new ActionRowBuilder().addComponents(menu),
+  new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:profile:${userId}`)
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary)
+  )
+]
 });
 }
 
@@ -723,7 +748,15 @@ if (overrides?.messageId && !payload?.ephemeral) {
           return row;
         });
       }
-      return target.edit(editPayload);
+      const result = await target.edit(editPayload);
+      if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
+        try {
+          await interaction.deleteReply();
+        } catch (e) {
+          // ignore
+        }
+      }
+      return result;
     }
   } catch (e) {
     // fall through to componentCommit
@@ -750,7 +783,7 @@ if (group === "dev" && sub === "reset_tutorial") {
 
   return await withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, target.id);
-    completeUserReset(p);
+    resetTutorialState(p);
     upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
 
     const step = getCurrentTutorialStep(p);
@@ -771,7 +804,7 @@ const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 if (sub === "start") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
-    const embed = renderProfileEmbed(p, interaction.user.displayName);
+    const embed = renderProfileEmbed(p, interaction.user.displayName, null, interaction.user);
     const step = getCurrentTutorialStep(p);
     const tut = formatTutorialMessage(step);
 
@@ -801,7 +834,7 @@ if (sub === "profile") {
   const p = ensurePlayer(serverId, u.id);
   const party = getUserActiveParty(db, u.id);
   
-  const embed = renderProfileEmbed(p, u.displayName, party?.party_name);
+  const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.user);
   
   return commit({
     embeds: [embed],
@@ -977,8 +1010,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const msLeft = chk.nextAt - now;
       const mins = Math.ceil(msLeft / 60000);
       const nextAtTs = Math.floor(chk.nextAt / 1000);
+      const cooldownEmbed = buildMenuEmbed({
+        title: "🌿 Forage Cooldown",
+        description: `You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`,
+        user: interaction.user
+      });
       return commitState({
-        content: `🌿 You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`
+        content: " ",
+        embeds: [cooldownEmbed]
       });
     }
 
@@ -1031,12 +1070,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     );
 
     const header = itemId
-      ? `🌿 You search carefully and gather:\n`
-      : `🌿 You wander into the nearby grove and return with:\n`;
+      ? `You search carefully and gather:\n`
+      : `You wander into the nearby grove and return with:\n`;
 
+    const forageEmbed = buildMenuEmbed({
+      title: "🌿 Forage",
+      description: `${header}${lines.join("\n")}${tutorialSuffix(p)}`,
+      user: interaction.user
+    });
     return commitState({
-      content: `${header}${lines.join("\n")}${tutorialSuffix(p)}`,
-      embeds: []
+      content: " ",
+      embeds: [forageEmbed]
     });
   }
 
@@ -1082,13 +1126,30 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         .setMaxValues(Math.min(5, opts.length))
         .addOptions(opts);
 
+      const buyEmbed = buildMenuEmbed({
+        title: "🛒 Multi-buy",
+        description:
+          "Select up to **5** items\n" +
+          "When you’re done selecting, if on Desktop, press **Esc** to continue\n",
+        user: interaction.user
+      });
+
       return commit({
-        content:
-          "🛒 **Multi-buy**\n" +
-          "1) Select up to **5** items\n" +
-          "2) When you’re done selecting, if on Desktop, press **Esc** to continue\n" +
-          "3) Then choose **Buy 1 each** or **Enter quantities**",
-        components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`noodle:nav:sell:${userId}`).setLabel("💰 Sell Items").setStyle(ButtonStyle.Secondary))]
+        content: " ",
+        embeds: [buyEmbed],
+        components: [
+          new ActionRowBuilder().addComponents(menu),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`noodle:nav:sell:${userId}`)
+              .setLabel("💰 Sell Items")
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setCustomId(`noodle:nav:profile:${userId}`)
+              .setLabel("Cancel")
+              .setStyle(ButtonStyle.Secondary)
+          )
+        ]
       });
     }
 
@@ -1212,12 +1273,19 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!p.lifetime) p.lifetime = { recipes_cooked: 0 };
     p.lifetime.recipes_cooked = (p.lifetime.recipes_cooked || 0) + 1;
 
-    return commitState({
-      content: [
-        `🍲 You cooked **${qty}× ${r.name}**.`,
+    const cookEmbed = buildMenuEmbed({
+      title: "🍲 Cooked",
+      description: [
+        `You cooked **${qty}× ${r.name}**.`,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
       ].filter(Boolean).join("\n"),
+      user: interaction.user
+    });
+
+    return commitState({
+      content: " ",
+      embeds: [cookEmbed],
       components: [noodleOrdersActionRow(userId)]
     });
   }
@@ -1281,14 +1349,23 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       })
       .filter(Boolean);
 
-    const statusMsg = readyBowls.length > 0
-      ? `🍲 **Bowls Ready**\n${readyBowls.join("\n")}`
-      : (shortages.length
-          ? `🧺 **Ingredients Needed**\n${shortages.map((s) => {
-              const iName = displayItemName(s.itemId, content);
-              return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
-            }).join("\n")}`
-          : `🧺 **Ingredients Needed**\n_All ingredients ready!_`);
+    const statusParts = [];
+    if (shortages.length) {
+      statusParts.push(
+        `🧺 **Ingredients Needed**\n${shortages.map((s) => {
+          const iName = displayItemName(s.itemId, content);
+          return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
+        }).join("\n")}`
+      );
+    } else {
+      statusParts.push(`🧺 **Ingredients Needed**\n_All ingredients ready to cook!_`);
+    }
+
+    if (readyBowls.length > 0) {
+      statusParts.push(`🍲 **Bowls Ready**\n${readyBowls.join("\n")}`);
+    }
+
+    const statusMsg = statusParts.join("\n\n");
 
     const acceptedLines = acceptedEntries.map(([fullId, a]) => {
       const snap = a?.order ?? null;
@@ -1297,7 +1374,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       if (a?.expires_at) {
         const msLeft = a.expires_at - now2;
         if (msLeft <= 0) timeLeft = " *(expired)*";
-        else timeLeft = ` *(~${Math.ceil(msLeft / 60000)} min left)*`;
+        else timeLeft = ` *(<t:${Math.floor(a.expires_at / 1000)}:R>)*`;
       } else timeLeft = " *(no rush)*";
 
       const order =
@@ -1320,7 +1397,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const remaining = (p.order_board ?? []).length;
     if (remaining > 0) {
       parts.push(
-        "📋 **Today’s Orders**",
+        "**Today’s Orders**",
         `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
       );
     } else if (acceptedLines.length) {
@@ -1347,9 +1424,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (tutSuffix) parts.push("", tutSuffix);
 
     const showCancel = acceptedEntries.length > 0;
+    const menuEmbed = buildMenuEmbed({
+      title: "📋 Orders",
+      description: parts.join("\n"),
+      user: interaction.user
+    });
     return commitState({
-      content: parts.join("\n"),
-      embeds: [],
+      content: " ",
+      embeds: [menuEmbed],
       components: [noodleOrdersMenuActionRow(userId, { showCancel }), noodleMainMenuRow(userId)]
     });
   }
@@ -1380,6 +1462,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const board = p.order_board ?? [];
     const results = [];
+    const readyBowlsByRecipe = new Map();
     let acceptedNow = 0;
 
     for (const tok of tokens) {
@@ -1405,8 +1488,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
 
       const acceptedAt = nowTs();
+      const baseSpeedWindowSeconds = order.speed_window_seconds ?? 180;
+      const speedWindowSeconds = order.is_limited_time
+        ? getLimitedTimeWindowSeconds(p, baseSpeedWindowSeconds)
+        : baseSpeedWindowSeconds;
       const expiresAt = order.is_limited_time
-        ? acceptedAt + ((order.speed_window_seconds ?? 180) * 1000)
+        ? acceptedAt + (speedWindowSeconds * 1000)
         : null;
 
       p.orders.accepted[order.order_id] = {
@@ -1418,24 +1505,50 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           tier: order.tier,
           npc_archetype: order.npc_archetype,
           is_limited_time: order.is_limited_time,
-          speed_window_seconds: order.speed_window_seconds
+          speed_window_seconds: speedWindowSeconds,
+          base_speed_window_seconds: baseSpeedWindowSeconds
         }
       };
 
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const timeNote = expiresAt
-        ? `⏳ ~${Math.ceil((expiresAt - acceptedAt) / 60000)} min to serve.`
+        ? `⏳ <t:${Math.floor(expiresAt / 1000)}:R> to serve.`
         : `🌿 No rush.`;
 
-      results.push(`✅ Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})`);
+      results.push(`Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})`);
+
+      const bowl = p.inv_bowls?.[order.recipe_id];
+      if (bowl && bowl.qty > 0) {
+        readyBowlsByRecipe.set(order.recipe_id, bowl.qty);
+      } else {
+        const needs = formatRecipeNeeds({ recipeId: order.recipe_id, content, player: p });
+        if (needs) {
+          results.push(needs, "");
+        } else {
+          results.push("✅ All ingredients ready to cook!", "");
+        }
+      }
       acceptedNow += 1;
     }
 
     if (acceptedNow > 0) advanceTutorial(p, "accept");
 
+    if (readyBowlsByRecipe.size > 0) {
+      const readyLines = [...readyBowlsByRecipe.entries()].map(([recipeId, qty]) => {
+        const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+        return `• **${rName}** — **${qty}** bowl(s) ready`;
+      });
+      results.push("\n🍲 **Bowls Ready**", ...readyLines, "");
+    }
+
+    const acceptEmbed = buildMenuEmbed({
+      title: "✅ Orders Accepted",
+      description: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
+      user: interaction.user
+    });
     return commitState({
-      content: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
-      embeds: [],
+      content: " ",
+      embeds: [acceptEmbed],
       components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)]
     });
   }
@@ -1552,6 +1665,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
       const servedAt = nowTs();
       const recipe = content.recipes?.[order.recipe_id];
+      const baseSpeedWindowSeconds = accepted.order?.base_speed_window_seconds ?? order.speed_window_seconds ?? 180;
+      const speedWindowSeconds = order.is_limited_time
+        ? getLimitedTimeWindowSeconds(p, baseSpeedWindowSeconds)
+        : baseSpeedWindowSeconds;
       const rewards = computeServeRewards({
         serverId,
         tier: order.tier,
@@ -1559,7 +1676,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         isLimitedTime: order.is_limited_time,
         servedAtMs: servedAt,
         acceptedAtMs: accepted.accepted_at,
-        speedWindowSeconds: order.speed_window_seconds,
+        speedWindowSeconds,
         player: p,
         recipe,
         content
@@ -1588,7 +1705,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       p.lifetime.bowls_served_total += 1;
       p.lifetime.coins_earned += rewards.coins;
       if (order.is_limited_time) p.lifetime.limited_time_served += 1;
-      if (order.is_limited_time && (servedAt - accepted.accepted_at) <= (order.speed_window_seconds * 1000)) {
+      if (order.is_limited_time && (servedAt - accepted.accepted_at) <= (speedWindowSeconds * 1000)) {
         p.lifetime.perfect_speed_serves += 1;
       }
       if (!p.lifetime.npc_seen) p.lifetime.npc_seen = {};
@@ -1648,7 +1765,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
       
       // Build the serve message with bonus on same line
-      let serveMsg = `🍜 Served **${rName}** to *${npcName}*.`;
+      let serveMsg = `Served **${rName}** to *${npcName}*.`;
       if (rewards.npcModifier === "coins_courier") serveMsg += ` 🌧️ +25% coins`;
       if (rewards.npcModifier === "coins_bard") serveMsg += ` 🎵 +10% coins`;
       if (rewards.npcModifier === "coins_festival") serveMsg += ` 🎉 +25% coins`;
@@ -1690,12 +1807,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
     const components = [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
-    const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName)] : [];
+    const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName, null, interaction.user)] : [];
+
+    const serveEmbed = buildMenuEmbed({
+      title: "🍜 Orders Served",
+      description: `${results.join("\n")}\n\n${summary}${levelLine}${discoveryLine}${suffix}`,
+      user: interaction.user
+    });
 
     return commitState({
-      content: `${results.join("\n")}\n\n${summary}${levelLine}${discoveryLine}${suffix}`,
+      content: " ",
       components,
-      embeds
+      embeds: [serveEmbed, ...embeds]
     });
   }
 
@@ -1786,11 +1909,17 @@ if (kind === "nav" && action === "sell") {
     .setLabel("Cancel")
     .setStyle(ButtonStyle.Secondary);
 
+  const sellEmbed = buildMenuEmbed({
+    title: "💰 Sell Items",
+    description:
+      "Select up to **5** items to sell\n" +
+      "When you’re done selecting, if on Desktop, press **Esc** to continue",
+    user: interaction.user
+  });
+
   return componentCommit(interaction, {
-    content:
-      "💰 **Sell Items**\n" +
-      "1) Select items to sell\n" +
-      "2) Choose to sell 1 each or enter custom quantities",
+    content: " ",
+    embeds: [sellEmbed],
     components: [
       new ActionRowBuilder().addComponents(menu),
       new ActionRowBuilder().addComponents(cancelButton)
@@ -1866,8 +1995,15 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
   const rows = [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)];
   if (totalPages > 1) rows.push(navRow);
 
+  const acceptEmbed = buildMenuEmbed({
+    title: "✅ Accept Orders",
+    description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.\n\n(page ${page + 1}/${totalPages})`,
+    user: interaction.user
+  });
+
   return componentCommit(interaction, {
-    content: `Select orders to accept (page ${page + 1}/${totalPages}):\nWhen you're done selecting, if on Desktop, press **Esc** to continue.`,
+    content: " ",
+    embeds: [acceptEmbed],
     components: rows
   });
 }
@@ -1896,10 +2032,15 @@ if (action === "cancel" || action === "serve") {
     .setMaxValues(action === "serve" ? Math.min(5, opts.length) : 1)
     .addOptions(opts);
 
+  const actionTitle = action === "serve" ? "🍜 Serve Orders" : "❌ Cancel Order";
+  const actionDesc = action === "serve"
+    ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
+    : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
+  const actionEmbed = buildMenuEmbed({ title: actionTitle, description: actionDesc, user: interaction.user });
+
   return componentCommit(interaction, {
-    content: action === "serve" 
-      ? "Select accepted orders to serve:\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
-      : "Select an accepted order to cancel:\nWhen you're done selecting, if on Desktop, press **Esc** to continue.",
+    content: " ",
+    embeds: [actionEmbed],
     components: [
       new ActionRowBuilder().addComponents(menu),
       action === "serve" ? noodleOrdersActionRowWithBack(userId) : noodleOrdersActionRow(userId)
@@ -1927,8 +2068,15 @@ if (action === "cook") {
     .setMaxValues(1)
     .addOptions(opts);
 
+  const cookEmbed = buildMenuEmbed({
+    title: "🍲 Cook",
+    description: "Select a recipe to cook:",
+    user: interaction.user
+  });
+
   return componentCommit(interaction, {
-    content: "Select a recipe to cook:",
+    content: " ",
+    embeds: [cookEmbed],
     components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)]
   });
 }
@@ -2068,8 +2216,15 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         .setStyle(ButtonStyle.Secondary)
     );
 
+    const selectionEmbed = buildMenuEmbed({
+      title: "🛒 Multi-buy",
+      description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to buy:`,
+      user: interaction.user
+    });
+
     return componentCommit(interaction, {
-      content: `🛒 **Selected:** ${pickedNames.join(", ")}\nChoose how you want to buy:`,
+      content: " ",
+      embeds: [selectionEmbed],
       components: [btnRow, sellButton]
     });
   }
@@ -2195,13 +2350,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
-
-        // refresh market
-        const set = buildSettingsMap(settingsCatalog, s.settings);
-        s.season = computeActiveSeason(set);
-        rollMarket({ serverId, content, serverState: s });
-        if (!s.market_prices) s.market_prices = {};
-        rollPlayerMarketStock({ userId, serverId, content, playerState: p2 });
         if (!p2.market_stock) p2.market_stock = {};
 
         const want = {};
@@ -2258,8 +2406,15 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
+        const buyEmbed = buildMenuEmbed({
+          title: "🛒 Purchase Complete",
+          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${tutorialSuffix(p2)}`,
+          user: interaction.user
+        });
+
         const replyObj = {
-          content: `🛒 Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${tutorialSuffix(p2)}`,
+          content: " ",
+          embeds: [buyEmbed],
           components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
         };
 
@@ -2423,8 +2578,15 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
+      const buyEmbed = buildMenuEmbed({
+        title: "🛒 Purchase Complete",
+        description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.`,
+        user: interaction.user
+      });
+
       const replyObj = {
-        content: `🛒 Bought:\n${pretty}\n\nTotal: **${totalCost}c**.`,
+        content: " ",
+        embeds: [buyEmbed],
         components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)],
         targetMessageId: sourceMessageIdFinal // Edit the original message
       };

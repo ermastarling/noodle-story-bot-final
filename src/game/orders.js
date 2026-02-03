@@ -1,7 +1,8 @@
 import { makeStreamRng, weightedPick } from "../util/rng.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
+import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
 
-export function generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool }) {
+export function generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool, player }) {
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"orders", serverId, dayKey });
   const maxOrders = 100;
   const count = Math.min(Number(settings.ORDERS_BASE_COUNT ?? maxOrders), maxOrders);
@@ -15,14 +16,33 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
     return pool[Math.floor(rng()*pool.length)];
   };
 
+  const blessing = player ? getActiveBlessing(player) : null;
+  const npcBlessingActive = blessing?.type === "npc_weight_mult";
+  const npcRarityMultipliers = BLESSING_EFFECTS.npc_weight_mult?.rarityMultipliers ?? {};
+  const npcRarityWeights = settings.NPC_RARITY_WEIGHTS ?? {
+    common: 1,
+    uncommon: 1,
+    rare: 1,
+    epic: 1,
+    seasonal: 1
+  };
+
+  const npcWeights = Object.fromEntries(
+    Object.values(content.npcs).map((npc) => {
+      const rarity = npc?.rarity ?? "common";
+      const baseWeight = npcRarityWeights[rarity] ?? 1;
+      const rarityMult = npcBlessingActive ? (npcRarityMultipliers[rarity] ?? 1) : 1;
+      return [npc.npc_id, Math.max(0.01, baseWeight * rarityMult)];
+    })
+  );
+
   const board = [];
   for (let i=0;i<count;i++) {
     const tier = weightedPick(rng, tierWeights);
     const r = pickRecipeByTier(tier) ?? pickRecipeByTier("common");
     if (!r) continue;
 
-    const npcKeys = Object.keys(content.npcs);
-    const npc = npcKeys[Math.floor(rng()*npcKeys.length)];
+    const npc = weightedPick(rng, npcWeights);
     const isLimited = rng() < Number(settings.LIMITED_TIME_CHANCE ?? 0.20);
     const createdAt = nowTs();
     const expiresAt = isLimited ? createdAt + 30*60*1000 : null;
@@ -99,6 +119,14 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
   const seedString = `${serverId}-${userId}-recipes${playerRecipePool.size}`;
   playerState.orders_day = dayKey;
   playerState.order_seed_version = orderSeedVersion;
-  playerState.order_board = generateOrderBoard({ serverId: seedString, dayKey, settings, content, activeSeason, playerRecipePool });
+  playerState.order_board = generateOrderBoard({
+    serverId: seedString,
+    dayKey,
+    settings,
+    content,
+    activeSeason,
+    playerRecipePool,
+    player: playerState
+  });
   return playerState;
 }

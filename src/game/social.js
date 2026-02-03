@@ -18,6 +18,20 @@ export const BLESSING_TYPES = [
   "npc_weight_mult"
 ];
 
+export const BLESSING_EFFECTS = {
+  discovery_chance_add: { clueBonus: 0.05, scrollBonus: 0.05 },
+  limited_time_window_add: { speedWindowMult: 1.25 },
+  npc_weight_mult: {
+    rarityMultipliers: {
+      common: 1,
+      uncommon: 1.2,
+      rare: 1.5,
+      epic: 2.0,
+      seasonal: 1.3
+    }
+  }
+};
+
 /* ------------------------------------------------------------------ */
 /*  Blessing System (D3)                                               */
 /* ------------------------------------------------------------------ */
@@ -209,6 +223,23 @@ export function leaveParty(db, partyId, userId) {
 }
 
 /**
+ * Kick a party member (leader only)
+ */
+export function kickPartyMember(db, partyId, targetUserId) {
+  const now = nowTs();
+
+  const membership = db.prepare(
+    "SELECT * FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL"
+  ).get(partyId, targetUserId);
+  if (!membership) {
+    throw new Error("User is not an active party member");
+  }
+
+  db.prepare("UPDATE party_members SET left_at = ? WHERE party_id = ? AND user_id = ?")
+    .run(now, partyId, targetUserId);
+}
+
+/**
  * Invite a user to a party
  */
 export function inviteUserToParty(db, serverId, partyId, inviteTargetId) {
@@ -278,6 +309,36 @@ export function getUserActiveParty(db, userId) {
   if (!membership) return null;
   
   return getParty(db, membership.party_id);
+}
+
+/**
+ * Rename an existing party
+ */
+export function renameParty(db, partyId, newName) {
+  const party = db.prepare("SELECT * FROM guild_parties WHERE party_id = ? AND status = 'active'").get(partyId);
+  if (!party) {
+    throw new Error("Party not found or inactive");
+  }
+  db.prepare("UPDATE guild_parties SET party_name = ? WHERE party_id = ?").run(newName, partyId);
+  return { partyId, partyName: newName };
+}
+
+/**
+ * Transfer party leadership to another active member
+ */
+export function transferPartyLeadership(db, partyId, newLeaderUserId) {
+  const party = db.prepare("SELECT * FROM guild_parties WHERE party_id = ? AND status = 'active'").get(partyId);
+  if (!party) {
+    throw new Error("Party not found or inactive");
+  }
+  const membership = db.prepare(
+    "SELECT * FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL"
+  ).get(partyId, newLeaderUserId);
+  if (!membership) {
+    throw new Error("User is not an active party member");
+  }
+  db.prepare("UPDATE guild_parties SET leader_user_id = ? WHERE party_id = ?").run(newLeaderUserId, partyId);
+  return { partyId, leaderUserId: newLeaderUserId };
 }
 
 /* ------------------------------------------------------------------ */
