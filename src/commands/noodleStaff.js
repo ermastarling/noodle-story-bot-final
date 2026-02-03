@@ -8,11 +8,11 @@ import { newServerState } from "../game/server.js";
 import { loadStaffContent } from "../content/index.js";
 import {
   rollDailyStaffPool,
-  hireStaff,
-  fireStaff,
-  getHiredStaff,
+  levelUpStaff,
+  getStaffLevels,
   calculateStaffEffects,
-  getMaxStaffCapacity
+  getMaxStaffCapacity,
+  calculateStaffCost
 } from "../game/staff.js";
 import { dayKeyUTC } from "../util/time.js";
 
@@ -70,10 +70,29 @@ function categoryEmoji(category) {
   return "📋";
 }
 
+function formatEffects(effects) {
+  const lines = [];
+  for (const [key, value] of Object.entries(effects)) {
+    if (key === "cooking_speed_bonus") lines.push(`+${(value * 100).toFixed(0)}% cooking speed`);
+    else if (key === "ingredient_save_chance") lines.push(`${(value * 100).toFixed(0)}% ingredient save`);
+    else if (key === "double_craft_chance") lines.push(`${(value * 100).toFixed(0)}% double craft`);
+    else if (key === "rep_bonus_flat") lines.push(`+${value} rep`);
+    else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% rep`);
+    else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(1)}% order quality`);
+    else if (key === "cooldown_reduction") lines.push(`-${(value * 100).toFixed(0)}% cooldowns`);
+    else if (key === "bowl_capacity_bonus") lines.push(`+${value} bowl capacity`);
+    else if (key === "forage_bonus_items") lines.push(`+${value} forage items`);
+    else if (key === "market_discount") lines.push(`${(value * 100).toFixed(0)}% market discount`);
+    else if (key === "sxp_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% SXP`);
+    else if (key === "rare_epic_rep_bonus") lines.push(`+${value} rep on rare/epic`);
+  }
+  return lines.join(", ");
+}
+
 export const noodleStaffCommand = {
   data: new SlashCommandBuilder()
     .setName("noodle-staff")
-    .setDescription("Manage your noodle shop staff"),
+    .setDescription("Manage your noodle shop staff levels"),
   execute: noodleStaffHandler,
   handleComponent: noodleStaffInteractionHandler
 };
@@ -128,28 +147,29 @@ export async function noodleStaffHandler(interaction) {
 }
 
 function buildStaffOverviewEmbed(player, server, user) {
-  const hired = getHiredStaff(player, staffContent);
-  const maxStaff = getMaxStaffCapacity(player);
+  const leveledStaff = getStaffLevels(player, staffContent);
   const effects = calculateStaffEffects(player, staffContent);
   
   const embed = new EmbedBuilder()
     .setTitle("👥 Staff Management")
     .setColor(0x4169E1);
 
-  // Current staff section
-  if (hired.length > 0) {
-    const staffLines = hired.map(s => {
-      return `${rarityEmoji(s.rarity)} **${s.name}** ${categoryEmoji(s.category)} — ${s.daily_wage} coins/day`;
+  // Current staff levels
+  if (leveledStaff.length > 0) {
+    const staffLines = leveledStaff.map(s => {
+      const maxed = s.level >= s.maxLevel;
+      const status = maxed ? "MAX" : `Lv${s.level}/${s.maxLevel}`;
+      return `${rarityEmoji(s.rarity)} **${s.name}** ${categoryEmoji(s.category)} — ${status}`;
     });
     embed.addField(
-      `Your Staff (${hired.length}/${maxStaff})`,
+      `Your Staff (${leveledStaff.length} leveled)`,
       staffLines.join("\n"),
       false
     );
   } else {
     embed.addField(
-      `Your Staff (0/${maxStaff})`,
-      "_No staff hired yet._",
+      "Your Staff",
+      "_No staff leveled yet._",
       false
     );
   }
@@ -167,6 +187,7 @@ function buildStaffOverviewEmbed(player, server, user) {
   if (effects.market_discount > 0) effectLines.push(`💰 ${(effects.market_discount * 100).toFixed(0)}% market discount`);
   if (effects.sxp_bonus_percent > 0) effectLines.push(`📈 +${(effects.sxp_bonus_percent * 100).toFixed(0)}% SXP`);
   if (effects.rare_epic_rep_bonus > 0) effectLines.push(`🌟 +${effects.rare_epic_rep_bonus} rep on rare/epic`);
+  if (effects.order_quality_bonus > 0) effectLines.push(`✨ +${(effects.order_quality_bonus * 100).toFixed(1)}% order quality`);
 
   if (effectLines.length > 0) {
     embed.addField("Active Bonuses", effectLines.join("\n"), false);
@@ -176,9 +197,10 @@ function buildStaffOverviewEmbed(player, server, user) {
   const poolLines = server.staff_pool.map(staffId => {
     const staff = staffContent.staff_members?.[staffId];
     if (!staff) return null;
-    const isHired = player.staff_hired?.[staffId];
-    const status = isHired ? "✅" : "";
-    return `${rarityEmoji(staff.rarity)} **${staff.name}** ${categoryEmoji(staff.category)} — ${staff.hire_cost} coins ${status}`;
+    const currentLevel = player.staff_levels?.[staffId] || 0;
+    const cost = calculateStaffCost(staff, currentLevel);
+    const status = currentLevel >= staff.max_level ? "✅ MAX" : `Lv${currentLevel}`;
+    return `${rarityEmoji(staff.rarity)} **${staff.name}** ${categoryEmoji(staff.category)} — ${status} (${cost} coins)`;
   }).filter(Boolean);
 
   if (poolLines.length > 0) {
@@ -196,46 +218,33 @@ function buildStaffOverviewEmbed(player, server, user) {
 function buildStaffComponents(userId, player, server) {
   const rows = [];
 
-  // Hire menu
-  const hireOptions = server.staff_pool
+  // Level up menu
+  const levelUpOptions = server.staff_pool
     .map(staffId => {
       const staff = staffContent.staff_members?.[staffId];
       if (!staff) return null;
-      const isHired = player.staff_hired?.[staffId];
-      if (isHired) return null; // Already hired
+      const currentLevel = player.staff_levels?.[staffId] || 0;
+      if (currentLevel >= staff.max_level) return null; // Already maxed
+
+      const cost = calculateStaffCost(staff, currentLevel);
+      const effectStr = formatEffects(staff.effects_per_level);
+      const description = `Lv${currentLevel}→${currentLevel + 1}: ${effectStr}`.substring(0, 100);
 
       return {
-        label: `${staff.name} — ${staff.hire_cost} coins`,
-        description: staff.description.substring(0, 100),
-        value: `hire:${staffId}`,
+        label: `${staff.name} — ${cost} coins`,
+        description,
+        value: staffId,
         emoji: rarityEmoji(staff.rarity)
       };
     })
     .filter(Boolean);
 
-  if (hireOptions.length > 0) {
-    const hireMenu = new StringSelectMenuBuilder()
-      .setCustomId(`noodle-staff:hire:${userId}`)
-      .setPlaceholder("Hire staff member")
-      .addOptions(hireOptions);
-    rows.push(new ActionRowBuilder().addComponents(hireMenu));
-  }
-
-  // Fire menu
-  const hired = getHiredStaff(player, staffContent);
-  if (hired.length > 0) {
-    const fireOptions = hired.map(s => ({
-      label: `${s.name} — ${s.daily_wage} coins/day`,
-      description: `Fire this staff member`,
-      value: `fire:${s.staffId}`,
-      emoji: "❌"
-    }));
-
-    const fireMenu = new StringSelectMenuBuilder()
-      .setCustomId(`noodle-staff:fire:${userId}`)
-      .setPlaceholder("Fire staff member")
-      .addOptions(fireOptions);
-    rows.push(new ActionRowBuilder().addComponents(fireMenu));
+  if (levelUpOptions.length > 0) {
+    const levelUpMenu = new StringSelectMenuBuilder()
+      .setCustomId(`noodle-staff:levelup:${userId}`)
+      .setPlaceholder("Level up staff member")
+      .addOptions(levelUpOptions);
+    rows.push(new ActionRowBuilder().addComponents(levelUpMenu));
   }
 
   // Refresh button
@@ -284,34 +293,13 @@ export async function noodleStaffInteractionHandler(interaction) {
       s = getServer(db, serverId);
     }
 
-    // Handle hire
-    if (action === "hire") {
+    // Handle level up
+    if (action === "levelup") {
       if (!interaction.isSelectMenu()) return null;
       
-      const selected = interaction.values[0];
-      const staffId = selected.replace("hire:", "");
+      const staffId = interaction.values[0];
       
-      const result = hireStaff(p, staffId, staffContent);
-      upsertPlayer(db, userId, serverId, p, null);
-
-      const embed = buildStaffOverviewEmbed(p, s, interaction.user);
-      const components = buildStaffComponents(userId, p, s);
-
-      return {
-        content: result.message,
-        embeds: [embed],
-        components
-      };
-    }
-
-    // Handle fire
-    if (action === "fire") {
-      if (!interaction.isSelectMenu()) return null;
-      
-      const selected = interaction.values[0];
-      const staffId = selected.replace("fire:", "");
-      
-      const result = fireStaff(p, staffId, staffContent);
+      const result = levelUpStaff(p, staffId, staffContent);
       upsertPlayer(db, userId, serverId, p, null);
 
       const embed = buildStaffOverviewEmbed(p, s, interaction.user);

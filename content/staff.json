@@ -6,9 +6,10 @@
       "description": "Speeds up ingredient prep, improving cooking efficiency.",
       "category": "kitchen",
       "rarity": "common",
-      "hire_cost": 300,
-      "daily_wage": 15,
-      "effects": {
+      "max_level": 20,
+      "base_cost": 300,
+      "cost_scaling": 1.35,
+      "effects_per_level": {
         "cooking_speed_bonus": 0.05
       }
     },
@@ -18,9 +19,10 @@
       "description": "Expert technique reduces ingredient waste.",
       "category": "kitchen",
       "rarity": "rare",
-      "hire_cost": 800,
-      "daily_wage": 40,
-      "effects": {
+      "max_level": 20,
+      "base_cost": 800,
+      "cost_scaling": 1.40,
+      "effects_per_level": {
         "ingredient_save_chance": 0.10
       }
     },
@@ -30,9 +32,10 @@
       "description": "Occasionally crafts double portions from a single recipe.",
       "category": "kitchen",
       "rarity": "epic",
-      "hire_cost": 2000,
-      "daily_wage": 100,
-      "effects": {
+      "max_level": 10,
+      "base_cost": 2000,
+      "cost_scaling": 1.50,
+      "effects_per_level": {
         "double_craft_chance": 0.08
       }
     },
@@ -42,9 +45,10 @@
       "description": "Friendly service increases customer satisfaction.",
       "category": "service",
       "rarity": "common",
-      "hire_cost": 250,
-      "daily_wage": 12,
-      "effects": {
+      "max_level": 20,
+      "base_cost": 250,
+      "cost_scaling": 1.30,
+      "effects_per_level": {
         "rep_bonus_flat": 1
       }
     },
@@ -54,9 +58,10 @@
       "description": "Welcoming presence attracts more customers.",
       "category": "service",
       "rarity": "rare",
-      "hire_cost": 700,
-      "daily_wage": 35,
-      "effects": {
+      "max_level": 20,
+      "base_cost": 700,
+      "cost_scaling": 1.38,
+      "effects_per_level": {
         "order_quality_bonus": 0.05
       }
     },
@@ -66,9 +71,10 @@
       "description": "Optimizes operations, slightly reducing all cooldowns.",
       "category": "service",
       "rarity": "epic",
-      "hire_cost": 1800,
-      "daily_wage": 90,
-      "effects": {
+      "max_level": 10,
+      "base_cost": 1800,
+      "cost_scaling": 1.48,
+      "effects_per_level": {
         "cooldown_reduction": 0.10
       }
     },
@@ -78,9 +84,10 @@
       "description": "Keeps the kitchen running smoothly.",
       "category": "kitchen",
       "rarity": "common",
-      "hire_cost": 200,
-      "daily_wage": 10,
-      "effects": {
+      "max_level": 20,
+      "base_cost": 200,
+      "cost_scaling": 1.28,
+      "effects_per_level": {
         "bowl_capacity_bonus": 2
       }
     },
@@ -90,10 +97,11 @@
       "description": "Knows the best spots for wild ingredients.",
       "category": "support",
       "rarity": "rare",
-      "hire_cost": 750,
-      "daily_wage": 38,
-      "effects": {
-        "forage_bonus_items": 1
+      "max_level": 20,
+      "base_cost": 750,
+      "cost_scaling": 1.40,
+      "effects_per_level": {
+        "forage_bonus_items": 5
       }
     },
     "merchant": {
@@ -102,9 +110,10 @@
       "description": "Negotiates better market deals.",
       "category": "support",
       "rarity": "rare",
-      "hire_cost": 850,
-      "daily_wage": 42,
-      "effects": {
+      "max_level": 20,
+      "base_cost": 850,
+      "cost_scaling": 1.38,
+      "effects_per_level": {
         "market_discount": 0.08
       }
     },
@@ -114,9 +123,10 @@
       "description": "Eager learner who helps with basic tasks.",
       "category": "kitchen",
       "rarity": "common",
-      "hire_cost": 150,
-      "daily_wage": 8,
-      "effects": {
+      "max_level": 20,
+      "base_cost": 150,
+      "cost_scaling": 1.25,
+      "effects_per_level": {
         "sxp_bonus_percent": 0.03
       }
     },
@@ -126,9 +136,10 @@
       "description": "Entertains guests with tales, improving their experience.",
       "category": "service",
       "rarity": "epic",
-      "hire_cost": 2200,
-      "daily_wage": 110,
-      "effects": {
+      "max_level": 10,
+      "base_cost": 2200,
+      "cost_scaling": 1.50,
+      "effects_per_level": {
         "rep_bonus_percent": 0.12
       }
     },
@@ -138,9 +149,10 @@
       "description": "Expertise in pairings enhances rare and epic dishes.",
       "category": "service",
       "rarity": "epic",
-      "hire_cost": 2500,
-      "daily_wage": 125,
-      "effects": {
+      "max_level": 10,
+      "base_cost": 2500,
+      "cost_scaling": 1.52,
+      "effects_per_level": {
         "rare_epic_rep_bonus": 3
       }
     }

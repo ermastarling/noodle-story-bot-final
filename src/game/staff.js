@@ -48,65 +48,73 @@ export function rollDailyStaffPool({ serverId, staffContent }) {
 }
 
 /**
- * Hire a staff member
- * @param {Object} player - Player profile
- * @param {string} staffId - Staff ID to hire
- * @param {Object} staffContent - Content from staff.json
- * @returns {Object} { success: boolean, message: string, cost: number }
+ * Calculate staff upgrade cost for next level
+ * @param {Object} staff - Staff definition from staff.json
+ * @param {number} currentLevel - Current level of the staff
+ * @returns {number} Cost for next level
  */
-export function hireStaff(player, staffId, staffContent) {
-  const staff = staffContent.staff_members?.[staffId];
-  if (!staff) {
-    return { success: false, message: "Staff member not found.", cost: 0 };
-  }
+export function calculateStaffCost(staff, currentLevel) {
+  if (!staff || currentLevel >= staff.max_level) return 0;
   
-  // Check if already hired
-  if (player.staff_hired?.[staffId]) {
-    return { success: false, message: "Already hired this staff member.", cost: 0 };
-  }
+  const baseCost = staff.base_cost || 100;
+  const scaling = staff.cost_scaling || 1.30;
   
-  // Check if can afford
-  const cost = staff.hire_cost || 0;
-  if (player.coins < cost) {
-    return { success: false, message: `Not enough coins. Need ${cost} coins.`, cost };
-  }
-  
-  // Check staff capacity (based on u_staff_quarters upgrade)
-  const maxStaff = getMaxStaffCapacity(player);
-  const currentStaff = Object.keys(player.staff_hired || {}).length;
-  if (currentStaff >= maxStaff) {
-    return { success: false, message: `Staff capacity full (${currentStaff}/${maxStaff}). Upgrade Staff Quarters.`, cost };
-  }
-  
-  // Hire staff
-  if (!player.staff_hired) player.staff_hired = {};
-  player.staff_hired[staffId] = {
-    hired_at: Date.now(),
-    total_wages_paid: 0
-  };
-  player.coins -= cost;
-  
-  return { success: true, message: `Hired ${staff.name} for ${cost} coins!`, cost };
+  // Cost = baseCost * (scaling ^ currentLevel)
+  const cost = Math.floor(baseCost * Math.pow(scaling, currentLevel));
+  return cost;
 }
 
 /**
- * Fire a staff member
+ * Level up a staff member
  * @param {Object} player - Player profile
- * @param {string} staffId - Staff ID to fire
+ * @param {string} staffId - Staff ID to level up
  * @param {Object} staffContent - Content from staff.json
- * @returns {Object} { success: boolean, message: string }
+ * @returns {Object} { success: boolean, message: string, cost: number, newLevel: number }
  */
-export function fireStaff(player, staffId, staffContent) {
-  if (!player.staff_hired?.[staffId]) {
-    return { success: false, message: "This staff member is not hired." };
+export function levelUpStaff(player, staffId, staffContent) {
+  const staff = staffContent.staff_members?.[staffId];
+  if (!staff) {
+    return { success: false, message: "Staff member not found.", cost: 0, newLevel: 0 };
   }
   
-  const staff = staffContent.staff_members?.[staffId];
-  const staffName = staff?.name || staffId;
+  // Ensure staff_levels object exists
+  if (!player.staff_levels) player.staff_levels = {};
   
-  delete player.staff_hired[staffId];
+  const currentLevel = player.staff_levels[staffId] || 0;
   
-  return { success: true, message: `Fired ${staffName}.` };
+  // Check if at max level
+  if (currentLevel >= staff.max_level) {
+    return { 
+      success: false, 
+      message: `${staff.name} is already at max level (${staff.max_level}).`, 
+      cost: 0, 
+      newLevel: currentLevel 
+    };
+  }
+  
+  // Calculate cost
+  const cost = calculateStaffCost(staff, currentLevel);
+  
+  // Check if can afford
+  if (player.coins < cost) {
+    return { 
+      success: false, 
+      message: `Not enough coins. Need ${cost} coins.`, 
+      cost, 
+      newLevel: currentLevel 
+    };
+  }
+  
+  // Level up staff
+  player.staff_levels[staffId] = currentLevel + 1;
+  player.coins -= cost;
+  
+  return { 
+    success: true, 
+    message: `Leveled up ${staff.name} to level ${currentLevel + 1} for ${cost} coins!`, 
+    cost, 
+    newLevel: currentLevel + 1 
+  };
 }
 
 /**
@@ -115,11 +123,10 @@ export function fireStaff(player, staffId, staffContent) {
  * @returns {number} Maximum staff capacity
  */
 export function getMaxStaffCapacity(player) {
-  const baseCapacity = 3;
+  const baseCapacity = 12; // Can level up all 12 staff
   const staffQuartersLevel = player.upgrades?.u_staff_quarters || 0;
-  // Each level of staff quarters adds 0.5 capacity (so level 2 = +1, level 4 = +2, etc.)
-  const bonusCapacity = Math.floor(staffQuartersLevel * 0.5);
-  return baseCapacity + bonusCapacity;
+  // Staff quarters now just provides quality bonus, not capacity
+  return baseCapacity;
 }
 
 /**
@@ -144,19 +151,21 @@ export function calculateStaffEffects(player, staffContent) {
     rare_epic_rep_bonus: 0
   };
   
-  if (!player.staff_hired) return effects;
+  if (!player.staff_levels) return effects;
   
   // Get staff effect multiplier from u_manuals upgrade
   const manualsLevel = player.upgrades?.u_manuals || 0;
   const staffMultiplier = 1 + (manualsLevel * 0.03);
   
-  for (const staffId of Object.keys(player.staff_hired)) {
-    const staff = staffContent.staff_members?.[staffId];
-    if (!staff || !staff.effects) continue;
+  for (const [staffId, level] of Object.entries(player.staff_levels)) {
+    if (level <= 0) continue;
     
-    for (const [effectKey, effectValue] of Object.entries(staff.effects)) {
+    const staff = staffContent.staff_members?.[staffId];
+    if (!staff || !staff.effects_per_level) continue;
+    
+    for (const [effectKey, effectPerLevel] of Object.entries(staff.effects_per_level)) {
       if (effects.hasOwnProperty(effectKey)) {
-        effects[effectKey] += effectValue * staffMultiplier;
+        effects[effectKey] += effectPerLevel * level * staffMultiplier;
       }
     }
   }
@@ -165,60 +174,29 @@ export function calculateStaffEffects(player, staffContent) {
 }
 
 /**
- * Apply daily wages to all hired staff
+ * Get all staff levels for a player
  * @param {Object} player - Player profile
  * @param {Object} staffContent - Content from staff.json
- * @returns {Object} { totalWages: number, staffDetails: Array }
+ * @returns {Array} Array of staff with their current levels
  */
-export function applyDailyWages(player, staffContent) {
-  let totalWages = 0;
-  const staffDetails = [];
+export function getStaffLevels(player, staffContent) {
+  if (!player.staff_levels) return [];
   
-  if (!player.staff_hired) return { totalWages, staffDetails };
-  
-  for (const staffId of Object.keys(player.staff_hired)) {
-    const staff = staffContent.staff_members?.[staffId];
-    if (!staff) continue;
-    
-    const wage = staff.daily_wage || 0;
-    totalWages += wage;
-    
-    if (player.staff_hired[staffId]) {
-      player.staff_hired[staffId].total_wages_paid = 
-        (player.staff_hired[staffId].total_wages_paid || 0) + wage;
-    }
-    
-    staffDetails.push({ staffId, name: staff.name, wage });
-  }
-  
-  // Deduct wages from player coins (can go negative)
-  player.coins -= totalWages;
-  
-  return { totalWages, staffDetails };
-}
-
-/**
- * Get all hired staff for a player
- * @param {Object} player - Player profile
- * @param {Object} staffContent - Content from staff.json
- * @returns {Array} Array of hired staff with details
- */
-export function getHiredStaff(player, staffContent) {
-  if (!player.staff_hired) return [];
-  
-  return Object.keys(player.staff_hired).map(staffId => {
-    const staff = staffContent.staff_members?.[staffId];
-    const hireData = player.staff_hired[staffId];
-    
-    return {
-      staffId,
-      name: staff?.name || staffId,
-      category: staff?.category || "unknown",
-      rarity: staff?.rarity || "common",
-      daily_wage: staff?.daily_wage || 0,
-      effects: staff?.effects || {},
-      hired_at: hireData?.hired_at || 0,
-      total_wages_paid: hireData?.total_wages_paid || 0
-    };
-  });
+  return Object.keys(player.staff_levels)
+    .filter(staffId => player.staff_levels[staffId] > 0)
+    .map(staffId => {
+      const staff = staffContent.staff_members?.[staffId];
+      const level = player.staff_levels[staffId];
+      
+      return {
+        staffId,
+        name: staff?.name || staffId,
+        category: staff?.category || "unknown",
+        rarity: staff?.rarity || "common",
+        level,
+        maxLevel: staff?.max_level || 20,
+        effects: staff?.effects_per_level || {},
+        nextCost: calculateStaffCost(staff, level)
+      };
+    });
 }
