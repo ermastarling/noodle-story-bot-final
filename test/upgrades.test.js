@@ -36,7 +36,7 @@ function makeTestPlayer() {
   };
 }
 
-test("Upgrades: calculateUpgradeCost returns correct cost", (t) => {
+test("Upgrades: calculateUpgradeCost returns correct cost", () => {
   const upgrade = upgradesContent.upgrades.u_prep;
   
   const cost0 = calculateUpgradeCost(upgrade, 0);
@@ -49,14 +49,14 @@ test("Upgrades: calculateUpgradeCost returns correct cost", (t) => {
   assert.ok(cost5 > cost1); // Cost continues to increase
 });
 
-test("Upgrades: calculateUpgradeCost returns 0 at max level", (t) => {
+test("Upgrades: calculateUpgradeCost returns 0 at max level", () => {
   const upgrade = upgradesContent.upgrades.u_prep;
   const cost = calculateUpgradeCost(upgrade, upgrade.max_level);
   
   assert.strictEqual(cost, 0);
 });
 
-test("Upgrades: purchaseUpgrade succeeds when conditions met", (t) => {
+test("Upgrades: purchaseUpgrade succeeds when conditions met", () => {
   const player = makeTestPlayer();
   player.coins = 500;
   
@@ -67,7 +67,7 @@ test("Upgrades: purchaseUpgrade succeeds when conditions met", (t) => {
   assert.ok(player.coins < 500); // Coins deducted
 });
 
-test("Upgrades: purchaseUpgrade fails when insufficient coins", (t) => {
+test("Upgrades: purchaseUpgrade fails when insufficient coins", () => {
   const player = makeTestPlayer();
   player.coins = 50;
   
@@ -78,7 +78,7 @@ test("Upgrades: purchaseUpgrade fails when insufficient coins", (t) => {
   assert.strictEqual(player.coins, 50); // No change
 });
 
-test("Upgrades: purchaseUpgrade fails at max level", (t) => {
+test("Upgrades: purchaseUpgrade fails at max level", () => {
   const player = makeTestPlayer();
   player.coins = 999999;
   player.upgrades.u_prep = 20; // Max level
@@ -89,7 +89,7 @@ test("Upgrades: purchaseUpgrade fails at max level", (t) => {
   assert.ok(result.message.includes("max level"));
 });
 
-test("Upgrades: purchaseUpgrade cost increases with each level", (t) => {
+test("Upgrades: purchaseUpgrade cost increases with each level", () => {
   const player = makeTestPlayer();
   player.coins = 999999;
   
@@ -102,7 +102,7 @@ test("Upgrades: purchaseUpgrade cost increases with each level", (t) => {
   assert.ok(cost2 > cost1);
 });
 
-test("Upgrades: calculateUpgradeEffects aggregates multiple upgrades", (t) => {
+test("Upgrades: calculateUpgradeEffects aggregates multiple upgrades", () => {
   const player = makeTestPlayer();
   player.upgrades.u_prep = 5;
   player.upgrades.u_stoves = 3;
@@ -115,7 +115,7 @@ test("Upgrades: calculateUpgradeEffects aggregates multiple upgrades", (t) => {
   assert.ok(effects.rep_bonus_flat > 0);
 });
 
-test("Upgrades: calculateUpgradeEffects scales with level", (t) => {
+test("Upgrades: calculateUpgradeEffects scales with level", () => {
   const player = makeTestPlayer();
   
   player.upgrades.u_prep = 1;
@@ -130,7 +130,7 @@ test("Upgrades: calculateUpgradeEffects scales with level", (t) => {
   assert.ok(Math.abs(speed5 - speed1 * 5) < 0.01); // Should be ~5x
 });
 
-test("Upgrades: getUpgradesByCategory groups correctly", (t) => {
+test("Upgrades: getUpgradesByCategory groups correctly", () => {
   const player = makeTestPlayer();
   const categories = getUpgradesByCategory(player, upgradesContent);
   
@@ -143,7 +143,7 @@ test("Upgrades: getUpgradesByCategory groups correctly", (t) => {
   assert.ok(categories.kitchen.upgrades.length > 0);
 });
 
-test("Upgrades: getUpgradesByCategory shows current level and cost", (t) => {
+test("Upgrades: getUpgradesByCategory shows current level and cost", () => {
   const player = makeTestPlayer();
   player.upgrades.u_prep = 5;
   
@@ -155,7 +155,7 @@ test("Upgrades: getUpgradesByCategory shows current level and cost", (t) => {
   assert.strictEqual(prepUpgrade.isMaxed, false);
 });
 
-test("Upgrades: applyCookingSpeedBonus increases value", (t) => {
+test("Upgrades: applyCookingSpeedBonus increases value", () => {
   const baseValue = 100;
   const effects = { cooking_speed_bonus: 0.20 }; // 20% bonus
   
@@ -164,7 +164,7 @@ test("Upgrades: applyCookingSpeedBonus increases value", (t) => {
   assert.strictEqual(result, 120);
 });
 
-test("Upgrades: applyReputationBonus adds flat and percent", (t) => {
+test("Upgrades: applyReputationBonus adds flat and percent", () => {
   const baseRep = 10;
   const effects = {
     rep_bonus_flat: 2,
@@ -177,7 +177,7 @@ test("Upgrades: applyReputationBonus adds flat and percent", (t) => {
   assert.strictEqual(result, 13);
 });
 
-test("Upgrades: applyReputationBonus adds rare/epic bonus", (t) => {
+test("Upgrades: applyReputationBonus adds rare/epic bonus", () => {
   const baseRep = 10;
   const effects = {
     rep_bonus_flat: 0,
@@ -195,7 +195,7 @@ test("Upgrades: applyReputationBonus adds rare/epic bonus", (t) => {
   assert.strictEqual(resultCommon, 10); // No bonus
 });
 
-test("Upgrades: applyCooldownReduction decreases cooldown", (t) => {
+test("Upgrades: applyCooldownReduction decreases cooldown", () => {
   const baseCooldown = 10000; // 10 seconds
   const effects = { cooldown_reduction: 0.10 }; // 10% reduction
   
@@ -204,7 +204,7 @@ test("Upgrades: applyCooldownReduction decreases cooldown", (t) => {
   assert.strictEqual(result, 9000);
 });
 
-test("Upgrades: getTotalBowlCapacity adds bonus", (t) => {
+test("Upgrades: getTotalBowlCapacity adds bonus", () => {
   const baseCapacity = 10;
   const effects = { bowl_capacity_bonus: 5 };
   
@@ -213,7 +213,7 @@ test("Upgrades: getTotalBowlCapacity adds bonus", (t) => {
   assert.strictEqual(result, 15);
 });
 
-test("Upgrades: applyMarketDiscount reduces price", (t) => {
+test("Upgrades: applyMarketDiscount reduces price", () => {
   const basePrice = 100;
   const effects = { market_discount: 0.08 }; // 8% discount
   
@@ -222,7 +222,7 @@ test("Upgrades: applyMarketDiscount reduces price", (t) => {
   assert.strictEqual(result, 92);
 });
 
-test("Upgrades: storage upgrades increase capacity significantly", (t) => {
+test("Upgrades: storage upgrades increase capacity significantly", () => {
   const player = makeTestPlayer();
   player.upgrades.u_pantry = 10; // 10 levels
   
@@ -231,7 +231,7 @@ test("Upgrades: storage upgrades increase capacity significantly", (t) => {
   assert.strictEqual(effects.ingredient_capacity, 50); // 10 * 5
 });
 
-test("Upgrades: staff upgrades affect multipliers", (t) => {
+test("Upgrades: staff upgrades affect multipliers", () => {
   const player = makeTestPlayer();
   player.upgrades.u_staff_quarters = 4;
   player.upgrades.u_manuals = 5;
