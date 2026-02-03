@@ -449,7 +449,7 @@ async function handleParty(interaction) {
         .setTitle("🎉 Party Created!")
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
-          { name: "Party ID", value: formatPartyId(result.partyId), inline: true },
+          { name: "Party ID", value: `\`\`\`${formatPartyId(result.partyId)}\`\`\``, inline: true },
           { name: "Leader", value: `<@${userId}>`, inline: true }
         )
         .setColor(0x00ff00);
@@ -520,7 +520,7 @@ async function handleParty(interaction) {
 
       const embed = new EmbedBuilder()
         .setTitle(`🎪 ${currentParty.party_name}`)
-        .setDescription(`Party ID: ${formatPartyId(currentParty.party_id)}`)
+        .setDescription(`Party ID:\n\`\`\`${formatPartyId(currentParty.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${currentParty.leader_user_id}>`, inline: true },
           { name: "Members", value: `${currentParty.members.length}/${currentParty.max_members}`, inline: true },
@@ -966,7 +966,7 @@ async function handleComponent(interaction) {
             .setTitle("🎉 Party Created!")
             .setDescription(`You've created the party **${result.partyName}**`)
             .addFields(
-              { name: "Party ID", value: formatPartyId(result.partyId), inline: true },
+              { name: "Party ID", value: `\`\`\`${formatPartyId(result.partyId)}\`\`\``, inline: true },
               { name: "Leader", value: `<@${userId}>`, inline: true }
             )
             .setColor(0x00ff00);
@@ -1561,7 +1561,7 @@ async function handleComponent(interaction) {
 
       const embed = new EmbedBuilder()
         .setTitle(`🎪 ${party.party_name}`)
-        .setDescription(`Party ID: ${formatPartyId(party.party_id)}`)
+        .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
@@ -1580,14 +1580,14 @@ async function handleComponent(interaction) {
         const recipeName = recipe?.name ?? existingOrder.order_id;
         const servings = existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS;
         embed.addFields({
-          name: "🍜 Shared Order",
+          name: "\n🍜 Shared Order",
           value: `Active — **${recipeName}** (${servings} servings)`,
           inline: false
         });
       } else {
         embed.addFields({
-          name: "🍜 Shared Order",
-          value: "None active",
+          name: "\n🍜 Shared Order",
+          value: "None active.",
           inline: false
         });
       }
@@ -1998,7 +1998,7 @@ async function handleComponent(interaction) {
 
       const embed = new EmbedBuilder()
         .setTitle(`🎪 ${party.party_name}`)
-        .setDescription(`Party ID: ${formatPartyId(party.party_id)}`)
+        .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },

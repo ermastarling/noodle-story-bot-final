@@ -106,6 +106,7 @@ return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
 );
 }
@@ -114,7 +115,8 @@ function noodleMainMenuRowNoProfile(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -123,6 +125,24 @@ return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🍂 Season").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:help:${userId}`).setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
+);
+}
+
+function noodleMainMenuRowNoPantry(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
+);
+}
+
+function noodleMainMenuRowNoOrders(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -254,27 +274,6 @@ if (player.inv_bowls && Object.keys(player.inv_bowls).length > 0) {
     })
     .join("\n");
   embed.addFields({ name: "🍲 Cooked Bowls", value: bowlLines || "None", inline: false });
-}
-
-// Add ingredients inventory
-if (player.inv_ingredients && Object.keys(player.inv_ingredients).length > 0) {
-  // Aggregate quantities by display name to avoid duplicates (e.g., soy_broth vs Soy Broth)
-  const agg = new Map();
-  for (const [id, qty] of Object.entries(player.inv_ingredients)) {
-    if (!qty || qty <= 0) continue; // skip zeros
-    const name = displayItemName(id);
-    const key = name.toLowerCase();
-    const cur = agg.get(key) ?? { name, qty: 0 };
-    cur.qty += qty;
-    agg.set(key, cur);
-  }
-
-  const ingLines = [...agg.values()]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map(({ name, qty }) => `• **${name}**: ${qty}`)
-    .join("\n");
-
-  if (ingLines) embed.addFields({ name: "🧺 Ingredients", value: ingLines, inline: false });
 }
 
 applyOwnerFooter(embed, ownerUser);
@@ -611,7 +610,7 @@ if (!allowed.has(id)) return null;
 if (!opts.length) {
 return componentCommit(interaction, {
 content: "🛒 No market items are available for your unlocked recipes right now.",
-components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)],
+components: [noodleMainMenuRow(userId)],
 ephemeral: true
 });
 }
@@ -842,6 +841,48 @@ if (sub === "profile") {
   });
 }
 
+/* ---------------- PANTRY ---------------- */
+if (sub === "pantry") {
+  const p = ensurePlayer(serverId, userId);
+  const grouped = new Map();
+  for (const [id, qty] of Object.entries(p.inv_ingredients ?? {})) {
+    if (!qty || qty <= 0) continue;
+    const item = content.items?.[id] ?? {};
+    const category = String(item.category || "other").toLowerCase();
+    const name = displayItemName(id);
+    const catMap = grouped.get(category) ?? new Map();
+    const key = name.toLowerCase();
+    const cur = catMap.get(key) ?? { name, qty: 0 };
+    cur.qty += qty;
+    catMap.set(key, cur);
+    grouped.set(category, catMap);
+  }
+
+  const categoryBlocks = [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([category, items]) => {
+      const title = category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      const lines = [...items.values()]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(({ name, qty }) => `• ${name}: **${qty}**`)
+        .join("\n");
+      return lines ? `**${title}**\n${lines}` : null;
+    })
+    .filter(Boolean);
+
+  const pantryEmbed = buildMenuEmbed({
+    title: "🧺 Pantry",
+    description: categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
+    user: interaction.user
+  });
+
+  return commit({
+    content: " ",
+    embeds: [pantryEmbed],
+    components: [noodleMainMenuRowNoPantry(userId)]
+  });
+}
+
 /* ---------------- SEASON ---------------- */
 if (sub === "season") {
   return commit({
@@ -994,7 +1035,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ...replyObj,
       content: finalContent,
       ephemeral: replyObj.ephemeral ?? false,
-      components: replyObj.ephemeral ? (replyObj.components ?? []) : (replyObj.components ?? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)])
+      components: replyObj.ephemeral ? (replyObj.components ?? []) : (replyObj.components ?? [noodleMainMenuRow(userId)])
     };
 
     putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
@@ -1432,7 +1473,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: " ",
       embeds: [menuEmbed],
-      components: [noodleOrdersMenuActionRow(userId, { showCancel }), noodleMainMenuRow(userId)]
+      components: [noodleOrdersMenuActionRow(userId, { showCancel }), noodleMainMenuRowNoOrders(userId)]
     });
   }
 
@@ -2415,7 +2456,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         const replyObj = {
           content: " ",
           embeds: [buyEmbed],
-          components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+          components: [noodleMainMenuRow(userId)]
         };
 
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
@@ -2587,7 +2628,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const replyObj = {
         content: " ",
         embeds: [buyEmbed],
-        components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)],
+        components: [noodleMainMenuRow(userId)],
         targetMessageId: sourceMessageIdFinal // Edit the original message
       };
 
@@ -2727,7 +2768,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         const replyObj = {
           content: `💰 Sold:\n${pretty}\n\nTotal: **${totalGain}c**.`,
-          components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+          components: [noodleMainMenuRow(userId)]
         };
 
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
@@ -2819,7 +2860,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       const replyObj = {
         content: `💰 Sold:\n${pretty}\n\nTotal: **${totalGain}c**.${errSuffix}`,
-        components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+        components: [noodleMainMenuRow(userId)]
       };
 
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
@@ -2853,6 +2894,7 @@ export const noodleCommand = {
         .addUserOption((o) => o.setName("user").setDescription("User").setRequired(false))
     )
     .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
+    .addSubcommand((sc) => sc.setName("pantry").setDescription("View your ingredient pantry."))
     .addSubcommand((sc) => sc.setName("status").setDescription("Show reset timestamps (debug info)."))
     .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
     .addSubcommandGroup((group) =>
