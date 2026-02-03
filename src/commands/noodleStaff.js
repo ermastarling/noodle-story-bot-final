@@ -161,17 +161,17 @@ function buildStaffOverviewEmbed(player, server, user) {
       const status = maxed ? "MAX" : `Lv${s.level}/${s.maxLevel}`;
       return `${rarityEmoji(s.rarity)} **${s.name}** ${categoryEmoji(s.category)} — ${status}`;
     });
-    embed.addField(
-      `Your Staff (${leveledStaff.length} leveled)`,
-      staffLines.join("\n"),
-      false
-    );
+    embed.addFields({
+      name: `Your Staff (${leveledStaff.length} leveled)`,
+      value: staffLines.join("\n"),
+      inline: false
+    });
   } else {
-    embed.addField(
-      "Your Staff",
-      "_No staff leveled yet._",
-      false
-    );
+    embed.addFields({
+      name: "Your Staff",
+      value: "_No staff leveled yet._",
+      inline: false
+    });
   }
 
   // Effects summary
@@ -190,7 +190,11 @@ function buildStaffOverviewEmbed(player, server, user) {
   if (effects.order_quality_bonus > 0) effectLines.push(`✨ +${(effects.order_quality_bonus * 100).toFixed(1)}% order quality`);
 
   if (effectLines.length > 0) {
-    embed.addField("Active Bonuses", effectLines.join("\n"), false);
+    embed.addFields({
+      name: "Active Bonuses",
+      value: effectLines.join("\n"),
+      inline: false
+    });
   }
 
   // Daily staff pool
@@ -204,9 +208,17 @@ function buildStaffOverviewEmbed(player, server, user) {
   }).filter(Boolean);
 
   if (poolLines.length > 0) {
-    embed.addField("Today's Available Staff", poolLines.join("\n"), false);
+    embed.addFields({
+      name: "Today's Available Staff",
+      value: poolLines.join("\n"),
+      inline: false
+    });
   } else {
-    embed.addField("Today's Available Staff", "_No staff available today. Check back tomorrow!_", false);
+    embed.addFields({
+      name: "Today's Available Staff",
+      value: "_No staff available today. Check back tomorrow!_",
+      inline: false
+    });
   }
 
   embed.setDescription(`💰 Coins: **${player.coins}**`);
