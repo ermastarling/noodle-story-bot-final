@@ -1,0 +1,91 @@
+{
+  "spoilage_rules_version": 1,
+  "description": "Spoilage rules for inventory items. Forage-only items are spoilable by default.",
+  
+  "default_spoilage": {
+    "enabled": true,
+    "base_chance_per_tick": 0.05,
+    "tick_hours": 1,
+    "description": "Default spoilage settings. Base 5% chance per hour for spoilable items."
+  },
+  
+  "tier_modifiers": {
+    "common": {
+      "chance_multiplier": 1.0,
+      "description": "Common items spoil at normal rate"
+    },
+    "rare": {
+      "chance_multiplier": 0.8,
+      "description": "Rare items spoil 20% slower"
+    },
+    "epic": {
+      "chance_multiplier": 0.6,
+      "description": "Epic items spoil 40% slower"
+    },
+    "seasonal": {
+      "chance_multiplier": 0.5,
+      "description": "Seasonal items spoil 50% slower"
+    }
+  },
+  
+  "cold_storage_mitigation": {
+    "enabled": true,
+    "u_cold_cellar": {
+      "description": "Cold Cellar upgrade reduces spoilage for fresh ingredients",
+      "reduction_per_level": 0.01,
+      "max_reduction": 0.5,
+      "applies_to_tags": ["fresh"],
+      "note": "Each level reduces spoilage chance by 1%, up to 50% maximum"
+    }
+  },
+  
+  "protected_categories": {
+    "fresh": {
+      "description": "Fresh ingredients benefit from cold storage",
+      "base_protection": 0.0,
+      "cold_cellar_protection": 0.5
+    }
+  },
+  
+  "bowl_spoilage": {
+    "enabled": false,
+    "description": "Bowls do not spoil by default. They are pre-cooked and preserved."
+  },
+  
+  "overflow_behavior": {
+    "mode": "block",
+    "description": "When inventory is full, prevent adding more items (block mode)"
+  },
+  
+  "capacity_rules": {
+    "ingredients": {
+      "base_stack_capacity": 40,
+      "capacity_per_pantry_level": 5,
+      "description": "Each ingredient type can stack up to 40 + (5 * u_pantry level)"
+    },
+    "bowls": {
+      "base_stack_capacity": 10,
+      "description": "Each bowl type can stack up to 10 (not modified by upgrades)"
+    }
+  },
+  
+  "catchup_limits": {
+    "max_ticks_on_login": 24,
+    "description": "When player returns, process up to 24 hours of spoilage (configurable via settings)"
+  },
+  
+  "exemptions": {
+    "non_spoilable_categories": ["base", "noodle", "broth"],
+    "non_spoilable_items": [],
+    "description": "Items that never spoil, regardless of settings"
+  },
+  
+  "notes": [
+    "Spoilage only applies to items marked as 'spoilable: true' in bundle.v1.json",
+    "Forage-only items are typically spoilable (fresh ingredients)",
+    "Market-bought items (broths, noodles) are not spoilable",
+    "Spoilage is deterministic based on player ID, item ID, and tick count",
+    "Cold Cellar upgrade (u_cold_cellar) reduces spoilage by 50% for fresh items",
+    "Tier affects spoilage rate: rarer items spoil more slowly"
+  ]
+}
