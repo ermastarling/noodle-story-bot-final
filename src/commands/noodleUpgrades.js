@@ -191,11 +191,11 @@ function buildUpgradesOverviewEmbed(player, user) {
       return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
     });
 
-    embed.addField(
-      `${categoryData.icon || ""} ${categoryData.display_name || categoryId}`,
-      lines.join("\n"),
-      true
-    );
+    embed.addFields({
+      name: `${categoryData.icon || ""} ${categoryData.display_name || categoryId}`,
+      value: lines.join("\n"),
+      inline: true
+    });
   }
 
   // Active effects summary
@@ -210,7 +210,11 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effects.staff_effect_multiplier > 0) effectLines.push(`👥 +${(effects.staff_effect_multiplier * 100).toFixed(0)}% staff effects`);
 
   if (effectLines.length > 0) {
-    embed.addField("📊 Total Upgrade Bonuses", effectLines.join("\n"), false);
+    embed.addFields({
+      name: "📊 Total Upgrade Bonuses",
+      value: effectLines.join("\n"),
+      inline: false
+    });
   }
 
   applyOwnerFooter(embed, user);
