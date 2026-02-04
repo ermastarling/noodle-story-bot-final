@@ -1304,11 +1304,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
     }
 
-    applyDropsToInventory(p, drops);
+    const inventoryResult = applyDropsToInventory(p, drops);
     setForageCooldown(p, now);
     advanceTutorial(p, "forage");
 
-    const lines = Object.entries(drops).map(
+    const lines = Object.entries(inventoryResult.added).map(
       ([id, q]) => `• **${q}×** ${displayItemName(id)}`
     );
 
@@ -1316,9 +1316,21 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ? `You search carefully and gather:\n`
       : `You wander into the nearby grove and return with:\n`;
 
+    let description = `${header}${lines.join("\n")}`;
+    
+    // Add warning if some items were blocked due to capacity
+    if (!inventoryResult.success && Object.keys(inventoryResult.blocked).length > 0) {
+      const blockedLines = Object.entries(inventoryResult.blocked).map(
+        ([id, q]) => `**${q}×** ${displayItemName(id)}`
+      );
+      description += `\n\n⚠️ **Pantry Full!** Could not collect: ${blockedLines.join(", ")}\n_Upgrade your Pantry to increase capacity._`;
+    }
+    
+    description += tutorialSuffix(p);
+
     const forageEmbed = buildMenuEmbed({
       title: "🌿 Forage",
-      description: `${header}${lines.join("\n")}${tutorialSuffix(p)}`,
+      description,
       user: interaction.member ?? interaction.user
     });
     return commitState({
