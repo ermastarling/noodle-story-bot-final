@@ -1,16 +1,17 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import discordPkg from "discord.js";
-import { openDb, getPlayer, upsertPlayer, getServer } from "../db/index.js";
+import { openDb, getPlayer, upsertPlayer } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile } from "../game/player.js";
-import { newServerState } from "../game/server.js";
-import { loadUpgradesContent } from "../content/index.js";
+import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
+import { noodleMainMenuRow } from "./noodle.js";
 import {
   purchaseUpgrade,
   getUpgradesByCategory,
   calculateUpgradeEffects
 } from "../game/upgrades.js";
+import { calculateStaffCost, levelUpStaff } from "../game/staff.js";
 
 const {
   MessageActionRow,
@@ -36,6 +37,7 @@ const ButtonStyle = {
 
 const db = openDb();
 const upgradesContent = loadUpgradesContent();
+const staffContent = loadStaffContent();
 
 function ownerFooterText(userOrMember) {
   const member = userOrMember?.user ? userOrMember : null;
@@ -73,6 +75,57 @@ function formatEffects(effects) {
   return lines.join(", ");
 }
 
+function rarityEmoji(rarity) {
+  return "";
+}
+
+function shouldHideRarityEmoji(staff) {
+  return staff?.staff_id === "forager" || staff?.staff_id === "merchant";
+}
+
+function staffSortKey(player, staff) {
+  const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
+  const isMaxed = currentLevel >= staff.max_level;
+  const cost = isMaxed ? Number.POSITIVE_INFINITY : calculateStaffCost(staff, currentLevel);
+  return { cost, isMaxed };
+}
+
+function buildCategoryButtonsRow(userId, activeCategory = null) {
+  const categories = [
+    { id: "staff", label: "👥 Staff" },
+    { id: "kitchen", label: "🍳 Kitchen" },
+    { id: "storage", label: "📦 Storage" },
+    { id: "service", label: "🍜 Service" },
+    { id: "ambience", label: "✨ Ambiance" }
+  ];
+
+  const buttons = categories.map((cat) =>
+    new ButtonBuilder()
+      .setCustomId(`noodle-upgrades:category:${userId}:${cat.id}`)
+      .setLabel(cat.label)
+      .setStyle(cat.id === activeCategory ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+
+  return new ActionRowBuilder().addComponents(buttons);
+}
+
+function buildStaffRarityRow(userId, activeRarity = "common") {
+  const rarities = [
+    { id: "common", label: "⚪ Common" },
+    { id: "rare", label: "⭐ Rare" },
+    { id: "epic", label: "🌟 Epic" }
+  ];
+
+  const buttons = rarities.map((rar) =>
+    new ButtonBuilder()
+      .setCustomId(`noodle-upgrades:staffpage:${userId}:${rar.id}`)
+      .setLabel(rar.label)
+      .setStyle(rar.id === activeRarity ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+
+  return new ActionRowBuilder().addComponents(buttons);
+}
+
 export const noodleUpgradesCommand = {
   data: new SlashCommandBuilder()
     .setName("noodle-upgrades")
@@ -84,24 +137,29 @@ export const noodleUpgradesCommand = {
 export async function noodleUpgradesHandler(interaction) {
   const userId = interaction.user.id;
   const serverId = interaction.guild?.id ?? "DM";
-  
-  const idempKey = makeIdempotencyKey(interaction);
-  const existing = getIdempotentResult(idempKey);
+
+  const idempKey = makeIdempotencyKey({
+    serverId,
+    userId,
+    action: "noodle-upgrades",
+    interactionId: interaction.id
+  });
+  const existing = getIdempotentResult(db, idempKey);
   if (existing) {
     return existing;
   }
 
   const lockKey = `user:${userId}`;
-  
-  return withLock(lockKey, async () => {
-    let p = getPlayer(db, userId, serverId);
+
+  return withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
+    let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
-      upsertPlayer(db, userId, serverId, p, null);
-      p = getPlayer(db, userId, serverId);
+      upsertPlayer(db, serverId, userId, p, null);
+      p = getPlayer(db, serverId, userId);
     }
 
-    const embed = buildUpgradesOverviewEmbed(p, interaction.user);
+    const embed = buildUpgradesOverviewEmbed(p, interaction.member ?? interaction.user);
     const components = buildUpgradesComponents(userId, p);
 
     const response = {
@@ -110,7 +168,7 @@ export async function noodleUpgradesHandler(interaction) {
       ephemeral: false
     };
 
-    putIdempotentResult(idempKey, response);
+    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-upgrades", ttlSeconds: 900, result: response });
     return response;
   });
 }
@@ -133,11 +191,11 @@ function buildUpgradesOverviewEmbed(player, user) {
       return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
     });
 
-    embed.addField(
-      `${categoryData.icon || ""} ${categoryData.display_name || categoryId}`,
-      lines.join("\n"),
-      true
-    );
+    embed.addFields({
+      name: `${categoryData.icon || ""} ${categoryData.display_name || categoryId}`,
+      value: lines.join("\n"),
+      inline: true
+    });
   }
 
   // Active effects summary
@@ -152,20 +210,141 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effects.staff_effect_multiplier > 0) effectLines.push(`👥 +${(effects.staff_effect_multiplier * 100).toFixed(0)}% staff effects`);
 
   if (effectLines.length > 0) {
-    embed.addField("📊 Total Upgrade Bonuses", effectLines.join("\n"), false);
+    embed.addFields({
+      name: "📊 Total Upgrade Bonuses",
+      value: effectLines.join("\n"),
+      inline: false
+    });
   }
 
   applyOwnerFooter(embed, user);
   return embed;
 }
 
-function buildUpgradesComponents(userId, player) {
-  const rows = [];
+function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "common" } = {}) {
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
+  const categoryData = upgradesContent.upgrade_categories?.[categoryId];
+
+  if (categoryId === "staff") {
+    const embed = new EmbedBuilder()
+      .setTitle("👥 Staff Upgrades")
+      .setDescription(`💰 Coins: **${player.coins}**\n\nHire and empower your staff.`)
+      .setColor(0xFF8C00);
+
+    const allStaff = Object.values(staffContent.staff_members ?? {});
+    const staffLines = allStaff
+      .slice()
+      .filter((staff) => staff?.rarity === staffRarity)
+      .sort((a, b) => {
+        if (staffRarity === "common") {
+          const aPinned = a.staff_id === "forager" ? 1 : 0;
+          const bPinned = b.staff_id === "forager" ? 1 : 0;
+          if (aPinned !== bPinned) return bPinned - aPinned;
+        }
+        const aKey = staffSortKey(player, a);
+        const bKey = staffSortKey(player, b);
+        if (aKey.cost !== bKey.cost) return aKey.cost - bKey.cost;
+        return a.name.localeCompare(b.name);
+      })
+      .map((staff) => {
+        const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
+        const cost = calculateStaffCost(staff, currentLevel);
+        const status = currentLevel >= staff.max_level ? "✅ MAX" : `${cost} coins`;
+        const emoji = shouldHideRarityEmoji(staff) ? "" : `${rarityEmoji(staff.rarity)} `;
+        const description = staff.description ? `\n  _${staff.description}_` : "";
+        return `• ${emoji}**${staff.name}** (${currentLevel}/${staff.max_level}) — ${status}${description}`.trim();
+      })
+      .filter(Boolean);
+
+    embed.addFields({
+      name: `${rarityEmoji(staffRarity)} ${staffRarity[0].toUpperCase()}${staffRarity.slice(1)} Staff`,
+      value: staffLines.length ? staffLines.join("\n") : "_No staff found._",
+      inline: false
+    });
+
+    applyOwnerFooter(embed, user);
+    return embed;
+  }
+
+  const title = `${categoryData?.icon || "🔧"} ${categoryData?.display_name || categoryId}`;
+  const descLines = [
+    `💰 Coins: **${player.coins}**`,
+    categoryData?.description ? `\n${categoryData.description}` : ""
+  ].join("\n");
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(descLines.trim())
+    .setColor(0xFF8C00);
+
+  const upgrades = upgradesByCategory[categoryId]?.upgrades ?? [];
+  const lines = upgrades.map((u) => {
+    const status = u.isMaxed ? "✅ MAX" : `${u.nextCost} coins`;
+    return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
+  });
+
+  embed.addFields({
+    name: "Upgrades",
+    value: lines.length ? lines.join("\n") : "_No upgrades found._",
+    inline: false
+  });
+
+  applyOwnerFooter(embed, user);
+  return embed;
+}
+
+function buildUpgradesComponents(userId, player, { categoryId = null, staffRarity = "common" } = {}) {
+  const rows = [];
+  if (categoryId !== "staff") {
+    rows.push(buildCategoryButtonsRow(userId, categoryId));
+  }
+  const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
+
+  if (categoryId === "staff") {
+    rows.push(buildStaffRarityRow(userId, staffRarity));
+    const staffOptions = Object.values(staffContent.staff_members ?? {})
+      .slice()
+      .sort((a, b) => {
+        if (a.rarity === "common" || b.rarity === "common") {
+          const aPinned = a.staff_id === "forager" ? 1 : 0;
+          const bPinned = b.staff_id === "forager" ? 1 : 0;
+          if (aPinned !== bPinned) return bPinned - aPinned;
+        }
+        const aKey = staffSortKey(player, a);
+        const bKey = staffSortKey(player, b);
+        if (aKey.cost !== bKey.cost) return aKey.cost - bKey.cost;
+        return a.name.localeCompare(b.name);
+      })
+      .map((staff) => {
+        const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
+        if (currentLevel >= staff.max_level) return null;
+        const cost = calculateStaffCost(staff, currentLevel);
+        return {
+          label: `${staff.name} — ${cost} coins`,
+          description: `Lv${currentLevel}→${currentLevel + 1}`.slice(0, 100),
+          value: staff.staff_id,
+          emoji: rarityEmoji(staff.rarity)
+        };
+      })
+      .filter(Boolean);
+
+    if (staffOptions.length > 0) {
+      const staffMenu = new StringSelectMenuBuilder()
+        .setCustomId(`noodle-upgrades:staff:${userId}`)
+        .setPlaceholder("Level up staff member")
+        .addOptions(staffOptions);
+      rows.push(new ActionRowBuilder().addComponents(staffMenu));
+    }
+  }
 
   // Build options for each category
   const allOptions = [];
-  for (const [categoryId, categoryData] of Object.entries(upgradesByCategory)) {
+  const categoryEntries = categoryId
+    ? [[categoryId, upgradesByCategory[categoryId]]]
+    : Object.entries(upgradesByCategory);
+
+  for (const [catId, categoryData] of categoryEntries) {
+    if (!categoryData?.upgrades) continue;
     for (const upgrade of categoryData.upgrades || []) {
       if (upgrade.isMaxed) continue;
 
@@ -189,20 +368,28 @@ function buildUpgradesComponents(userId, player) {
     }
 
     chunks.forEach((chunk, idx) => {
+      const placeholder = categoryId === "staff"
+        ? "Purchase Staff Upgrades"
+        : "Purchase Shop Upgrades";
       const menu = new StringSelectMenuBuilder()
-        .setCustomId(`noodle-upgrades:buy:${userId}:${idx}`)
-        .setPlaceholder(`Purchase upgrade (${idx + 1}/${chunks.length})`)
+        .setCustomId(`noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}`)
+        .setPlaceholder(placeholder)
         .addOptions(chunk);
       rows.push(new ActionRowBuilder().addComponents(menu));
     });
   }
 
-  // Refresh button
-  const refreshButton = new ButtonBuilder()
-    .setCustomId(`noodle-upgrades:refresh:${userId}`)
-    .setLabel("🔄 Refresh")
-    .setStyle(ButtonStyle.Secondary);
-  rows.push(new ActionRowBuilder().addComponents(refreshButton));
+  if (!categoryId) {
+    rows.push(noodleMainMenuRow(userId));
+  }
+
+  if (categoryId) {
+    const backButton = new ButtonBuilder()
+      .setCustomId(`noodle-upgrades:category:${userId}:all`)
+      .setLabel("⬅️ Back")
+      .setStyle(ButtonStyle.Secondary);
+    rows.push(new ActionRowBuilder().addComponents(backButton));
+  }
 
   return rows;
 }
@@ -228,13 +415,43 @@ export async function noodleUpgradesInteractionHandler(interaction) {
   const serverId = interaction.guild?.id ?? "DM";
   const lockKey = `user:${userId}`;
 
-  return withLock(lockKey, async () => {
-    let p = getPlayer(db, userId, serverId);
+  return withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
+    let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
-      upsertPlayer(db, userId, serverId, p, null);
-      p = getPlayer(db, userId, serverId);
+      upsertPlayer(db, serverId, userId, p, null);
+      p = getPlayer(db, serverId, userId);
     }
+
+    const resolveCategory = () => {
+      if (action === "category") return parts[3] ?? null;
+      if (action === "refresh") return "all";
+      if (action === "buy") {
+        const maybeCategory = parts[3];
+        if (!maybeCategory) return null;
+        const asNumber = Number(maybeCategory);
+        return Number.isFinite(asNumber) ? null : maybeCategory;
+      }
+      if (action === "staffpage") return "staff";
+      return null;
+    };
+
+    const resolveStaffRarity = () => {
+      if (action === "staffpage") return parts[3] ?? "common";
+      if (action === "category" && parts[3] === "staff") return parts[4] ?? "common";
+      return "common";
+    };
+
+    const categoryId = resolveCategory();
+    const staffRarity = resolveStaffRarity();
+    const refreshed = getPlayer(db, serverId, userId) ?? p;
+    const embed = categoryId && categoryId !== "all"
+      ? buildUpgradesCategoryEmbed(refreshed, interaction.member ?? interaction.user, categoryId, { staffRarity })
+      : buildUpgradesOverviewEmbed(refreshed, interaction.member ?? interaction.user);
+    const components = buildUpgradesComponents(userId, refreshed, {
+      categoryId: categoryId && categoryId !== "all" ? categoryId : null,
+      staffRarity
+    });
 
     // Handle purchase
     if (action === "buy") {
@@ -243,23 +460,45 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       const upgradeId = interaction.values[0];
       
       const result = purchaseUpgrade(p, upgradeId, upgradesContent);
-      upsertPlayer(db, userId, serverId, p, null);
+      upsertPlayer(db, serverId, userId, p, null);
 
-      const embed = buildUpgradesOverviewEmbed(p, interaction.user);
-      const components = buildUpgradesComponents(userId, p);
+      const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
+      const updatedEmbed = categoryId && categoryId !== "all"
+        ? buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, categoryId, { staffRarity })
+        : buildUpgradesOverviewEmbed(updatedPlayer, interaction.member ?? interaction.user);
+      const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, {
+        categoryId: categoryId && categoryId !== "all" ? categoryId : null,
+        staffRarity
+      });
 
       return {
         content: result.message,
-        embeds: [embed],
-        components
+        embeds: [updatedEmbed],
+        components: updatedComponents,
+        ephemeral: !result.success
       };
     }
 
-    // Handle refresh
-    if (action === "refresh") {
-      const embed = buildUpgradesOverviewEmbed(p, interaction.user);
-      const components = buildUpgradesComponents(userId, p);
+    if (action === "staff") {
+      if (!interaction.isSelectMenu()) return null;
 
+      const staffId = interaction.values[0];
+      const result = levelUpStaff(p, staffId, staffContent);
+      upsertPlayer(db, serverId, userId, p, null);
+
+      const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
+      const updatedEmbed = buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, "staff", { staffRarity });
+      const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, { categoryId: "staff", staffRarity });
+
+      return {
+        content: result.message,
+        embeds: [updatedEmbed],
+        components: updatedComponents,
+        ephemeral: !result.success
+      };
+    }
+
+    if (action === "category" || action === "refresh" || action === "staffpage") {
       return {
         content: " ",
         embeds: [embed],

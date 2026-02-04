@@ -96,10 +96,10 @@
       "name": "Forager",
       "description": "Knows the best spots for wild ingredients.",
       "category": "support",
-      "rarity": "rare",
+      "rarity": "common",
       "max_level": 20,
-      "base_cost": 750,
-      "cost_scaling": 1.40,
+      "base_cost": 100,
+      "cost_scaling": 1.22,
       "effects_per_level": {
         "forage_bonus_items": 5
       }

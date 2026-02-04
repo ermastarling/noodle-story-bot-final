@@ -58,9 +58,7 @@ function applyOwnerFooter(embed, user) {
 }
 
 function rarityEmoji(rarity) {
-  if (rarity === "epic") return "🌟";
-  if (rarity === "rare") return "⭐";
-  return "⚪";
+  return "";
 }
 
 function categoryEmoji(category) {
@@ -68,6 +66,13 @@ function categoryEmoji(category) {
   if (category === "service") return "🍜";
   if (category === "support") return "🛠️";
   return "📋";
+}
+
+function staffSortKey(player, staff) {
+  const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
+  const isMaxed = currentLevel >= staff.max_level;
+  const cost = isMaxed ? Number.POSITIVE_INFINITY : calculateStaffCost(staff, currentLevel);
+  return { cost, isMaxed };
 }
 
 function formatEffects(effects) {
@@ -100,21 +105,26 @@ export const noodleStaffCommand = {
 export async function noodleStaffHandler(interaction) {
   const userId = interaction.user.id;
   const serverId = interaction.guild?.id ?? "DM";
-  
-  const idempKey = makeIdempotencyKey(interaction);
-  const existing = getIdempotentResult(idempKey);
+
+  const idempKey = makeIdempotencyKey({
+    serverId,
+    userId,
+    action: "noodle-staff",
+    interactionId: interaction.id
+  });
+  const existing = getIdempotentResult(db, idempKey);
   if (existing) {
     return existing;
   }
 
   const lockKey = `user:${userId}`;
   
-  return withLock(lockKey, async () => {
-    let p = getPlayer(db, userId, serverId);
+  return withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
+    let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
-      upsertPlayer(db, userId, serverId, p, null);
-      p = getPlayer(db, userId, serverId);
+      upsertPlayer(db, serverId, userId, p, null);
+      p = getPlayer(db, serverId, userId);
     }
 
     let s = getServer(db, serverId);
@@ -141,7 +151,7 @@ export async function noodleStaffHandler(interaction) {
       ephemeral: false
     };
 
-    putIdempotentResult(idempKey, response);
+    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-staff", ttlSeconds: 900, result: response });
     return response;
   });
 }
@@ -198,10 +208,17 @@ function buildStaffOverviewEmbed(player, server, user) {
   }
 
   // Daily staff pool
-  const poolLines = server.staff_pool.map(staffId => {
-    const staff = staffContent.staff_members?.[staffId];
-    if (!staff) return null;
-    const currentLevel = player.staff_levels?.[staffId] || 0;
+  const poolLines = server.staff_pool
+    .map(staffId => staffContent.staff_members?.[staffId])
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aKey = staffSortKey(player, a);
+      const bKey = staffSortKey(player, b);
+      if (aKey.cost !== bKey.cost) return aKey.cost - bKey.cost;
+      return a.name.localeCompare(b.name);
+    })
+    .map(staff => {
+    const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
     const cost = calculateStaffCost(staff, currentLevel);
     const status = currentLevel >= staff.max_level ? "✅ MAX" : `Lv${currentLevel}`;
     return `${rarityEmoji(staff.rarity)} **${staff.name}** ${categoryEmoji(staff.category)} — ${status} (${cost} coins)`;
@@ -232,10 +249,16 @@ function buildStaffComponents(userId, player, server) {
 
   // Level up menu
   const levelUpOptions = server.staff_pool
-    .map(staffId => {
-      const staff = staffContent.staff_members?.[staffId];
-      if (!staff) return null;
-      const currentLevel = player.staff_levels?.[staffId] || 0;
+    .map(staffId => staffContent.staff_members?.[staffId])
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aKey = staffSortKey(player, a);
+      const bKey = staffSortKey(player, b);
+      if (aKey.cost !== bKey.cost) return aKey.cost - bKey.cost;
+      return a.name.localeCompare(b.name);
+    })
+    .map(staff => {
+      const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
       if (currentLevel >= staff.max_level) return null; // Already maxed
 
       const cost = calculateStaffCost(staff, currentLevel);
@@ -245,7 +268,7 @@ function buildStaffComponents(userId, player, server) {
       return {
         label: `${staff.name} — ${cost} coins`,
         description,
-        value: staffId,
+        value: staff.staff_id,
         emoji: rarityEmoji(staff.rarity)
       };
     })
@@ -290,12 +313,12 @@ export async function noodleStaffInteractionHandler(interaction) {
   const serverId = interaction.guild?.id ?? "DM";
   const lockKey = `user:${userId}`;
 
-  return withLock(lockKey, async () => {
-    let p = getPlayer(db, userId, serverId);
+  return withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
+    let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
-      upsertPlayer(db, userId, serverId, p, null);
-      p = getPlayer(db, userId, serverId);
+      upsertPlayer(db, serverId, userId, p, null);
+      p = getPlayer(db, serverId, userId);
     }
 
     let s = getServer(db, serverId);
@@ -320,7 +343,8 @@ export async function noodleStaffInteractionHandler(interaction) {
       return {
         content: result.message,
         embeds: [embed],
-        components
+        components,
+        ephemeral: !result.success
       };
     }
 
