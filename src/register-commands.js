@@ -2,9 +2,8 @@ import "dotenv/config";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
 
-if (!process.env.NOODLE_SKIP_DB) {
-  process.env.NOODLE_SKIP_DB = "1";
-}
+// Skip loading native SQLite bindings during command registration to improve startup performance and avoid unnecessary dependencies.
+process.env.NOODLE_SKIP_DB = process.env.NOODLE_SKIP_DB || "1";
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;

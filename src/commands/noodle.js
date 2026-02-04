@@ -322,7 +322,9 @@ return map[code] ?? "Something went a little sideways, try again.";
 }
 
 function ensureServer(serverId) {
-  if (!db) return newServerState(serverId);
+  if (!db) {
+    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
+  }
   let s = getServer(db, serverId);
   if (!s) {
     s = newServerState(serverId);
@@ -333,18 +335,20 @@ function ensureServer(serverId) {
 }
 
 function ensurePlayer(serverId, userId) {
-  if (!db) return newPlayerProfile(userId);
+  if (!db) {
+    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
+  }
   let p = getPlayer(db, serverId, userId);
   if (!p) {
     p = newPlayerProfile(userId);
     upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     p = getPlayer(db, serverId, userId);
   }
-// Backfill missing starter recipes for legacy/partial profiles
-if (!Array.isArray(p.known_recipes) || p.known_recipes.length === 0) {
-  p.known_recipes = [...(STARTER_PROFILE.known_recipes || [])];
-}
-return p;
+  // Backfill missing starter recipes for legacy/partial profiles
+  if (!Array.isArray(p.known_recipes) || p.known_recipes.length === 0) {
+    p.known_recipes = [...(STARTER_PROFILE.known_recipes || [])];
+  }
+  return p;
 }
 
 function displayItemName(id) {
@@ -873,10 +877,10 @@ return componentCommit(interaction, payload);
 try {
 const owner = `discord:${interaction.id}`;
 
-  const server = ensureServer(serverId);
-  const settings = buildSettingsMap(settingsCatalog, server.settings);
-  server.season = computeActiveSeason(settings);
-  rollMarket({ serverId, content, serverState: server });
+const server = ensureServer(serverId);
+const settings = buildSettingsMap(settingsCatalog, server.settings);
+server.season = computeActiveSeason(settings);
+rollMarket({ serverId, content, serverState: server });
 
 if (group === "dev" && sub === "reset_tutorial") {
   const target = opt.getUser("user");
@@ -884,9 +888,6 @@ if (group === "dev" && sub === "reset_tutorial") {
     return commit({ content: "Pick a user to reset.", ephemeral: true });
   }
 
-  if (!db) {
-    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
-  }
   return await withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, target.id);
     resetTutorialState(p);
@@ -910,9 +911,6 @@ const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 
 /* ---------------- START ---------------- */
 if (sub === "start") {
-  if (!db) {
-    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
-  }
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const embed = renderProfileEmbed(p, interaction.user.displayName, null, interaction.member ?? interaction.user);
@@ -1252,7 +1250,7 @@ if (cached) {
 }
 
 if (!db) {
-  return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  return commit({ content: "This action needs database access and is unavailable right now.", ephemeral: true });
 }
 return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let p = ensurePlayer(serverId, userId);
@@ -3353,9 +3351,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       if (cached) return componentCommit(interaction, cached);
 
       const owner2 = `discord:${interaction.id}`;
-      if (!db) {
-        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
-      }
       return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
@@ -3436,9 +3431,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     if (cached) return componentCommit(interaction, cached);
 
     const owner2 = `discord:${interaction.id}`;
-    if (!db) {
-      return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
-    }
     return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
       let s = ensureServer(serverId);
       let p2 = ensurePlayer(serverId, userId);
