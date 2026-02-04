@@ -165,7 +165,7 @@ test("Staff: calculateStaffCost returns 0 at max level", () => {
   assert.strictEqual(cost, 0);
 });
 
-test("Staff: Forager provides +5 forage items per level", () => {
+test("Staff: Forager provides +1 forage item per level", () => {
   const player = makeTestPlayer();
   player.staff_levels = {
     "forager": 3
@@ -173,7 +173,7 @@ test("Staff: Forager provides +5 forage items per level", () => {
   
   const effects = calculateStaffEffects(player, staffContent);
   
-  assert.strictEqual(effects.forage_bonus_items, 15); // 3 levels * 5
+  assert.strictEqual(effects.forage_bonus_items, 3); // 3 levels * 1
 });
 
 test("Staff: Epic staff have max level of 10", () => {

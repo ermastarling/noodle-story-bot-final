@@ -24,7 +24,7 @@ import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, rollPlayerMarketStock, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
-import { STARTER_PROFILE, CLUES_TO_UNLOCK_RECIPE } from "../constants.js";
+import { STARTER_PROFILE, CLUES_TO_UNLOCK_RECIPE, INGREDIENT_CAPACITY_BASE } from "../constants.js";
 import { nowTs } from "../util/time.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, BLESSING_EFFECTS } from "../game/social.js";
@@ -229,6 +229,79 @@ function formatBonusLabel(key) {
   return key
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeIngredientType(itemId) {
+  const raw = String(content.items?.[itemId]?.category ?? "").toLowerCase();
+  if (raw === "broth") return "broth";
+  if (raw === "noodles" || raw === "noodle") return "noodles";
+  if (raw === "spice" || raw === "aromatic") return "spice";
+  if (raw === "topping") return "topping";
+  return "topping";
+}
+
+function getIngredientCountsByType(player) {
+  const counts = { broth: 0, noodles: 0, spice: 0, topping: 0 };
+  for (const [id, qtyRaw] of Object.entries(player?.inv_ingredients ?? {})) {
+    const qty = Math.max(0, Number(qtyRaw) || 0);
+    if (!qty) continue;
+    const type = normalizeIngredientType(id);
+    counts[type] = (counts[type] ?? 0) + qty;
+  }
+  return counts;
+}
+
+function getIngredientCountForType(player, type) {
+  return getIngredientCountsByType(player)[type] ?? 0;
+}
+
+function getIngredientCapacityPerType(_player, effects) {
+  const bonus = Math.floor(effects?.ingredient_capacity || 0);
+  return Math.max(0, INGREDIENT_CAPACITY_BASE + bonus);
+}
+
+function getBowlCount(player) {
+  return Object.values(player?.inv_bowls ?? {}).reduce(
+    (sum, bowl) => sum + Math.max(0, Number(bowl?.qty) || 0),
+    0
+  );
+}
+
+function getBowlCapacity(player, effects) {
+  const base = getIngredientCapacityPerType(player, effects);
+  const bonus = Math.floor(effects?.bowl_storage_capacity || 0);
+  return Math.max(0, base + bonus);
+}
+
+function applyIngredientCapacityToDrops(drops, player, effects) {
+  const capacity = getIngredientCapacityPerType(player, effects);
+  const current = getIngredientCountsByType(player);
+  const remainingByType = {
+    broth: Math.max(0, capacity - (current.broth ?? 0)),
+    noodles: Math.max(0, capacity - (current.noodles ?? 0)),
+    spice: Math.max(0, capacity - (current.spice ?? 0)),
+    topping: Math.max(0, capacity - (current.topping ?? 0))
+  };
+
+  const accepted = {};
+  const rejected = {};
+
+  for (const [id, qtyRaw] of Object.entries(drops ?? {})) {
+    const qty = Math.max(0, Number(qtyRaw) || 0);
+    if (qty <= 0) continue;
+    const type = normalizeIngredientType(id);
+    const remaining = remainingByType[type] ?? 0;
+    if (remaining <= 0) {
+      rejected[id] = (rejected[id] ?? 0) + qty;
+      continue;
+    }
+    const take = Math.min(qty, remaining);
+    if (take > 0) accepted[id] = (accepted[id] ?? 0) + take;
+    if (take < qty) rejected[id] = (rejected[id] ?? 0) + (qty - take);
+    remainingByType[type] = remaining - take;
+  }
+
+  return { accepted, rejected, current, capacity, remainingByType };
 }
 
 function getLimitedTimeWindowSeconds(player, baseSeconds) {
@@ -436,8 +509,8 @@ if (targetMessageId && !ephemeral) {
           return row;
         });
       }
-      // Dismiss the modal/interaction response
-      if (interaction.deferred || interaction.replied) {
+      // Dismiss the modal response only for modal submits
+      if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
           await interaction.deleteReply();
         } catch (e) {
@@ -876,8 +949,7 @@ if (sub === "pantry") {
   const grouped = new Map();
   for (const [id, qty] of Object.entries(p.inv_ingredients ?? {})) {
     if (!qty || qty <= 0) continue;
-    const item = content.items?.[id] ?? {};
-    const category = String(item.category || "other").toLowerCase();
+    const category = normalizeIngredientType(id);
     const name = displayItemName(id);
     const catMap = grouped.get(category) ?? new Map();
     const key = name.toLowerCase();
@@ -887,15 +959,27 @@ if (sub === "pantry") {
     grouped.set(category, catMap);
   }
 
-  const categoryBlocks = [...grouped.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([category, items]) => {
-      const title = category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
+  const countsByType = getIngredientCountsByType(p);
+  const typeOrder = ["broth", "noodles", "spice", "topping"];
+  const typeLabels = {
+    broth: "Broth",
+    noodles: "Noodles",
+    spice: "Spice",
+    topping: "Topping"
+  };
+
+  const categoryBlocks = typeOrder
+    .map((category) => {
+      const items = grouped.get(category) ?? new Map();
       const lines = [...items.values()]
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(({ name, qty }) => `• ${name}: **${qty}**`)
         .join("\n");
-      return lines ? `**${title}**\n${lines}` : null;
+      const have = countsByType[category] ?? 0;
+      const title = `${typeLabels[category]} (${have}/${perTypeCap})`;
+      return lines ? `**${title}**\n${lines}` : `**${title}**\n_None yet._`;
     })
     .filter(Boolean);
 
@@ -906,7 +990,11 @@ if (sub === "pantry") {
       return `• ${recipeName}: **${bowl.qty}**`;
     })
     .join("\n");
-  const bowlsBlock = bowlLines ? `**🍲 Cooked Bowls**\n${bowlLines}` : "**🍲 Cooked Bowls**\n_None yet._";
+  const bowlCount = getBowlCount(p);
+  const bowlCap = getBowlCapacity(p, combinedEffects);
+  const bowlsBlock = bowlLines
+    ? `**🍲 Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
+    : `**🍲 Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
 
   const pantryDescription = [
     categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
@@ -1145,8 +1233,8 @@ if (sub === "event") {
 const action = sub;
 const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
 
-// Skip idempotency check for component interactions to avoid stale cached responses
-const isComponent = interaction.isButton?.() || interaction.isSelectMenu?.() || interaction.isModalSubmit?.();
+// Skip idempotency check for button/select interactions to avoid stale cached responses
+const isComponent = interaction.isButton?.() || interaction.isSelectMenu?.();
 const cached = isComponent ? null : getIdempotentResult(db, idemKey);
 
 if (cached) {
@@ -1321,8 +1409,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (itemId && bonusItems > 0) {
       drops[itemId] = (drops[itemId] ?? 0) + bonusItems;
     }
+    const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects);
+    const { accepted, rejected } = capacityResult;
 
-    applyDropsToInventory(p, drops);
+    if (!Object.keys(accepted).length) {
+      setForageCooldown(p, now);
+      return commitState({
+        content: "🧺 Your pantry is full. Upgrade storage or use ingredients to make room."
+      });
+    }
+
+    applyDropsToInventory(p, accepted);
     setForageCooldown(p, now);
     advanceTutorial(p, "forage");
 
@@ -1348,7 +1445,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const forageEmbed = buildMenuEmbed({
       title: "🌿 Forage",
-      description,
+      description: `${header}${lines.join("\n")}${
+        Object.keys(rejected).length
+          ? `\n\n🧺 Pantry full — left behind ${Object.values(rejected).reduce((sum, v) => sum + v, 0)} item(s).`
+          : ""
+      }${tutorialSuffix(p)}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -1449,9 +1550,21 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const basePrice = pityPrice ?? (s.market_prices?.[itemId] ?? item.base_price);
     const price = applyMarketDiscount(basePrice, combinedEffects);
     const stock = p.market_stock?.[itemId] ?? 0;
-    const cost = price * qty;
+    const type = normalizeIngredientType(itemId);
+    const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
+    const remaining = perTypeCap - getIngredientCountForType(p, type);
+    if (remaining <= 0) {
+      const label = type.charAt(0).toUpperCase() + type.slice(1);
+      return commitState({
+        content: `🧺 Your ${label} storage is full. Upgrade storage or use ingredients to make room.`,
+        ephemeral: true
+      });
+    }
 
-    if (stock < qty) {
+    const qtyToBuy = Math.min(qty, remaining);
+    const cost = price * qtyToBuy;
+
+    if (stock < qtyToBuy) {
       const friendly = displayItemName(itemId);
       return commitState({ content: `Only ${stock} in stock today for **${friendly}**.`, ephemeral: true });
     }
@@ -1469,12 +1582,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     p.coins -= cost;
-    p.market_stock[itemId] = stock - qty;
+    p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qtyToBuy;
+    p.market_stock[itemId] = stock - qtyToBuy;
 
     advanceTutorial(p, "buy");
 
+    const capacityNote = qtyToBuy < qty ? `\n🧺 Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
     return commitState({
-      content: `🛒 Bought **${qty}× ${item.name}** for **${cost}c**.${tutorialSuffix(p)}`,
+      content: `🛒 Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${tutorialSuffix(p)}`,
       embeds: []
     });
   }
@@ -1528,9 +1643,21 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
     if (!qty || qty <= 0) return commitState({ content: "Pick a positive quantity.", ephemeral: true });
 
+    const bowlCap = getBowlCapacity(p, combinedEffects);
+    const bowlCount = getBowlCount(p);
+    const remainingBowls = bowlCap - bowlCount;
+    if (remainingBowls <= 0) {
+      return commitState({
+        content: "🧺 Your cooked bowls storage is full. Serve bowls or upgrade storage to make room.",
+        ephemeral: true
+      });
+    }
+
+    const qtyToCook = Math.min(qty, remainingBowls);
+
     for (const ing of r.ingredients) {
       const haveIng = p.inv_ingredients?.[ing.item_id] ?? 0;
-      const need = ing.qty * qty;
+      const need = ing.qty * qtyToCook;
       if (haveIng < need) {
         const missing = need - haveIng;
         return commitState({
@@ -1543,7 +1670,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const cookRng = makeStreamRng({ mode: "secure", streamName: "cook", serverId, userId });
     const savedLines = [];
     for (const ing of r.ingredients) {
-      const need = ing.qty * qty;
+      const need = ing.qty * qtyToCook;
       let saved = 0;
       if (combinedEffects.ingredient_save_chance > 0) {
         for (let i = 0; i < need; i += 1) {
@@ -1566,16 +1693,20 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         recipe_id: recipeId,
         quality: "standard",
         tier: r.tier,
-        qty,
+        qty: qtyToCook,
         cooked_at: nowTs()
       };
     } else {
-      existing.qty += qty;
+      existing.qty += qtyToCook;
     }
 
     const doubleCrafted = combinedEffects.double_craft_chance > 0 && rollDoubleCraft(combinedEffects, cookRng);
     if (doubleCrafted) {
-      p.inv_bowls[bowlKey].qty += qty;
+      const remainingAfter = Math.max(0, bowlCap - (bowlCount + qtyToCook));
+      const extra = Math.min(qtyToCook, remainingAfter);
+      if (extra > 0) {
+        p.inv_bowls[bowlKey].qty += extra;
+      }
     }
 
     const have = p.inv_bowls[bowlKey].qty;
@@ -1587,8 +1718,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const cookEmbed = buildMenuEmbed({
       title: "🍲 Cooked",
       description: [
-        `You cooked **${qty}× ${r.name}**.`,
-        doubleCrafted ? `✨ Double craft! **+${qty}** extra bowl(s).` : null,
+        `You cooked **${qtyToCook}× ${r.name}**.`,
+        qtyToCook < qty ? `🧺 Bowl storage limited this cook to **${qtyToCook}**.` : null,
+        doubleCrafted ? `✨ Double craft! **+${Math.min(qtyToCook, Math.max(0, bowlCap - (bowlCount + qtyToCook)))}** extra bowl(s).` : null,
         savedLines.length ? savedLines.join("\n") : null,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
@@ -1844,12 +1976,73 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (acceptedNow > 0) advanceTutorial(p, "accept");
 
-    if (readyBowlsByRecipe.size > 0) {
-      const readyLines = [...readyBowlsByRecipe.entries()].map(([recipeId, qty]) => {
-        const rName = content.recipes?.[recipeId]?.name ?? recipeId;
-        return `• **${rName}** — **${qty}** bowl(s) ready`;
+    // Build summary for accepted orders
+    const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+    const neededByItem = {};
+    const neededByRecipe = {};
+
+    acceptedEntries.forEach(([fullId, a]) => {
+      const snap = a?.order ?? null;
+      const order =
+        snap ??
+        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
+        null;
+
+      if (!order?.recipe_id) return;
+
+      neededByRecipe[order.recipe_id] = (neededByRecipe[order.recipe_id] ?? 0) + 1;
+    });
+
+    // Only count ingredients for orders that don't already have bowls ready
+    Object.entries(neededByRecipe).forEach(([recipeId, needed]) => {
+      const bowl = p.inv_bowls?.[recipeId];
+      const ready = Math.min(needed, bowl?.qty ?? 0);
+      const remainingToCook = Math.max(0, needed - ready);
+      if (remainingToCook <= 0) return;
+
+      const recipe = content.recipes?.[recipeId];
+      if (!recipe?.ingredients) return;
+      recipe.ingredients.forEach((ing) => {
+        neededByItem[ing.item_id] = (neededByItem[ing.item_id] ?? 0) + (ing.qty ?? 0) * remainingToCook;
       });
-      results.push("\n🍲 **Bowls Ready**", ...readyLines, "");
+    });
+
+    const shortages = Object.entries(neededByItem)
+      .map(([itemId, needed]) => {
+        const have = p.inv_ingredients?.[itemId] ?? 0;
+        const short = Math.max(0, needed - have);
+        return { itemId, needed, have, short };
+      })
+      .filter((s) => s.short > 0);
+
+    const readyBowls = Object.entries(neededByRecipe)
+      .map(([recipeId, needed]) => {
+        const bowl = p.inv_bowls?.[recipeId];
+        const ready = Math.min(needed, bowl?.qty ?? 0);
+        if (ready <= 0) return null;
+        const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+        return `• **${rName}** — **${ready}/${needed}** bowl(s) ready`;
+      })
+      .filter(Boolean);
+
+    const statusParts = [];
+    if (readyBowls.length > 0) {
+      statusParts.push(`🍲 **Bowls Ready**\n${readyBowls.join("\n")}`);
+    }
+
+    if (shortages.length) {
+      statusParts.push(
+        `\n🧺 **Ingredients Needed**\n${shortages.map((s) => {
+          const iName = displayItemName(s.itemId, content);
+          return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
+        }).join("\n")}`
+      );
+    } else {
+      statusParts.push(`\n🧺 **Ingredients Needed**\n_All ingredients ready to cook!_`);
+    }
+
+    if (statusParts.length) {
+      results.push("", ...statusParts, "");
     }
 
     const acceptEmbed = buildMenuEmbed({
@@ -2187,6 +2380,7 @@ return componentCommit(interaction, { content: "That menu isn’t for you.", eph
 if (kind === "nav" && action === "sell") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
+  const targetMessageId = interaction.message?.id ?? null;
   
   const ownedItems = Object.entries(p.inv_ingredients ?? {})
     .filter(([id, q]) => q > 0 && MARKET_ITEM_IDS.includes(id))
@@ -2243,7 +2437,8 @@ if (kind === "nav" && action === "sell") {
     components: [
       new ActionRowBuilder().addComponents(menu),
       new ActionRowBuilder().addComponents(cancelButton)
-    ]
+    ],
+    targetMessageId
   });
 }
 
@@ -2379,6 +2574,7 @@ if (action === "cancel" || action === "serve") {
 if (action === "cook") {
   // select a recipe from known_recipes, then modal for qty
   const p = ensurePlayer(serverId, userId);
+  const s = ensureServer(serverId);
   const available = getAvailableRecipes(p);
   const activeSeason = s?.season ?? null;
   const seasonFiltered = available.filter((rid) => {
@@ -2483,9 +2679,13 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     return await interaction.showModal(modal);
   } catch (e) {
     console.log(`⚠️ showModal failed for cook:`, e?.message);
-    return componentCommit(interaction, { 
-      content: "⚠️ Discord couldn't show the modal. Try using `/noodle cook` directly instead.", 
-      ephemeral: true 
+    const code = e?.code ?? e?.message;
+    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+      return;
+    }
+    return componentCommit(interaction, {
+      content: "⚠️ Discord couldn't show the modal. Try using `/noodle cook` directly instead.",
+      ephemeral: true
     });
   }
 }
@@ -2692,11 +2892,22 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         let p2 = ensurePlayer(serverId, userId);
         if (!p2.market_stock) p2.market_stock = {};
 
+        const combinedEffects = calculateCombinedEffects(p2, upgradesContent, staffContent, calculateStaffEffects);
+        const perTypeCap = getIngredientCapacityPerType(p2, combinedEffects);
+        const countsByType = getIngredientCountsByType(p2);
+        const remainingByType = {
+          broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
+          noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
+          spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
+          topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0))
+        };
+
         const want = {};
         for (const id3 of selectedIds) want[id3] = qtyEach;
 
         let totalCost = 0;
         const buyLines = [];
+        let capacityReduced = false;
 
         for (const [id3, qty3] of Object.entries(want)) {
           if (!MARKET_ITEM_IDS.includes(id3)) {
@@ -2712,8 +2923,16 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
           const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
           const stock = p2.market_stock?.[id3] ?? 0;
+          const type = normalizeIngredientType(id3);
+          const remaining = remainingByType[type] ?? 0;
+          const qtyToBuy = Math.min(qty3, remaining);
 
-          if (stock < qty3) {
+          if (qtyToBuy <= 0) {
+            capacityReduced = true;
+            continue;
+          }
+
+          if (stock < qtyToBuy) {
             const friendly = displayItemName(id3);
             return componentCommit(interaction, {
               content: `Only ${stock} in stock today for **${friendly}**.`,
@@ -2721,8 +2940,18 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
             });
           }
 
-          totalCost += price * qty3;
-          buyLines.push({ id: id3, qty: qty3, name: it.name, price });
+          if (qtyToBuy < qty3) capacityReduced = true;
+
+          totalCost += price * qtyToBuy;
+          buyLines.push({ id: id3, qty: qtyToBuy, name: it.name, price });
+          remainingByType[type] = remaining - qtyToBuy;
+        }
+
+        if (!buyLines.length) {
+          return componentCommit(interaction, {
+            content: "🧺 Your pantry is full. Upgrade storage or use ingredients to make room.",
+            ephemeral: true
+          });
         }
 
         if ((p2.coins ?? 0) < totalCost) {
@@ -2764,7 +2993,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         const buyEmbed = buildMenuEmbed({
           title: "🛒 Purchase Complete",
-          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${tutorialSuffix(p2)}`,
+          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? "\n🧺 Pantry capacity limited this purchase." : ""}${tutorialSuffix(p2)}`,
           user: interaction.member ?? interaction.user
         });
 
@@ -2776,22 +3005,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         
-        // Edit original message if we have the messageId
-        if (sourceMessageId) {
-          try {
-            const targetMsg = await interaction.channel.messages.fetch(sourceMessageId);
-            if (targetMsg) {
-              await targetMsg.edit(replyObj);
-              // Acknowledge the button interaction
-              await interaction.update({});
-              return;
-            }
-          } catch (e) {
-            console.log(`⚠️ Failed to edit message ${sourceMessageId}:`, e?.message);
-          }
-        }
-        
-        return componentCommit(interaction, replyObj);
+        const finalReply = sourceMessageId
+          ? { ...replyObj, targetMessageId: sourceMessageId }
+          : replyObj;
+        return componentCommit(interaction, finalReply);
       });
     }
 
@@ -2882,9 +3099,20 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       rollPlayerMarketStock({ userId, serverId, content, playerState: p2 });
       if (!p2.market_stock) p2.market_stock = {};
 
+      const combinedEffects = calculateCombinedEffects(p2, upgradesContent, staffContent, calculateStaffEffects);
+      const perTypeCap = getIngredientCapacityPerType(p2, combinedEffects);
+      const countsByType = getIngredientCountsByType(p2);
+      const remainingByType = {
+        broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
+        noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
+        spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
+        topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0))
+      };
+
       // Validate stock + compute cost
       let totalCost = 0;
       const buyLines = [];
+      let capacityReduced = false;
 
       for (const [id3, qty3] of Object.entries(want)) {
         if (!MARKET_ITEM_IDS.includes(id3)) {
@@ -2900,8 +3128,16 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
         const stock = p2.market_stock?.[id3] ?? 0;
+        const type = normalizeIngredientType(id3);
+        const remaining = remainingByType[type] ?? 0;
+        const qtyToBuy = Math.min(qty3, remaining);
 
-        if (stock < qty3) {
+        if (qtyToBuy <= 0) {
+          capacityReduced = true;
+          continue;
+        }
+
+        if (stock < qtyToBuy) {
           const friendly = displayItemName(id3);
           return componentCommit(interaction, {
             content: `Only ${stock} in stock today for **${friendly}**.`,
@@ -2909,8 +3145,18 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           });
         }
 
-        totalCost += price * qty3;
-        buyLines.push({ id: id3, qty: qty3, name: it.name, price });
+        if (qtyToBuy < qty3) capacityReduced = true;
+
+        totalCost += price * qtyToBuy;
+        buyLines.push({ id: id3, qty: qtyToBuy, name: it.name, price });
+        remainingByType[type] = remaining - qtyToBuy;
+      }
+
+      if (!buyLines.length) {
+        return componentCommit(interaction, {
+          content: "🧺 Your pantry is full. Upgrade storage or use ingredients to make room.",
+          ephemeral: true
+        });
       }
 
       if ((p2.coins ?? 0) < totalCost) {
@@ -2952,7 +3198,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       const buyEmbed = buildMenuEmbed({
         title: "🛒 Purchase Complete",
-        description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.`,
+        description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? "\n🧺 Pantry capacity limited this purchase." : ""}`,
         user: interaction.member ?? interaction.user
       });
 
@@ -2983,13 +3229,22 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     const pickedNames = picked.map((id) => displayItemName(id));
     
+    const sourceMessageId = interaction.message?.id ?? "none";
     const btnRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:sell:sell1:${interaction.user.id}:${picked.join(",")}`)
         .setLabel("Sell 1 each")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(`noodle:sell:qty:${interaction.user.id}:${picked.join(",")}`)
+        .setCustomId(`noodle:sell:sell5:${interaction.user.id}:${picked.join(",")}`)
+        .setLabel("Sell 5 each")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:sell:sell10:${interaction.user.id}:${picked.join(",")}`)
+        .setLabel("Sell 10 each")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:sell:qty:${interaction.user.id}:${sourceMessageId}:${picked.join(",")}`)
         .setLabel("Enter quantities")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
@@ -2998,19 +3253,30 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         .setStyle(ButtonStyle.Danger)
     );
 
+    const sellEmbed = buildMenuEmbed({
+      title: "💰 Sell Items",
+      description: `💰 **Selected:** ${pickedNames.join(", ")}\nChoose how you want to sell:`,
+      user: interaction.member ?? interaction.user
+    });
+
     return componentCommit(interaction, {
-      content: `💰 **Selected:** ${pickedNames.join(", ")}\nChoose how you want to sell:`,
-      components: [btnRow]
+      content: " ",
+      embeds: [sellEmbed],
+      components: [btnRow],
+      targetMessageId: interaction.message?.id ?? null
     });
   }
 
   /* ---------------- SELL BUTTONS ---------------- */
   if (interaction.isButton?.() && interaction.customId.startsWith("noodle:sell:")) {
     const parts2 = interaction.customId.split(":");
-    // noodle:sell:<mode>:<ownerId>:<id1,id2,...>
+    // noodle:sell:<mode>:<ownerId>:<messageId?>:<id1,id2,...>
     const mode = parts2[2];
     const owner = parts2[3];
-    const idsPart = parts2.slice(4).join(":");
+    const maybeMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
+    const hasMessageId = Boolean(maybeMessageId) && parts2.length > 5;
+    const messageId = hasMessageId ? maybeMessageId : null;
+    const idsPart = hasMessageId ? parts2.slice(5).join(":") : parts2.slice(4).join(":");
     const selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
 
     if (owner && owner !== interaction.user.id) {
@@ -3028,7 +3294,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       }
 
       const modal = new ModalBuilder()
-        .setCustomId(`noodle:sell:qty:${interaction.user.id}:${selectedIds.join(",")}`)
+        .setCustomId(`noodle:sell:qty:${interaction.user.id}:${messageId ?? "none"}:${selectedIds.join(",")}`)
         .setTitle("Sell quantities");
 
       const pickedNames = selectedIds.map((id) => content.items?.[id]?.name ?? displayItemName(id));
@@ -3053,8 +3319,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       }
     }
 
-    // Sell 1 each
-    if (mode === "sell1") {
+    // Sell N each
+    if (mode === "sell1" || mode === "sell5" || mode === "sell10") {
+      const qtyEach = mode === "sell10" ? 10 : mode === "sell5" ? 5 : 1;
       const action = "sell";
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = getIdempotentResult(db, idemKey);
@@ -3073,17 +3340,17 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           if (!it) continue;
           
           const owned = p2.inv_ingredients?.[id] ?? 0;
-          if (owned < 1) continue;
+          if (owned < qtyEach) continue;
 
           const unit = sellPrice(s, id);
-          const gain = unit * 1;
+          const gain = unit * qtyEach;
 
-          p2.inv_ingredients[id] = owned - 1;
+          p2.inv_ingredients[id] = owned - qtyEach;
           p2.coins += gain;
           p2.lifetime.coins_earned += gain;
           totalGain += gain;
 
-          sellLines.push({ id, name: it.name, qty: 1, price: unit });
+          sellLines.push({ id, name: it.name, qty: qtyEach, price: unit });
         }
 
         if (!sellLines.length) {
@@ -3097,9 +3364,17 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
 
+        const sellEmbed = buildMenuEmbed({
+          title: "💰 Sold Items",
+          description: `Sold:\n${pretty}\n\nTotal: **${totalGain}c**.`,
+          user: interaction.member ?? interaction.user
+        });
+
         const replyObj = {
-          content: `💰 Sold:\n${pretty}\n\nTotal: **${totalGain}c**.`,
-          components: [noodleMainMenuRow(userId)]
+          content: " ",
+          embeds: [sellEmbed],
+          components: [noodleMainMenuRow(userId)],
+          targetMessageId: interaction.message?.id ?? null
         };
 
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
@@ -3112,7 +3387,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:sell:qty:")) {
     const parts3 = interaction.customId.split(":");
     const owner = parts3[3];
-    const idsPart = parts3.slice(4).join(":");
+    const targetMessageId = parts3[4] && parts3[4] !== "none" ? parts3[4] : null;
+    const idsPart = parts3.slice(5).join(":");
     const selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
 
     if (owner && owner !== interaction.user.id) {
@@ -3189,9 +3465,17 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
       const errSuffix = errors.length ? `\n\n⚠️ Some items had errors (${errors.length})` : "";
 
+      const sellEmbed = buildMenuEmbed({
+        title: "💰 Sold Items",
+        description: `Sold:\n${pretty}\n\nTotal: **${totalGain}c**.${errSuffix}`,
+        user: interaction.member ?? interaction.user
+      });
+
       const replyObj = {
-        content: `💰 Sold:\n${pretty}\n\nTotal: **${totalGain}c**.${errSuffix}`,
-        components: [noodleMainMenuRow(userId)]
+        content: " ",
+        embeds: [sellEmbed],
+        components: [noodleMainMenuRow(userId)],
+        targetMessageId
       };
 
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });

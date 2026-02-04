@@ -415,13 +415,14 @@ export async function noodleUpgradesInteractionHandler(interaction) {
   const serverId = interaction.guild?.id ?? "DM";
   const lockKey = `user:${userId}`;
 
-  return withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
-    let p = getPlayer(db, serverId, userId);
-    if (!p) {
-      p = newPlayerProfile(userId);
-      upsertPlayer(db, serverId, userId, p, null);
-      p = getPlayer(db, serverId, userId);
-    }
+  try {
+    return await withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
+      let p = getPlayer(db, serverId, userId);
+      if (!p) {
+        p = newPlayerProfile(userId);
+        upsertPlayer(db, serverId, userId, p, null);
+        p = getPlayer(db, serverId, userId);
+      }
 
     const resolveCategory = () => {
       if (action === "category") return parts[3] ?? null;
@@ -506,6 +507,16 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       };
     }
 
-    return null;
-  });
+      return null;
+    });
+  } catch (e) {
+    const code = e?.code ?? e?.message;
+    if (code === "LOCK_BUSY" || code === "ERR_LOCK_BUSY") {
+      return {
+        content: "Your shop is already busy. Try again in a moment.",
+        ephemeral: true
+      };
+    }
+    throw e;
+  }
 }

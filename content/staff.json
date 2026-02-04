@@ -101,7 +101,7 @@
       "base_cost": 100,
       "cost_scaling": 1.22,
       "effects_per_level": {
-        "forage_bonus_items": 5
+        "forage_bonus_items": 1
       }
     },
     "merchant": {
