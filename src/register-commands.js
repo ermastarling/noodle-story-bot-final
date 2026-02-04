@@ -1,7 +1,10 @@
 import "dotenv/config";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
-import { commands } from "./commands/index.js";
+
+if (!process.env.NOODLE_SKIP_DB) {
+  process.env.NOODLE_SKIP_DB = "1";
+}
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
@@ -12,10 +15,11 @@ if (!token || !clientId) {
   process.exit(1);
 }
 
-const rest = new REST({ version: "10" }).setToken(token);
-const body = commands.map(c => c.data.toJSON());
-
 async function main() {
+  const { commands } = await import("./commands/index.js");
+  const rest = new REST({ version: "10" }).setToken(token);
+  const body = commands.map(c => c.data.toJSON());
+
   if (guildId) {
     await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
     console.log(`Registered guild commands for ${guildId}`);

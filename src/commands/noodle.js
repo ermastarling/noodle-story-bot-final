@@ -322,22 +322,24 @@ return map[code] ?? "Something went a little sideways, try again.";
 }
 
 function ensureServer(serverId) {
-let s = getServer(db, serverId);
-if (!s) {
-s = newServerState(serverId);
-upsertServer(db, serverId, s, null);
-s = getServer(db, serverId);
-}
-return s;
+  if (!db) return newServerState(serverId);
+  let s = getServer(db, serverId);
+  if (!s) {
+    s = newServerState(serverId);
+    upsertServer(db, serverId, s, null);
+    s = getServer(db, serverId);
+  }
+  return s;
 }
 
 function ensurePlayer(serverId, userId) {
-let p = getPlayer(db, serverId, userId);
-if (!p) {
-p = newPlayerProfile(userId);
-upsertPlayer(db, serverId, userId, p, null, p.schema_version);
-p = getPlayer(db, serverId, userId);
-}
+  if (!db) return newPlayerProfile(userId);
+  let p = getPlayer(db, serverId, userId);
+  if (!p) {
+    p = newPlayerProfile(userId);
+    upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+    p = getPlayer(db, serverId, userId);
+  }
 // Backfill missing starter recipes for legacy/partial profiles
 if (!Array.isArray(p.known_recipes) || p.known_recipes.length === 0) {
   p.known_recipes = [...(STARTER_PROFILE.known_recipes || [])];
@@ -871,10 +873,10 @@ return componentCommit(interaction, payload);
 try {
 const owner = `discord:${interaction.id}`;
 
-const server = ensureServer(serverId);
-const settings = buildSettingsMap(settingsCatalog, server.settings);
-server.season = computeActiveSeason(settings);
-rollMarket({ serverId, content, serverState: server });
+  const server = ensureServer(serverId);
+  const settings = buildSettingsMap(settingsCatalog, server.settings);
+  server.season = computeActiveSeason(settings);
+  rollMarket({ serverId, content, serverState: server });
 
 if (group === "dev" && sub === "reset_tutorial") {
   const target = opt.getUser("user");
@@ -882,10 +884,15 @@ if (group === "dev" && sub === "reset_tutorial") {
     return commit({ content: "Pick a user to reset.", ephemeral: true });
   }
 
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  }
   return await withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, target.id);
     resetTutorialState(p);
-    upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
+    if (db) {
+      upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
+    }
 
     const step = getCurrentTutorialStep(p);
     const tut = formatTutorialMessage(step);
@@ -903,6 +910,9 @@ const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 
 /* ---------------- START ---------------- */
 if (sub === "start") {
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  }
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const embed = renderProfileEmbed(p, interaction.user.displayName, null, interaction.member ?? interaction.user);
@@ -1235,12 +1245,15 @@ const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: in
 
 // Skip idempotency check for button/select interactions to avoid stale cached responses
 const isComponent = interaction.isButton?.() || interaction.isSelectMenu?.();
-const cached = isComponent ? null : getIdempotentResult(db, idemKey);
+const cached = isComponent || !db ? null : getIdempotentResult(db, idemKey);
 
 if (cached) {
   return commit(cached);
 }
 
+if (!db) {
+  return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+}
 return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let p = ensurePlayer(serverId, userId);
   let s = ensureServer(serverId);
@@ -1250,7 +1263,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   
   // C: Apply time catch-up BEFORE any state changes
   // Get last_active_at from database (before it's updated by upsertPlayer)
-  const lastActiveAt = getLastActiveAt(db, serverId, userId) || now;
+  const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
   
   const set = buildSettingsMap(settingsCatalog, s.settings);
   s.season = computeActiveSeason(set);
@@ -1304,8 +1317,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
     }
     
-    upsertPlayer(db, serverId, userId, p, null, p.schema_version);
-    upsertServer(db, serverId, s, null);
+    if (db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      upsertServer(db, serverId, s, null);
+    }
 
     // Prepend time catch-up and resilience messages
     let finalContent = replyObj.content || "";
@@ -1340,7 +1355,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         : (replyObj.components ?? [noodleMainMenuRow(userId)])
     };
 
-    putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
+    if (db) {
+      putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
+    }
     return commit(out);
   };
 
@@ -2882,7 +2899,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const sourceMessageId = interaction.message?.id;
       const action = `multibuy_buy${qtyEach}`;
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-      const cached = getIdempotentResult(db, idemKey);
+      const cached = db ? getIdempotentResult(db, idemKey) : null;
       if (cached) return componentCommit(interaction, cached);
 
       const ownerLock = `discord:${interaction.id}`;
@@ -2986,8 +3003,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         advanceTutorial(p2, "buy");
 
         // Persist
-        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-        upsertServer(db, serverId, s, null);
+        if (db) {
+          upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+          upsertServer(db, serverId, s, null);
+        }
 
         const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
@@ -3003,7 +3022,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           components: [noodleMainMenuRow(userId)]
         };
 
-        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        if (db) {
+          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        }
         
         const finalReply = sourceMessageId
           ? { ...replyObj, targetMessageId: sourceMessageId }
@@ -3081,7 +3102,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     // Idempotency (prevents double submit)
     const action = "multibuy";
     const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-    const cached = getIdempotentResult(db, idemKey);
+    const cached = db ? getIdempotentResult(db, idemKey) : null;
     if (cached) return componentCommit(interaction, cached);
 
     const ownerLock = `discord:${interaction.id}`;
@@ -3191,8 +3212,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       advanceTutorial(p2, "buy");
 
       // Persist
-      upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-      upsertServer(db, serverId, s, null);
+      if (db) {
+        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+        upsertServer(db, serverId, s, null);
+      }
 
       const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
@@ -3209,7 +3232,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         targetMessageId: sourceMessageIdFinal // Edit the original message
       };
 
-      putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+      if (db) {
+        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+      }
       
       return componentCommit(interaction, replyObj);
     });
@@ -3324,10 +3349,13 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const qtyEach = mode === "sell10" ? 10 : mode === "sell5" ? 5 : 1;
       const action = "sell";
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-      const cached = getIdempotentResult(db, idemKey);
+      const cached = db ? getIdempotentResult(db, idemKey) : null;
       if (cached) return componentCommit(interaction, cached);
 
       const owner2 = `discord:${interaction.id}`;
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
       return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
@@ -3360,7 +3388,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           });
         }
 
-        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+        if (db) {
+          upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+        }
 
         const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
 
@@ -3377,7 +3407,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           targetMessageId: interaction.message?.id ?? null
         };
 
-        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        if (db) {
+          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        }
         return componentCommit(interaction, replyObj);
       });
     }
@@ -3400,10 +3432,13 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     const action = "sell";
     const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-    const cached = getIdempotentResult(db, idemKey);
+    const cached = db ? getIdempotentResult(db, idemKey) : null;
     if (cached) return componentCommit(interaction, cached);
 
     const owner2 = `discord:${interaction.id}`;
+    if (!db) {
+      return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+    }
     return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
       let s = ensureServer(serverId);
       let p2 = ensurePlayer(serverId, userId);
@@ -3460,7 +3495,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         return componentCommit(interaction, { content: `❌ ${errMsg}`, ephemeral: true });
       }
 
-      upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+      if (db) {
+        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+      }
 
       const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
       const errSuffix = errors.length ? `\n\n⚠️ Some items had errors (${errors.length})` : "";
@@ -3478,7 +3515,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         targetMessageId
       };
 
-      putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+      if (db) {
+        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+      }
       return componentCommit(interaction, replyObj);
     });
   }
@@ -3588,4 +3627,3 @@ export const noodleCommand = {
 };
 
 export { noodleMainMenuRow, noodleMainMenuRowNoProfile, displayItemName };
-
