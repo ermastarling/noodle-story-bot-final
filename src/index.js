@@ -135,13 +135,15 @@ import { fileURLToPath } from "url";
     const cid = interaction.customId;
     const isNoodle = cid?.startsWith("noodle:");
     const isNoodleSocial = cid?.startsWith("noodle-social:");
+    const isNoodleStaff = cid?.startsWith("noodle-staff:");
+    const isNoodleUpgrades = cid?.startsWith("noodle-upgrades:");
     
     const alreadyAck = interaction.deferred || interaction.replied;
 
     // Defer buttons/selects with deferUpdate (updates original message)
     // BUT: Don't defer buttons/selects that will show modals
     if (!alreadyAck && (isBtn || isSelect)) {
-      if (isNoodle || isNoodleSocial) {
+      if (isNoodle || isNoodleSocial || isNoodleStaff || isNoodleUpgrades) {
         // Check if this button/select will show a modal
         const willShowModal = cid?.includes("multibuy:qty:") || 
                 cid?.includes("pick:cook_select:") ||
@@ -159,17 +161,13 @@ import { fileURLToPath } from "url";
                 cid?.includes("action:shared_order_abort_cancel") ||
                 cid?.includes("action:shared_order_cancel_complete");
         
-        // Don't defer for noodle-staff and noodle-upgrades interactions
-        const isNoodleStaff = cid?.startsWith("noodle-staff:");
-        const isNoodleUpgrades = cid?.startsWith("noodle-upgrades:");
-        
         if (willShowModal) {
           console.log(`⏭️  Skipping defer for modal-showing button/select: ${cid}`);
         }
         if (skipDeferButtons) {
           console.log(`⏭️  Skipping defer for immediate-response button: ${cid}`);
         }
-        if (!willShowModal && !skipDeferButtons && !isNoodleStaff && !isNoodleUpgrades) {
+        if (!willShowModal && !skipDeferButtons && !isNoodleStaff) {
           const deferStart = Date.now();
           try {
             await interaction.deferUpdate();

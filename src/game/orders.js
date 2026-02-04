@@ -17,7 +17,12 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
   const recipes = Object.values(content.recipes);
 
   const pickRecipeByTier = (tier) => {
-    const pool = recipes.filter(r => r.tier === tier && playerRecipePool.has(r.recipe_id));
+    const pool = recipes.filter((r) => {
+      if (r.tier !== tier) return false;
+      if (!playerRecipePool.has(r.recipe_id)) return false;
+      if (tier === "seasonal") return r.season === activeSeason;
+      return true;
+    });
     if (pool.length === 0) return null;
     return pool[Math.floor(rng()*pool.length)];
   };
