@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { createRequire } from "module";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -6,8 +6,13 @@ import { nowTs } from "../util/time.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 export function openDb() {
+  if (process.env.NOODLE_SKIP_DB === "1") {
+    return null;
+  }
+  // Load the native SQLite module dynamically using require() to keep openDb synchronous while allowing conditional skipping via NOODLE_SKIP_DB.
+  const require = createRequire(import.meta.url);
+  const Database = require("better-sqlite3");
   const dataDir = path.join(__dirname, "..", "..", "data");
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, "noodlestory.sqlite");

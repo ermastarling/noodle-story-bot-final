@@ -405,6 +405,9 @@ function formatPartyId(partyId) {
 }
 
 function ensureServer(serverId) {
+  if (!db) {
+    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
+  }
   let s = getServer(db, serverId);
   if (!s) {
     s = newServerState(serverId);
@@ -415,6 +418,9 @@ function ensureServer(serverId) {
 }
 
 function ensurePlayer(serverId, userId) {
+  if (!db) {
+    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
+  }
   let p = getPlayer(db, serverId, userId);
   if (!p) {
     p = newPlayerProfile(userId);
@@ -452,6 +458,9 @@ async function handleParty(interaction) {
     }
   };
 
+  if (!db) {
+    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+  }
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     const player = ensurePlayer(serverId, userId);
 
@@ -677,11 +686,14 @@ async function handleTip(interaction) {
 
   const action = "tip";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-  const cached = getIdempotentResult(db, idemKey);
+  const cached = db ? getIdempotentResult(db, idemKey) : null;
   if (cached) return interaction.editReply(cached);
 
   const ownerLock = `discord:${interaction.id}`;
 
+  if (!db) {
+    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+  }
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
       let sender = ensurePlayer(serverId, userId);
@@ -740,11 +752,14 @@ async function handleVisit(interaction) {
 
   const action = "visit";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-  const cached = getIdempotentResult(db, idemKey);
+  const cached = db ? getIdempotentResult(db, idemKey) : null;
   if (cached) return interaction.editReply(cached);
 
   const ownerLock = `discord:${interaction.id}`;
 
+  if (!db) {
+    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+  }
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
       let serverState = ensureServer(serverId);
@@ -981,6 +996,9 @@ async function handleComponent(interaction) {
 
       const ownerLock = `discord:${interaction.id}`;
 
+  if (!db) {
+    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+  }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const result = createParty(db, serverId, userId, partyName);
@@ -1023,6 +1041,9 @@ async function handleComponent(interaction) {
 
       const ownerLock = `discord:${interaction.id}`;
 
+  if (!db) {
+    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+  }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const result = joinParty(db, serverId, partyId, userId);
@@ -1069,6 +1090,9 @@ async function handleComponent(interaction) {
       const ownerLock = `discord:${interaction.id}`;
 
       try {
+        if (!db) {
+          return errorReply(interaction, "Database unavailable in this environment.");
+        }
         return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
           try {
             // Only allow inviting users in this server
@@ -1174,6 +1198,9 @@ async function handleComponent(interaction) {
 
       const ownerLock = `discord:${interaction.id}`;
 
+      if (!db) {
+        return errorReply(interaction, "Database unavailable in this environment.");
+      }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
           let sender = ensurePlayer(serverId, userId);
@@ -1233,6 +1260,9 @@ async function handleComponent(interaction) {
 
       const ownerLock = `discord:${interaction.id}`;
 
+  if (!db) {
+    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
+  }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
           let serverState = ensureServer(serverId);
@@ -1314,6 +1344,9 @@ async function handleComponent(interaction) {
 
       const ownerLock = `discord:${interaction.id}`;
 
+  if (!db) {
+    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
+  }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const party = getUserActiveParty(db, userId);
@@ -1574,6 +1607,9 @@ async function handleComponent(interaction) {
   if (kind === "nav") {
     // Navigate to different social views
     if (action === "party") {
+  if (!db) {
+    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
+  }
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
@@ -1627,6 +1663,9 @@ async function handleComponent(interaction) {
     }
 
     if (action === "leaderboard") {
+  if (!db) {
+    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
+  }
       // Show leaderboard
       const allPlayers = db.prepare(`
         SELECT user_id, data_json FROM players 
@@ -2255,6 +2294,9 @@ async function handleComponent(interaction) {
           return;
         }
       }
+  if (!db) {
+    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
+  }
 
       const party = getUserActiveParty(db, userId);
       if (!party) {
@@ -2399,6 +2441,9 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_confirm_cancel") {
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
