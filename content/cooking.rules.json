@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "cooldown": {
+    "base_seconds": 180,
+    "min_seconds": 60
+  },
+  "batch": {
+    "prep_bonus_divisor": 4
+  },
+  "failure": {
+    "fail_bowl_yield": 0.25,
+    "fail_chance_by_tier": {
+      "common": 0.06,
+      "uncommon": 0.07,
+      "rare": 0.08,
+      "epic": 0.09,
+      "seasonal": 0.10
+    }
+  },
+  "quality": {
+    "tiers": ["standard", "good", "excellent", "salvage"],
+    "weights": {
+      "standard": 0.65,
+      "good": 0.25,
+      "excellent": 0.10
+    },
+    "multipliers": {
+      "standard": 1.0,
+      "good": 1.1,
+      "excellent": 1.25,
+      "salvage": 0.5
+    }
+  }
+}

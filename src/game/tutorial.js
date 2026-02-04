@@ -67,7 +67,7 @@ export function formatTutorialMessage(step) {
   const tipText = step.tip ?? "";
 
   const lines = [
-    `🧾 **Tutorial — ${step.title}**`,
+    `**Tutorial — ${step.title}**`,
     stepText
   ];
 
@@ -84,8 +84,8 @@ export function formatTutorialCompletionMessage() {
     "✨ **Your noodle shop is officially open!**",
     "From here, you can play freely:",
     "",
-    "• Start each day with `/noodle orders` to accept, cook and serve customers using the provided buttons.",
-    "• Track your growth with `/noodle profile` and use `/noodle help` for command help.",
+    "• Start each day with `/noodle orders` to accept, cook and serve customers.",
+    "• Use `/noodle help` for command help.",
     "",
     "Your story begins here, etch your noodle shop into legend, one bowl at a time 🍜"
   ].join("\n");

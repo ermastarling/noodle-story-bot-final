@@ -405,9 +405,7 @@ function formatPartyId(partyId) {
 }
 
 function ensureServer(serverId) {
-  if (!db) {
-    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
-  }
+  if (!db) return newServerState(serverId);
   let s = getServer(db, serverId);
   if (!s) {
     s = newServerState(serverId);
@@ -418,9 +416,7 @@ function ensureServer(serverId) {
 }
 
 function ensurePlayer(serverId, userId) {
-  if (!db) {
-    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
-  }
+  if (!db) return newPlayerProfile(userId);
   let p = getPlayer(db, serverId, userId);
   if (!p) {
     p = newPlayerProfile(userId);
@@ -459,7 +455,7 @@ async function handleParty(interaction) {
   };
 
   if (!db) {
-    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+    return errorReply(interaction, "Database unavailable in this environment.");
   }
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     const player = ensurePlayer(serverId, userId);
@@ -692,7 +688,7 @@ async function handleTip(interaction) {
   const ownerLock = `discord:${interaction.id}`;
 
   if (!db) {
-    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+    return errorReply(interaction, "Database unavailable in this environment.");
   }
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
@@ -703,8 +699,10 @@ async function handleTip(interaction) {
         const result = transferTip(db, serverId, sender, receiver, amount, message);
 
         // Save both players
-        upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
-        upsertPlayer(db, serverId, targetUser.id, result.receiver, null, result.receiver.schema_version);
+        if (db) {
+          upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
+          upsertPlayer(db, serverId, targetUser.id, result.receiver, null, result.receiver.schema_version);
+        }
 
         const embed = new EmbedBuilder()
           .setTitle("💰 Tip Sent!")
@@ -726,7 +724,9 @@ async function handleTip(interaction) {
           embeds: [embed], 
           components: [socialMainMenuRow(userId)] 
         };
-        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        if (db) {
+          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        }
         return interaction.editReply(replyObj);
       } catch (err) {
         return errorReply(interaction, `❌ ${err.message}`);
@@ -758,13 +758,13 @@ async function handleVisit(interaction) {
   const ownerLock = `discord:${interaction.id}`;
 
   if (!db) {
-    return errorReply(interaction, "This action needs database access and is unavailable right now.");
+    return errorReply(interaction, "Database unavailable in this environment.");
   }
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
-      let serverState = ensureServer(serverId);
-      let visitor = ensurePlayer(serverId, userId);
-      let targetPlayer = ensurePlayer(serverId, targetUser.id);
+       let serverState = ensureServer(serverId);
+       let visitor = ensurePlayer(serverId, userId);
+       let targetPlayer = ensurePlayer(serverId, targetUser.id);
 
       try {
         // Grant a random blessing
@@ -775,8 +775,10 @@ async function handleVisit(interaction) {
         serverState = logVisitActivity(serverState, userId, targetUser.id);
 
         // Save state
-        upsertPlayer(db, serverId, targetUser.id, targetPlayer, null, targetPlayer.schema_version);
-        upsertServer(db, serverId, serverState, null);
+        if (db) {
+          upsertPlayer(db, serverId, targetUser.id, targetPlayer, null, targetPlayer.schema_version);
+          upsertServer(db, serverId, serverState, null);
+        }
 
         const blessing = getActiveBlessing(targetPlayer);
         const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
@@ -807,8 +809,10 @@ async function handleVisit(interaction) {
         embeds: [embed], 
         components: [socialMainMenuRow(userId)] 
       };
-      putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-      return interaction.editReply(replyObj);
+        if (db) {
+          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        }
+       return interaction.editReply(replyObj);
     } catch (err) {
       return errorReply(interaction, `❌ ${err.message}`);
     }
@@ -995,10 +999,9 @@ async function handleComponent(interaction) {
       }
 
       const ownerLock = `discord:${interaction.id}`;
-
-  if (!db) {
-    return errorReply(interaction, "This action needs database access and is unavailable right now.");
-  }
+      if (!db) {
+        return errorReply(interaction, "Database unavailable in this environment.");
+      }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const result = createParty(db, serverId, userId, partyName);
@@ -1040,10 +1043,9 @@ async function handleComponent(interaction) {
       }
 
       const ownerLock = `discord:${interaction.id}`;
-
-  if (!db) {
-    return errorReply(interaction, "This action needs database access and is unavailable right now.");
-  }
+      if (!db) {
+        return errorReply(interaction, "Database unavailable in this environment.");
+      }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const result = joinParty(db, serverId, partyId, userId);
@@ -1209,8 +1211,10 @@ async function handleComponent(interaction) {
           try {
             const result = transferTip(db, serverId, sender, receiver, amount, null);
 
-            upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
-            upsertPlayer(db, serverId, targetId, result.receiver, null, result.receiver.schema_version);
+            if (db) {
+              upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
+              upsertPlayer(db, serverId, targetId, result.receiver, null, result.receiver.schema_version);
+            }
 
             const party = getUserActiveParty(db, userId);
             const isLeader = party?.leader_user_id === userId;
@@ -1259,10 +1263,9 @@ async function handleComponent(interaction) {
       }
 
       const ownerLock = `discord:${interaction.id}`;
-
-  if (!db) {
-    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
-  }
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
           let serverState = ensureServer(serverId);
@@ -1274,8 +1277,10 @@ async function handleComponent(interaction) {
 
             serverState = logVisitActivity(serverState, userId, targetId);
 
-            upsertPlayer(db, serverId, targetId, targetPlayer, null, targetPlayer.schema_version);
-            upsertServer(db, serverId, serverState, null);
+            if (db) {
+              upsertPlayer(db, serverId, targetId, targetPlayer, null, targetPlayer.schema_version);
+              upsertServer(db, serverId, serverState, null);
+            }
 
             const blessing = getActiveBlessing(targetPlayer);
             const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
@@ -1343,10 +1348,9 @@ async function handleComponent(interaction) {
       }
 
       const ownerLock = `discord:${interaction.id}`;
-
-  if (!db) {
-    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
-  }
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const party = getUserActiveParty(db, userId);
@@ -1387,7 +1391,9 @@ async function handleComponent(interaction) {
           }
 
           player.inv_ingredients[ingredientId] = owned - quantity;
-          upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+          if (db) {
+            upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+          }
 
           // Contribute to shared order
           contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity);
@@ -1607,9 +1613,9 @@ async function handleComponent(interaction) {
   if (kind === "nav") {
     // Navigate to different social views
     if (action === "party") {
-  if (!db) {
-    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
-  }
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
@@ -1663,9 +1669,9 @@ async function handleComponent(interaction) {
     }
 
     if (action === "leaderboard") {
-  if (!db) {
-    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
-  }
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
       // Show leaderboard
       const allPlayers = db.prepare(`
         SELECT user_id, data_json FROM players 
@@ -2294,9 +2300,9 @@ async function handleComponent(interaction) {
           return;
         }
       }
-  if (!db) {
-    return componentCommit(interaction, { content: "This action needs database access and is unavailable right now.", ephemeral: true });
-  }
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
 
       const party = getUserActiveParty(db, userId);
       if (!party) {
@@ -2378,7 +2384,9 @@ async function handleComponent(interaction) {
               // Apply SXP level up (modifies player in place)
               applySxpLevelUp(player);
 
-              upsertPlayer(db, serverId, contributorId, player, null, player.schema_version);
+              if (db) {
+                upsertPlayer(db, serverId, contributorId, player, null, player.schema_version);
+              }
             })
           );
         }
@@ -2484,7 +2492,9 @@ async function handleComponent(interaction) {
           for (const [ingredientId, qty] of Object.entries(items)) {
             player.inv_ingredients[ingredientId] = (player.inv_ingredients[ingredientId] ?? 0) + qty;
           }
-          upsertPlayer(db, serverId, contributorId, player, null, player.schema_version);
+          if (db) {
+            upsertPlayer(db, serverId, contributorId, player, null, player.schema_version);
+          }
         })
       );
 

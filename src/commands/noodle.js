@@ -42,6 +42,12 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../g
 import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
 import {
+  getCookBatchOutput,
+  rollCookBatchOutcome,
+  getQualityMultiplier,
+  rollCookQuality
+} from "../game/cooking.js";
+import {
   calculateCombinedEffects,
   applyCooldownReduction,
   applyMarketDiscount,
@@ -123,6 +129,42 @@ new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy")
 new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
+);
+}
+
+function noodleTutorialMenuRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary)
+);
+}
+
+function noodleTutorialBuyRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Primary)
+);
+}
+
+function noodleTutorialForageRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Primary)
+);
+}
+
+function noodleTutorialCookRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary)
+);
+}
+
+function noodleTutorialServeRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
+);
+}
+
+function noodleOrdersAcceptOnlyRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success)
 );
 }
 
@@ -273,6 +315,66 @@ function getBowlCapacity(player, effects) {
   return Math.max(0, base + bonus);
 }
 
+const QUALITY_ORDER = ["salvage", "standard", "good", "excellent"];
+
+function normalizeQuality(quality) {
+  const q = String(quality ?? "standard").toLowerCase();
+  return QUALITY_ORDER.includes(q) ? q : "standard";
+}
+
+function qualityRank(quality) {
+  return QUALITY_ORDER.indexOf(normalizeQuality(quality));
+}
+
+function getBowlEntriesByRecipe(player, recipeId) {
+  return Object.entries(player?.inv_bowls ?? {})
+    .map(([key, bowl]) => ({ key, bowl }))
+    .filter(({ bowl }) => bowl?.recipe_id === recipeId && (bowl?.qty ?? 0) > 0);
+}
+
+function getTotalBowlsForRecipe(player, recipeId) {
+  return getBowlEntriesByRecipe(player, recipeId)
+    .reduce((sum, { bowl }) => sum + (bowl?.qty ?? 0), 0);
+}
+
+function getBestBowlEntry(player, recipeId) {
+  const entries = getBowlEntriesByRecipe(player, recipeId);
+  if (!entries.length) return null;
+  return entries.sort((a, b) => {
+    const qa = qualityRank(a.bowl?.quality);
+    const qb = qualityRank(b.bowl?.quality);
+    if (qa !== qb) return qb - qa;
+    return (b.bowl?.cooked_at ?? 0) - (a.bowl?.cooked_at ?? 0);
+  })[0];
+}
+
+function resolveBowlKeyForQuality(player, recipeId, quality) {
+  const q = normalizeQuality(quality);
+  if (q === "standard" && player?.inv_bowls?.[recipeId]) return recipeId;
+  return `${recipeId}:${q}`;
+}
+
+function addBowlsWithQuality(player, recipeId, tier, quality, qty) {
+  if (!qty || qty <= 0) return;
+  if (!player.inv_bowls) player.inv_bowls = {};
+  const q = normalizeQuality(quality);
+  const bowlKey = resolveBowlKeyForQuality(player, recipeId, q);
+  const existing = player.inv_bowls[bowlKey];
+  if (!existing) {
+    player.inv_bowls[bowlKey] = {
+      recipe_id: recipeId,
+      quality: q,
+      tier,
+      qty,
+      cooked_at: nowTs()
+    };
+  } else {
+    existing.qty += qty;
+    existing.quality = q;
+  }
+}
+
+
 function applyIngredientCapacityToDrops(drops, player, effects) {
   const capacity = getIngredientCapacityPerType(player, effects);
   const current = getIngredientCountsByType(player);
@@ -322,9 +424,7 @@ return map[code] ?? "Something went a little sideways, try again.";
 }
 
 function ensureServer(serverId) {
-  if (!db) {
-    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
-  }
+  if (!db) return newServerState(serverId);
   let s = getServer(db, serverId);
   if (!s) {
     s = newServerState(serverId);
@@ -335,9 +435,7 @@ function ensureServer(serverId) {
 }
 
 function ensurePlayer(serverId, userId) {
-  if (!db) {
-    throw new Error("Database not initialized. This command requires database access. If running in production, ensure NOODLE_SKIP_DB is not set.");
-  }
+  if (!db) return newPlayerProfile(userId);
   let p = getPlayer(db, serverId, userId);
   if (!p) {
     p = newPlayerProfile(userId);
@@ -349,6 +447,11 @@ function ensurePlayer(serverId, userId) {
     p.known_recipes = [...(STARTER_PROFILE.known_recipes || [])];
   }
   return p;
+}
+
+function isTutorialStep(player, stepId) {
+  const step = getCurrentTutorialStep(player);
+  return step?.id === stepId;
 }
 
 function displayItemName(id) {
@@ -749,31 +852,36 @@ components: [
 });
 }
 
-function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId) {
+function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId, { limitToBuy1 = false } = {}) {
 const pickedNames = selectedIds.map((id) => displayItemName(id));
 const msgId = sourceMessageId || "none";
 const btnRow = new ActionRowBuilder().addComponents(
 new ButtonBuilder()
 .setCustomId(`noodle:multibuy:buy1:${userId}:${msgId}`)
 .setLabel("Buy 1 each")
-.setStyle(ButtonStyle.Success),
-new ButtonBuilder()
-.setCustomId(`noodle:multibuy:buy5:${userId}:${msgId}`)
-.setLabel("Buy 5 each")
-.setStyle(ButtonStyle.Primary),
-new ButtonBuilder()
-.setCustomId(`noodle:multibuy:buy10:${userId}:${msgId}`)
-.setLabel("Buy 10 each")
-.setStyle(ButtonStyle.Primary),
-new ButtonBuilder()
-.setCustomId(`noodle:multibuy:qty:${userId}:${msgId}`)
-.setLabel("Enter quantities")
-.setStyle(ButtonStyle.Secondary),
-new ButtonBuilder()
-.setCustomId(`noodle:multibuy:clear:${userId}:${msgId}`)
-.setLabel("Clear")
-.setStyle(ButtonStyle.Danger)
+.setStyle(ButtonStyle.Success)
 );
+
+if (!limitToBuy1) {
+  btnRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:multibuy:buy5:${userId}:${msgId}`)
+      .setLabel("Buy 5 each")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:multibuy:buy10:${userId}:${msgId}`)
+      .setLabel("Buy 10 each")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:multibuy:qty:${userId}:${msgId}`)
+      .setLabel("Enter quantities")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:multibuy:clear:${userId}:${msgId}`)
+      .setLabel("Clear")
+      .setStyle(ButtonStyle.Danger)
+  );
+}
 
 return { pickedNames, btnRow };
 }
@@ -877,10 +985,10 @@ return componentCommit(interaction, payload);
 try {
 const owner = `discord:${interaction.id}`;
 
-const server = ensureServer(serverId);
-const settings = buildSettingsMap(settingsCatalog, server.settings);
-server.season = computeActiveSeason(settings);
-rollMarket({ serverId, content, serverState: server });
+  const server = ensureServer(serverId);
+  const settings = buildSettingsMap(settingsCatalog, server.settings);
+  server.season = computeActiveSeason(settings);
+  rollMarket({ serverId, content, serverState: server });
 
 if (group === "dev" && sub === "reset_tutorial") {
   const target = opt.getUser("user");
@@ -888,9 +996,15 @@ if (group === "dev" && sub === "reset_tutorial") {
     return commit({ content: "Pick a user to reset.", ephemeral: true });
   }
 
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  }
   return await withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, target.id);
     resetTutorialState(p);
+    if (db) {
+      upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
+    }
     if (db) {
       upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
     }
@@ -911,16 +1025,28 @@ const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 
 /* ---------------- START ---------------- */
 if (sub === "start") {
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  }
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
-    const embed = renderProfileEmbed(p, interaction.user.displayName, null, interaction.member ?? interaction.user);
     const step = getCurrentTutorialStep(p);
     const tut = formatTutorialMessage(step);
+    const tutorialDone = !p.tutorial?.active || !step;
+    const tutorialEmbed = buildMenuEmbed({
+      title: tutorialDone ? "✅ Tutorial Complete" : "🧾 Tutorial",
+      description: tutorialDone
+        ? "You’ve already completed the tutorial. Use the menu below to play."
+        : (tut ?? "Welcome to your Noodle Story."),
+      user: interaction.member ?? interaction.user
+    });
 
     return commit({
-      content: ["Welcome to your Noodle Story.", tut ? `\n${tut}` : ""].join(""),
-      embeds: [embed],
-      components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+      content: " ",
+      embeds: [tutorialEmbed],
+      components: tutorialDone
+        ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+        : [noodleTutorialMenuRow(userId)]
     });
   });
 }
@@ -1244,13 +1370,14 @@ const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: in
 // Skip idempotency check for button/select interactions to avoid stale cached responses
 const isComponent = interaction.isButton?.() || interaction.isSelectMenu?.();
 const cached = isComponent || !db ? null : getIdempotentResult(db, idemKey);
+const cached = isComponent || !db ? null : getIdempotentResult(db, idemKey);
 
 if (cached) {
   return commit(cached);
 }
 
 if (!db) {
-  return commit({ content: "This action needs database access and is unavailable right now.", ephemeral: true });
+  return commit({ content: "Database unavailable in this environment.", ephemeral: true });
 }
 return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let p = ensurePlayer(serverId, userId);
@@ -1319,6 +1446,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       upsertPlayer(db, serverId, userId, p, null, p.schema_version);
       upsertServer(db, serverId, s, null);
     }
+    if (db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      upsertServer(db, serverId, s, null);
+    }
 
     // Prepend time catch-up and resilience messages
     let finalContent = replyObj.content || "";
@@ -1353,6 +1484,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         : (replyObj.components ?? [noodleMainMenuRow(userId)])
     };
 
+    if (db) {
+      putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
+    }
     if (db) {
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
     }
@@ -1434,7 +1568,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
     }
 
-    applyDropsToInventory(p, accepted);
+    const inventoryResult = applyDropsToInventory(p, accepted);
     setForageCooldown(p, now);
     advanceTutorial(p, "forage");
 
@@ -1469,7 +1603,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     });
     return commitState({
       content: " ",
-      embeds: [forageEmbed]
+      embeds: [forageEmbed],
+      components: isTutorialStep(p, "intro_cook") ? [noodleTutorialCookRow(userId)] : undefined
     });
   }
 
@@ -1601,11 +1736,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     p.market_stock[itemId] = stock - qtyToBuy;
 
     advanceTutorial(p, "buy");
+    const tutorialOnlyForage = isTutorialStep(p, "intro_forage");
 
     const capacityNote = qtyToBuy < qty ? `\n🧺 Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
     return commitState({
       content: `🛒 Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${tutorialSuffix(p)}`,
-      embeds: []
+      embeds: [],
+      components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : undefined
     });
   }
 
@@ -1668,7 +1805,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
     }
 
+    const now = nowTs();
+
     const qtyToCook = Math.min(qty, remainingBowls);
+    const batchOutput = Math.min(getCookBatchOutput(qtyToCook, p), remainingBowls);
 
     for (const ing of r.ingredients) {
       const haveIng = p.inv_ingredients?.[ing.item_id] ?? 0;
@@ -1699,43 +1839,57 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
     }
 
-    const bowlKey = recipeId;
-    const existing = p.inv_bowls?.[bowlKey];
-
-    if (!existing) {
-      if (!p.inv_bowls) p.inv_bowls = {};
-      p.inv_bowls[bowlKey] = {
-        recipe_id: recipeId,
-        quality: "standard",
-        tier: r.tier,
-        qty: qtyToCook,
-        cooked_at: nowTs()
-      };
-    } else {
-      existing.qty += qtyToCook;
-    }
+    const blessing = getActiveBlessing(p);
+    const outcome = rollCookBatchOutcome({
+      quantity: batchOutput,
+      tier: r.tier,
+      player: p,
+      effects: combinedEffects,
+      rng: cookRng,
+      blessing
+    });
 
     const doubleCrafted = combinedEffects.double_craft_chance > 0 && rollDoubleCraft(combinedEffects, cookRng);
+    let extra = 0;
     if (doubleCrafted) {
-      const remainingAfter = Math.max(0, bowlCap - (bowlCount + qtyToCook));
-      const extra = Math.min(qtyToCook, remainingAfter);
-      if (extra > 0) {
-        p.inv_bowls[bowlKey].qty += extra;
+      const remainingAfter = Math.max(0, bowlCap - (bowlCount + batchOutput));
+      extra = Math.min(batchOutput, remainingAfter);
+      for (let i = 0; i < extra; i += 1) {
+        const quality = rollCookQuality(cookRng, p, combinedEffects, blessing);
+        outcome.qualityCounts[quality] = (outcome.qualityCounts[quality] ?? 0) + 1;
       }
     }
 
-    const have = p.inv_bowls[bowlKey].qty;
+    const qualityCounts = outcome.qualityCounts ?? {};
+    for (const [quality, count] of Object.entries(qualityCounts)) {
+      addBowlsWithQuality(p, recipeId, r.tier, quality, count);
+    }
+
+    if (!p.lifetime) p.lifetime = {};
+    p.lifetime.cook_failures = p.lifetime.cook_failures ?? 0;
+    if (outcome.failed > 0) p.lifetime.cook_failures += outcome.failed;
+    if (outcome.success > 0) updateFailStreak(p, true);
+    if (outcome.success === 0) updateFailStreak(p, false);
+    if (!p.cooldowns) p.cooldowns = {};
+
+    const have = getTotalBowlsForRecipe(p, recipeId);
 
     advanceTutorial(p, "cook");
-    if (!p.lifetime) p.lifetime = { recipes_cooked: 0 };
     p.lifetime.recipes_cooked = (p.lifetime.recipes_cooked || 0) + 1;
+
+    const failInfo = outcome.failed > 0
+      ? `⚠️ **Cook failure**: ${outcome.failed} bowl(s) failed. Ingredients were **consumed** during the attempt. You did salvage **${outcome.salvage}** bowl(s). Failures happen based on recipe tier risk.`
+      : null;
 
     const cookEmbed = buildMenuEmbed({
       title: "🍲 Cooked",
       description: [
-        `You cooked **${qtyToCook}× ${r.name}**.`,
+        `You cooked **${batchOutput}× ${r.name}**.`,
         qtyToCook < qty ? `🧺 Bowl storage limited this cook to **${qtyToCook}**.` : null,
-        doubleCrafted ? `✨ Double craft! **+${Math.min(qtyToCook, Math.max(0, bowlCap - (bowlCount + qtyToCook)))}** extra bowl(s).` : null,
+        batchOutput > qtyToCook ? `🍜 Prep bonus: **+${batchOutput - qtyToCook}** bowl(s).` : null,
+        outcome.failed > 0 ? `🔥 ${outcome.failed} bowl(s) failed. Salvage yield: **${outcome.salvage}**.` : null,
+        failInfo,
+        doubleCrafted ? `✨ Double craft! **+${extra}** extra bowl(s).` : null,
         savedLines.length ? savedLines.join("\n") : null,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
@@ -1743,10 +1897,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       user: interaction.member ?? interaction.user
     });
 
+    const tutorialOnlyServe = isTutorialStep(p, "intro_serve");
+
     return commitState({
       content: " ",
       embeds: [cookEmbed],
-      components: [noodleOrdersActionRow(userId)]
+      components: tutorialOnlyServe ? [noodleTutorialServeRow(userId)] : [noodleOrdersActionRow(userId)]
     });
   }
 
@@ -1800,10 +1956,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const readyBowls = Array.from(uniqueRecipes)
       .map((recipeId) => {
-        const bowl = p.inv_bowls?.[recipeId];
-        if (bowl && bowl.qty > 0) {
+        const total = getTotalBowlsForRecipe(p, recipeId);
+        if (total > 0) {
           const rName = content.recipes[recipeId]?.name ?? "a dish";
-          return `• **${rName}** — **${bowl.qty}** bowl(s) ready`;
+          return `• **${rName}** — **${total}** bowl(s) ready`;
         }
         return null;
       })
@@ -1889,10 +2045,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       description: parts.join("\n"),
       user: interaction.member ?? interaction.user
     });
+    const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
     return commitState({
       content: " ",
       embeds: [menuEmbed],
-      components: [noodleOrdersMenuActionRow(userId, { showCancel }), noodleMainMenuRowNoOrders(userId)]
+      components: tutorialOnlyAccept
+        ? [noodleOrdersAcceptOnlyRow(userId)]
+        : [noodleOrdersMenuActionRow(userId, { showCancel }), noodleMainMenuRowNoOrders(userId)]
     });
   }
 
@@ -1978,8 +2137,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       results.push(`Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})`);
 
       const bowl = p.inv_bowls?.[order.recipe_id];
-      if (bowl && bowl.qty > 0) {
-        readyBowlsByRecipe.set(order.recipe_id, bowl.qty);
+      const total = getTotalBowlsForRecipe(p, order.recipe_id);
+      if (total > 0) {
+        readyBowlsByRecipe.set(order.recipe_id, total);
       } else {
         const needs = formatRecipeNeeds({ recipeId: order.recipe_id, content, player: p });
         if (needs) {
@@ -2010,8 +2170,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     // Only count ingredients for orders that don't already have bowls ready
     Object.entries(neededByRecipe).forEach(([recipeId, needed]) => {
-      const bowl = p.inv_bowls?.[recipeId];
-      const ready = Math.min(needed, bowl?.qty ?? 0);
+      const readyTotal = getTotalBowlsForRecipe(p, recipeId);
+      const ready = Math.min(needed, readyTotal);
       const remainingToCook = Math.max(0, needed - ready);
       if (remainingToCook <= 0) return;
 
@@ -2032,8 +2192,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const readyBowls = Object.entries(neededByRecipe)
       .map(([recipeId, needed]) => {
-        const bowl = p.inv_bowls?.[recipeId];
-        const ready = Math.min(needed, bowl?.qty ?? 0);
+        const readyTotal = getTotalBowlsForRecipe(p, recipeId);
+        const ready = Math.min(needed, readyTotal);
         if (ready <= 0) return null;
         const rName = content.recipes?.[recipeId]?.name ?? recipeId;
         return `• **${rName}** — **${ready}/${needed}** bowl(s) ready`;
@@ -2065,10 +2225,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       description: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
       user: interaction.member ?? interaction.user
     });
+    const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
     return commitState({
       content: " ",
       embeds: [acceptEmbed],
-      components: [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)]
+      components: tutorialOnlyBuy
+        ? [noodleTutorialBuyRow(userId)]
+        : [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)]
     });
   }
 
@@ -2177,10 +2340,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         continue;
       }
 
-      const key = bowlKey ?? order.recipe_id;
-      const bowl = p.inv_bowls?.[key];
-      if (!bowl || bowl.qty <= 0) {
-        const recipeName = content.recipes?.[key]?.name ?? "that recipe";
+      const pickedKey = bowlKey ?? null;
+      const selectedEntry = pickedKey && p.inv_bowls?.[pickedKey]
+        ? { key: pickedKey, bowl: p.inv_bowls[pickedKey] }
+        : getBestBowlEntry(p, order.recipe_id);
+      const bowl = selectedEntry?.bowl ?? null;
+      if (!bowl || (bowl.qty ?? 0) <= 0) {
+        const recipeName = content.recipes?.[order.recipe_id]?.name ?? "that recipe";
         results.push(`🧺 You don't have a bowl ready for **${recipeName}**.`);
         continue;
       }
@@ -2209,11 +2375,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         effects: combinedEffects
       });
 
+      const bowlQuality = normalizeQuality(bowl.quality);
+      const qualityMult = getQualityMultiplier(bowlQuality);
+      rewards.coins = Math.floor(rewards.coins * qualityMult);
+      rewards.rep = Math.floor(rewards.rep * qualityMult);
+      rewards.sxp = Math.floor(rewards.sxp * qualityMult);
+
       // Consume fail-streak relief after successful serve (B4)
       consumeFailStreakRelief(p);
 
       bowl.qty -= 1;
-      if (bowl.qty <= 0) delete p.inv_bowls[key];
+      if (bowl.qty <= 0) delete p.inv_bowls[selectedEntry?.key ?? order.recipe_id];
 
       delete acceptedMap[fullOrderId];
       if (Array.isArray(p.order_board)) {
@@ -2247,40 +2419,43 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         p.buffs.last_recipe_served = order.recipe_id;
       }
       
-      // Apply NPC discovery buffs for next serve
-      applyNpcDiscoveryBuff(p, order.npc_archetype);
+      const allowDiscovery = bowlQuality !== "salvage";
+      if (allowDiscovery) {
+        // Apply NPC discovery buffs for next serve
+        applyNpcDiscoveryBuff(p, order.npc_archetype);
 
-      // Roll for recipe discovery
-      // Note: Uses same seed (12345) as serve rewards for consistency,
-      // but different streamName and extra parameters ensure independence
-      const discoveryRng = makeStreamRng({ 
-        mode: "seeded", 
-        seed: 12345, 
-        streamName: "discovery", 
-        serverId, 
-        dayKey,
-        extra: `${fullOrderId}_${servedAt}` 
-      });
-      const discoveries = rollRecipeDiscovery({
-        player: p,
-        content,
-        npcArchetype: order.npc_archetype,
-        tier: order.tier,
-        rng: discoveryRng,
-        activeSeason: s.season
-      });
-      
-      for (const discovery of discoveries ?? []) {
-        const result = applyDiscovery(p, discovery, content, discoveryRng);
-        if (result.message) {
-          discoveryMessages.push(result.message);
-        } else if (result.isDuplicate && result.reward) {
-          discoveryMessages.push(`✨ ${result.reward}`);
-        }
+        // Roll for recipe discovery
+        // Note: Uses same seed (12345) as serve rewards for consistency,
+        // but different streamName and extra parameters ensure independence
+        const discoveryRng = makeStreamRng({
+          mode: "seeded",
+          seed: 12345,
+          streamName: "discovery",
+          serverId,
+          dayKey,
+          extra: `${fullOrderId}_${servedAt}`
+        });
+        const discoveries = rollRecipeDiscovery({
+          player: p,
+          content,
+          npcArchetype: order.npc_archetype,
+          tier: order.tier,
+          rng: discoveryRng,
+          activeSeason: s.season
+        });
         
-        // Track if a new recipe was unlocked
-        if (result.recipeUnlocked) {
-          recipeUnlocked = true;
+        for (const discovery of discoveries ?? []) {
+          const result = applyDiscovery(p, discovery, content, discoveryRng);
+          if (result.message) {
+            discoveryMessages.push(result.message);
+          } else if (result.isDuplicate && result.reward) {
+            discoveryMessages.push(`✨ ${result.reward}`);
+          }
+          
+          // Track if a new recipe was unlocked
+          if (result.recipeUnlocked) {
+            recipeUnlocked = true;
+          }
         }
       }
 
@@ -2293,7 +2468,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
       
       // Build the serve message with bonus on same line
-      let serveMsg = `Served **${rName}** to *${npcName}*.`;
+      const qualityNote = bowlQuality !== "standard" ? ` (${bowlQuality})` : "";
+      let serveMsg = `Served **${rName}**${qualityNote} to *${npcName}*.`;
       if (rewards.npcModifier === "coins_courier") serveMsg += ` 🌧️ +25% coins`;
       if (rewards.npcModifier === "coins_bard") serveMsg += ` 🎵 +10% coins`;
       if (rewards.npcModifier === "coins_festival") serveMsg += ` 🎉 +25% coins`;
@@ -2334,8 +2510,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
-    const components = [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
-    const embeds = tut.finished ? [renderProfileEmbed(p, interaction.user.displayName, null, interaction.member ?? interaction.user)] : [];
+    const components = tut.finished
+      ? [noodleMainMenuRow(userId)]
+      : [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
+    const embeds = [];
 
     const serveEmbed = buildMenuEmbed({
       title: "🍜 Orders Served",
@@ -2530,7 +2708,7 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
     );
   }
 
-  const rows = [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)];
+  const rows = [new ActionRowBuilder().addComponents(menu)];
   if (totalPages > 1) rows.push(navRow);
 
   const acceptEmbed = buildMenuEmbed({
@@ -2575,13 +2753,14 @@ if (action === "cancel" || action === "serve") {
     ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
     : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
   const actionEmbed = buildMenuEmbed({ title: actionTitle, description: actionDesc, user: interaction.member ?? interaction.user });
+  const tutorialOnlyServeMenu = action === "serve" && isTutorialStep(p, "intro_serve");
 
   return componentCommit(interaction, {
     content: " ",
     embeds: [actionEmbed],
     components: [
       new ActionRowBuilder().addComponents(menu),
-      action === "serve" ? noodleOrdersActionRowWithBack(userId) : noodleOrdersActionRow(userId)
+      ...(tutorialOnlyServeMenu ? [] : [action === "serve" ? noodleOrdersActionRowWithBack(userId) : noodleOrdersActionRow(userId)])
     ]
   });
 }
@@ -2625,10 +2804,15 @@ if (action === "cook") {
     user: interaction.member ?? interaction.user
   });
 
+  const tutorialOnlyMenu = isTutorialStep(p, "intro_cook");
+  const components = tutorialOnlyMenu
+    ? [new ActionRowBuilder().addComponents(menu)]
+    : [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)];
+
   return componentCommit(interaction, {
     content: " ",
     embeds: [cookEmbed],
-    components: [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)]
+    components
   });
 }
 
@@ -2762,7 +2946,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       expiresAt: Date.now() + 5 * 60 * 1000
     });
 
-    const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId);
+    const p = ensurePlayer(serverId, interaction.user.id);
+    const tutorialOnlyBuy1 = isTutorialStep(p, "intro_market");
+    const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId, { limitToBuy1: tutorialOnlyBuy1 });
 
     const sellButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -2780,7 +2966,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     return componentCommit(interaction, {
       content: " ",
       embeds: [selectionEmbed],
-      components: [btnRow, sellButton]
+      components: tutorialOnlyBuy1 ? [btnRow] : [btnRow, sellButton]
     });
   }
 
@@ -2898,6 +3084,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const action = `multibuy_buy${qtyEach}`;
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = db ? getIdempotentResult(db, idemKey) : null;
+      const cached = db ? getIdempotentResult(db, idemKey) : null;
       if (cached) return componentCommit(interaction, cached);
 
       const ownerLock = `discord:${interaction.id}`;
@@ -3005,6 +3192,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
           upsertServer(db, serverId, s, null);
         }
+        if (db) {
+          upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+          upsertServer(db, serverId, s, null);
+        }
 
         const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
@@ -3014,12 +3205,17 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           user: interaction.member ?? interaction.user
         });
 
+        const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
+
         const replyObj = {
           content: " ",
           embeds: [buyEmbed],
-          components: [noodleMainMenuRow(userId)]
+          components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : [noodleMainMenuRow(userId)]
         };
 
+        if (db) {
+          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        }
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         }
@@ -3100,6 +3296,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     // Idempotency (prevents double submit)
     const action = "multibuy";
     const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
+    const cached = db ? getIdempotentResult(db, idemKey) : null;
     const cached = db ? getIdempotentResult(db, idemKey) : null;
     if (cached) return componentCommit(interaction, cached);
 
@@ -3214,6 +3411,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
         upsertServer(db, serverId, s, null);
       }
+      if (db) {
+        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+        upsertServer(db, serverId, s, null);
+      }
 
       const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
@@ -3223,13 +3424,18 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         user: interaction.member ?? interaction.user
       });
 
+      const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
+
       const replyObj = {
         content: " ",
         embeds: [buyEmbed],
-        components: [noodleMainMenuRow(userId)],
+        components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : [noodleMainMenuRow(userId)],
         targetMessageId: sourceMessageIdFinal // Edit the original message
       };
 
+      if (db) {
+        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+      }
       if (db) {
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
       }
@@ -3348,9 +3554,13 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const action = "sell";
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = db ? getIdempotentResult(db, idemKey) : null;
+      const cached = db ? getIdempotentResult(db, idemKey) : null;
       if (cached) return componentCommit(interaction, cached);
 
       const owner2 = `discord:${interaction.id}`;
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
       return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
@@ -3386,6 +3596,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         if (db) {
           upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
         }
+        if (db) {
+          upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+        }
 
         const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
 
@@ -3402,6 +3615,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           targetMessageId: interaction.message?.id ?? null
         };
 
+        if (db) {
+          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+        }
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         }
@@ -3428,9 +3644,13 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const action = "sell";
     const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
     const cached = db ? getIdempotentResult(db, idemKey) : null;
+    const cached = db ? getIdempotentResult(db, idemKey) : null;
     if (cached) return componentCommit(interaction, cached);
 
     const owner2 = `discord:${interaction.id}`;
+    if (!db) {
+      return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+    }
     return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
       let s = ensureServer(serverId);
       let p2 = ensurePlayer(serverId, userId);
@@ -3490,6 +3710,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       if (db) {
         upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
       }
+      if (db) {
+        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
+      }
 
       const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
       const errSuffix = errors.length ? `\n\n⚠️ Some items had errors (${errors.length})` : "";
@@ -3507,6 +3730,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         targetMessageId
       };
 
+      if (db) {
+        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
+      }
       if (db) {
         putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
       }

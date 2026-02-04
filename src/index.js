@@ -20,6 +20,7 @@ import { fileURLToPath } from "url";
   // Now import the rest
   const { commandMap } = await import("./commands/index.js");
   const { startDailyResetScheduler } = await import("./jobs/dailyReset.js");
+  const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
   const { loadContentBundle, loadSettingsCatalog } = await import("./content/index.js");
   const { openDb, getPlayer } = await import("./db/index.js");
   const { newPlayerProfile } = await import("./game/player.js");
@@ -108,6 +109,14 @@ import { fileURLToPath } from "url";
     }
 
     startDailyResetScheduler(getKnownServerIds);
+    startDbBackupScheduler(db);
+
+    const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";
+    if (backupOnStart) {
+      setTimeout(() => {
+        runDbBackup(db, "startup");
+      }, 60_000);
+    }
   });
 
   /* ------------------------------------------------------------------ */

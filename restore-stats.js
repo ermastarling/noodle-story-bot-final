@@ -35,8 +35,8 @@ for (const player of playersToRestore) {
       sxp_progress: 0,
       known_recipes: ["classic_soy_ramen"],
       inventory: {
-        soy_broth: 3,
-        wheat_noodles: 3,
+        broth_soy: 3,
+        noodles_wheat: 3,
         scallions: 2
       },
       orders: [],

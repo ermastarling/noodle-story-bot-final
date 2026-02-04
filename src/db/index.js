@@ -6,12 +6,12 @@ import { nowTs } from "../util/time.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 export function openDb() {
   if (process.env.NOODLE_SKIP_DB === "1") {
     return null;
   }
   // Load the native SQLite module dynamically using require() to keep openDb synchronous while allowing conditional skipping via NOODLE_SKIP_DB.
-  const require = createRequire(import.meta.url);
   const Database = require("better-sqlite3");
   const dataDir = path.join(__dirname, "..", "..", "data");
   fs.mkdirSync(dataDir, { recursive: true });
@@ -53,7 +53,38 @@ export function getPlayer(db, serverId, userId) {
   const row = db.prepare("SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
     .get(serverId, userId);
   if (!row) return null;
-  return { ...JSON.parse(row.data_json), user_id: userId, state_rev: row.state_rev, schema_version: row.schema_version };
+  const player = { ...JSON.parse(row.data_json), user_id: userId, state_rev: row.state_rev, schema_version: row.schema_version };
+  const migrated = migrateLegacyIngredientIds(player);
+  if (migrated) {
+    upsertPlayer(db, serverId, userId, player, player.state_rev, player.schema_version ?? row.schema_version ?? 1);
+    return getPlayer(db, serverId, userId);
+  }
+  return player;
+}
+
+function migrateLegacyIngredientIds(player) {
+  const inv = { ...(player?.inv_ingredients ?? {}) };
+  const mappings = {
+    soy_broth: "broth_soy",
+    wheat_noodles: "noodles_wheat"
+  };
+  let changed = false;
+
+  for (const [oldId, newId] of Object.entries(mappings)) {
+    if (Object.prototype.hasOwnProperty.call(inv, oldId)) {
+      const qty = Number(inv[oldId]) || 0;
+      if (qty > 0) {
+        inv[newId] = (Number(inv[newId]) || 0) + qty;
+      }
+      delete inv[oldId];
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    player.inv_ingredients = inv;
+  }
+  return changed;
 }
 
 export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null, schemaVersion=1) {
