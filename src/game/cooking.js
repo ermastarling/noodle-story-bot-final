@@ -16,15 +16,6 @@ export function loadCookingRules() {
   return cachedRules;
 }
 
-export function getCookCooldownSeconds(effects) {
-  const rules = loadCookingRules();
-  const base = Math.max(0, Number(rules.cooldown?.base_seconds) || 180);
-  const min = Math.max(0, Number(rules.cooldown?.min_seconds) || 60);
-  const speedBonus = Math.max(0, Number(effects?.cooking_speed_bonus) || 0);
-  const multiplier = Math.max(0.2, 1 - speedBonus);
-  return Math.max(min, Math.floor(base * multiplier));
-}
-
 export function getCookBatchOutput(quantity, player) {
   const rules = loadCookingRules();
   const divisor = Math.max(1, Number(rules.batch?.prep_bonus_divisor) || 4);

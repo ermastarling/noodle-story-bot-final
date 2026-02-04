@@ -154,9 +154,7 @@ import { fileURLToPath } from "url";
     if (!alreadyAck && (isBtn || isSelect)) {
       if (isNoodle || isNoodleSocial || isNoodleStaff || isNoodleUpgrades) {
         // Check if this button/select will show a modal
-        const willShowModal = cid?.includes("multibuy:qty:") || 
-                cid?.includes("pick:cook_select:") ||
-                cid?.includes("sell:qty:") ||
+        const willShowModal = cid?.includes("pick:cook_select:") ||
                 cid?.includes("action:party_create") ||
                 cid?.includes("action:party_join") ||
                 cid?.includes("action:party_invite") ||

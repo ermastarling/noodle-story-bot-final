@@ -76,7 +76,6 @@ export function purchaseUpgrade(player, upgradeId, upgradesContent) {
  */
 export function calculateUpgradeEffects(player, upgradesContent) {
   const effects = {
-    cooking_speed_bonus: 0,
     ingredient_save_chance: 0,
     bowl_capacity_bonus: 0,
     ingredient_capacity: 0,
@@ -86,7 +85,6 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     rep_bonus_percent: 0,
     order_quality_bonus: 0,
     npc_variety_bonus: 0,
-    staff_pool_quality: 0,
     staff_capacity: 0,
     staff_effect_multiplier: 0
   };
@@ -191,17 +189,6 @@ export function getUpgradesByCategory(player, upgradesContent) {
  * Apply upgrade effects to specific game calculations
  * These helper functions make it easy to apply upgrade bonuses in other game systems
  */
-
-/**
- * Apply cooking speed bonus (reduces time or increases efficiency)
- * @param {number} baseValue - Base value
- * @param {Object} effects - Combined effects object
- * @returns {number} Modified value
- */
-export function applyCookingSpeedBonus(baseValue, effects) {
-  const bonus = effects.cooking_speed_bonus || 0;
-  return baseValue * (1 + bonus);
-}
 
 /**
  * Check if ingredient is saved (not consumed)

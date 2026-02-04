@@ -5,7 +5,6 @@ import {
   purchaseUpgrade,
   calculateUpgradeEffects,
   getUpgradesByCategory,
-  applyCookingSpeedBonus,
   applyReputationBonus,
   applyCooldownReduction,
   getTotalBowlCapacity,
@@ -104,30 +103,30 @@ test("Upgrades: purchaseUpgrade cost increases with each level", () => {
 
 test("Upgrades: calculateUpgradeEffects aggregates multiple upgrades", () => {
   const player = makeTestPlayer();
-  player.upgrades.u_prep = 5;
   player.upgrades.u_stoves = 3;
   player.upgrades.u_seating = 2;
+  player.upgrades.u_pantry = 2;
   
   const effects = calculateUpgradeEffects(player, upgradesContent);
   
-  assert.ok(effects.cooking_speed_bonus > 0);
   assert.ok(effects.ingredient_save_chance > 0);
   assert.ok(effects.rep_bonus_flat > 0);
+  assert.ok(effects.ingredient_capacity > 0);
 });
 
 test("Upgrades: calculateUpgradeEffects scales with level", () => {
   const player = makeTestPlayer();
   
-  player.upgrades.u_prep = 1;
+  player.upgrades.u_stoves = 1;
   const effects1 = calculateUpgradeEffects(player, upgradesContent);
-  const speed1 = effects1.cooking_speed_bonus;
+  const save1 = effects1.ingredient_save_chance;
   
-  player.upgrades.u_prep = 5;
+  player.upgrades.u_stoves = 5;
   const effects5 = calculateUpgradeEffects(player, upgradesContent);
-  const speed5 = effects5.cooking_speed_bonus;
+  const save5 = effects5.ingredient_save_chance;
   
-  assert.ok(speed5 > speed1);
-  assert.ok(Math.abs(speed5 - speed1 * 5) < 0.01); // Should be ~5x
+  assert.ok(save5 > save1);
+  assert.ok(Math.abs(save5 - save1 * 5) < 0.01); // Should be ~5x
 });
 
 test("Upgrades: getUpgradesByCategory groups correctly", () => {
@@ -153,15 +152,6 @@ test("Upgrades: getUpgradesByCategory shows current level and cost", () => {
   assert.strictEqual(prepUpgrade.currentLevel, 5);
   assert.ok(prepUpgrade.nextCost > 0);
   assert.strictEqual(prepUpgrade.isMaxed, false);
-});
-
-test("Upgrades: applyCookingSpeedBonus increases value", () => {
-  const baseValue = 100;
-  const effects = { cooking_speed_bonus: 0.20 }; // 20% bonus
-  
-  const result = applyCookingSpeedBonus(baseValue, effects);
-  
-  assert.strictEqual(result, 120);
 });
 
 test("Upgrades: applyReputationBonus adds flat and percent", () => {

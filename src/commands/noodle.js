@@ -312,7 +312,8 @@ function getBowlCount(player) {
 function getBowlCapacity(player, effects) {
   const base = getIngredientCapacityPerType(player, effects);
   const bonus = Math.floor(effects?.bowl_storage_capacity || 0);
-  return Math.max(0, base + bonus);
+  const ladleBonus = Math.floor(effects?.bowl_capacity_bonus || 0);
+  return Math.max(0, base + bonus + ladleBonus);
 }
 
 const QUALITY_ORDER = ["salvage", "standard", "good", "excellent"];
@@ -324,6 +325,17 @@ function normalizeQuality(quality) {
 
 function qualityRank(quality) {
   return QUALITY_ORDER.indexOf(normalizeQuality(quality));
+}
+
+function formatQualityLabel(quality) {
+  const q = normalizeQuality(quality);
+  const labels = {
+    salvage: "S-",
+    standard: "S",
+    good: "G",
+    excellent: "E"
+  };
+  return labels[q] ?? "S";
 }
 
 function getBowlEntriesByRecipe(player, recipeId) {
@@ -641,10 +653,19 @@ const shouldBeEphemeral = ephemeral === true && !hasComponents;
 const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
 
 if (shouldBeEphemeral) {
-  if (interaction.deferred || interaction.replied) {
-    return interaction.followUp({ ...rest, ephemeral: true });
+  try {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.followUp({ ...rest, ephemeral: true });
+    }
+    return interaction.reply({ ...rest, ephemeral: true });
+  } catch (e) {
+    if (e?.code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+      console.log(`⏭️  Skipping ephemeral reply - interaction invalid or already handled`);
+      return;
+    }
+    console.log(`⚠️ Ephemeral reply failed:`, e?.message);
+    return;
   }
-  return interaction.reply({ ...rest, ephemeral: true });
 }
 
 // Modal submits: deferred in index.js, so use editReply unless ephemeral
@@ -833,22 +854,27 @@ const menu = new StringSelectMenuBuilder()
 .setMaxValues(Math.min(5, opts.length))
 .addOptions(opts);
 
-return componentCommit(interaction, {
-content: " ",
-embeds: [buildMenuEmbed({
+const buyEmbed = buildMenuEmbed({
   title: "🛒 Multi-buy",
   description: "Select up to **5** items.\nWhen you’re done selecting, if on Desktop, press **Esc** to continue.",
   user: interaction.member ?? interaction.user
-})],
-components: [
-  new ActionRowBuilder().addComponents(menu),
-  new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:profile:${userId}`)
-      .setLabel("Cancel")
-      .setStyle(ButtonStyle.Secondary)
-  )
-]
+});
+buyEmbed.setFooter({
+  text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
+});
+
+return componentCommit(interaction, {
+  content: " ",
+  embeds: [buyEmbed],
+  components: [
+    new ActionRowBuilder().addComponents(menu),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:profile:${userId}`)
+        .setLabel("Cancel")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  ]
 });
 }
 
@@ -872,10 +898,6 @@ if (!limitToBuy1) {
       .setCustomId(`noodle:multibuy:buy10:${userId}:${msgId}`)
       .setLabel("Buy 10 each")
       .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`noodle:multibuy:qty:${userId}:${msgId}`)
-      .setLabel("Enter quantities")
-      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:multibuy:clear:${userId}:${msgId}`)
       .setLabel("Clear")
@@ -1117,11 +1139,36 @@ if (sub === "pantry") {
     })
     .filter(Boolean);
 
-  const bowlLines = Object.entries(p.inv_bowls ?? {})
-    .filter(([, bowl]) => bowl?.qty > 0)
-    .map(([, bowl]) => {
-      const recipeName = content.recipes?.[bowl.recipe_id]?.name ?? bowl.recipe_id;
-      return `• ${recipeName}: **${bowl.qty}**`;
+  const bowlGroups = new Map();
+  for (const [, bowl] of Object.entries(p.inv_bowls ?? {})) {
+    if (!bowl?.qty || bowl.qty <= 0) continue;
+    const recipeId = bowl.recipe_id ?? "unknown";
+    const list = bowlGroups.get(recipeId) ?? [];
+    list.push({
+      qty: bowl.qty,
+      quality: normalizeQuality(bowl.quality)
+    });
+    bowlGroups.set(recipeId, list);
+  }
+
+  const bowlLines = [...bowlGroups.entries()]
+    .sort(([a], [b]) => {
+      const nameA = content.recipes?.[a]?.name ?? a;
+      const nameB = content.recipes?.[b]?.name ?? b;
+      return String(nameA).localeCompare(String(nameB));
+    })
+    .map(([recipeId, entries]) => {
+      const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
+      const counts = entries.reduce((acc, entry) => {
+        const q = normalizeQuality(entry.quality);
+        acc[q] = (acc[q] ?? 0) + Number(entry.qty || 0);
+        return acc;
+      }, {});
+      const order = ["excellent", "good", "standard", "salvage"];
+      const parts = order
+        .filter((q) => counts[q])
+        .map((q) => `${formatQualityLabel(q)} (${counts[q]})`);
+      return `• ${recipeName}: **${parts.join(" · ")}**`;
     })
     .join("\n");
   const bowlCount = getBowlCount(p);
@@ -1139,6 +1186,9 @@ if (sub === "pantry") {
     title: "🧺 Pantry",
     description: pantryDescription,
     user: interaction.member ?? interaction.user
+  });
+  pantryEmbed.setFooter({
+    text: `Forageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
   });
 
   return commit({
@@ -1369,7 +1419,6 @@ const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: in
 
 // Skip idempotency check for button/select interactions to avoid stale cached responses
 const isComponent = interaction.isButton?.() || interaction.isSelectMenu?.();
-const cached = isComponent || !db ? null : getIdempotentResult(db, idemKey);
 const cached = isComponent || !db ? null : getIdempotentResult(db, idemKey);
 
 if (cached) {
@@ -1657,6 +1706,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           "When you’re done selecting, if on Desktop, press **Esc** to continue\n",
         user: interaction.member ?? interaction.user
       });
+      buyEmbed.setFooter({
+        text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
+      });
 
       return commit({
         content: " ",
@@ -1824,6 +1876,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const cookRng = makeStreamRng({ mode: "secure", streamName: "cook", serverId, userId });
     const savedLines = [];
+    const consumedByItem = {};
     for (const ing of r.ingredients) {
       const need = ing.qty * qtyToCook;
       let saved = 0;
@@ -1834,6 +1887,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
       const consume = Math.max(0, need - saved);
       p.inv_ingredients[ing.item_id] -= consume;
+      if (consume > 0) {
+        consumedByItem[ing.item_id] = (consumedByItem[ing.item_id] ?? 0) + consume;
+      }
       if (saved > 0) {
         savedLines.push(`🧺 Saved **${saved}× ${displayItemName(ing.item_id)}**`);
       }
@@ -1877,8 +1933,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     advanceTutorial(p, "cook");
     p.lifetime.recipes_cooked = (p.lifetime.recipes_cooked || 0) + 1;
 
+    const consumedLine = Object.entries(consumedByItem)
+      .map(([id, qty2]) => `**${qty2}× ${displayItemName(id)}**`)
+      .join(" · ");
+    const salvageLine = outcome.salvage > 0 ? ` Salvaged **${outcome.salvage}** bowl(s).` : "";
     const failInfo = outcome.failed > 0
-      ? `⚠️ **Cook failure**: ${outcome.failed} bowl(s) failed. Ingredients were **consumed** during the attempt. You did salvage **${outcome.salvage}** bowl(s). Failures happen based on recipe tier risk.`
+      ? `⚠️ **Cook failure**: ${outcome.failed} bowl(s) failed. Consumed: ${consumedLine}. Cause: recipe tier risk.${salvageLine}`
       : null;
 
     const cookEmbed = buildMenuEmbed({
@@ -1887,7 +1947,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         `You cooked **${batchOutput}× ${r.name}**.`,
         qtyToCook < qty ? `🧺 Bowl storage limited this cook to **${qtyToCook}**.` : null,
         batchOutput > qtyToCook ? `🍜 Prep bonus: **+${batchOutput - qtyToCook}** bowl(s).` : null,
-        outcome.failed > 0 ? `🔥 ${outcome.failed} bowl(s) failed. Salvage yield: **${outcome.salvage}**.` : null,
         failInfo,
         doubleCrafted ? `✨ Double craft! **+${extra}** extra bowl(s).` : null,
         savedLines.length ? savedLines.join("\n") : null,
@@ -2468,7 +2527,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
       
       // Build the serve message with bonus on same line
-      const qualityNote = bowlQuality !== "standard" ? ` (${bowlQuality})` : "";
+      const qualityNote = bowlQuality !== "standard" ? ` (${formatQualityLabel(bowlQuality)})` : "";
       let serveMsg = `Served **${rName}**${qualityNote} to *${npcName}*.`;
       if (rewards.npcModifier === "coins_courier") serveMsg += ` 🌧️ +25% coins`;
       if (rewards.npcModifier === "coins_bard") serveMsg += ` 🎵 +10% coins`;
@@ -2962,6 +3021,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to buy:`,
       user: interaction.member ?? interaction.user
     });
+    selectionEmbed.setFooter({
+      text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
+    });
 
     return componentCommit(interaction, {
       content: " ",
@@ -2977,8 +3039,25 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const mode = parts2[2];
     const owner = parts2[3];
     const sourceMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
-    const cacheKey = `${interaction.user.id}:${sourceMessageId || "none"}`;
-    const cacheEntry = multibuyCacheV2.get(cacheKey);
+    let cacheKey = `${interaction.user.id}:${sourceMessageId || "none"}`;
+    let cacheEntry = multibuyCacheV2.get(cacheKey);
+
+    if (!cacheEntry) {
+      const prefix = `${interaction.user.id}:`;
+      let newestKey = null;
+      let newestEntry = null;
+      for (const [key, entry] of multibuyCacheV2.entries()) {
+        if (!key.startsWith(prefix)) continue;
+        if (!newestEntry || (entry?.expiresAt ?? 0) > (newestEntry?.expiresAt ?? 0)) {
+          newestKey = key;
+          newestEntry = entry;
+        }
+      }
+      if (newestEntry) {
+        cacheKey = newestKey;
+        cacheEntry = newestEntry;
+      }
+    }
 
     if (!cacheEntry) {
       return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
@@ -2999,68 +3078,31 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       return componentCommit(interaction, { content: "No items selected.", ephemeral: true });
     }
 
-    // Enter quantities -> show modal IMMEDIATELY (before any DB work to avoid timeout)
     if (mode === "qty") {
-      // Check if interaction is still valid before attempting modal
-      if (interaction.deferred || interaction.replied) {
-        // If already deferred/replied, we can't show a modal - try to defer and use reply instead
-        try {
-          await interaction.deferReply({ ephemeral: true });
-          return componentCommit(interaction, { 
-            content: "⚠️ Discord couldn't show the modal. Try using `/noodle buy` with individual items instead.", 
-            ephemeral: true 
-          });
-        } catch (e) {
-          return componentCommit(interaction, { 
-            content: "⚠️ Discord couldn't show the modal. Try using `/noodle buy` with individual items instead.", 
-            ephemeral: true 
-          });
-        }
-      }
-
-      const sourceMessageId = interaction.message?.id ?? "";
-      const modal = new ModalBuilder()
-        .setCustomId(`noodle:multibuy:qty:${interaction.user.id}:${sourceMessageId || "none"}`)
-        .setTitle("Multi-buy quantities");
-
-      console.log(`📝 Creating multibuy modal with sourceMessageId="${sourceMessageId}", button message id: ${interaction.message?.id}`);
-
-      const pickedNames = selectedIds.map((id) => content.items?.[id]?.name ?? displayItemName(id));
-
-      const input = new TextInputBuilder()
-        .setCustomId("lines")
-        .setLabel("One per line: item=qty (Carrots=3)")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setPlaceholder(pickedNames.map((n) => `${n}=1`).join("\n"));
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      
-      // Store the selected items in cache to avoid custom ID length limit
-      const cacheKey = `${interaction.user.id}:${sourceMessageId || "none"}`;
-      multibuyCacheV2.set(cacheKey, {
-        selectedIds: selectedIds.slice(0, 5),
-        sourceMessageId: sourceMessageId || null,
-        expiresAt: Date.now() + 5 * 60 * 1000
+      const sourceId = cacheEntry.sourceMessageId || interaction.message?.id || "none";
+      const p = ensurePlayer(serverId, userId);
+      const tutorialOnlyBuy1 = isTutorialStep(p, "intro_market");
+      const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceId, { limitToBuy1: tutorialOnlyBuy1 });
+      const sellButton = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
+          .setLabel("💰 Sell Items")
+          .setStyle(ButtonStyle.Secondary)
+      );
+      const selectionEmbed = buildMenuEmbed({
+        title: "🛒 Multi-buy",
+        description: `**Selected:** ${pickedNames.join(", ")}\nQuantity entry has been removed. Use Buy 1/5/10 each instead.`,
+        user: interaction.member ?? interaction.user
       });
-      
-      try {
-        return await interaction.showModal(modal);
-      } catch (e) {
-        console.log(`⚠️ showModal failed for multibuy:`, e?.message);
-        // If modal fails, try to acknowledge and give user a fallback message
-        try {
-          if (!interaction.deferred && !interaction.replied) {
-            await interaction.deferReply({ ephemeral: true });
-          }
-        } catch (defer_err) {
-          // Ignore defer errors
-        }
-        return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal. Try using `/noodle buy` with individual items instead.", 
-          ephemeral: true 
-        });
-      }
+      selectionEmbed.setFooter({
+        text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
+      });
+      return componentCommit(interaction, {
+        content: " ",
+        embeds: [selectionEmbed],
+        components: tutorialOnlyBuy1 ? [btnRow] : [btnRow, sellButton],
+        targetMessageId: sourceId !== "none" ? sourceId : undefined
+      });
     }
 
     // All other button modes need DB queries first
@@ -3083,7 +3125,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const sourceMessageId = interaction.message?.id;
       const action = `multibuy_buy${qtyEach}`;
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-      const cached = db ? getIdempotentResult(db, idemKey) : null;
       const cached = db ? getIdempotentResult(db, idemKey) : null;
       if (cached) return componentCommit(interaction, cached);
 
@@ -3206,11 +3247,33 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         });
 
         const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
+        const tutorialActive = Boolean(p2.tutorial?.active && getCurrentTutorialStep(p2));
+
+        let components;
+        if (tutorialActive) {
+          components = tutorialOnlyForage
+            ? [noodleTutorialForageRow(userId)]
+            : [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)];
+        } else {
+          const { btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceMessageId, { limitToBuy1: false });
+          const sellRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
+              .setLabel("💰 Sell Items")
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setCustomId(`noodle:nav:profile:${interaction.user.id}`)
+              .setLabel("Cancel")
+              .setStyle(ButtonStyle.Secondary)
+          );
+          components = [btnRow, sellRow];
+        }
 
         const replyObj = {
           content: " ",
           embeds: [buyEmbed],
-          components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : [noodleMainMenuRow(userId)]
+          components,
+          targetMessageId: interaction.message?.id ?? sourceMessageId ?? null
         };
 
         if (db) {
@@ -3220,10 +3283,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         }
         
-        const finalReply = sourceMessageId
-          ? { ...replyObj, targetMessageId: sourceMessageId }
-          : replyObj;
-        return componentCommit(interaction, finalReply);
+        return componentCommit(interaction, replyObj);
       });
     }
 
@@ -3232,218 +3292,11 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
   /* ---------------- MULTI-BUY QTY MODAL SUBMIT ---------------- */
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:multibuy:qty:")) {
-    const parts2 = interaction.customId.split(":");
-    // noodle:multibuy:qty:<ownerId>:<messageId>
-    const owner = parts2[3];
-    const sourceMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
-
-    if (owner && owner !== interaction.user.id) {
-      return componentCommit(interaction, { content: "That purchase isn’t for you.", ephemeral: true });
-    }
-
-    const cacheKey = `${interaction.user.id}:${sourceMessageId || "none"}`;
-    const cacheEntry = multibuyCacheV2.get(cacheKey);
-    if (!cacheEntry) {
-      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
-    }
-
-    if (cacheEntry.expiresAt < Date.now()) {
-      multibuyCacheV2.delete(cacheKey);
-      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
-    }
-
-    const { selectedIds, sourceMessageId: cachedSourceMessageId } = cacheEntry;
-    const sourceMessageIdFinal = cachedSourceMessageId ?? sourceMessageId;
-
-    const raw = String(interaction.fields.getTextInputValue("lines") ?? "").trim();
-    const want = {};
-
-    for (const lineRaw of raw.split("\n")) {
-      const line = lineRaw.trim();
-      if (!line) continue;
-
-      const [kRaw, vRaw] = line.split("=").map((s) => s?.trim());
-      if (!kRaw || !vRaw) {
-        return componentCommit(interaction, {
-          content: "Use `item=qty` per line (example: `Carrots=3`).",
-          ephemeral: true
-        });
-      }
-
-      const qty = Number(vRaw);
-      if (!Number.isInteger(qty) || qty < 1 || qty > 99) {
-        return componentCommit(interaction, {
-          content: `Invalid qty for \`${kRaw}\`. Use 1–99.`,
-          ephemeral: true
-        });
-      }
-
-      const resolvedId = resolveSelectedItemId(kRaw, selectedIds, content);
-      if (!resolvedId) {
-        return componentCommit(interaction, {
-          content: `I couldn’t match \`${kRaw}\` to one of your selected items. Try the exact item name shown in the menu.`,
-          ephemeral: true
-        });
-      }
-
-      want[resolvedId] = (want[resolvedId] ?? 0) + qty;
-    }
-
-    if (!Object.keys(want).length) {
-      return componentCommit(interaction, { content: "No quantities provided.", ephemeral: true });
-    }
-
-    // Idempotency (prevents double submit)
-    const action = "multibuy";
-    const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-    const cached = db ? getIdempotentResult(db, idemKey) : null;
-    const cached = db ? getIdempotentResult(db, idemKey) : null;
-    if (cached) return componentCommit(interaction, cached);
-
-    const ownerLock = `discord:${interaction.id}`;
-
-    return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
-      let s = ensureServer(serverId);
-      let p2 = ensurePlayer(serverId, userId);
-
-      // Refresh season + market state
-      const set = buildSettingsMap(settingsCatalog, s.settings);
-      s.season = computeActiveSeason(set);
-
-      rollMarket({ serverId, content, serverState: s });
-      if (!s.market_prices) s.market_prices = {};
-      rollPlayerMarketStock({ userId, serverId, content, playerState: p2 });
-      if (!p2.market_stock) p2.market_stock = {};
-
-      const combinedEffects = calculateCombinedEffects(p2, upgradesContent, staffContent, calculateStaffEffects);
-      const perTypeCap = getIngredientCapacityPerType(p2, combinedEffects);
-      const countsByType = getIngredientCountsByType(p2);
-      const remainingByType = {
-        broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
-        noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
-        spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
-        topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0))
-      };
-
-      // Validate stock + compute cost
-      let totalCost = 0;
-      const buyLines = [];
-      let capacityReduced = false;
-
-      for (const [id3, qty3] of Object.entries(want)) {
-        if (!MARKET_ITEM_IDS.includes(id3)) {
-          const friendly = displayItemName(id3);
-          return componentCommit(interaction, { content: `${friendly} isn’t a market item.`, ephemeral: true });
-        }
-
-        const it = content.items?.[id3];
-        if (!it) {
-          const friendly = displayItemName(id3);
-          return componentCommit(interaction, { content: `Unknown item: ${friendly}.`, ephemeral: true });
-        }
-
-        const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
-        const stock = p2.market_stock?.[id3] ?? 0;
-        const type = normalizeIngredientType(id3);
-        const remaining = remainingByType[type] ?? 0;
-        const qtyToBuy = Math.min(qty3, remaining);
-
-        if (qtyToBuy <= 0) {
-          capacityReduced = true;
-          continue;
-        }
-
-        if (stock < qtyToBuy) {
-          const friendly = displayItemName(id3);
-          return componentCommit(interaction, {
-            content: `Only ${stock} in stock today for **${friendly}**.`,
-            ephemeral: true
-          });
-        }
-
-        if (qtyToBuy < qty3) capacityReduced = true;
-
-        totalCost += price * qtyToBuy;
-        buyLines.push({ id: id3, qty: qtyToBuy, name: it.name, price });
-        remainingByType[type] = remaining - qtyToBuy;
-      }
-
-      if (!buyLines.length) {
-        return componentCommit(interaction, {
-          content: "🧺 Your pantry is full. Upgrade storage or use ingredients to make room.",
-          ephemeral: true
-        });
-      }
-
-      if ((p2.coins ?? 0) < totalCost) {
-        return componentCommit(interaction, { content: `Not enough coins. Total is **${totalCost}c**.`, ephemeral: true });
-      }
-
-      // Check inventory capacity before purchase
-      const purchaseItems = {};
-      for (const x of buyLines) {
-        purchaseItems[x.id] = x.qty;
-      }
-      
-      const inventoryResult = addIngredientsToInventory(p2, purchaseItems, "block");
-      
-      if (!inventoryResult.success) {
-        const blockedItems = Object.entries(inventoryResult.blocked)
-          .map(([id, qty]) => `${qty}× ${displayItemName(id)}`)
-          .join(", ");
-        return componentCommit(interaction, { 
-          content: `⚠️ **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
-          ephemeral: true
-        });
-      }
-
-      // Apply purchase
-      p2.coins -= totalCost;
-
-      for (const x of buyLines) {
-        p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
-      }
-
-      advanceTutorial(p2, "buy");
-
-      // Persist
-      if (db) {
-        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-        upsertServer(db, serverId, s, null);
-      }
-      if (db) {
-        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-        upsertServer(db, serverId, s, null);
-      }
-
-      const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
-
-      const buyEmbed = buildMenuEmbed({
-        title: "🛒 Purchase Complete",
-        description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? "\n🧺 Pantry capacity limited this purchase." : ""}`,
-        user: interaction.member ?? interaction.user
-      });
-
-      const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
-
-      const replyObj = {
-        content: " ",
-        embeds: [buyEmbed],
-        components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : [noodleMainMenuRow(userId)],
-        targetMessageId: sourceMessageIdFinal // Edit the original message
-      };
-
-      if (db) {
-        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-      }
-      if (db) {
-        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-      }
-      
-      return componentCommit(interaction, replyObj);
+    return componentCommit(interaction, {
+      content: "Quantity entry has been removed. Use Buy 1/5/10 each instead.",
+      ephemeral: true
     });
   }
-
   /* ---------------- SELL SELECT MENU ---------------- */
   if (interaction.isSelectMenu?.() && interaction.customId.startsWith("noodle:sell:select:")) {
     const owner = interaction.customId.split(":")[3];
@@ -3473,10 +3326,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         .setLabel("Sell 10 each")
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`noodle:sell:qty:${interaction.user.id}:${sourceMessageId}:${picked.join(",")}`)
-        .setLabel("Enter quantities")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
         .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
         .setLabel("Clear")
         .setStyle(ButtonStyle.Danger)
@@ -3484,7 +3333,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     const sellEmbed = buildMenuEmbed({
       title: "💰 Sell Items",
-      description: `💰 **Selected:** ${pickedNames.join(", ")}\nChoose how you want to sell:`,
+      description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to sell:`,
       user: interaction.member ?? interaction.user
     });
 
@@ -3516,36 +3365,39 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       return componentCommit(interaction, { content: "No items selected.", ephemeral: true });
     }
 
-    // Enter quantities -> show modal
     if (mode === "qty") {
-      if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-      }
+      const pickedNames = selectedIds.map((id) => displayItemName(id));
+      const btnRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:sell:sell1:${interaction.user.id}:${selectedIds.join(",")}`)
+          .setLabel("Sell 1 each")
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`noodle:sell:sell5:${interaction.user.id}:${selectedIds.join(",")}`)
+          .setLabel("Sell 5 each")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`noodle:sell:sell10:${interaction.user.id}:${selectedIds.join(",")}`)
+          .setLabel("Sell 10 each")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
+          .setLabel("Clear")
+          .setStyle(ButtonStyle.Danger)
+      );
 
-      const modal = new ModalBuilder()
-        .setCustomId(`noodle:sell:qty:${interaction.user.id}:${messageId ?? "none"}:${selectedIds.join(",")}`)
-        .setTitle("Sell quantities");
+      const sellEmbed = buildMenuEmbed({
+        title: "💰 Sell Items",
+        description: `**Selected:** ${pickedNames.join(", ")}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
+        user: interaction.member ?? interaction.user
+      });
 
-      const pickedNames = selectedIds.map((id) => content.items?.[id]?.name ?? displayItemName(id));
-
-      const input = new TextInputBuilder()
-        .setCustomId("lines")
-        .setLabel("One per line: item=qty (Carrots=3)")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setPlaceholder(pickedNames.map((n) => `${n}=1`).join("\n"));
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      
-      try {
-        return await interaction.showModal(modal);
-      } catch (e) {
-        console.log(`⚠️ showModal failed for sell:`, e?.message);
-        return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal. Try using `/noodle sell` with individual items instead.", 
-          ephemeral: true 
-        });
-      }
+      return componentCommit(interaction, {
+        content: " ",
+        embeds: [sellEmbed],
+        components: [btnRow],
+        targetMessageId: interaction.message?.id ?? null
+      });
     }
 
     // Sell N each
@@ -3553,7 +3405,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const qtyEach = mode === "sell10" ? 10 : mode === "sell5" ? 5 : 1;
       const action = "sell";
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-      const cached = db ? getIdempotentResult(db, idemKey) : null;
       const cached = db ? getIdempotentResult(db, idemKey) : null;
       if (cached) return componentCommit(interaction, cached);
 
@@ -3628,115 +3479,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
   /* ---------------- SELL QTY MODAL SUBMIT ---------------- */
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:sell:qty:")) {
-    const parts3 = interaction.customId.split(":");
-    const owner = parts3[3];
-    const targetMessageId = parts3[4] && parts3[4] !== "none" ? parts3[4] : null;
-    const idsPart = parts3.slice(5).join(":");
-    const selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
-
-    if (owner && owner !== interaction.user.id) {
-      return componentCommit(interaction, { content: "That modal isn't for you.", ephemeral: true });
-    }
-
-    const rawInput = interaction.fields.getTextInputValue("lines");
-    const lines = rawInput.split("\n").filter(Boolean);
-
-    const action = "sell";
-    const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
-    const cached = db ? getIdempotentResult(db, idemKey) : null;
-    const cached = db ? getIdempotentResult(db, idemKey) : null;
-    if (cached) return componentCommit(interaction, cached);
-
-    const owner2 = `discord:${interaction.id}`;
-    if (!db) {
-      return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
-    }
-    return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
-      let s = ensureServer(serverId);
-      let p2 = ensurePlayer(serverId, userId);
-
-      const sellLines = [];
-      const errors = [];
-      let totalGain = 0;
-
-      for (const line of lines) {
-        const match = line.match(/^(.+?)=(\d+)$/);
-        if (!match) {
-          errors.push(`Invalid format: "${line}"`);
-          continue;
-        }
-
-        const [, itemStr, qtyStr] = match;
-        const qty = parseInt(qtyStr, 10);
-        if (!qty || qty <= 0) {
-          errors.push(`Invalid quantity for "${itemStr}"`);
-          continue;
-        }
-
-        const resolvedId = resolveSelectedItemId(itemStr, selectedIds, content);
-        if (!resolvedId) {
-          errors.push(`Couldn't find "${itemStr}" in your selection`);
-          continue;
-        }
-
-        const it = content.items[resolvedId];
-        if (!it) {
-          errors.push(`Item doesn't exist: ${resolvedId}`);
-          continue;
-        }
-
-        const owned = p2.inv_ingredients?.[resolvedId] ?? 0;
-        if (owned < qty) {
-          errors.push(`Not enough ${it.name} (have ${owned}, want ${qty})`);
-          continue;
-        }
-
-        const unit = sellPrice(s, resolvedId);
-        const gain = unit * qty;
-
-        p2.inv_ingredients[resolvedId] = owned - qty;
-        p2.coins += gain;
-        p2.lifetime.coins_earned += gain;
-        totalGain += gain;
-
-        sellLines.push({ id: resolvedId, name: it.name, qty, price: unit });
-      }
-
-      if (!sellLines.length) {
-        const errMsg = errors.length ? `Errors:\n${errors.slice(0, 3).join("\n")}` : "No valid items to sell.";
-        return componentCommit(interaction, { content: `❌ ${errMsg}`, ephemeral: true });
-      }
-
-      if (db) {
-        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-      }
-      if (db) {
-        upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-      }
-
-      const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
-      const errSuffix = errors.length ? `\n\n⚠️ Some items had errors (${errors.length})` : "";
-
-      const sellEmbed = buildMenuEmbed({
-        title: "💰 Sold Items",
-        description: `Sold:\n${pretty}\n\nTotal: **${totalGain}c**.${errSuffix}`,
-        user: interaction.member ?? interaction.user
-      });
-
-      const replyObj = {
-        content: " ",
-        embeds: [sellEmbed],
-        components: [noodleMainMenuRow(userId)],
-        targetMessageId
-      };
-
-      if (db) {
-        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-      }
-      if (db) {
-        putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-      }
-      return componentCommit(interaction, replyObj);
+    return componentCommit(interaction, {
+      content: "Quantity entry has been removed. Use Sell 1/5/10 each instead.",
+      ephemeral: true
     });
   }
 

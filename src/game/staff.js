@@ -1,5 +1,7 @@
-import { makeStreamRng, rngBetween, weightedPick } from "../util/rng.js";
-import { dayKeyUTC } from "../util/time.js";
+import { loadUpgradesContent } from "../content/index.js";
+import { calculateUpgradeEffects } from "./upgrades.js";
+
+const upgradesContent = loadUpgradesContent();
 
 /**
  * Roll a daily staff pool for a server
@@ -8,44 +10,6 @@ import { dayKeyUTC } from "../util/time.js";
  * @param {Object} params.staffContent - Content from staff.json
  * @returns {Array} Array of staff_ids available today
  */
-export function rollDailyStaffPool({ serverId, staffContent }) {
-  const dayKey = dayKeyUTC();
-  const rng = makeStreamRng({ mode: "seeded", seed: 54321, streamName: "staff_pool", serverId, dayKey });
-  
-  const poolConfig = staffContent.pool_config || { pool_size: 4, rarity_weights: { common: 60, rare: 30, epic: 10 } };
-  const poolSize = poolConfig.pool_size;
-  const rarityWeights = poolConfig.rarity_weights;
-  
-  // Get all available staff
-  const allStaff = Object.values(staffContent.staff_members || {});
-  if (allStaff.length === 0) return [];
-  
-  // Group staff by rarity
-  const staffByRarity = {
-    common: allStaff.filter(s => s.rarity === "common"),
-    rare: allStaff.filter(s => s.rarity === "rare"),
-    epic: allStaff.filter(s => s.rarity === "epic")
-  };
-  
-  const pool = [];
-  for (let i = 0; i < poolSize; i++) {
-    // Pick rarity based on weights
-    const rarity = weightedPick(rng, rarityWeights);
-    const candidates = staffByRarity[rarity] || [];
-    
-    if (candidates.length === 0) continue;
-    
-    // Pick random staff from this rarity
-    const idx = Math.floor(rngBetween(rng, 0, candidates.length));
-    const staff = candidates[idx];
-    
-    if (staff && !pool.includes(staff.staff_id)) {
-      pool.push(staff.staff_id);
-    }
-  }
-  
-  return pool;
-}
 
 /**
  * Calculate staff upgrade cost for next level
@@ -124,9 +88,9 @@ export function levelUpStaff(player, staffId, staffContent) {
  */
 export function getMaxStaffCapacity(player) {
   const baseCapacity = 12; // Can level up all 12 staff
-  const staffQuartersLevel = player.upgrades?.u_staff_quarters || 0;
-  // Staff quarters now just provides quality bonus, not capacity
-  return baseCapacity;
+  const effects = calculateUpgradeEffects(player, upgradesContent);
+  const bonus = Math.floor(effects.staff_capacity || 0);
+  return baseCapacity + bonus;
 }
 
 /**
@@ -137,7 +101,6 @@ export function getMaxStaffCapacity(player) {
  */
 export function calculateStaffEffects(player, staffContent) {
   const effects = {
-    cooking_speed_bonus: 0,
     ingredient_save_chance: 0,
     double_craft_chance: 0,
     rep_bonus_flat: 0,
@@ -153,9 +116,9 @@ export function calculateStaffEffects(player, staffContent) {
   
   if (!player.staff_levels) return effects;
   
-  // Get staff effect multiplier from u_manuals upgrade
-  const manualsLevel = player.upgrades?.u_manuals || 0;
-  const staffMultiplier = 1 + (manualsLevel * 0.03);
+  // Get staff effect multiplier from upgrades
+  const upgradeEffects = calculateUpgradeEffects(player, upgradesContent);
+  const staffMultiplier = 1 + (upgradeEffects.staff_effect_multiplier || 0);
   
   for (const [staffId, level] of Object.entries(player.staff_levels)) {
     if (level <= 0) continue;

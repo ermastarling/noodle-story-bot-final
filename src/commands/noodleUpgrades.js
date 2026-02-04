@@ -58,8 +58,7 @@ function applyOwnerFooter(embed, user) {
 function formatEffects(effects) {
   const lines = [];
   for (const [key, value] of Object.entries(effects)) {
-    if (key === "cooking_speed_bonus") lines.push(`+${(value * 100).toFixed(1)}% cooking speed`);
-    else if (key === "ingredient_save_chance") lines.push(`+${(value * 100).toFixed(1)}% ingredient save`);
+    if (key === "ingredient_save_chance") lines.push(`+${(value * 100).toFixed(1)}% ingredient save`);
     else if (key === "bowl_capacity_bonus") lines.push(`+${value} bowl capacity`);
     else if (key === "ingredient_capacity") lines.push(`+${value} ingredient storage`);
     else if (key === "spoilage_reduction") lines.push(`-${(value * 100).toFixed(1)}% spoilage`);
@@ -68,7 +67,6 @@ function formatEffects(effects) {
     else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(1)}% rep`);
     else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(1)}% order quality`);
     else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(1)}% NPC variety`);
-    else if (key === "staff_pool_quality") lines.push(`+${(value * 100).toFixed(1)}% staff pool quality`);
     else if (key === "staff_capacity") lines.push(`+${value.toFixed(1)} staff capacity`);
     else if (key === "staff_effect_multiplier") lines.push(`+${(value * 100).toFixed(1)}% staff effects`);
   }
@@ -200,7 +198,6 @@ function buildUpgradesOverviewEmbed(player, user) {
 
   // Active effects summary
   const effectLines = [];
-  if (effects.cooking_speed_bonus > 0) effectLines.push(`🍳 +${(effects.cooking_speed_bonus * 100).toFixed(0)}% cooking speed`);
   if (effects.ingredient_save_chance > 0) effectLines.push(`🧺 ${(effects.ingredient_save_chance * 100).toFixed(1)}% ingredient save`);
   if (effects.bowl_capacity_bonus > 0) effectLines.push(`🍜 +${effects.bowl_capacity_bonus} bowl capacity`);
   if (effects.ingredient_capacity > 0) effectLines.push(`📦 +${effects.ingredient_capacity} ingredient capacity`);

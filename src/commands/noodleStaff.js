@@ -7,14 +7,11 @@ import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { loadStaffContent } from "../content/index.js";
 import {
-  rollDailyStaffPool,
   levelUpStaff,
   getStaffLevels,
   calculateStaffEffects,
-  getMaxStaffCapacity,
   calculateStaffCost
 } from "../game/staff.js";
-import { dayKeyUTC } from "../util/time.js";
 
 const {
   MessageActionRow,
@@ -78,8 +75,7 @@ function staffSortKey(player, staff) {
 function formatEffects(effects) {
   const lines = [];
   for (const [key, value] of Object.entries(effects)) {
-    if (key === "cooking_speed_bonus") lines.push(`+${(value * 100).toFixed(0)}% cooking speed`);
-    else if (key === "ingredient_save_chance") lines.push(`${(value * 100).toFixed(0)}% ingredient save`);
+    if (key === "ingredient_save_chance") lines.push(`${(value * 100).toFixed(0)}% ingredient save`);
     else if (key === "double_craft_chance") lines.push(`${(value * 100).toFixed(0)}% double craft`);
     else if (key === "rep_bonus_flat") lines.push(`+${value} rep`);
     else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% rep`);
@@ -134,14 +130,6 @@ export async function noodleStaffHandler(interaction) {
       s = getServer(db, serverId);
     }
 
-    // Ensure staff pool exists for today
-    const today = dayKeyUTC();
-    if (s.staff_day !== today || !s.staff_pool || s.staff_pool.length === 0) {
-      s.staff_pool = rollDailyStaffPool({ serverId, staffContent });
-      s.staff_day = today;
-      upsertServer(db, serverId, s, null);
-    }
-
     const embed = buildStaffOverviewEmbed(p, s, interaction.user);
     const components = buildStaffComponents(userId, p, s);
 
@@ -186,7 +174,6 @@ function buildStaffOverviewEmbed(player, server, user) {
 
   // Effects summary
   const effectLines = [];
-  if (effects.cooking_speed_bonus > 0) effectLines.push(`🍳 +${(effects.cooking_speed_bonus * 100).toFixed(0)}% cooking speed`);
   if (effects.ingredient_save_chance > 0) effectLines.push(`🧺 ${(effects.ingredient_save_chance * 100).toFixed(0)}% ingredient save`);
   if (effects.double_craft_chance > 0) effectLines.push(`✨ ${(effects.double_craft_chance * 100).toFixed(0)}% double craft`);
   if (effects.rep_bonus_flat > 0) effectLines.push(`⭐ +${effects.rep_bonus_flat.toFixed(1)} rep per serve`);
@@ -207,9 +194,8 @@ function buildStaffOverviewEmbed(player, server, user) {
     });
   }
 
-  // Daily staff pool
-  const poolLines = server.staff_pool
-    .map(staffId => staffContent.staff_members?.[staffId])
+  // All available staff
+  const poolLines = Object.values(staffContent.staff_members ?? {})
     .filter(Boolean)
     .sort((a, b) => {
       const aKey = staffSortKey(player, a);
@@ -226,14 +212,14 @@ function buildStaffOverviewEmbed(player, server, user) {
 
   if (poolLines.length > 0) {
     embed.addFields({
-      name: "Today's Available Staff",
+      name: "Available Staff",
       value: poolLines.join("\n"),
       inline: false
     });
   } else {
     embed.addFields({
-      name: "Today's Available Staff",
-      value: "_No staff available today. Check back tomorrow!_",
+      name: "Available Staff",
+      value: "_No staff available._",
       inline: false
     });
   }
@@ -248,9 +234,7 @@ function buildStaffComponents(userId, player, server) {
   const rows = [];
 
   // Level up menu
-  const levelUpOptions = server.staff_pool
-    .map(staffId => staffContent.staff_members?.[staffId])
-    .filter(Boolean)
+  const levelUpOptions = Object.values(staffContent.staff_members ?? {})
     .sort((a, b) => {
       const aKey = staffSortKey(player, a);
       const bKey = staffSortKey(player, b);

@@ -4,13 +4,11 @@
       "upgrade_id": "u_prep",
       "name": "Prep Station",
       "category": "kitchen",
-      "description": "Improved prep area for faster cooking.",
+      "description": "Improved prep area for larger batches.",
       "max_level": 20,
       "base_cost": 200,
       "cost_scaling": 1.35,
-      "effects_per_level": {
-        "cooking_speed_bonus": 0.02
-      }
+      "effects_per_level": {}
     },
     "u_stoves": {
       "upgrade_id": "u_stoves",
@@ -124,12 +122,11 @@
       "upgrade_id": "u_staff_quarters",
       "name": "Staff Quarters",
       "category": "staff",
-      "description": "Better accommodations attract quality staff.",
+      "description": "Better accommodations expand your staff capacity.",
       "max_level": 20,
       "base_cost": 400,
       "cost_scaling": 1.45,
       "effects_per_level": {
-        "staff_pool_quality": 0.05,
         "staff_capacity": 0.5
       }
     },

@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
-  rollDailyStaffPool,
   levelUpStaff,
   getMaxStaffCapacity,
   calculateStaffEffects,
@@ -23,17 +22,6 @@ function makeTestPlayer() {
     staff_levels: {}
   };
 }
-
-test("Staff: rollDailyStaffPool returns valid staff pool", () => {
-  const pool = rollDailyStaffPool({ serverId: "test-server", staffContent });
-  assert.ok(Array.isArray(pool));
-  // Pool size may be less than 4 due to duplicate filtering
-  assert.ok(pool.length >= 3 && pool.length <= 4);
-  // Verify all items are valid staff IDs
-  pool.forEach(staffId => {
-    assert.ok(staffContent.staff_members[staffId]);
-  });
-});
 
 test("Staff: levelUpStaff successfully levels up when conditions met", () => {
   const player = makeTestPlayer();
@@ -90,44 +78,44 @@ test("Staff: getMaxStaffCapacity returns 12 for all staff", () => {
 test("Staff: calculateStaffEffects aggregates bonuses", () => {
   const player = makeTestPlayer();
   player.staff_levels = {
-    "prep_chef": 2,
-    "server": 3
+    "server": 3,
+    "forager": 2
   };
   
   const effects = calculateStaffEffects(player, staffContent);
   
-  assert.ok(effects.cooking_speed_bonus > 0);
   assert.ok(effects.rep_bonus_flat > 0);
+  assert.ok(effects.forage_bonus_items > 0);
 });
 
 test("Staff: calculateStaffEffects scales with level", () => {
   const player = makeTestPlayer();
   
-  player.staff_levels = { "prep_chef": 1 };
+  player.staff_levels = { "forager": 1 };
   const effects1 = calculateStaffEffects(player, staffContent);
-  const speed1 = effects1.cooking_speed_bonus;
+  const forage1 = effects1.forage_bonus_items;
   
-  player.staff_levels = { "prep_chef": 5 };
+  player.staff_levels = { "forager": 5 };
   const effects5 = calculateStaffEffects(player, staffContent);
-  const speed5 = effects5.cooking_speed_bonus;
+  const forage5 = effects5.forage_bonus_items;
   
-  assert.ok(speed5 > speed1);
-  assert.ok(Math.abs(speed5 - speed1 * 5) < 0.01); // Should be ~5x
+  assert.ok(forage5 > forage1);
+  assert.strictEqual(forage5, forage1 * 5);
 });
 
 test("Staff: calculateStaffEffects applies manuals multiplier", () => {
   const player = makeTestPlayer();
   player.staff_levels = {
-    "prep_chef": 2
+    "server": 2
   };
   
   const baseEffects = calculateStaffEffects(player, staffContent);
-  const baseCookingSpeed = baseEffects.cooking_speed_bonus;
+  const baseRep = baseEffects.rep_bonus_flat;
   
   player.upgrades.u_manuals = 5; // +15% staff effects
   const boostedEffects = calculateStaffEffects(player, staffContent);
   
-  assert.ok(boostedEffects.cooking_speed_bonus > baseCookingSpeed);
+  assert.ok(boostedEffects.rep_bonus_flat > baseRep);
 });
 
 test("Staff: getStaffLevels returns staff details", () => {

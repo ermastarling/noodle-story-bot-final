@@ -3,15 +3,13 @@
     "prep_chef": {
       "staff_id": "prep_chef",
       "name": "Prep Chef",
-      "description": "Speeds up ingredient prep, improving cooking efficiency.",
+      "description": "Keeps prep work organized and consistent.",
       "category": "kitchen",
       "rarity": "common",
       "max_level": 20,
       "base_cost": 300,
       "cost_scaling": 1.35,
-      "effects_per_level": {
-        "cooking_speed_bonus": 0.05
-      }
+      "effects_per_level": {}
     },
     "sous_chef": {
       "staff_id": "sous_chef",

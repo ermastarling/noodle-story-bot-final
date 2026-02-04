@@ -524,13 +524,35 @@ async function handleParty(interaction) {
 
       try {
         leaveParty(db, currentParty.party_id, userId);
-        
+
+        const embed = new EmbedBuilder()
+          .setTitle("🎪 Party")
+          .setDescription(`✅ You've left the party **${currentParty.party_name}**.`)
+          .setColor(0x00aeff);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+        const replyObj = {
+          content: " ",
+          embeds: [embed],
+          components: [partyCreationRow(userId), socialMainMenuRow(userId)]
+        };
+
+        const sourceMessageId = interaction.message?.id ?? null;
+        if (sourceMessageId && interaction.channel?.messages) {
+          try {
+            const msg = await interaction.channel.messages.fetch(sourceMessageId);
+            await msg.edit(replyObj);
+            if (interaction.deferred || interaction.replied) {
+              await interaction.deleteReply().catch(() => {});
+            }
+            return;
+          } catch (e) {
+            // fallback to editing interaction reply
+          }
+        }
+
         await ensurePublicReply();
-        return interaction.editReply({
-          content: `✅ You've left the party **${currentParty.party_name}**.`,
-          embeds: [],
-          components: [socialMainMenuRow(userId)]
-        });
+        return interaction.editReply(replyObj);
       } catch (err) {
         return errorReply(interaction, `❌ ${err.message}`);
       }
@@ -992,6 +1014,8 @@ async function handleComponent(interaction) {
       }
     }
     if (customId.startsWith("noodle-social:modal:create_party:")) {
+      const parts = customId.split(":");
+      const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : null;
       const partyName = interaction.fields.getTextInputValue("party_name");
       
       if (!partyName || partyName.trim().length === 0) {
@@ -1016,11 +1040,23 @@ async function handleComponent(interaction) {
             .setColor(0x00ff00);
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
+          const replyObj = {
+            embeds: [embed],
+            components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
+          };
 
-          return interaction.editReply({ 
-            embeds: [embed], 
-            components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)] 
-          });
+          if (sourceMessageId && interaction.channel?.messages) {
+            try {
+              const msg = await interaction.channel.messages.fetch(sourceMessageId);
+              await msg.edit(replyObj);
+              await interaction.deleteReply().catch(() => {});
+              return;
+            } catch (e) {
+              // fallback to editing interaction reply
+            }
+          }
+
+          return interaction.editReply(replyObj);
         } catch (err) {
           return errorReply(interaction, `❌ ${err.message}`);
         }
@@ -1618,9 +1654,14 @@ async function handleComponent(interaction) {
       }
       const party = getUserActiveParty(db, userId);
       if (!party) {
+        const embed = new EmbedBuilder()
+          .setTitle("🎪 Party")
+          .setDescription("You're not in any party. Create or join one!")
+          .setColor(0x00aeff);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
         return componentCommit(interaction, {
-          content: "You're not in any party. Create or join one!",
-          embeds: [],
+          content: " ",
+          embeds: [embed],
           components: [partyCreationRow(userId), socialMainMenuRow(userId)],
           ephemeral: false
         });
@@ -1786,12 +1827,16 @@ async function handleComponent(interaction) {
           tagline: "A tiny shop with a big simmer."
         };
       }
-      
+
+      if (!player.lifetime) {
+        player.lifetime = { bowls_served_total: 0 };
+      }
+
       let description = `*${player.profile.tagline}*`;
-      if (party) {
+      if (party?.party_name) {
         description += `\n\n🎪 **${party.party_name}**`;
       }
-      
+
       const embed = new EmbedBuilder()
         .setTitle(`🍜 ${player.profile.shop_name}`)
         .setDescription(description)
@@ -2554,8 +2599,9 @@ async function handleComponent(interaction) {
       }
 
       try {
+        const sourceMessageId = interaction.message?.id ?? "none";
         return await interaction.showModal({
-          customId: `noodle-social:modal:create_party:${userId}`,
+          customId: `noodle-social:modal:create_party:${userId}:${sourceMessageId}`,
           title: "Create Party",
           components: [
             {

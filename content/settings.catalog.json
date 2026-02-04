@@ -94,7 +94,7 @@
     "key": "SPOILAGE_ENABLED",
     "type": "bool",
     "scope": "server",
-    "default": false,
+    "default": true,
     "description": "Enable spoilage mechanics for ingredients.",
     "requires_permission": "manage_guild",
     "restart_required": false,
