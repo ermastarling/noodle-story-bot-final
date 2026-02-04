@@ -5,6 +5,7 @@ applyDropsToInventory,
 setForageCooldown,
 FORAGE_ITEM_IDS
 } from "../game/forage.js";
+import { addIngredientsToInventory } from "../game/inventory.js";
 import {
 advanceTutorial,
 ensureTutorial,
@@ -1422,13 +1423,25 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     setForageCooldown(p, now);
     advanceTutorial(p, "forage");
 
-    const lines = Object.entries(accepted).map(
+    const lines = Object.entries(inventoryResult.added).map(
       ([id, q]) => `• **${q}×** ${displayItemName(id)}`
     );
 
     const header = itemId
       ? `You search carefully and gather:\n`
       : `You wander into the nearby grove and return with:\n`;
+
+    let description = `${header}${lines.join("\n")}`;
+    
+    // Add warning if some items were blocked due to capacity
+    if (!inventoryResult.success && Object.keys(inventoryResult.blocked).length > 0) {
+      const blockedLines = Object.entries(inventoryResult.blocked).map(
+        ([id, q]) => `**${q}×** ${displayItemName(id)}`
+      );
+      description += `\n\n⚠️ **Pantry Full!** Could not collect: ${blockedLines.join(", ")}\n_Upgrade your Pantry to increase capacity._`;
+    }
+    
+    description += tutorialSuffix(p);
 
     const forageEmbed = buildMenuEmbed({
       title: "🌿 Forage",
@@ -1556,6 +1569,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({ content: `Only ${stock} in stock today for **${friendly}**.`, ephemeral: true });
     }
     if (p.coins < cost) return commitState({ content: "Not enough coins for that purchase." });
+
+    // Check inventory capacity before purchase
+    const inventoryResult = addIngredientsToInventory(p, { [itemId]: qty }, "block");
+    
+    if (!inventoryResult.success) {
+      const friendly = displayItemName(itemId);
+      return commitState({ 
+        content: `⚠️ **Pantry Full!** Cannot store ${qty}× **${friendly}**.\nUpgrade your Pantry to increase capacity.`,
+        ephemeral: true
+      });
+    }
 
     p.coins -= cost;
     p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qtyToBuy;
@@ -2934,12 +2958,28 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           return componentCommit(interaction, { content: `Not enough coins. Total is **${totalCost}c**.`, ephemeral: true });
         }
 
+        // Check inventory capacity before purchase
+        const purchaseItems = {};
+        for (const x of buyLines) {
+          purchaseItems[x.id] = x.qty;
+        }
+        
+        const inventoryResult = addIngredientsToInventory(p2, purchaseItems, "block");
+        
+        if (!inventoryResult.success) {
+          const blockedItems = Object.entries(inventoryResult.blocked)
+            .map(([id, qty]) => `${qty}× ${displayItemName(id)}`)
+            .join(", ");
+          return componentCommit(interaction, { 
+            content: `⚠️ **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
+            ephemeral: true
+          });
+        }
+
         // Apply purchase
         p2.coins -= totalCost;
-        if (!p2.inv_ingredients) p2.inv_ingredients = {};
 
         for (const x of buyLines) {
-          p2.inv_ingredients[x.id] = (p2.inv_ingredients[x.id] ?? 0) + x.qty;
           p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
         }
 
@@ -3123,12 +3163,28 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         return componentCommit(interaction, { content: `Not enough coins. Total is **${totalCost}c**.`, ephemeral: true });
       }
 
+      // Check inventory capacity before purchase
+      const purchaseItems = {};
+      for (const x of buyLines) {
+        purchaseItems[x.id] = x.qty;
+      }
+      
+      const inventoryResult = addIngredientsToInventory(p2, purchaseItems, "block");
+      
+      if (!inventoryResult.success) {
+        const blockedItems = Object.entries(inventoryResult.blocked)
+          .map(([id, qty]) => `${qty}× ${displayItemName(id)}`)
+          .join(", ");
+        return componentCommit(interaction, { 
+          content: `⚠️ **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
+          ephemeral: true
+        });
+      }
+
       // Apply purchase
       p2.coins -= totalCost;
-      if (!p2.inv_ingredients) p2.inv_ingredients = {};
 
       for (const x of buyLines) {
-        p2.inv_ingredients[x.id] = (p2.inv_ingredients[x.id] ?? 0) + x.qty;
         p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
       }
 

@@ -90,11 +90,12 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       const item = content.items?.[itemId];
       if (!item) continue;
 
-      // Check if item is protected by upgrades
-      const isProtected = isItemProtected(item, coldCellarLevel, secureCratesLevel);
+      // Get spoilage reduction from upgrades and tier
+      const { reduction, tierMultiplier } = getSpoilageReduction(item, coldCellarLevel, secureCratesLevel);
 
-      // Protected items still evaluated per tick, but with reduced chance
-      const spoilChance = isProtected ? adjustedBaseChance * 0.5 : adjustedBaseChance;
+      // Calculate effective spoilage chance
+      // Formula: baseChance * tierMultiplier * (1 - coldStorageReduction)
+      const spoilChance = baseChance * tierMultiplier * (1 - reduction);
 
       // Deterministic random based on player, item, and tick
       const seed = `spoilage:${player.user_id}:${itemId}:${lastActiveAt}:${tick}`;
@@ -137,19 +138,30 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
 
 /**
  * Check if an item is protected by storage upgrades
+ * Returns reduction factor (0.0 = no protection, 1.0 = full protection)
  */
-function isItemProtected(item, coldCellarLevel, secureCratesLevel) {
+function getSpoilageReduction(item, coldCellarLevel, secureCratesLevel) {
+  let reduction = 0;
+  
   // Cold Cellar protects fresh/spoilable ingredients
+  // Each level reduces spoilage by 1%, up to 50% maximum
   if (coldCellarLevel > 0 && item.tags?.includes('fresh')) {
-    return true;
+    reduction = Math.min(0.5, coldCellarLevel * 0.01);
   }
-
-  // Secure Crates protect valuable items (rare/epic tier)
-  if (secureCratesLevel > 0 && (item.tier === 'rare' || item.tier === 'epic')) {
-    return true;
-  }
-
-  return false;
+  
+  // Tier-based reduction (rarer items spoil slower)
+  const tierMultipliers = {
+    common: 1.0,
+    rare: 0.8,
+    epic: 0.6,
+    seasonal: 0.5
+  };
+  
+  const tierMultiplier = tierMultipliers[item.tier] || 1.0;
+  
+  // Combine reductions: base rate * tier modifier * (1 - cold storage reduction)
+  // Final formula: chance = baseChance * tierMultiplier * (1 - coldStorageReduction)
+  return { reduction, tierMultiplier };
 }
 
 /**

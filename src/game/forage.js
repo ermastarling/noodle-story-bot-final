@@ -1,6 +1,7 @@
 // src/game/forage.js
 import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
+import { addIngredientsToInventory } from "./inventory.js";
 
 // ✅ Forage-only pool (your list)
 // If the user chooses a specific item, we validate against this table.
@@ -110,10 +111,9 @@ export function rollForageDrops({
 }
 
 export function applyDropsToInventory(player, drops) {
-  if (!player.inv_ingredients) player.inv_ingredients = {};
-  for (const [itemId, qty] of Object.entries(drops)) {
-    player.inv_ingredients[itemId] = (player.inv_ingredients[itemId] ?? 0) + qty;
-  }
+  // Use the new inventory system with capacity checks
+  const result = addIngredientsToInventory(player, drops, "block");
+  return result;
 }
 
 export function setForageCooldown(player, nowMs) {
