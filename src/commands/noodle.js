@@ -1445,7 +1445,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!inventoryResult.success) {
       const friendly = displayItemName(itemId);
       return commitState({ 
-        content: `⚠️ **Pantry Full!** Cannot store ${qty}× **${friendly}**.\nUpgrade your Pantry to increase capacity (currently at capacity).`,
+        content: `⚠️ **Pantry Full!** Cannot store ${qty}× **${friendly}**.\nUpgrade your Pantry to increase capacity.`,
         ephemeral: true
       });
     }
