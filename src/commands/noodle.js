@@ -5,6 +5,7 @@ applyDropsToInventory,
 setForageCooldown,
 FORAGE_ITEM_IDS
 } from "../game/forage.js";
+import { addIngredientsToInventory } from "../game/inventory.js";
 import {
 advanceTutorial,
 ensureTutorial,
@@ -1438,8 +1439,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
     if (p.coins < cost) return commitState({ content: "Not enough coins for that purchase." });
 
+    // Check inventory capacity before purchase
+    const inventoryResult = addIngredientsToInventory(p, { [itemId]: qty }, "block");
+    
+    if (!inventoryResult.success) {
+      const friendly = displayItemName(itemId);
+      return commitState({ 
+        content: `⚠️ **Pantry Full!** Cannot store ${qty}× **${friendly}**.\nUpgrade your Pantry to increase capacity (currently at capacity).`,
+        ephemeral: true
+      });
+    }
+
     p.coins -= cost;
-    p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qty;
     p.market_stock[itemId] = stock - qty;
 
     advanceTutorial(p, "buy");
@@ -2679,12 +2690,28 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           return componentCommit(interaction, { content: `Not enough coins. Total is **${totalCost}c**.`, ephemeral: true });
         }
 
+        // Check inventory capacity before purchase
+        const purchaseItems = {};
+        for (const x of buyLines) {
+          purchaseItems[x.id] = x.qty;
+        }
+        
+        const inventoryResult = addIngredientsToInventory(p2, purchaseItems, "block");
+        
+        if (!inventoryResult.success) {
+          const blockedItems = Object.entries(inventoryResult.blocked)
+            .map(([id, qty]) => `${qty}× ${displayItemName(id)}`)
+            .join(", ");
+          return componentCommit(interaction, { 
+            content: `⚠️ **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
+            ephemeral: true
+          });
+        }
+
         // Apply purchase
         p2.coins -= totalCost;
-        if (!p2.inv_ingredients) p2.inv_ingredients = {};
 
         for (const x of buyLines) {
-          p2.inv_ingredients[x.id] = (p2.inv_ingredients[x.id] ?? 0) + x.qty;
           p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
         }
 
@@ -2851,12 +2878,28 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         return componentCommit(interaction, { content: `Not enough coins. Total is **${totalCost}c**.`, ephemeral: true });
       }
 
+      // Check inventory capacity before purchase
+      const purchaseItems = {};
+      for (const x of buyLines) {
+        purchaseItems[x.id] = x.qty;
+      }
+      
+      const inventoryResult = addIngredientsToInventory(p2, purchaseItems, "block");
+      
+      if (!inventoryResult.success) {
+        const blockedItems = Object.entries(inventoryResult.blocked)
+          .map(([id, qty]) => `${qty}× ${displayItemName(id)}`)
+          .join(", ");
+        return componentCommit(interaction, { 
+          content: `⚠️ **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
+          ephemeral: true
+        });
+      }
+
       // Apply purchase
       p2.coins -= totalCost;
-      if (!p2.inv_ingredients) p2.inv_ingredients = {};
 
       for (const x of buyLines) {
-        p2.inv_ingredients[x.id] = (p2.inv_ingredients[x.id] ?? 0) + x.qty;
         p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
       }
 
