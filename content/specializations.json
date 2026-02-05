@@ -1,0 +1,214 @@
+{
+  "specializations": [
+    {
+      "spec_id": "festival_noodle_house",
+      "name": "Festival Noodle House",
+      "icon": "🏮",
+      "description": "Boosts event visitors, festive décor vibes.",
+      "summary": "More event visitors and festive décor vibes.",
+      "requirements": { "min_level": 10 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "forest_kitchen",
+      "name": "Forest Kitchen",
+      "icon": "🌿",
+      "description": "Favors forage-driven recipes and nature décor.",
+      "summary": "More forage-friendly vibes and nature décor.",
+      "requirements": { "min_level": 20 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "comfort_food_inn",
+      "name": "Comfort Food Inn",
+      "icon": "🍲",
+      "description": "Hospitality-forward identity and cozy comfort.",
+      "summary": "A cozy comfort vibe for everyday guests.",
+      "requirements": { "min_level": 30 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "riverstone_kitchen",
+      "name": "Riverstone Kitchen",
+      "icon": "🌊",
+      "description": "Fresh river flavors and smooth stone décor.",
+      "summary": "Cool riverstone calm with crisp, fresh flavors.",
+      "requirements": { "min_level": 40 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "moonlit_atelier",
+      "name": "Moonlit Atelier",
+      "icon": "🌙",
+      "description": "Epic/seasonal flair and rare NPC affinity.",
+      "summary": "Elegant moonlit flair and rare NPC affinity.",
+      "requirements": { "min_level": 50 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "starlight_caravan",
+      "name": "Starlight Caravan",
+      "icon": "🌟",
+      "description": "Wandering wonder, glittering lanterns, and star-kissed service.",
+      "summary": "A dreamy starlit caravan with bright, whimsical charm.",
+      "requirements": { "min_level": 60 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "comet_kitchen",
+      "name": "Comet Kitchen",
+      "icon": "☄️",
+      "description": "Cosmic spectacle, bold flavors, and legendary spectacle.",
+      "summary": "A comet-bright kitchen with showstopping energy.",
+      "requirements": { "min_level": 70 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "aurora_bistro",
+      "name": "Aurora Bistro",
+      "icon": "🌌",
+      "description": "Northern lights ambiance and cool-toned elegance.",
+      "summary": "Aurora glow with serene, luminous décor.",
+      "requirements": { "min_level": 80 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "lotus_teahouse",
+      "name": "Lotus Teahouse",
+      "icon": "🪷",
+      "description": "Tranquil tea rituals and refined floral décor.",
+      "summary": "Lotus calm with gentle ceremonial flair.",
+      "requirements": { "min_level": 90 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "stormforged_wok",
+      "name": "Stormforged Wok",
+      "icon": "⚡",
+      "description": "Electric energy, sizzling woks, and bold service.",
+      "summary": "Storm-charged momentum and sharp, lively décor.",
+      "requirements": { "min_level": 100 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "coral_cove_canteen",
+      "name": "Coral Cove Canteen",
+      "icon": "🐚",
+      "description": "Coastal breeze, sea-salt comfort, and shell accents.",
+      "summary": "A coral cove retreat with airy seaside charm.",
+      "requirements": { "min_level": 110 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "spice_route_caravan",
+      "name": "Spice Route Caravan",
+      "icon": "🧭",
+      "description": "Trade-route spices, layered aromas, and market flair.",
+      "summary": "A bustling caravan of bold spice and brass.",
+      "requirements": { "min_level": 120 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "sunlit_veranda",
+      "name": "Sunlit Veranda",
+      "icon": "☀️",
+      "description": "Golden daylight, open-air seating, and bright décor.",
+      "summary": "Sunlit warmth with breezy, open hospitality.",
+      "requirements": { "min_level": 130 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "frostpeak_izakaya",
+      "name": "Frostpeak Izakaya",
+      "icon": "❄️",
+      "description": "Crisp winter calm and frosted lantern glow.",
+      "summary": "Frosted serenity with quiet, cozy warmth.",
+      "requirements": { "min_level": 140 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "gilded_pavilion",
+      "name": "Gilded Pavilion",
+      "icon": "🏛️",
+      "description": "Polished marble, gilded trim, and refined service.",
+      "summary": "A grand pavilion with elegant, golden polish.",
+      "requirements": { "min_level": 150 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "misty_grove_stall",
+      "name": "Misty Grove Stall",
+      "icon": "🌫️",
+      "description": "Foggy forest hush and soft, mossy accents.",
+      "summary": "A misty grove retreat with gentle greenery.",
+      "requirements": { "min_level": 160 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "emberglass_kitchen",
+      "name": "Emberglass Kitchen",
+      "icon": "🧪",
+      "description": "Smoky glasswork, ember glow, and artisan heat.",
+      "summary": "Emberglass glow with crafted, molten detail.",
+      "requirements": { "min_level": 170 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "celestial_observatory",
+      "name": "Celestial Observatory",
+      "icon": "🔭",
+      "description": "High-altitude stargazing and refined night décor.",
+      "summary": "Celestial poise with observatory elegance.",
+      "requirements": { "min_level": 180 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "velvet_night_noodle",
+      "name": "Velvet Night Noodle",
+      "icon": "🌒",
+      "description": "Midnight luxury, soft velvet tones, and hush.",
+      "summary": "Velvet night calm with understated prestige.",
+      "requirements": { "min_level": 190 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "mythic_dragon_hall",
+      "name": "Mythic Dragon Hall",
+      "icon": "🐉",
+      "description": "Legendary dragon motifs and heroic grandeur.",
+      "summary": "Mythic dragon prestige with bold ceremonial flair.",
+      "requirements": { "min_level": 200 },
+      "is_permanent": false
+    },
+    {
+      "spec_id": "golden_hearth",
+      "name": "Golden Hearth",
+      "icon": "🔥",
+      "description": "Unlocked at 2,500 bowls served.",
+      "summary": "Warm hearth prestige and classic inn ambiance.",
+      "requirements": { "bowls_served_total": 2500 },
+      "hidden_until_unlocked": true,
+      "is_permanent": true
+    },
+    {
+      "spec_id": "lucky_ladle_pavilion",
+      "name": "Lucky Ladle Pavilion",
+      "icon": "✨",
+      "description": "Unlocked at 4,444 bowls served.",
+      "summary": "Whimsical fortune motifs and charm banners.",
+      "requirements": { "bowls_served_total": 4444 },
+      "hidden_until_unlocked": true,
+      "is_permanent": true
+    },
+    {
+      "spec_id": "legendary_noodle_hall",
+      "name": "Legendary Noodle Hall",
+      "icon": "🏯",
+      "description": "Unlocked at 10,000 bowls served.",
+      "summary": "Mythic prestige and legendary grandeur.",
+      "requirements": { "bowls_served_total": 10000 },
+      "hidden_until_unlocked": true,
+      "is_permanent": true
+    }
+  ]
+}

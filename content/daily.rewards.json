@@ -1,0 +1,8 @@
+{
+  "base": { "coins": 60, "sxp": 12, "rep": 2 },
+  "streak_bonuses": [
+    { "day": 3, "reward": { "coins": 20 } },
+    { "day": 7, "reward": { "coins": 50, "sxp": 10 } },
+    { "day": 14, "reward": { "coins": 100, "rep": 3 } }
+  ]
+}

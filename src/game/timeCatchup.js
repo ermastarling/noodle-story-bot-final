@@ -82,7 +82,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
     const spoilableItems = Object.entries(inventory).filter(([itemId, qty]) => {
       if (qty <= 0) return false;
       const item = content.items?.[itemId];
-      return item?.spoilable === true;
+      return item?.spoilable === true && item?.acquisition === "forage";
     });
 
     // Evaluate spoilage for each item

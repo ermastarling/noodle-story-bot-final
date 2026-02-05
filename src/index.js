@@ -21,7 +21,12 @@ import { fileURLToPath } from "url";
   const { commandMap } = await import("./commands/index.js");
   const { startDailyResetScheduler } = await import("./jobs/dailyReset.js");
   const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
-  const { loadContentBundle, loadSettingsCatalog } = await import("./content/index.js");
+  const {
+    loadContentBundle,
+    loadSettingsCatalog,
+    loadBadgesContent,
+    loadSpecializationsContent
+  } = await import("./content/index.js");
   const { openDb, getPlayer } = await import("./db/index.js");
   const { newPlayerProfile } = await import("./game/player.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
@@ -74,6 +79,8 @@ import { fileURLToPath } from "url";
   const db = openDb();
   const content = loadContentBundle(1);
   const settingsCatalog = loadSettingsCatalog();
+  const badgesContent = loadBadgesContent();
+  const specializationsContent = loadSpecializationsContent();
 
   function getUnlockedIngredientIds(player, content) {
     const out = new Set();
@@ -225,6 +232,48 @@ import { fileURLToPath } from "url";
             )
             .slice(0, 25)
             .map(x => ({
+              name: String(x.name).slice(0, 100),
+              value: String(x.id).slice(0, 100)
+            }));
+
+          return interaction.respond(results);
+        }
+
+        // ✅ Badge autocomplete (owned badges)
+        if (sub === "badge_set" && focused.name === "badge_id") {
+          const serverId = interaction.guildId;
+          const userId = interaction.user.id;
+          if (!serverId) return interaction.respond([]);
+
+          const p = getPlayer(db, serverId, userId) ?? newPlayerProfile(userId);
+          const owned = Array.isArray(p.profile?.badges) ? p.profile.badges : [];
+          const results = owned
+            .map((id) => {
+              const badge = badgesContent?.badges?.find((b) => b.badge_id === id);
+              const name = badge?.name ?? id;
+              return { id, name };
+            })
+            .filter((x) =>
+              x.id.toLowerCase().includes(q) || x.name.toLowerCase().includes(q)
+            )
+            .slice(0, 25)
+            .map((x) => ({
+              name: String(x.name).slice(0, 100),
+              value: String(x.id).slice(0, 100)
+            }));
+
+          return interaction.respond(results);
+        }
+
+        // ✅ Specialization autocomplete
+        if (sub === "specialize" && focused.name === "spec") {
+          const results = (specializationsContent?.specializations ?? [])
+            .map((spec) => ({ id: spec.spec_id, name: spec.name }))
+            .filter((x) =>
+              x.id.toLowerCase().includes(q) || x.name.toLowerCase().includes(q)
+            )
+            .slice(0, 25)
+            .map((x) => ({
               name: String(x.name).slice(0, 100),
               value: String(x.id).slice(0, 100)
             }));

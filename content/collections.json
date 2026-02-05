@@ -1,0 +1,64 @@
+{
+  "collections": [
+    {
+      "collection_id": "npc_codex",
+      "name": "Tea-Room Regulars Ledger",
+      "description": "Meet and serve every regular to fill the ledger.",
+      "type": "npc",
+      "entries": [],
+      "entry_source": "npcs"
+    },
+    {
+      "collection_id": "recipe_codex_common",
+      "name": "Hearthside Recipe Quilt (Common)",
+      "description": "Stitch together all common-tier recipes.",
+      "type": "recipe",
+      "entries": [],
+      "entry_source": "recipes",
+      "tier": "common"
+    },
+    {
+      "collection_id": "recipe_codex_rare",
+      "name": "Moonlit Recipe Journal (Rare)",
+      "description": "Record every rare recipe in the journal.",
+      "type": "recipe",
+      "entries": [],
+      "entry_source": "recipes",
+      "tier": "rare"
+    },
+    {
+      "collection_id": "recipe_codex_epic",
+      "name": "Starlit Masterpiece Tome (Epic)",
+      "description": "Complete the epic recipe collection.",
+      "type": "recipe",
+      "entries": [],
+      "entry_source": "recipes",
+      "tier": "epic"
+    },
+    {
+      "collection_id": "recipe_codex_seasonal",
+      "name": "Seasonal Simmer Scrapbook",
+      "description": "Gather recipes tied to seasonal events.",
+      "type": "recipe",
+      "entries": [],
+      "entry_source": "recipes",
+      "tier": "seasonal"
+    },
+    {
+      "collection_id": "recipe_codex_all",
+      "name": "Cozy Kitchen Compendium",
+      "description": "Master the full recipe catalog.",
+      "type": "recipe",
+      "entries": [],
+      "entry_source": "recipes"
+    },
+    {
+      "collection_id": "bowl_ledger",
+      "name": "Ladle & Lantern Ledger",
+      "description": "Bowls served milestones: 100, 250, 500, 1000, 2500, 4444, 5000, and 10000.",
+      "type": "milestone",
+      "entries": ["100", "250", "500", "1000", "2500", "4444", "5000", "10000"],
+      "counter_key": "bowls_served_total"
+    }
+  ]
+}

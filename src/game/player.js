@@ -29,7 +29,7 @@ export function newPlayerProfile(userId) {
     staff_levels: {},
 
     daily: { last_claimed_at: null, streak_days: 0, streak_last_day: null },
-    quests: { active: {}, completed: [], claimed: [] },
+    quests: { active: {}, completed: [], claimed: [], daily_day: null, weekly_week: null },
 
     orders: { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 },
 
@@ -43,9 +43,12 @@ export function newPlayerProfile(userId) {
       shop_name: "My Noodle Shop",
       tagline: "A tiny shop with a big simmer.",
       featured_badge_id: null,
+      badges: [],
       decor_slots: { front:null,counter:null,wall:null,sign:null,frame:null },
-      specialization: { active_spec_id: null, chosen_at: null, change_cooldown_expires_at: null }
+      specialization: { active_spec_id: null, chosen_at: null, change_cooldown_expires_at: null, unlocked_spec_ids: [] }
     },
+
+    collections: { completed: [], progress: {} },
 
     tutorial: { active: true, queue: [...TUTORIAL_QUESTS], completed: [] },
 

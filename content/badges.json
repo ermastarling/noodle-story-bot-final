@@ -1,0 +1,53 @@
+{
+  "badges": [
+    {
+      "badge_id": "bowl_100",
+      "name": "Hundred-Bowl Simmer",
+      "icon": "🍜",
+      "rarity": "rare",
+      "condition": { "type": "serve_bowls_total", "value": 100 }
+    },
+    {
+      "badge_id": "bowl_250",
+      "name": "Quarter-Kilo Ladle",
+      "icon": "🥢",
+      "rarity": "rare",
+      "condition": { "type": "serve_bowls_total", "value": 250 }
+    },
+    {
+      "badge_id": "bowl_500",
+      "name": "Five-Hundred Bowl Steward",
+      "icon": "🍲",
+      "rarity": "rare",
+      "condition": { "type": "serve_bowls_total", "value": 500 }
+    },
+    {
+      "badge_id": "bowl_1000",
+      "name": "Thousand-Bowl Noodle Sage",
+      "icon": "🏮",
+      "rarity": "epic",
+      "condition": { "type": "serve_bowls_total", "value": 1000 }
+    },
+    {
+      "badge_id": "bowl_2500",
+      "name": "Golden Hearth Keeper",
+      "icon": "🔥",
+      "rarity": "epic",
+      "condition": { "type": "serve_bowls_total", "value": 2500 }
+    },
+    {
+      "badge_id": "bowl_5000",
+      "name": "Grand Pavilion Host",
+      "icon": "🎏",
+      "rarity": "epic",
+      "condition": { "type": "serve_bowls_total", "value": 5000 }
+    },
+    {
+      "badge_id": "bowl_10000",
+      "name": "Ten-Thousand Bowl Legend",
+      "icon": "🌙",
+      "rarity": "seasonal",
+      "condition": { "type": "serve_bowls_total", "value": 10000 }
+    }
+  ]
+}

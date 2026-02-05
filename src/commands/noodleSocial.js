@@ -7,7 +7,7 @@ import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
 import { loadContentBundle } from "../content/index.js";
-import { noodleMainMenuRowNoProfile, displayItemName } from "./noodle.js";
+import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed } from "./noodle.js";
 import {
   grantBlessing,
   getActiveBlessing,
@@ -131,8 +131,12 @@ function socialMainMenuRowNoProfile(userId) {
       .setLabel("📈 Stats")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:season:${userId}`)
-      .setLabel("🍂 Season")
+      .setCustomId(`noodle:nav:quests:${userId}`)
+      .setLabel("📜 Quests")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:profile_edit:${userId}`)
+      .setLabel("✏️ Customize")
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -322,6 +326,10 @@ function statsViewButtons(userId) {
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
       .setLabel("📊 Leaderboard")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:collections:${userId}`)
+      .setLabel("📚 Collections")
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -1820,35 +1828,13 @@ async function handleComponent(interaction) {
     if (action === "profile") {
       const player = ensurePlayer(serverId, userId);
       const party = getUserActiveParty(db, userId);
-      
-      if (!player.profile) {
-        player.profile = {
-          shop_name: "My Noodle Shop",
-          tagline: "A tiny shop with a big simmer."
-        };
-      }
 
-      if (!player.lifetime) {
-        player.lifetime = { bowls_served_total: 0 };
-      }
-
-      let description = `*${player.profile.tagline}*`;
-      if (party?.party_name) {
-        description += `\n\n🎪 **${party.party_name}**`;
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(`🍜 ${player.profile.shop_name}`)
-        .setDescription(description)
-        .addFields(
-          { name: "⭐ Bowls Served", value: String(player.lifetime?.bowls_served_total || 0), inline: true },
-          { name: "Level", value: String(player.shop_level || 1), inline: true },
-          { name: "REP", value: String(player.rep || 0), inline: true },
-          { name: "Coins", value: `${player.coins || 0}c`, inline: true }
-        )
-        .setColor(0x00ff88);
-
-      applyOwnerFooter(embed, interaction.member ?? interaction.user);
+      const embed = renderProfileEmbed(
+        player,
+        interaction.member?.displayName ?? interaction.user?.username,
+        party?.party_name,
+        interaction.member ?? interaction.user
+      );
 
       return componentCommit(interaction, {
         embeds: [embed],

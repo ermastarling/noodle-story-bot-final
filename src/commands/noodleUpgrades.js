@@ -6,6 +6,7 @@ import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "..
 import { newPlayerProfile } from "../game/player.js";
 import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
 import { noodleMainMenuRow } from "./noodle.js";
+import { buildStaffOverviewEmbed } from "./noodleStaff.js";
 import {
   purchaseUpgrade,
   calculateUpgradeCost,
@@ -110,6 +111,7 @@ function buildCategoryButtonsRow(userId, activeCategory = null) {
 
 function buildStaffRarityRow(userId, activeRarity = "common") {
   const rarities = [
+    { id: "overview", label: "👥 Staff" },
     { id: "common", label: "⚪ Common" },
     { id: "rare", label: "⭐ Rare" },
     { id: "epic", label: "🌟 Epic" },
@@ -225,6 +227,11 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
   const categoryData = upgradesContent.upgrade_categories?.[categoryId];
 
   if (categoryId === "staff") {
+    if (staffRarity === "overview") {
+      const embed = buildStaffOverviewEmbed(player, null, user);
+      embed.setTitle("👥 Staff Management");
+      return embed;
+    }
     if (staffRarity === "upgrades") {
       const embed = new EmbedBuilder()
         .setTitle("🧰 Staff Upgrades")
@@ -467,7 +474,7 @@ export async function noodleUpgradesInteractionHandler(interaction) {
 
     const resolveStaffRarity = () => {
       if (action === "staffpage") return parts[3] ?? "common";
-      if (action === "category" && parts[3] === "staff") return parts[4] ?? "common";
+      if (action === "category" && parts[3] === "staff") return parts[4] ?? "overview";
       return "common";
     };
 

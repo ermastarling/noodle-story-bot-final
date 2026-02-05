@@ -1,0 +1,303 @@
+{
+  "sets": [
+    {
+      "set_id": "festival_noodle_house",
+      "name": "Festival Noodle House",
+      "description": "Boosts event visitors, festive decor vibes.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_festival_gate" },
+        { "slot": "counter", "item_id": "decor_cedar_counter" },
+        { "slot": "wall", "item_id": "decor_lantern_row" },
+        { "slot": "sign", "item_id": "decor_handpainted_sign" },
+        { "slot": "frame", "item_id": "decor_festival_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "forest_kitchen",
+      "name": "Forest Kitchen",
+      "description": "Favors forage-driven recipes and nature décor.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_bamboo_gate" },
+        { "slot": "counter", "item_id": "decor_forest_counter" },
+        { "slot": "wall", "item_id": "decor_ivy_trellis" },
+        { "slot": "sign", "item_id": "decor_forest_kitchen_sign" },
+        { "slot": "frame", "item_id": "decor_forest_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "comfort_food_inn",
+      "name": "Comfort Food Inn",
+      "description": "Hospitality-forward identity and cozy comfort.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_welcome_banner" },
+        { "slot": "counter", "item_id": "decor_comfort_counter" },
+        { "slot": "wall", "item_id": "decor_comfort_hearth_wall" },
+        { "slot": "sign", "item_id": "decor_comfort_sign" },
+        { "slot": "frame", "item_id": "decor_simple_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "riverstone_kitchen",
+      "name": "Riverstone Kitchen",
+      "description": "Fresh river flavors and smooth stone decor.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_riverstone_entry" },
+        { "slot": "counter", "item_id": "decor_riverstone_counter" },
+        { "slot": "wall", "item_id": "decor_riverstone_wall" },
+        { "slot": "sign", "item_id": "decor_riverstone_sign" },
+        { "slot": "frame", "item_id": "decor_riverstone_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "moonlit_atelier",
+      "name": "Moonlit Atelier",
+      "description": "Epic/seasonal flair and rare NPC affinity.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_moonlit_entry" },
+        { "slot": "counter", "item_id": "decor_moonlit_counter" },
+        { "slot": "wall", "item_id": "decor_moonlit_mural" },
+        { "slot": "sign", "item_id": "decor_moonlit_sign" },
+        { "slot": "frame", "item_id": "decor_moonlit_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "starlight_caravan",
+      "name": "Starlight Caravan",
+      "description": "Wandering wonder, glittering lanterns, and star-kissed service.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_starlight_gateway" },
+        { "slot": "counter", "item_id": "decor_starlight_counter" },
+        { "slot": "wall", "item_id": "decor_starlight_tapestry" },
+        { "slot": "sign", "item_id": "decor_starlight_sign" },
+        { "slot": "frame", "item_id": "decor_starlight_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "comet_kitchen",
+      "name": "Comet Kitchen",
+      "description": "Cosmic spectacle, bold flavors, and legendary spectacle.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_comet_portal" },
+        { "slot": "counter", "item_id": "decor_comet_counter" },
+        { "slot": "wall", "item_id": "decor_comet_wall" },
+        { "slot": "sign", "item_id": "decor_comet_sign" },
+        { "slot": "frame", "item_id": "decor_comet_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "aurora_bistro",
+      "name": "Aurora Bistro",
+      "description": "Northern lights ambiance and cool-toned elegance.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_aurora_entry" },
+        { "slot": "counter", "item_id": "decor_aurora_counter" },
+        { "slot": "wall", "item_id": "decor_aurora_wall" },
+        { "slot": "sign", "item_id": "decor_aurora_sign" },
+        { "slot": "frame", "item_id": "decor_aurora_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "lotus_teahouse",
+      "name": "Lotus Teahouse",
+      "description": "Tranquil tea rituals and refined floral decor.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_lotus_entry" },
+        { "slot": "counter", "item_id": "decor_lotus_counter" },
+        { "slot": "wall", "item_id": "decor_lotus_wall" },
+        { "slot": "sign", "item_id": "decor_lotus_sign" },
+        { "slot": "frame", "item_id": "decor_lotus_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "stormforged_wok",
+      "name": "Stormforged Wok",
+      "description": "Electric energy, sizzling woks, and bold service.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_stormforged_entry" },
+        { "slot": "counter", "item_id": "decor_stormforged_counter" },
+        { "slot": "wall", "item_id": "decor_stormforged_wall" },
+        { "slot": "sign", "item_id": "decor_stormforged_sign" },
+        { "slot": "frame", "item_id": "decor_stormforged_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "coral_cove_canteen",
+      "name": "Coral Cove Canteen",
+      "description": "Coastal breeze, sea-salt comfort, and shell accents.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_coral_entry" },
+        { "slot": "counter", "item_id": "decor_coral_counter" },
+        { "slot": "wall", "item_id": "decor_coral_wall" },
+        { "slot": "sign", "item_id": "decor_coral_sign" },
+        { "slot": "frame", "item_id": "decor_coral_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "spice_route_caravan",
+      "name": "Spice Route Caravan",
+      "description": "Trade-route spices, layered aromas, and market flair.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_spice_route_entry" },
+        { "slot": "counter", "item_id": "decor_spice_route_counter" },
+        { "slot": "wall", "item_id": "decor_spice_route_wall" },
+        { "slot": "sign", "item_id": "decor_spice_route_sign" },
+        { "slot": "frame", "item_id": "decor_spice_route_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "sunlit_veranda",
+      "name": "Sunlit Veranda",
+      "description": "Golden daylight, open-air seating, and bright decor.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_sunlit_entry" },
+        { "slot": "counter", "item_id": "decor_sunlit_counter" },
+        { "slot": "wall", "item_id": "decor_sunlit_wall" },
+        { "slot": "sign", "item_id": "decor_sunlit_sign" },
+        { "slot": "frame", "item_id": "decor_sunlit_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "frostpeak_izakaya",
+      "name": "Frostpeak Izakaya",
+      "description": "Crisp winter calm and frosted lantern glow.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_frostpeak_entry" },
+        { "slot": "counter", "item_id": "decor_frostpeak_counter" },
+        { "slot": "wall", "item_id": "decor_frostpeak_wall" },
+        { "slot": "sign", "item_id": "decor_frostpeak_sign" },
+        { "slot": "frame", "item_id": "decor_frostpeak_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "gilded_pavilion",
+      "name": "Gilded Pavilion",
+      "description": "Polished marble, gilded trim, and refined service.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_gilded_entry" },
+        { "slot": "counter", "item_id": "decor_gilded_counter" },
+        { "slot": "wall", "item_id": "decor_gilded_wall" },
+        { "slot": "sign", "item_id": "decor_gilded_sign" },
+        { "slot": "frame", "item_id": "decor_gilded_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "misty_grove_stall",
+      "name": "Misty Grove Stall",
+      "description": "Foggy forest hush and soft, mossy accents.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_misty_entry" },
+        { "slot": "counter", "item_id": "decor_misty_counter" },
+        { "slot": "wall", "item_id": "decor_misty_wall" },
+        { "slot": "sign", "item_id": "decor_misty_sign" },
+        { "slot": "frame", "item_id": "decor_misty_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "emberglass_kitchen",
+      "name": "Emberglass Kitchen",
+      "description": "Smoky glasswork, ember glow, and artisan heat.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_emberglass_entry" },
+        { "slot": "counter", "item_id": "decor_emberglass_counter" },
+        { "slot": "wall", "item_id": "decor_emberglass_wall" },
+        { "slot": "sign", "item_id": "decor_emberglass_sign" },
+        { "slot": "frame", "item_id": "decor_emberglass_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "celestial_observatory",
+      "name": "Celestial Observatory",
+      "description": "High-altitude stargazing and refined night decor.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_celestial_entry" },
+        { "slot": "counter", "item_id": "decor_celestial_counter" },
+        { "slot": "wall", "item_id": "decor_celestial_wall" },
+        { "slot": "sign", "item_id": "decor_celestial_sign" },
+        { "slot": "frame", "item_id": "decor_celestial_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "velvet_night_noodle",
+      "name": "Velvet Night Noodle",
+      "description": "Midnight luxury, soft velvet tones, and hush.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_velvet_entry" },
+        { "slot": "counter", "item_id": "decor_velvet_counter" },
+        { "slot": "wall", "item_id": "decor_velvet_wall" },
+        { "slot": "sign", "item_id": "decor_velvet_sign" },
+        { "slot": "frame", "item_id": "decor_velvet_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "mythic_dragon_hall",
+      "name": "Mythic Dragon Hall",
+      "description": "Legendary dragon motifs and heroic grandeur.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_dragon_entry" },
+        { "slot": "counter", "item_id": "decor_dragon_counter" },
+        { "slot": "wall", "item_id": "decor_dragon_wall" },
+        { "slot": "sign", "item_id": "decor_dragon_sign" },
+        { "slot": "frame", "item_id": "decor_dragon_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "hearth_classic",
+      "name": "Hearth Classic",
+      "description": "Warm hearthstone accents and amber glow.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_hearth_portal" },
+        { "slot": "counter", "item_id": "decor_hearth_counter" },
+        { "slot": "wall", "item_id": "decor_hearth_wall" },
+        { "slot": "sign", "item_id": "decor_hearth_sign" },
+        { "slot": "frame", "item_id": "decor_hearth_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "lucky_pavilion",
+      "name": "Lucky Pavilion",
+      "description": "Charm banners and night-market sparkle.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_lucky_portal" },
+        { "slot": "counter", "item_id": "decor_lucky_counter" },
+        { "slot": "wall", "item_id": "decor_lucky_wall" },
+        { "slot": "sign", "item_id": "decor_lucky_sign" },
+        { "slot": "frame", "item_id": "decor_lucky_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "legend_hall",
+      "name": "Legend Hall",
+      "description": "Mythic gold trim and legendary grandeur.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_legend_portal" },
+        { "slot": "counter", "item_id": "decor_legend_counter" },
+        { "slot": "wall", "item_id": "decor_legend_wall" },
+        { "slot": "sign", "item_id": "decor_legend_sign" },
+        { "slot": "frame", "item_id": "decor_legend_frame" }
+      ],
+      "completion_rewards": []
+    }
+  ]
+}

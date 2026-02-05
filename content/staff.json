@@ -3,7 +3,7 @@
     "prep_chef": {
       "staff_id": "prep_chef",
       "name": "Prep Chef",
-      "description": "Goes out to buy missing ingredients for you.",
+      "description": "Goes out to buy missing non-forage ingredients for you, +1 order per level.",
       "category": "kitchen",
       "rarity": "common",
         "max_level": 5,

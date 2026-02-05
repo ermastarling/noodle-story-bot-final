@@ -24,3 +24,38 @@ export function loadUpgradesContent() {
   const p = path.join(__dirname, "..", "..", "content", "upgrades.json");
   return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
+
+export function loadQuestsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "quests.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadDailyRewards() {
+  const p = path.join(__dirname, "..", "..", "content", "daily.rewards.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadBadgesContent() {
+  const p = path.join(__dirname, "..", "..", "content", "badges.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadCollectionsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "collections.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadSpecializationsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "specializations.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadDecorContent() {
+  const p = path.join(__dirname, "..", "..", "content", "decor.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadDecorSetsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "decor.sets.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}

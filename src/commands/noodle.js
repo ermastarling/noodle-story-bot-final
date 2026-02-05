@@ -13,7 +13,19 @@ getCurrentTutorialStep,
 formatTutorialMessage,
 formatTutorialCompletionMessage
 } from "../game/tutorial.js";
-import { loadContentBundle, loadSettingsCatalog, loadStaffContent, loadUpgradesContent } from "../content/index.js";
+import {
+  loadContentBundle,
+  loadSettingsCatalog,
+  loadStaffContent,
+  loadUpgradesContent,
+  loadQuestsContent,
+  loadDailyRewards,
+  loadBadgesContent,
+  loadCollectionsContent,
+  loadSpecializationsContent,
+  loadDecorContent,
+  loadDecorSetsContent
+} from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
@@ -24,7 +36,14 @@ import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, rollPlayerMarketStock, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
-import { STARTER_PROFILE, CLUES_TO_UNLOCK_RECIPE, INGREDIENT_CAPACITY_BASE } from "../constants.js";
+import {
+  STARTER_PROFILE,
+  CLUES_TO_UNLOCK_RECIPE,
+  INGREDIENT_CAPACITY_BASE,
+  PROFILE_DEFAULT_TAGLINE,
+  PROFILE_BADGES_SHOWN,
+  PROFILE_COLLECTIONS_SHOWN
+} from "../constants.js";
 import { nowTs } from "../util/time.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, BLESSING_EFFECTS } from "../game/social.js";
@@ -41,6 +60,30 @@ import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
+import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
+import { claimDailyReward } from "../game/daily.js";
+import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges } from "../game/badges.js";
+import {
+  applyCollectionProgressOnServe,
+  applyCollectionProgressOnCook,
+  ensureCollectionsState,
+  getCollectionsSummary
+} from "../game/collections.js";
+import {
+  canSelectSpecialization,
+  ensureSpecializationState,
+  getActiveSpecialization,
+  getSpecializationById,
+  meetsSpecializationRequirements,
+  selectSpecialization
+} from "../game/specialization.js";
+import {
+  ensureDecorState,
+  grantUnlockedDecor,
+  buildDecorOwnershipSummary,
+  getDecorItemById,
+  getOwnedDecorItems
+} from "../game/decor.js";
 import {
   getCookBatchOutput,
   rollCookBatchOutcome,
@@ -95,7 +138,82 @@ const content = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
+const questsContent = loadQuestsContent();
+const dailyRewards = loadDailyRewards();
+const badgesContent = loadBadgesContent();
+const collectionsContent = loadCollectionsContent();
+const specializationsContent = loadSpecializationsContent();
+const decorContent = loadDecorContent();
+const decorSetsContent = loadDecorSetsContent();
 const db = openDb();
+
+const DECOR_SET_SPECIALIZATION_MAP = {
+  festival_noodle_house: "festival_noodle_house",
+  forest_kitchen: "forest_kitchen",
+  comfort_food_inn: "comfort_food_inn",
+  riverstone_kitchen: "riverstone_kitchen",
+  moonlit_atelier: "moonlit_atelier",
+  starlight_caravan: "starlight_caravan",
+  comet_kitchen: "comet_kitchen",
+  aurora_bistro: "aurora_bistro",
+  lotus_teahouse: "lotus_teahouse",
+  stormforged_wok: "stormforged_wok",
+  coral_cove_canteen: "coral_cove_canteen",
+  spice_route_caravan: "spice_route_caravan",
+  sunlit_veranda: "sunlit_veranda",
+  frostpeak_izakaya: "frostpeak_izakaya",
+  gilded_pavilion: "gilded_pavilion",
+  misty_grove_stall: "misty_grove_stall",
+  emberglass_kitchen: "emberglass_kitchen",
+  celestial_observatory: "celestial_observatory",
+  velvet_night_noodle: "velvet_night_noodle",
+  mythic_dragon_hall: "mythic_dragon_hall",
+  hearth_classic: "golden_hearth",
+  lucky_pavilion: "lucky_ladle_pavilion",
+  legend_hall: "legendary_noodle_hall"
+};
+
+function getDecorSetSpecId(setId) {
+  return DECOR_SET_SPECIALIZATION_MAP[setId] ?? null;
+}
+
+function getDecorSetIdForSpec(specId) {
+  return Object.keys(DECOR_SET_SPECIALIZATION_MAP)
+    .find((setId) => DECOR_SET_SPECIALIZATION_MAP[setId] === specId) ?? null;
+}
+
+function applyDecorSetForSpecialization(player, specId) {
+  if (!specId) return false;
+  const setId = getDecorSetIdForSpec(specId);
+  if (!setId) return false;
+  const set = (decorSetsContent?.sets ?? []).find((s) => s.set_id === setId);
+  if (!set) return false;
+
+  ensureDecorState(player);
+  const slots = { front: null, counter: null, wall: null, sign: null, frame: null };
+  for (const piece of set.pieces ?? []) {
+    if (!piece?.slot || !piece?.item_id) continue;
+    slots[piece.slot] = piece.item_id;
+    if (!player.cosmetics_owned) player.cosmetics_owned = {};
+    player.cosmetics_owned[piece.item_id] = 1;
+  }
+  player.profile.decor_slots = slots;
+  return true;
+}
+
+function getDecorItemRequiredSpecId(item) {
+  if (!item?.set_id) return null;
+  return getDecorSetSpecId(item.set_id);
+}
+
+function isSpecializationSet(set) {
+  if (!set?.set_id) return false;
+  const specId = getDecorSetSpecId(set.set_id);
+  if (!specId) return false;
+  const spec = getSpecializationById(specializationsContent, specId);
+  if (!spec) return false;
+  return !spec.is_permanent;
+}
 
 /* ------------------------------------------------------------------ */
 /*  UI helpers                                                         */
@@ -120,6 +238,118 @@ function applyOwnerFooter(embed, user) {
 function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
   const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
   return applyOwnerFooter(embed, user);
+}
+
+function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization", page = 0, pageSize = 5 }) {
+  const completed = new Set(player.profile?.decor_sets_completed ?? []);
+  const owned = new Set(getOwnedDecorItems(player));
+  const activeSpecId = player.profile?.specialization?.active_spec_id ?? null;
+  const equippedSetId = activeSpecId ? getDecorSetIdForSpec(activeSpecId) : null;
+  const showSpecialization = view === "specialization";
+  const sets = (decorSetsContent?.sets ?? []).filter((set) => (
+    showSpecialization ? isSpecializationSet(set) : !isSpecializationSet(set)
+  ));
+  const totalPages = showSpecialization
+    ? Math.max(1, Math.ceil(sets.length / pageSize))
+    : 1;
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const pageSets = showSpecialization
+    ? sets.slice(safePage * pageSize, (safePage + 1) * pageSize)
+    : sets;
+  const lines = pageSets.map((set) => {
+    const specId = getDecorSetSpecId(set.set_id);
+    const spec = specId ? getSpecializationById(specializationsContent, specId) : null;
+    const requirements = spec?.requirements ?? null;
+    const reqCheck = spec ? meetsSpecializationRequirements(player, requirements) : { ok: false, reason: "Unavailable." };
+    const status = showSpecialization
+      ? (equippedSetId === set.set_id
+        ? "✅ Equipped"
+        : reqCheck.ok
+          ? "Available"
+          : `🔒 ${reqCheck.reason}`)
+      : (equippedSetId === set.set_id
+        ? "✅ Equipped"
+        : completed.has(set.set_id)
+          ? "✅ Complete"
+          : "🧩");
+    const description = set.description ? `_${set.description}_` : "_No description._";
+
+    const pieces = (set.pieces ?? []).map((p) => {
+      const item = getDecorItemById(decorContent, p.item_id);
+      return { item, itemId: p.item_id };
+    });
+    const piecesList = pieces.map(({ item, itemId }) => item?.name ?? itemId).join(", ");
+
+    if (showSpecialization) {
+      return `${status} **${set.name}**\n${piecesList}\n${description}`;
+    }
+
+    const totalPieces = (set.pieces ?? []).length;
+    const ownedPieces = (set.pieces ?? []).filter((p) => owned.has(p.item_id)).length;
+    const countLine = `Pieces: ${ownedPieces}/${totalPieces}`;
+    const missingItems = pieces.filter(({ itemId }) => !owned.has(itemId));
+    let missingBlock = "**All pieces collected.**";
+    if (missingItems.length) {
+      const collectionUnlocks = missingItems
+        .map(({ item }) => (item?.unlock_source === "collection"
+          ? { collectionId: item?.unlock_rule?.collection_id, entry: item?.unlock_rule?.entry }
+          : null))
+        .filter((u) => u?.collectionId);
+      const collectionIds = [...new Set(collectionUnlocks.map((u) => u.collectionId))];
+      if (collectionIds.length === 1 && collectionUnlocks.length === missingItems.length) {
+        const collectionId = collectionIds[0];
+        const collectionName = (collectionsContent?.collections ?? [])
+          .find((c) => c.collection_id === collectionId)?.name ?? collectionId;
+        missingBlock = `Unlock all pieces by completing collection **${collectionName}**.`;
+      } else {
+        const nonCollection = missingItems.length - collectionUnlocks.length;
+        if (!nonCollection && collectionIds.length > 1) {
+          const names = collectionIds.map((id) => (collectionsContent?.collections ?? [])
+            .find((c) => c.collection_id === id)?.name ?? id);
+          missingBlock = `Unlock pieces by completing collections: ${names.join(", ")}.`;
+        } else {
+          missingBlock = "Complete the remaining unlock requirements to collect all pieces.";
+        }
+      }
+    }
+    return `${status} **${set.name}**\n${piecesList}\n${countLine}\n${description}\n${missingBlock}`;
+  });
+
+  let description = lines.length ? lines.join("\n\n") : "_No sets available on this page yet._";
+  if (showSpecialization && totalPages > 1) {
+    description += `\n\n*(page ${safePage + 1}/${totalPages})*`;
+  }
+
+  const embed = buildMenuEmbed({
+    title: showSpecialization ? "🪞 Décor — Specialization Sets" : "🪞 Décor — Collection Sets",
+    description,
+    user: ownerUser
+  });
+
+  return { embed, page: safePage, totalPages };
+}
+
+function formatDecorUnlockRequirement(item) {
+  if (!item) return "Unknown requirement";
+  const rule = item.unlock_rule ?? {};
+  switch (item.unlock_source) {
+    case "shop_level":
+      return `Reach shop level ${Number(rule.level || 0)}`;
+    case "rep":
+      return `Earn ${Number(rule.rep || 0)} REP`;
+    case "collection":
+      return rule.entry
+        ? `Complete collection ${rule.collection_id} entry ${rule.entry}`
+        : `Complete collection ${rule.collection_id}`;
+    case "event":
+      return rule.event_id ? `Participate in ${rule.event_id}` : "Participate in an event";
+    case "quest":
+      return "Complete a quest objective";
+    case "market_cosmetic":
+      return "Check the market for cosmetics";
+    default:
+      return "Unknown requirement";
+  }
 }
 
 function noodleMainMenuRow(userId) {
@@ -186,9 +416,100 @@ new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("🧑�
 
 function noodleSecondaryMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("📜 Quests").setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary)
+);
+}
+
+function noodleProfileEditRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("✨ Specializations").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel("🪞 Decor").setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function noodleProfileEditBackRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function noodleSpecializeSelectRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:profile:specialize_select:${userId}`)
+      .setLabel("Select Specialization")
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function noodleDecorMenuRow() {
+  return null;
+}
+
+function noodleDecorBackRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:profile_edit:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+  );
+}
+
+
+function noodleQuestsActionRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel("🎁 Daily Reward").setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("✅ Claim Quests").setStyle(ButtonStyle.Primary)
+);
+}
+
+function noodleQuestsSecondaryRow(userId) {
+return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🍂 Season").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:help:${userId}`).setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary)
+);
+}
+
+function hasClaimableQuests(player) {
+return Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
+}
+
+function hasDailyRewardAvailable(player, now = nowTs()) {
+  const lastClaimedAt = player?.daily?.last_claimed_at ?? null;
+  if (!lastClaimedAt) return true;
+  const todayKey = dayKeyUTC(now);
+  const lastKey = dayKeyUTC(lastClaimedAt);
+  return lastKey !== todayKey;
+}
+
+function noodleQuestsMenuRow(userId, { showClaim, showDaily, showQuests } = {}) {
+const dailyAvailable = showDaily ?? true;
+const primaryButton = showQuests
+  ? new ButtonBuilder()
+      .setCustomId(`noodle:nav:quests:${userId}`)
+      .setLabel("📜 Quests")
+      .setStyle(ButtonStyle.Secondary)
+  : new ButtonBuilder()
+      .setCustomId(`noodle:action:quests_daily:${userId}`)
+      .setLabel("🎁 Daily Reward")
+      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary);
+const row = new ActionRowBuilder().addComponents(primaryButton);
+
+if (showClaim) {
+  row.addComponents(
+    new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("✅ Claim Quests").setStyle(ButtonStyle.Primary)
+  );
+}
+
+row.addComponents(
+  new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🍂 Season").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary)
+);
+
+return row;
+}
+
+function noodleQuestsBackRow(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -458,6 +779,18 @@ function ensurePlayer(serverId, userId) {
   if (!Array.isArray(p.known_recipes) || p.known_recipes.length === 0) {
     p.known_recipes = [...(STARTER_PROFILE.known_recipes || [])];
   }
+  if (!p.profile) {
+    p.profile = {
+      shop_name: "My Noodle Shop",
+      tagline: PROFILE_DEFAULT_TAGLINE,
+      featured_badge_id: null,
+      decor_slots: { front: null, counter: null, wall: null, sign: null, frame: null },
+      specialization: { active_spec_id: null, chosen_at: null, change_cooldown_expires_at: null }
+    };
+  }
+  ensureBadgeState(p);
+  ensureCollectionsState(p);
+  ensureSpecializationState(p);
   return p;
 }
 
@@ -476,31 +809,121 @@ function displayItemName(id) {
 }
 
 function renderProfileEmbed(player, displayName, partyName, ownerUser) {
-if (!player.profile) {
-  player.profile = {
-    shop_name: "My Noodle Shop",
-    tagline: "A tiny shop with a big simmer."
-  };
-}
-let description = `*${player.profile.tagline}*`;
-if (partyName) {
-  description += `\n\n🎪 **${partyName}**`;
-}
-if (!player.lifetime) {
-  player.lifetime = { bowls_served_total: 0 };
-}
-const embed = new EmbedBuilder()
-.setTitle(`🍜 ${player.profile.shop_name}`)
-.setDescription(description)
-.addFields(
-{ name: "⭐ Bowls Served", value: String(player.lifetime.bowls_served_total || 0), inline: true },
-{ name: "Level", value: String(player.shop_level || 1), inline: true },
-{ name: "REP", value: String(player.rep || 0), inline: true },
-{ name: "Coins", value: `${player.coins || 0}c`, inline: true }
-);
+  if (!player.profile) {
+    player.profile = {
+      shop_name: "My Noodle Shop",
+      tagline: PROFILE_DEFAULT_TAGLINE
+    };
+  }
+  ensureBadgeState(player);
+  ensureCollectionsState(player);
+  ensureSpecializationState(player);
 
-applyOwnerFooter(embed, ownerUser);
-return embed;
+  let description = `*${player.profile.tagline || PROFILE_DEFAULT_TAGLINE}*`;
+  const activeSpec = getActiveSpecialization(player, specializationsContent);
+  const specState = ensureSpecializationState(player);
+  if (activeSpec) {
+    const specIcon = activeSpec.icon ?? "✨";
+    description += `\n${specIcon} **${activeSpec.name}**`;
+  } else if (specState?.active_spec_id) {
+    description += `\n✨ **${specState.active_spec_id}**`;
+  }
+  if (partyName) {
+    description += `\n\n🎪 **${partyName}**`;
+  }
+  if (!player.lifetime) {
+    player.lifetime = { bowls_served_total: 0 };
+  }
+
+  const ownedBadges = getOwnedBadges(player);
+  const featured = player.profile.featured_badge_id;
+  const orderedBadges = featured && ownedBadges.includes(featured)
+    ? [featured, ...ownedBadges.filter((id) => id !== featured)]
+    : [...ownedBadges];
+
+  const badgeLines = orderedBadges.map((id) => {
+    const badge = getBadgeById(badgesContent, id);
+    const icon = badge?.icon ?? "🏷️";
+    return `${icon}`;
+  });
+
+  const badgeRows = [];
+  for (let i = 0; i < badgeLines.length; i += 4) {
+    badgeRows.push(badgeLines.slice(i, i + 4).join(" "));
+  }
+  const badgesText = badgeRows.length ? badgeRows.join("\n") : "_No badges yet._";
+
+  const completedIds = player.collections?.completed ?? [];
+  const completedNames = completedIds
+    .map((id) => (collectionsContent?.collections ?? []).find((c) => c.collection_id === id)?.name ?? null)
+    .filter(Boolean);
+  const collectionsText = completedNames.length
+    ? completedNames.map((name) => `• ${name}`).join("\n")
+    : "_No collections completed yet._";
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🍜 ${player.profile.shop_name}`)
+    .setDescription(description)
+    .addFields(
+      { name: "⭐ Bowls Served", value: String(player.lifetime.bowls_served_total || 0), inline: true },
+      { name: "Level", value: String(player.shop_level || 1), inline: true },
+      { name: "REP", value: String(player.rep || 0), inline: true },
+      { name: "Coins", value: `${player.coins || 0}c`, inline: true },
+      { name: "🏅 Badges", value: badgesText, inline: false },
+      { name: "📚 Collections", value: collectionsText, inline: false },
+      { name: "🪞 Decor Set", value: " ", inline: false }
+    );
+
+  applyOwnerFooter(embed, ownerUser);
+  return embed;
+}
+
+function isSpecializationVisible(player, spec) {
+  if (!spec) return false;
+  if (!spec.hidden_until_unlocked) return true;
+  const reqCheck = meetsSpecializationRequirements(player, spec.requirements);
+  return reqCheck.ok || player?.profile?.specialization?.active_spec_id === spec.spec_id;
+}
+
+function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0, pageSize = 5) {
+  const state = ensureSpecializationState(player);
+  const specs = (specializationsContent?.specializations ?? [])
+    .filter((spec) => isSpecializationVisible(player, spec));
+  const totalPages = Math.max(1, Math.ceil(specs.length / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const pageSpecs = specs.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const lines = pageSpecs.map((spec) => {
+    const isActive = state.active_spec_id === spec.spec_id;
+    const check = canSelectSpecialization(player, specializationsContent, spec.spec_id, now);
+    const status = isActive
+      ? "✅ Equipped"
+      : check.ok
+        ? "Available"
+        : `🔒 ${check.reason}`;
+    const icon = spec.icon ?? "✨";
+    const description = spec.description ? `\n_${spec.description}_` : "";
+    return `${icon} **${spec.name}** — ${status}${description}`;
+  });
+
+  if (state?.active_spec_id && !specs.some((s) => s.spec_id === state.active_spec_id)) {
+    lines.unshift(`✨ **${state.active_spec_id}** — ✅ Equipped`);
+  }
+
+  let description = lines.length
+    ? `${lines.join("\n\n")}\n\nUse **Select Specialization** below to switch.`
+    : "No specializations available.";
+
+  if (totalPages > 1) {
+    description += `\n\n*(page ${safePage + 1}/${totalPages})*`;
+  }
+
+  const embed = buildMenuEmbed({
+    title: "✨ Specializations",
+    description,
+    user: ownerUser
+  });
+
+  return { embed, page: safePage, totalPages };
 }
 
 function resetTutorialState(player) {
@@ -946,6 +1369,9 @@ overrides?.strings?.[name] ??
 getInteger: (name) =>
 overrides?.integers?.[name] ??
 (interaction.options?.getInteger ? interaction.options.getInteger(name) : null),
+  getBoolean: (name) =>
+    overrides?.booleans?.[name] ??
+    (interaction.options?.getBoolean ? interaction.options.getBoolean(name) : null),
 getUser: (name) =>
 overrides?.users?.[name] ??
 (interaction.options?.getUser ? interaction.options.getUser(name) : null)
@@ -1096,6 +1522,21 @@ if (sub === "profile") {
   return commit({
     embeds: [embed],
     components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId)]
+  });
+}
+
+/* ---------------- PROFILE EDIT ---------------- */
+if (sub === "profile_edit") {
+  const embed = buildMenuEmbed({
+    title: "✏️ Customize Profile",
+    description: "Once you unlock specializations, you can change the active specialization and that will update your shop's decor!",
+    user: interaction.member ?? interaction.user
+  });
+
+  return commit({
+    content: " ",
+    embeds: [embed],
+    components: [noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)]
   });
 }
 
@@ -1354,23 +1795,30 @@ if (sub === "season") {
     user: interaction.member ?? interaction.user
   });
 
-  const primaryRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary)
+  const dailyAvailable = hasDailyRewardAvailable(p, nowTs());
+  const seasonRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:action:quests_daily:${userId}`)
+      .setLabel("🎁 Daily Reward")
+      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:quests:${userId}`)
+      .setLabel("📜 Quests")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:event:${userId}`)
+      .setLabel("🎪 Event")
+      .setStyle(ButtonStyle.Secondary)
   );
 
-  const secondaryRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:nav:help:${userId}`).setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
   );
 
   return commit({
     content: " ",
     embeds: [seasonEmbed],
-    components: [primaryRow, secondaryRow]
+    components: [seasonRow, backRow]
   });
 }
 
@@ -1408,9 +1856,38 @@ if (sub === "status") {
 
 /* ---------------- EVENT ---------------- */
 if (sub === "event") {
+  const dailyAvailable = hasDailyRewardAvailable(ensurePlayer(serverId, userId), nowTs());
+  const eventRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:action:quests_daily:${userId}`)
+      .setLabel("🎁 Daily Reward")
+      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:quests:${userId}`)
+      .setLabel("📜 Quests")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:season:${userId}`)
+      .setLabel("🍂 Season")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+  );
+
+  const eventEmbed = buildMenuEmbed({
+    title: "🎪 Event",
+    description: server.active_event_id
+      ? `Event active: **${server.active_event_id}**\n\n_More event details coming soon._`
+      : "No event is active right now.\n\n_More event details coming soon._",
+    user: interaction.member ?? interaction.user
+  });
+
   return commit({
-    content: server.active_event_id ? `🎪 Event active: **${server.active_event_id}**` : "🌙 No event is active right now.",
-    components: [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+    content: " ",
+    embeds: [eventEmbed],
+    components: [eventRow, backRow]
   });
 }
 
@@ -1456,6 +1933,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   const prevOrdersDay = p.orders_day;
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+  ensureQuests(p, questsContent, userId, now);
 
   // DM the user when a new day's orders are posted
   const dayChanged = prevOrdersDay !== p.orders_day;
@@ -1548,6 +2026,277 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commit(out);
   };
 
+  /* ---------------- QUESTS ---------------- */
+  if (sub === "quests") {
+    const summary = getQuestSummary(p, questsContent, userId, now);
+    const active = summary.active;
+
+    const lines = active.length
+      ? active.map((q) => {
+          const status = q.completed_at ? "✅" : "📝";
+          const rewardParts = [];
+          if (q.reward?.coins) rewardParts.push(`${q.reward.coins}c`);
+          if (q.reward?.sxp) rewardParts.push(`${q.reward.sxp} SXP`);
+          if (q.reward?.rep) rewardParts.push(`${q.reward.rep} REP`);
+          const rewardText = rewardParts.length ? ` — ${rewardParts.join(" · ")}` : "";
+          return `${status} **${q.name}** (${q.progress}/${q.target})${rewardText}`;
+        })
+      : ["_No quests available right now._"]; 
+
+    const questsEmbed = buildMenuEmbed({
+      title: "📜 Quests",
+      description: lines.join("\n"),
+      user: interaction.member ?? interaction.user
+    });
+
+    return commitState({
+      content: " ",
+      embeds: [questsEmbed],
+      components: [
+        noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
+        noodleQuestsBackRow(userId)
+      ]
+    });
+  }
+
+  /* ---------------- QUESTS: DAILY ---------------- */
+  if (sub === "quests_daily") {
+    const result = claimDailyReward(p, dailyRewards, now);
+    if (!result.ok) {
+      const embed = buildMenuEmbed({
+        title: "🎁 Daily Reward",
+        description: result.message,
+        user: interaction.member ?? interaction.user
+      });
+      return commitState({
+        content: " ",
+        embeds: [embed],
+        components: [
+          noodleQuestsMenuRow(userId, {
+            showClaim: hasClaimableQuests(p),
+            showDaily: hasDailyRewardAvailable(p, now),
+            showQuests: true
+          }),
+          noodleQuestsBackRow(userId)
+        ]
+      });
+    }
+
+    const rewardLines = [];
+    if (result.reward.coins) rewardLines.push(`💰 **${result.reward.coins}c**`);
+    if (result.reward.sxp) rewardLines.push(`✨ **${result.reward.sxp} SXP**`);
+    if (result.reward.rep) rewardLines.push(`⭐ **${result.reward.rep} REP**`);
+
+    const levelLine = result.leveledUp > 0 ? `\n🎉 Level up! **+${result.leveledUp}**` : "";
+    const embed = buildMenuEmbed({
+      title: "🎁 Daily Reward",
+      description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")}${levelLine}`,
+      user: interaction.member ?? interaction.user
+    });
+    return commitState({
+      content: " ",
+      embeds: [embed],
+      components: [
+        noodleQuestsMenuRow(userId, {
+          showClaim: hasClaimableQuests(p),
+          showDaily: hasDailyRewardAvailable(p, now),
+          showQuests: true
+        }),
+        noodleQuestsBackRow(userId)
+      ]
+    });
+  }
+
+  /* ---------------- QUESTS: CLAIM ---------------- */
+  if (sub === "quests_claim") {
+    const result = claimCompletedQuests(p);
+    const lines = result.claimed.length
+      ? result.claimed.map((entry) => {
+          const rewardParts = [];
+          if (entry.reward?.coins) rewardParts.push(`${entry.reward.coins}c`);
+          if (entry.reward?.sxp) rewardParts.push(`${entry.reward.sxp} SXP`);
+          if (entry.reward?.rep) rewardParts.push(`${entry.reward.rep} REP`);
+          return `✅ **${entry.quest.name}** — ${rewardParts.join(" · ")}`;
+        })
+      : ["_No completed quests to claim._"]; 
+
+    const levelLine = result.leveledUp > 0 ? `\n🎉 Level up! **+${result.leveledUp}**` : "";
+    const embed = buildMenuEmbed({
+      title: "✅ Quest Rewards",
+      description: `${lines.join("\n")}${levelLine}`,
+      user: interaction.member ?? interaction.user
+    });
+    return commitState({
+      content: " ",
+      embeds: [embed],
+      components: [
+        noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
+        noodleQuestsBackRow(userId)
+      ]
+    });
+  }
+
+
+  /* ---------------- SPECIALIZE ---------------- */
+  if (sub === "specialize") {
+    const specId = opt.getString("spec");
+    const confirm = opt.getBoolean("confirm");
+    const state = ensureSpecializationState(p);
+
+    if (!specId) {
+      const rawPage = opt.getInteger("page") ?? 0;
+      const { embed, page, totalPages } = buildSpecializationListEmbed(
+        p,
+        interaction.member ?? interaction.user,
+        now,
+        rawPage,
+        5
+      );
+      const components = [];
+      if (totalPages > 1) {
+        components.push(new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`noodle:nav:specialize:${userId}:${page - 1}`)
+            .setLabel("Prev")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page <= 0),
+          new ButtonBuilder()
+            .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
+            .setLabel("Next")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page >= totalPages - 1)
+        ));
+      }
+      components.push(noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId));
+      return commitState({
+        content: " ",
+        embeds: [embed],
+        components
+      });
+    }
+
+    const spec = getSpecializationById(specializationsContent, specId);
+    if (!spec) return commitState({ content: "Specialization not found.", ephemeral: true });
+
+    const check = canSelectSpecialization(p, specializationsContent, specId, now);
+    if (!check.ok) {
+      return commitState({ content: check.reason, ephemeral: true });
+    }
+
+    if (!confirm) {
+      const embed = buildMenuEmbed({
+        title: "✨ Confirm Specialization",
+        description: `You're about to switch to **${spec.name}**. Re-run with confirm=true to proceed.`,
+        user: interaction.member ?? interaction.user
+      });
+      return commitState({
+        content: " ",
+        embeds: [embed],
+        components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)]
+      });
+    }
+
+    const result = selectSpecialization(p, specializationsContent, specId, now);
+    if (!result.ok) return commitState({ content: result.reason, ephemeral: true });
+
+    applyDecorSetForSpecialization(p, specId);
+
+    if (db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+    }
+
+    const embed = buildMenuEmbed({
+      title: "✨ Specialization Updated",
+      description: `Active specialization: **${result.specialization?.name ?? specId}**.`,
+      user: interaction.member ?? interaction.user
+    });
+    return commitState({
+      content: " ",
+      embeds: [embed],
+      components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)]
+    });
+  }
+
+  /* ---------------- DECOR ---------------- */
+  if (sub === "decor" || sub === "decor_sets_spec") {
+    const p = ensurePlayer(serverId, userId);
+    const s = ensureServer(serverId);
+    ensureDecorState(p);
+    grantUnlockedDecor(p, decorContent, s);
+
+    const rawPage = opt.getInteger("page") ?? 0;
+    const { embed, page, totalPages } = renderDecorSetsEmbedLocal({
+      player: p,
+      ownerUser: interaction.member ?? interaction.user,
+      view: "specialization",
+      page: rawPage,
+      pageSize: 5
+    });
+
+    const components = [];
+    if (totalPages > 1) {
+      components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:decor:${userId}:${page - 1}`)
+          .setLabel("Prev")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page <= 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:decor:${userId}:${page + 1}`)
+          .setLabel("Next")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page >= totalPages - 1)
+      ));
+    }
+    components.push(noodleDecorBackRow(userId));
+
+    return commitState({
+      content: " ",
+      embeds: [embed],
+      components
+    });
+  }
+
+  /* ---------------- COLLECTIONS ---------------- */
+  if (sub === "collections") {
+    const p = ensurePlayer(serverId, userId);
+    ensureCollectionsState(p);
+
+    const collectionsList = collectionsContent?.collections ?? [];
+    const lines = collectionsList.map((collection) => {
+      const progress = p.collections?.progress?.[collection.collection_id] ?? { completed_entries: [] };
+      const totalEntries = Array.isArray(collection.entries) && collection.entries.length > 0
+        ? collection.entries.length
+        : (collection.entry_source === "npcs"
+          ? Object.keys(content.npcs ?? {}).length
+          : (collection.entry_source === "recipes"
+            ? Object.values(content.recipes ?? {}).filter((r) => !collection.tier || r?.tier === collection.tier).length
+            : 0));
+      const completed = progress.completed_entries?.length ?? 0;
+      const percent = totalEntries > 0 ? Math.floor((completed / totalEntries) * 100) : 0;
+      const status = percent >= 100 ? "✅" : "🧩";
+      const description = collection.description ? `\n_${collection.description}_` : "";
+      return `\n${status} **${collection.name}** — ${completed}/${totalEntries} (${percent}%)${description}`;
+    });
+
+    const embed = buildMenuEmbed({
+      title: "📚 Collections",
+      description: lines.length ? lines.join("\n") : "_No collections defined yet._",
+      user: interaction.member ?? interaction.user
+    });
+
+    return commitState({
+      content: " ",
+      embeds: [embed],
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:nav:stats:${userId}`)
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary)
+      )]
+    });
+  }
+
   /* ---------------- FORAGE ---------------- */
   if (sub === "forage") {
     const baseCooldownMs = 2 * 60 * 1000;
@@ -1626,6 +2375,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const inventoryResult = applyDropsToInventory(p, accepted);
     setForageCooldown(p, now);
     advanceTutorial(p, "forage");
+    applyQuestProgress(p, questsContent, userId, { type: "forage", amount: 1 }, now);
 
     const lines = Object.entries(inventoryResult.added).map(
       ([id, q]) => `• **${q}×** ${displayItemName(id)}`
@@ -1793,6 +2543,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qtyToBuy;
     p.market_stock[itemId] = stock - qtyToBuy;
 
+    applyQuestProgress(p, questsContent, userId, { type: "buy", amount: qtyToBuy }, now);
+
     advanceTutorial(p, "buy");
     const tutorialOnlyForage = isTutorialStep(p, "intro_forage");
 
@@ -1826,6 +2578,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     p.inv_ingredients[itemId] = owned - qty;
     p.coins += gain;
     p.lifetime.coins_earned += gain;
+
+    applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: gain }, now);
 
     return commitState({ content: `💰 Sold **${qty}× ${item.name}** for **${gain}c**.` });
   }
@@ -1938,6 +2692,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     advanceTutorial(p, "cook");
     p.lifetime.recipes_cooked = (p.lifetime.recipes_cooked || 0) + 1;
+
+    applyQuestProgress(p, questsContent, userId, { type: "cook", amount: batchOutput }, now);
+    applyCollectionProgressOnCook(p, collectionsContent, content, { recipeId, bowlsCooked: batchOutput });
 
     const lostLine = (r.ingredients ?? [])
       .map((ing) => {
@@ -2679,6 +3436,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
       
       results.push(serveMsg);
+
+      applyCollectionProgressOnServe(p, collectionsContent, content, {
+        npcArchetype: order.npc_archetype,
+        recipeId: order.recipe_id,
+        quality: bowlQuality
+      });
     }
 
     if (!servedCount) {
@@ -2689,11 +3452,43 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
       return commitState({ content: " ", embeds: [failEmbed] });
     }
+
+    if (servedCount > 0) {
+      applyQuestProgress(p, questsContent, userId, { type: "serve", amount: servedCount }, now);
+      if (totalCoins > 0) {
+        applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: totalCoins }, now);
+      }
+      unlockBadges(p, badgesContent);
+    }
+
+    const state = ensureSpecializationState(p);
+    const bowlsServedAfter = p.lifetime.bowls_served_total;
+    const newlyUnlockedSpecs = (specializationsContent?.specializations ?? []).filter((spec) => {
+      if (!spec?.hidden_until_unlocked) return false;
+      const req = spec?.requirements?.bowls_served_total;
+      if (!req || bowlsServedAfter < req) return false;
+      return !state.unlocked_spec_ids.includes(spec.spec_id);
+    });
+    if (newlyUnlockedSpecs.length) {
+      for (const spec of newlyUnlockedSpecs) {
+        state.unlocked_spec_ids.push(spec.spec_id);
+      }
+      const unlockLines = newlyUnlockedSpecs.map((spec) => {
+        const icon = spec.icon ?? "✨";
+        return `${icon} **Specialization unlocked:** ${spec.name}`;
+      });
+      results.push(...unlockLines);
+    }
     
     // If a recipe was unlocked, force regenerate order board to include new recipe
     if (recipeUnlocked) {
       delete p.orders_day; // Force regeneration by clearing day marker
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+    }
+
+    applyQuestProgress(p, questsContent, userId, { type: "serve", amount: servedCount }, now);
+    if (totalCoins > 0) {
+      applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: totalCoins }, now);
     }
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
@@ -2757,8 +3552,117 @@ const action = parts[2] ?? "";
 const ownerId = parts[3] ?? "";
 
 // lock UI to owner when ownerId is present
-if (ownerId && ownerId !== userId && (kind === "nav" || kind === "pick" || kind === "multibuy")) {
+if (ownerId && ownerId !== userId && (kind === "nav" || kind === "pick" || kind === "multibuy" || kind === "profile" || kind === "decor")) {
 return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+}
+
+
+/* ---------------- PROFILE SPECIALIZATION BUTTONS ---------------- */
+if (kind === "profile" && action === "specialize_select") {
+  const p = ensurePlayer(serverId, userId);
+  const now = nowTs();
+  const specs = (specializationsContent?.specializations ?? []).filter((spec) => {
+    if (!isSpecializationVisible(p, spec)) return false;
+    const check = canSelectSpecialization(p, specializationsContent, spec.spec_id, now);
+    return check.ok || p?.profile?.specialization?.active_spec_id === spec.spec_id;
+  });
+  if (!specs.length) {
+    return componentCommit(interaction, { content: "No specializations available yet.", ephemeral: true });
+  }
+
+  const options = specs.map((spec) => ({
+    label: spec.name?.slice(0, 100) ?? spec.spec_id,
+    description: (spec.description ?? "").slice(0, 100) || "No description yet.",
+    value: spec.spec_id
+  }));
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:profile:specialize_pick:${userId}`)
+    .setPlaceholder("Select a specialization")
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(options.slice(0, 25));
+
+  const embed = buildMenuEmbed({
+    title: "✨ Choose Specialization",
+    description: "Pick a specialization to preview and confirm.",
+    user: interaction.member ?? interaction.user
+  });
+
+  return componentCommit(interaction, {
+    content: " ",
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(menu), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+    targetMessageId: interaction.message?.id
+  });
+}
+
+/* ---------------- PROFILE BADGE BUTTONS ---------------- */
+
+if (kind === "profile" && action === "specialize_cancel") {
+  const p = ensurePlayer(serverId, userId);
+  const { embed, page, totalPages } = buildSpecializationListEmbed(p, interaction.member ?? interaction.user, nowTs(), 0, 5);
+  const components = [];
+  if (totalPages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:specialize:${userId}:${page - 1}`)
+        .setLabel("Prev")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page <= 0),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
+        .setLabel("Next")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page >= totalPages - 1)
+    ));
+  }
+  components.push(noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId));
+  return componentCommit(interaction, {
+    content: " ",
+    embeds: [embed],
+    components,
+    targetMessageId: interaction.message?.id
+  });
+}
+
+if (kind === "profile" && action === "specialize_confirm") {
+  const specId = parts[4] ?? "";
+  const p = ensurePlayer(serverId, userId);
+  const now = nowTs();
+  const spec = getSpecializationById(specializationsContent, specId);
+  if (!spec) {
+    return componentCommit(interaction, { content: "Specialization not found.", ephemeral: true });
+  }
+
+  const check = canSelectSpecialization(p, specializationsContent, specId, now);
+  if (!check.ok) {
+    return componentCommit(interaction, { content: check.reason, ephemeral: true });
+  }
+
+  const result = selectSpecialization(p, specializationsContent, specId, now);
+  if (!result.ok) {
+    return componentCommit(interaction, { content: result.reason, ephemeral: true });
+  }
+
+  applyDecorSetForSpecialization(p, specId);
+
+  if (db) {
+    upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+  }
+
+  const embed = buildMenuEmbed({
+    title: "✨ Specialization Updated",
+    description: `Active specialization: **${result.specialization?.name ?? specId}**.`,
+    user: interaction.member ?? interaction.user
+  });
+
+  return componentCommit(interaction, {
+    content: " ",
+    embeds: [embed],
+    components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+    targetMessageId: interaction.message?.id
+  });
 }
 
 /* -------- SPECIAL SELL NAV HANDLER -------- */
@@ -3164,6 +4068,64 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       components: tutorialOnlyBuy1 ? [btnRow] : [btnRow, sellButton]
     });
   }
+
+  /* ---------------- SPECIALIZATION SELECT MENU ---------------- */
+  if (interaction.isSelectMenu?.() && interaction.customId.startsWith("noodle:profile:specialize_pick:")) {
+    const owner = interaction.customId.split(":")[3];
+    if (owner && owner !== interaction.user.id) {
+      return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+    }
+
+    const specId = interaction.values?.[0];
+    const p = ensurePlayer(serverId, userId);
+    const now = nowTs();
+    const spec = getSpecializationById(specializationsContent, specId);
+    if (!spec) return componentCommit(interaction, { content: "Specialization not found.", ephemeral: true });
+
+    const check = canSelectSpecialization(p, specializationsContent, specId, now);
+    const description = spec.description ? `\n_${spec.description}_` : "";
+
+    if (!check.ok) {
+      const embed = buildMenuEmbed({
+        title: "✨ Specialization Locked",
+        description: `You can't select **${spec.name}** yet.\nReason: ${check.reason}${description}`,
+        user: interaction.member ?? interaction.user
+      });
+
+      return componentCommit(interaction, {
+        content: " ",
+        embeds: [embed],
+        components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+        targetMessageId: interaction.message?.id
+      });
+    }
+
+    const confirmRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:profile:specialize_confirm:${userId}:${specId}`)
+        .setLabel("Confirm")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`noodle:profile:specialize_cancel:${userId}`)
+        .setLabel("Cancel")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    const embed = buildMenuEmbed({
+      title: "✨ Confirm Specialization",
+      description: `You're about to switch to **${spec.name}**.${description}\n\nPress **Confirm** to apply.`,
+      user: interaction.member ?? interaction.user
+    });
+
+    return componentCommit(interaction, {
+      content: " ",
+      embeds: [embed],
+      components: [confirmRow, noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+      targetMessageId: interaction.message?.id
+    });
+  }
+
+  /* ---------------- BADGE SELECT MENU ---------------- */
 
   /* ---------------- MULTI-BUY BUTTONS ---------------- */
   if (interaction.isButton?.() && interaction.customId.startsWith("noodle:multibuy:")) {
@@ -3647,6 +4609,19 @@ export const noodleCommand = {
         .setDescription("View a shop profile")
         .addUserOption((o) => o.setName("user").setDescription("User").setRequired(false))
     )
+    .addSubcommand((sc) =>
+      sc
+        .setName("specialize")
+        .setDescription("Choose a shop specialization")
+        .addStringOption((o) =>
+          o
+            .setName("spec")
+            .setDescription("Specialization id")
+            .setRequired(false)
+            .setAutocomplete(true)
+        )
+        .addBooleanOption((o) => o.setName("confirm").setDescription("Confirm specialization change").setRequired(false))
+    )
     .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
     .addSubcommand((sc) => sc.setName("pantry").setDescription("View your ingredient pantry."))
     .addSubcommand((sc) => sc.setName("recipes").setDescription("View your unlocked recipes and clues."))
@@ -3726,4 +4701,4 @@ export const noodleCommand = {
   }
 };
 
-export { noodleMainMenuRow, noodleMainMenuRowNoProfile, displayItemName };
+export { noodleMainMenuRow, noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed };

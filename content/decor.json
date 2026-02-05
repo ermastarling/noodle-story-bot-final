@@ -1,0 +1,1154 @@
+{
+  "items": [
+    {
+      "item_id": "decor_welcome_banner",
+      "name": "Welcome Banner",
+      "slot": "front",
+      "set_id": "comfort_food_inn",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 2 },
+      "flavor_text": "A soft linen banner that sways with a friendly hello."
+    },
+    {
+      "item_id": "decor_festival_gate",
+      "name": "Festival Gate",
+      "slot": "front",
+      "set_id": "festival_noodle_house",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 6 },
+      "flavor_text": "A bright entry arch strung with festive tassels."
+    },
+    {
+      "item_id": "decor_bamboo_gate",
+      "name": "Bamboo Gate",
+      "slot": "front",
+      "set_id": "forest_kitchen",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 40 },
+      "flavor_text": "Green stalks and gentle chimes greet every guest."
+    },
+    {
+      "item_id": "decor_moonlit_entry",
+      "name": "Moonlit Entry",
+      "slot": "front",
+      "set_id": "moonlit_atelier",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 60 },
+      "flavor_text": "A soft silver arch that glows with evening light."
+    },
+    {
+      "item_id": "decor_hearth_portal",
+      "name": "Hearthstone Entry",
+      "slot": "front",
+      "set_id": "hearth_classic",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "2500" },
+      "flavor_text": "Warm stones and amber glow invite lingering stories."
+    },
+    {
+      "item_id": "decor_lucky_portal",
+      "name": "Lucky Pavilion Gate",
+      "slot": "front",
+      "set_id": "lucky_pavilion",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "4444" },
+      "flavor_text": "A night-market archway twinkling with charms."
+    },
+    {
+      "item_id": "decor_legend_portal",
+      "name": "Legend Hall Threshold",
+      "slot": "front",
+      "set_id": "legend_hall",
+      "rarity": "seasonal",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "10000" },
+      "flavor_text": "Mythic stonework that hums with quiet prestige."
+    },
+    {
+      "item_id": "decor_cedar_counter",
+      "name": "Cedar Counter",
+      "slot": "counter",
+      "set_id": "festival_noodle_house",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 1 },
+      "flavor_text": "A simple cedar counter polished by gentle hands."
+    },
+    {
+      "item_id": "decor_forest_counter",
+      "name": "Forest Kitchen Counter",
+      "slot": "counter",
+      "set_id": "forest_kitchen",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 50 },
+      "flavor_text": "A sturdy counter carved from wind-fallen cedar."
+    },
+    {
+      "item_id": "decor_comfort_counter",
+      "name": "Comfort Counter",
+      "slot": "counter",
+      "set_id": "comfort_food_inn",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 4 },
+      "flavor_text": "Soft edges and warm tones invite long conversations."
+    },
+    {
+      "item_id": "decor_moonlit_counter",
+      "name": "Moonlit Counter",
+      "slot": "counter",
+      "set_id": "moonlit_atelier",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 65 },
+      "flavor_text": "A sleek counter with a faint lunar sheen."
+    },
+    {
+      "item_id": "decor_hearth_counter",
+      "name": "Hearthstone Counter",
+      "slot": "counter",
+      "set_id": "hearth_classic",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "2500" },
+      "flavor_text": "Stone-and-wood warmth that keeps bowls cozy."
+    },
+    {
+      "item_id": "decor_lucky_counter",
+      "name": "Lucky Pavilion Counter",
+      "slot": "counter",
+      "set_id": "lucky_pavilion",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "4444" },
+      "flavor_text": "Night-market woodwork with a lucky shimmer."
+    },
+    {
+      "item_id": "decor_legend_counter",
+      "name": "Legend Hall Counter",
+      "slot": "counter",
+      "set_id": "legend_hall",
+      "rarity": "seasonal",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "10000" },
+      "flavor_text": "Gold-trimmed stone for a hall of legends."
+    },
+    {
+      "item_id": "decor_lantern_row",
+      "name": "Lantern Row",
+      "slot": "wall",
+      "set_id": "festival_noodle_house",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 4 },
+      "flavor_text": "A cheerful row of paper lanterns."
+    },
+    {
+      "item_id": "decor_ivy_trellis",
+      "name": "Ivy Trellis",
+      "slot": "wall",
+      "set_id": "forest_kitchen",
+      "rarity": "common",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 15 },
+      "flavor_text": "Soft greenery and a hint of forest air."
+    },
+    {
+      "item_id": "decor_comfort_hearth_wall",
+      "name": "Comfort Hearth Wall",
+      "slot": "wall",
+      "set_id": "comfort_food_inn",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 3 },
+      "flavor_text": "Warm tones and gentle patterns for cozy nights."
+    },
+    {
+      "item_id": "decor_moonlit_mural",
+      "name": "Moonlit Mural",
+      "slot": "wall",
+      "set_id": "moonlit_atelier",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 45 },
+      "flavor_text": "A shimmering mural with soft lunar hues."
+    },
+    {
+      "item_id": "decor_comet_wall",
+      "name": "Comet Wall",
+      "slot": "wall",
+      "set_id": "comet_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "A glowing mural traced by a comet’s tail."
+    },
+    {
+      "item_id": "decor_hearth_wall",
+      "name": "Hearth Ember Wall",
+      "slot": "wall",
+      "set_id": "hearth_classic",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "2500" },
+      "flavor_text": "Warm amber light and gentle ember glow."
+    },
+    {
+      "item_id": "decor_lucky_wall",
+      "name": "Lucky Star Wall",
+      "slot": "wall",
+      "set_id": "lucky_pavilion",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "4444" },
+      "flavor_text": "Star lanterns and charm banners softly twinkle."
+    },
+    {
+      "item_id": "decor_legend_wall",
+      "name": "Legend Hall Mural",
+      "slot": "wall",
+      "set_id": "legend_hall",
+      "rarity": "seasonal",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "10000" },
+      "flavor_text": "A mythic mural that glows with golden trim."
+    },
+    {
+      "item_id": "decor_handpainted_sign",
+      "name": "Handpainted Sign",
+      "slot": "sign",
+      "set_id": "festival_noodle_house",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 1 },
+      "flavor_text": "A brush-painted sign with your shop’s name."
+    },
+    {
+      "item_id": "decor_forest_kitchen_sign",
+      "name": "Forest Kitchen Sign",
+      "slot": "sign",
+      "set_id": "forest_kitchen",
+      "rarity": "common",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 25 },
+      "flavor_text": "Hand-carved wood with a leafy flourish."
+    },
+    {
+      "item_id": "decor_comfort_sign",
+      "name": "Comfort Sign",
+      "slot": "sign",
+      "set_id": "comfort_food_inn",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 5 },
+      "flavor_text": "A gentle script that welcomes every traveler."
+    },
+    {
+      "item_id": "decor_moonlit_sign",
+      "name": "Moonlit Sign",
+      "slot": "sign",
+      "set_id": "moonlit_atelier",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 55 },
+      "flavor_text": "A silvered sign with a soft lunar glow."
+    },
+    {
+      "item_id": "decor_hearth_sign",
+      "name": "Hearth Sign",
+      "slot": "sign",
+      "set_id": "hearth_classic",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "2500" },
+      "flavor_text": "A warm crest carved with glowing runes."
+    },
+    {
+      "item_id": "decor_lucky_sign",
+      "name": "Lucky Pavilion Sign",
+      "slot": "sign",
+      "set_id": "lucky_pavilion",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "4444" },
+      "flavor_text": "A charm-studded sign that sparkles at dusk."
+    },
+    {
+      "item_id": "decor_legend_sign",
+      "name": "Legend Hall Sign",
+      "slot": "sign",
+      "set_id": "legend_hall",
+      "rarity": "seasonal",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "10000" },
+      "flavor_text": "A grand sign carved in mythic gold."
+    },
+    {
+      "item_id": "decor_simple_frame",
+      "name": "Simple Frame",
+      "slot": "frame",
+      "set_id": "comfort_food_inn",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 2 },
+      "flavor_text": "A humble frame for cozy snapshots."
+    },
+    {
+      "item_id": "decor_festival_frame",
+      "name": "Festival Frame",
+      "slot": "frame",
+      "set_id": "festival_noodle_house",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 3 },
+      "flavor_text": "A lacquered frame lined with tiny festival charms."
+    },
+    {
+      "item_id": "decor_forest_frame",
+      "name": "Forest Frame",
+      "slot": "frame",
+      "set_id": "forest_kitchen",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 35 },
+      "flavor_text": "A woven frame with pressed evergreen leaves."
+    },
+    {
+      "item_id": "decor_hearth_frame",
+      "name": "Hearth Frame",
+      "slot": "frame",
+      "set_id": "hearth_classic",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "2500" },
+      "flavor_text": "A warm, ember-kissed frame with brass trim."
+    },
+    {
+      "item_id": "decor_moonlit_frame",
+      "name": "Moonlit Frame",
+      "slot": "frame",
+      "set_id": "moonlit_atelier",
+      "rarity": "rare",
+      "unlock_source": "rep",
+      "unlock_rule": { "rep": 30 },
+      "flavor_text": "A silver-blue frame kissed by moonlight."
+    },
+    {
+      "item_id": "decor_starlight_gateway",
+      "name": "Starlight Gateway",
+      "slot": "front",
+      "set_id": "starlight_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 75 },
+      "flavor_text": "A shimmering arch with drifting starlight lanterns."
+    },
+    {
+      "item_id": "decor_starlight_tapestry",
+      "name": "Starlight Tapestry",
+      "slot": "wall",
+      "set_id": "starlight_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 75 },
+      "flavor_text": "A woven night sky that glows with soft constellations."
+    },
+    {
+      "item_id": "decor_starlight_sign",
+      "name": "Starlight Sign",
+      "slot": "sign",
+      "set_id": "starlight_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 75 },
+      "flavor_text": "A painted sign traced with comet dust."
+    },
+    {
+      "item_id": "decor_starlight_counter",
+      "name": "Starlight Counter",
+      "slot": "counter",
+      "set_id": "starlight_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 75 },
+      "flavor_text": "A polished counter that glints like a clear night sky."
+    },
+    {
+      "item_id": "decor_starlight_frame",
+      "name": "Starlight Frame",
+      "slot": "frame",
+      "set_id": "starlight_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 75 },
+      "flavor_text": "A luminous frame dotted with tiny constellations."
+    },
+    {
+      "item_id": "decor_comet_portal",
+      "name": "Comet Portal",
+      "slot": "front",
+      "set_id": "comet_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "A radiant entrance streaked with a comet’s trail."
+    },
+    {
+      "item_id": "decor_comet_counter",
+      "name": "Comet Counter",
+      "slot": "counter",
+      "set_id": "comet_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "Polished stone that glitters like a passing comet."
+    },
+    {
+      "item_id": "decor_comet_frame",
+      "name": "Comet Frame",
+      "slot": "frame",
+      "set_id": "comet_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "A luminous frame that leaves a faint star trail."
+    },
+    {
+      "item_id": "decor_comet_sign",
+      "name": "Comet Sign",
+      "slot": "sign",
+      "set_id": "comet_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "A radiant sign streaked with a comet’s glow."
+    },
+    {
+      "item_id": "decor_lucky_frame",
+      "name": "Lucky Pavilion Frame",
+      "slot": "frame",
+      "set_id": "lucky_pavilion",
+      "rarity": "epic",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "4444" },
+      "flavor_text": "Starry trim and tiny charms for fortune."
+    },
+    {
+      "item_id": "decor_legend_frame",
+      "name": "Legend Hall Frame",
+      "slot": "frame",
+      "set_id": "legend_hall",
+      "rarity": "seasonal",
+      "unlock_source": "collection",
+      "unlock_rule": { "collection_id": "bowl_ledger", "entry": "10000" },
+      "flavor_text": "An ornate frame fit for legendary tales."
+    },
+    {
+      "item_id": "decor_riverstone_entry",
+      "name": "Riverstone Entry",
+      "slot": "front",
+      "set_id": "riverstone_kitchen",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 40 },
+      "flavor_text": "Smooth river stones line a cool, steady entrance."
+    },
+    {
+      "item_id": "decor_riverstone_counter",
+      "name": "Riverstone Counter",
+      "slot": "counter",
+      "set_id": "riverstone_kitchen",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 40 },
+      "flavor_text": "A sturdy counter with polished stone trim."
+    },
+    {
+      "item_id": "decor_riverstone_wall",
+      "name": "Riverstone Wall",
+      "slot": "wall",
+      "set_id": "riverstone_kitchen",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 40 },
+      "flavor_text": "Layered stonework with a gentle river sheen."
+    },
+    {
+      "item_id": "decor_riverstone_sign",
+      "name": "Riverstone Sign",
+      "slot": "sign",
+      "set_id": "riverstone_kitchen",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 40 },
+      "flavor_text": "A carved sign cooled by the river breeze."
+    },
+    {
+      "item_id": "decor_riverstone_frame",
+      "name": "Riverstone Frame",
+      "slot": "frame",
+      "set_id": "riverstone_kitchen",
+      "rarity": "common",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 40 },
+      "flavor_text": "A smooth frame with river-polished edges."
+    },
+    {
+      "item_id": "decor_aurora_entry",
+      "name": "Aurora Entry",
+      "slot": "front",
+      "set_id": "aurora_bistro",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 80 },
+      "flavor_text": "A luminous arch with a soft, shifting glow."
+    },
+    {
+      "item_id": "decor_aurora_counter",
+      "name": "Aurora Counter",
+      "slot": "counter",
+      "set_id": "aurora_bistro",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 80 },
+      "flavor_text": "Polished surfaces that catch the northern light."
+    },
+    {
+      "item_id": "decor_aurora_wall",
+      "name": "Aurora Wall",
+      "slot": "wall",
+      "set_id": "aurora_bistro",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 80 },
+      "flavor_text": "Cool gradients ripple like an aurora sweep."
+    },
+    {
+      "item_id": "decor_aurora_sign",
+      "name": "Aurora Sign",
+      "slot": "sign",
+      "set_id": "aurora_bistro",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 80 },
+      "flavor_text": "A soft glow sign with a calm sky shimmer."
+    },
+    {
+      "item_id": "decor_aurora_frame",
+      "name": "Aurora Frame",
+      "slot": "frame",
+      "set_id": "aurora_bistro",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 80 },
+      "flavor_text": "A radiant frame trimmed with icy light."
+    },
+    {
+      "item_id": "decor_lotus_entry",
+      "name": "Lotus Entry",
+      "slot": "front",
+      "set_id": "lotus_teahouse",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 90 },
+      "flavor_text": "A gentle gate adorned with lotus petals."
+    },
+    {
+      "item_id": "decor_lotus_counter",
+      "name": "Lotus Counter",
+      "slot": "counter",
+      "set_id": "lotus_teahouse",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 90 },
+      "flavor_text": "Warm wood and floral inlay set a calm tone."
+    },
+    {
+      "item_id": "decor_lotus_wall",
+      "name": "Lotus Wall",
+      "slot": "wall",
+      "set_id": "lotus_teahouse",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 90 },
+      "flavor_text": "Soft blossoms painted in serene strokes."
+    },
+    {
+      "item_id": "decor_lotus_sign",
+      "name": "Lotus Sign",
+      "slot": "sign",
+      "set_id": "lotus_teahouse",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 90 },
+      "flavor_text": "A delicate sign with a quiet tea aroma."
+    },
+    {
+      "item_id": "decor_lotus_frame",
+      "name": "Lotus Frame",
+      "slot": "frame",
+      "set_id": "lotus_teahouse",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 90 },
+      "flavor_text": "A tranquil frame with lotus-carved edges."
+    },
+    {
+      "item_id": "decor_stormforged_entry",
+      "name": "Stormforged Entry",
+      "slot": "front",
+      "set_id": "stormforged_wok",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "A steel arch crackling with quiet energy."
+    },
+    {
+      "item_id": "decor_stormforged_counter",
+      "name": "Stormforged Counter",
+      "slot": "counter",
+      "set_id": "stormforged_wok",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "Polished metal with a bold, electric gleam."
+    },
+    {
+      "item_id": "decor_stormforged_wall",
+      "name": "Stormforged Wall",
+      "slot": "wall",
+      "set_id": "stormforged_wok",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "Dark panels streaked with lightning lines."
+    },
+    {
+      "item_id": "decor_stormforged_sign",
+      "name": "Stormforged Sign",
+      "slot": "sign",
+      "set_id": "stormforged_wok",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "A bold sign edged with a thunderbolt flare."
+    },
+    {
+      "item_id": "decor_stormforged_frame",
+      "name": "Stormforged Frame",
+      "slot": "frame",
+      "set_id": "stormforged_wok",
+      "rarity": "rare",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 100 },
+      "flavor_text": "A sturdy frame with a charged metal trim."
+    },
+    {
+      "item_id": "decor_coral_entry",
+      "name": "Coral Entry",
+      "slot": "front",
+      "set_id": "coral_cove_canteen",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 110 },
+      "flavor_text": "A sea-breeze arch with coral accents."
+    },
+    {
+      "item_id": "decor_coral_counter",
+      "name": "Coral Counter",
+      "slot": "counter",
+      "set_id": "coral_cove_canteen",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 110 },
+      "flavor_text": "Driftwood lines and shell-polished edges."
+    },
+    {
+      "item_id": "decor_coral_wall",
+      "name": "Coral Wall",
+      "slot": "wall",
+      "set_id": "coral_cove_canteen",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 110 },
+      "flavor_text": "Seafoam hues and shell patterns ripple softly."
+    },
+    {
+      "item_id": "decor_coral_sign",
+      "name": "Coral Sign",
+      "slot": "sign",
+      "set_id": "coral_cove_canteen",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 110 },
+      "flavor_text": "A seaside sign with a bright shell crest."
+    },
+    {
+      "item_id": "decor_coral_frame",
+      "name": "Coral Frame",
+      "slot": "frame",
+      "set_id": "coral_cove_canteen",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 110 },
+      "flavor_text": "A pearl-toned frame with coral inlay."
+    },
+    {
+      "item_id": "decor_spice_route_entry",
+      "name": "Spice Route Entry",
+      "slot": "front",
+      "set_id": "spice_route_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 120 },
+      "flavor_text": "A market arch with brass bells and spice sacks."
+    },
+    {
+      "item_id": "decor_spice_route_counter",
+      "name": "Spice Route Counter",
+      "slot": "counter",
+      "set_id": "spice_route_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 120 },
+      "flavor_text": "A carved counter lined with spice crates."
+    },
+    {
+      "item_id": "decor_spice_route_wall",
+      "name": "Spice Route Wall",
+      "slot": "wall",
+      "set_id": "spice_route_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 120 },
+      "flavor_text": "Warm tapestries layered with trade-route maps."
+    },
+    {
+      "item_id": "decor_spice_route_sign",
+      "name": "Spice Route Sign",
+      "slot": "sign",
+      "set_id": "spice_route_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 120 },
+      "flavor_text": "A brass-edged sign with fragrant symbols."
+    },
+    {
+      "item_id": "decor_spice_route_frame",
+      "name": "Spice Route Frame",
+      "slot": "frame",
+      "set_id": "spice_route_caravan",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 120 },
+      "flavor_text": "A warm frame wrapped in woven spice cords."
+    },
+    {
+      "item_id": "decor_sunlit_entry",
+      "name": "Sunlit Entry",
+      "slot": "front",
+      "set_id": "sunlit_veranda",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 130 },
+      "flavor_text": "An open arch that welcomes bright daylight."
+    },
+    {
+      "item_id": "decor_sunlit_counter",
+      "name": "Sunlit Counter",
+      "slot": "counter",
+      "set_id": "sunlit_veranda",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 130 },
+      "flavor_text": "Light woods and airy trim keep things open."
+    },
+    {
+      "item_id": "decor_sunlit_wall",
+      "name": "Sunlit Wall",
+      "slot": "wall",
+      "set_id": "sunlit_veranda",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 130 },
+      "flavor_text": "A bright wall with sun-washed paneling."
+    },
+    {
+      "item_id": "decor_sunlit_sign",
+      "name": "Sunlit Sign",
+      "slot": "sign",
+      "set_id": "sunlit_veranda",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 130 },
+      "flavor_text": "A golden sign that gleams at noon."
+    },
+    {
+      "item_id": "decor_sunlit_frame",
+      "name": "Sunlit Frame",
+      "slot": "frame",
+      "set_id": "sunlit_veranda",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 130 },
+      "flavor_text": "A warm frame with bright, airy trim."
+    },
+    {
+      "item_id": "decor_frostpeak_entry",
+      "name": "Frostpeak Entry",
+      "slot": "front",
+      "set_id": "frostpeak_izakaya",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 140 },
+      "flavor_text": "A frosted gate with a crisp winter hush."
+    },
+    {
+      "item_id": "decor_frostpeak_counter",
+      "name": "Frostpeak Counter",
+      "slot": "counter",
+      "set_id": "frostpeak_izakaya",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 140 },
+      "flavor_text": "Cool stonework with a gentle snow glaze."
+    },
+    {
+      "item_id": "decor_frostpeak_wall",
+      "name": "Frostpeak Wall",
+      "slot": "wall",
+      "set_id": "frostpeak_izakaya",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 140 },
+      "flavor_text": "A pale wall trimmed with icy lantern light."
+    },
+    {
+      "item_id": "decor_frostpeak_sign",
+      "name": "Frostpeak Sign",
+      "slot": "sign",
+      "set_id": "frostpeak_izakaya",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 140 },
+      "flavor_text": "A crisp sign etched with frost motifs."
+    },
+    {
+      "item_id": "decor_frostpeak_frame",
+      "name": "Frostpeak Frame",
+      "slot": "frame",
+      "set_id": "frostpeak_izakaya",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 140 },
+      "flavor_text": "A cool frame with pale, snowy trim."
+    },
+    {
+      "item_id": "decor_gilded_entry",
+      "name": "Gilded Entry",
+      "slot": "front",
+      "set_id": "gilded_pavilion",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 150 },
+      "flavor_text": "A marble arch with soft gold filigree."
+    },
+    {
+      "item_id": "decor_gilded_counter",
+      "name": "Gilded Counter",
+      "slot": "counter",
+      "set_id": "gilded_pavilion",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 150 },
+      "flavor_text": "Polished stonework with a refined golden edge."
+    },
+    {
+      "item_id": "decor_gilded_wall",
+      "name": "Gilded Wall",
+      "slot": "wall",
+      "set_id": "gilded_pavilion",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 150 },
+      "flavor_text": "A bright wall trimmed with elegant gilt lines."
+    },
+    {
+      "item_id": "decor_gilded_sign",
+      "name": "Gilded Sign",
+      "slot": "sign",
+      "set_id": "gilded_pavilion",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 150 },
+      "flavor_text": "A stately sign with a golden seal."
+    },
+    {
+      "item_id": "decor_gilded_frame",
+      "name": "Gilded Frame",
+      "slot": "frame",
+      "set_id": "gilded_pavilion",
+      "rarity": "epic",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 150 },
+      "flavor_text": "An ornate frame with subtle gold leaf."
+    },
+    {
+      "item_id": "decor_misty_entry",
+      "name": "Misty Entry",
+      "slot": "front",
+      "set_id": "misty_grove_stall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 160 },
+      "flavor_text": "A fog-soft arch wrapped in mossy ribbons."
+    },
+    {
+      "item_id": "decor_misty_counter",
+      "name": "Misty Counter",
+      "slot": "counter",
+      "set_id": "misty_grove_stall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 160 },
+      "flavor_text": "A muted counter with dew-kissed trim."
+    },
+    {
+      "item_id": "decor_misty_wall",
+      "name": "Misty Wall",
+      "slot": "wall",
+      "set_id": "misty_grove_stall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 160 },
+      "flavor_text": "Soft green panels that fade like morning mist."
+    },
+    {
+      "item_id": "decor_misty_sign",
+      "name": "Misty Sign",
+      "slot": "sign",
+      "set_id": "misty_grove_stall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 160 },
+      "flavor_text": "A quiet sign veiled in a misty glow."
+    },
+    {
+      "item_id": "decor_misty_frame",
+      "name": "Misty Frame",
+      "slot": "frame",
+      "set_id": "misty_grove_stall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 160 },
+      "flavor_text": "A delicate frame with soft moss trim."
+    },
+    {
+      "item_id": "decor_emberglass_entry",
+      "name": "Emberglass Entry",
+      "slot": "front",
+      "set_id": "emberglass_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 170 },
+      "flavor_text": "A smoked glass arch glowing with ember light."
+    },
+    {
+      "item_id": "decor_emberglass_counter",
+      "name": "Emberglass Counter",
+      "slot": "counter",
+      "set_id": "emberglass_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 170 },
+      "flavor_text": "Dark glass and copper lines hold a warm glow."
+    },
+    {
+      "item_id": "decor_emberglass_wall",
+      "name": "Emberglass Wall",
+      "slot": "wall",
+      "set_id": "emberglass_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 170 },
+      "flavor_text": "A deep wall lit by ember-colored glass panels."
+    },
+    {
+      "item_id": "decor_emberglass_sign",
+      "name": "Emberglass Sign",
+      "slot": "sign",
+      "set_id": "emberglass_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 170 },
+      "flavor_text": "A glowing sign etched into smoky glass."
+    },
+    {
+      "item_id": "decor_emberglass_frame",
+      "name": "Emberglass Frame",
+      "slot": "frame",
+      "set_id": "emberglass_kitchen",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 170 },
+      "flavor_text": "A warm frame with emberlit glass trim."
+    },
+    {
+      "item_id": "decor_celestial_entry",
+      "name": "Celestial Entry",
+      "slot": "front",
+      "set_id": "celestial_observatory",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 180 },
+      "flavor_text": "A high-arch entry traced with star lines."
+    },
+    {
+      "item_id": "decor_celestial_counter",
+      "name": "Celestial Counter",
+      "slot": "counter",
+      "set_id": "celestial_observatory",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 180 },
+      "flavor_text": "A deep counter polished like a night sky."
+    },
+    {
+      "item_id": "decor_celestial_wall",
+      "name": "Celestial Wall",
+      "slot": "wall",
+      "set_id": "celestial_observatory",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 180 },
+      "flavor_text": "Constellation panels glow with quiet starlight."
+    },
+    {
+      "item_id": "decor_celestial_sign",
+      "name": "Celestial Sign",
+      "slot": "sign",
+      "set_id": "celestial_observatory",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 180 },
+      "flavor_text": "A refined sign marked with star charts."
+    },
+    {
+      "item_id": "decor_celestial_frame",
+      "name": "Celestial Frame",
+      "slot": "frame",
+      "set_id": "celestial_observatory",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 180 },
+      "flavor_text": "A star-trim frame with silver accents."
+    },
+    {
+      "item_id": "decor_velvet_entry",
+      "name": "Velvet Entry",
+      "slot": "front",
+      "set_id": "velvet_night_noodle",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 190 },
+      "flavor_text": "A deep-toned arch with velvet drapes."
+    },
+    {
+      "item_id": "decor_velvet_counter",
+      "name": "Velvet Counter",
+      "slot": "counter",
+      "set_id": "velvet_night_noodle",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 190 },
+      "flavor_text": "A dark counter with soft, plush trim."
+    },
+    {
+      "item_id": "decor_velvet_wall",
+      "name": "Velvet Wall",
+      "slot": "wall",
+      "set_id": "velvet_night_noodle",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 190 },
+      "flavor_text": "A midnight wall with velvet-toned panels."
+    },
+    {
+      "item_id": "decor_velvet_sign",
+      "name": "Velvet Sign",
+      "slot": "sign",
+      "set_id": "velvet_night_noodle",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 190 },
+      "flavor_text": "A quiet sign with a subtle moon sheen."
+    },
+    {
+      "item_id": "decor_velvet_frame",
+      "name": "Velvet Frame",
+      "slot": "frame",
+      "set_id": "velvet_night_noodle",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 190 },
+      "flavor_text": "A deep frame trimmed with soft velvet."
+    },
+    {
+      "item_id": "decor_dragon_entry",
+      "name": "Dragon Hall Entry",
+      "slot": "front",
+      "set_id": "mythic_dragon_hall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 200 },
+      "flavor_text": "A towering gate carved with dragon scales."
+    },
+    {
+      "item_id": "decor_dragon_counter",
+      "name": "Dragon Hall Counter",
+      "slot": "counter",
+      "set_id": "mythic_dragon_hall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 200 },
+      "flavor_text": "A grand counter etched with legendary crests."
+    },
+    {
+      "item_id": "decor_dragon_wall",
+      "name": "Dragon Hall Wall",
+      "slot": "wall",
+      "set_id": "mythic_dragon_hall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 200 },
+      "flavor_text": "A mythic mural with sweeping dragon forms."
+    },
+    {
+      "item_id": "decor_dragon_sign",
+      "name": "Dragon Hall Sign",
+      "slot": "sign",
+      "set_id": "mythic_dragon_hall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 200 },
+      "flavor_text": "A bold sign crowned with a dragon emblem."
+    },
+    {
+      "item_id": "decor_dragon_frame",
+      "name": "Dragon Hall Frame",
+      "slot": "frame",
+      "set_id": "mythic_dragon_hall",
+      "rarity": "seasonal",
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 200 },
+      "flavor_text": "An ornate frame with dragon-scale trim."
+    }
+  ]
+}

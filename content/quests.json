@@ -1,0 +1,86 @@
+{
+  "quests": [
+    {
+      "quest_id": "serve_5",
+      "name": "Serve 5 orders",
+      "description": "Serve dishes to customers.",
+      "cadence": "daily",
+      "type": "serve",
+      "target": 5,
+      "weight": 1,
+      "reward": { "coins": 40, "sxp": 10, "rep": 2 }
+    },
+    {
+      "quest_id": "cook_4",
+      "name": "Cook 4 bowls",
+      "description": "Cook bowls in your kitchen.",
+      "cadence": "daily",
+      "type": "cook",
+      "target": 4,
+      "weight": 1,
+      "reward": { "coins": 35, "sxp": 12, "rep": 1 }
+    },
+    {
+      "quest_id": "forage_3",
+      "name": "Forage 3 times",
+      "description": "Head out and forage for ingredients.",
+      "cadence": "daily",
+      "type": "forage",
+      "target": 3,
+      "weight": 1,
+      "reward": { "coins": 30, "sxp": 8, "rep": 1 }
+    },
+    {
+      "quest_id": "buy_5",
+      "name": "Buy 5 ingredients",
+      "description": "Purchase ingredients from the market.",
+      "cadence": "daily",
+      "type": "buy",
+      "target": 5,
+      "weight": 1,
+      "reward": { "coins": 30, "sxp": 6, "rep": 1 }
+    },
+    {
+      "quest_id": "coins_200",
+      "name": "Earn 200c",
+      "description": "Earn coins from serving customers.",
+      "cadence": "daily",
+      "type": "earn_coins",
+      "target": 200,
+      "weight": 1,
+      "reward": { "coins": 45, "sxp": 8, "rep": 2 }
+    },
+    {
+      "quest_id": "serve_30",
+      "name": "Serve 30 orders",
+      "description": "Complete a busy week of service.",
+      "cadence": "weekly",
+      "type": "serve",
+      "target": 30,
+      "weight": 1,
+      "reward": { "coins": 120, "sxp": 40, "rep": 8 }
+    },
+    {
+      "quest_id": "cook_20",
+      "name": "Cook 20 bowls",
+      "description": "Cook a large batch of bowls.",
+      "cadence": "weekly",
+      "type": "cook",
+      "target": 20,
+      "weight": 1,
+      "reward": { "coins": 100, "sxp": 35, "rep": 6 }
+    }
+  ],
+  "counts": {
+    "daily": 3,
+    "weekly": 2,
+    "story": 0,
+    "seasonal": 0
+  },
+  "cadence_multipliers": {
+    "daily": 1,
+    "weekly": 2.5,
+    "story": 4,
+    "seasonal": 3
+  }
+}

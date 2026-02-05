@@ -5,14 +5,14 @@ import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
-import { loadStaffContent } from "../content/index.js";
+import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import {
   levelUpStaff,
   getStaffLevels,
-  calculateStaffEffects,
   getMaxStaffCapacity,
   calculateStaffCost
 } from "../game/staff.js";
+import { calculateUpgradeEffects } from "../game/upgrades.js";
 
 const {
   MessageActionRow,
@@ -38,6 +38,7 @@ const ButtonStyle = {
 
 const db = openDb();
 const staffContent = loadStaffContent();
+const upgradesContent = loadUpgradesContent();
 
 function ownerFooterText(userOrMember) {
   const member = userOrMember?.user ? userOrMember : null;
@@ -145,9 +146,8 @@ export async function noodleStaffHandler(interaction) {
   });
 }
 
-function buildStaffOverviewEmbed(player, server, user) {
+export function buildStaffOverviewEmbed(player, server, user) {
   const leveledStaff = getStaffLevels(player, staffContent);
-  const effects = calculateStaffEffects(player, staffContent);
   const staffCap = getMaxStaffCapacity(player, staffContent);
   const hiredCount = Object.values(player.staff_levels || {}).filter((lvl) => Number(lvl) > 0).length;
   
@@ -163,13 +163,13 @@ function buildStaffOverviewEmbed(player, server, user) {
       return `${rarityEmoji(s.rarity)} **${s.name}** ${categoryEmoji(s.category)} — ${status}`;
     });
     embed.addFields({
-      name: `Your Staff (${leveledStaff.length} leveled)`,
+      name: `Your Staff (${hiredCount}/${staffCap} slots)`,
       value: staffLines.join("\n"),
       inline: false
     });
   } else {
     embed.addFields({
-      name: "Your Staff",
+      name: `Your Staff (${hiredCount}/${staffCap} slots)`,
       value: "_No staff leveled yet._",
       inline: false
     });
@@ -177,52 +177,51 @@ function buildStaffOverviewEmbed(player, server, user) {
 
   // Effects summary
   const effectLines = [];
-  if (effects.ingredient_save_chance > 0) effectLines.push(`🧺 ${(effects.ingredient_save_chance * 100).toFixed(0)}% ingredient save`);
-  if (effects.double_craft_chance > 0) effectLines.push(`✨ ${(effects.double_craft_chance * 100).toFixed(0)}% double craft`);
-  if (effects.rep_bonus_flat > 0) effectLines.push(`⭐ +${effects.rep_bonus_flat.toFixed(1)} rep per serve`);
-  if (effects.rep_bonus_percent > 0) effectLines.push(`⭐ +${(effects.rep_bonus_percent * 100).toFixed(0)}% rep`);
-  if (effects.bowl_capacity_bonus > 0) effectLines.push(`🍜 +${effects.bowl_capacity_bonus} bowl capacity`);
-  if (effects.cooldown_reduction > 0) effectLines.push(`⏱️ -${(effects.cooldown_reduction * 100).toFixed(0)}% cooldowns`);
-  if (effects.forage_bonus_items > 0) effectLines.push(`🌿 +${effects.forage_bonus_items} forage items`);
-  if (effects.market_discount > 0) effectLines.push(`💰 ${(effects.market_discount * 100).toFixed(0)}% market discount`);
-  if (effects.sxp_bonus_percent > 0) effectLines.push(`📈 +${(effects.sxp_bonus_percent * 100).toFixed(0)}% SXP`);
-  if (effects.rare_epic_rep_bonus > 0) effectLines.push(`🌟 +${effects.rare_epic_rep_bonus} rep on rare/epic`);
-  if (effects.order_quality_bonus > 0) effectLines.push(`✨ +${(effects.order_quality_bonus * 100).toFixed(1)}% order quality`);
+  const upgradeEffects = calculateUpgradeEffects(player, upgradesContent);
+  const staffMultiplier = 1 + (upgradeEffects.staff_effect_multiplier || 0);
+
+  const formatStaffEffectValue = (key, value) => {
+    if (key === "ingredient_save_chance") return `${(value * 100).toFixed(0)}% ingredient save`;
+    if (key === "double_craft_chance") return `${(value * 100).toFixed(0)}% double craft`;
+    if (key === "rep_bonus_flat") return `+${value.toFixed(1)} rep per serve`;
+    if (key === "rep_bonus_percent") return `+${(value * 100).toFixed(0)}% rep`;
+    if (key === "bowl_capacity_bonus") return `+${value} bowl capacity`;
+    if (key === "cooldown_reduction") return `-${(value * 100).toFixed(0)}% cooldowns`;
+    if (key === "forage_bonus_items") return `+${value} forage items`;
+    if (key === "market_discount") return `${(value * 100).toFixed(0)}% market discount`;
+    if (key === "sxp_bonus_percent") return `+${(value * 100).toFixed(0)}% SXP`;
+    if (key === "rare_epic_rep_bonus") return `+${value} rep on rare/epic`;
+    if (key === "order_quality_bonus") return `+${(value * 100).toFixed(1)}% order quality`;
+    return null;
+  };
+
+  const staffLevels = Object.entries(player.staff_levels || {})
+    .filter(([, level]) => Number(level) > 0);
+
+  for (const [staffId, levelRaw] of staffLevels) {
+    const staff = staffContent.staff_members?.[staffId];
+    if (!staff) continue;
+    const level = Math.max(0, Number(levelRaw || 0));
+    if (level <= 0) continue;
+
+    if (staffId === "prep_chef") {
+      effectLines.push(`**${staff.name}** — auto-buys missing non-forage ingredients for up to ${level} orders`);
+      continue;
+    }
+
+    const effectsPerLevel = staff.effects_per_level ?? {};
+    for (const [effectKey, perLevel] of Object.entries(effectsPerLevel)) {
+      const total = perLevel * level * staffMultiplier;
+      const formatted = formatStaffEffectValue(effectKey, total);
+      if (!formatted) continue;
+      effectLines.push(`**${staff.name}** — ${formatted}`);
+    }
+  }
 
   if (effectLines.length > 0) {
     embed.addFields({
       name: "Active Bonuses",
       value: effectLines.join("\n"),
-      inline: false
-    });
-  }
-
-  // All available staff
-  const poolLines = Object.values(staffContent.staff_members ?? {})
-    .filter(Boolean)
-    .sort((a, b) => {
-      const aKey = staffSortKey(player, a);
-      const bKey = staffSortKey(player, b);
-      if (aKey.cost !== bKey.cost) return aKey.cost - bKey.cost;
-      return a.name.localeCompare(b.name);
-    })
-    .map(staff => {
-    const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
-    const cost = calculateStaffCost(staff, currentLevel);
-    const status = currentLevel >= staff.max_level ? "✅ MAX" : `Lv${currentLevel}`;
-    return `${rarityEmoji(staff.rarity)} **${staff.name}** ${categoryEmoji(staff.category)} — ${status} (${cost}c)`;
-  }).filter(Boolean);
-
-  if (poolLines.length > 0) {
-    embed.addFields({
-      name: "Available Staff",
-      value: poolLines.join("\n"),
-      inline: false
-    });
-  } else {
-    embed.addFields({
-      name: "Available Staff",
-      value: "_No staff available._",
       inline: false
     });
   }

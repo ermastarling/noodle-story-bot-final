@@ -180,7 +180,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 12,
       "stock_min": 100,
       "stock_max": 150
@@ -191,7 +191,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 13,
       "stock_min": 100,
       "stock_max": 150
@@ -202,7 +202,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 14,
       "stock_min": 100,
       "stock_max": 150
@@ -213,7 +213,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 14,
       "stock_min": 100,
       "stock_max": 150
@@ -224,7 +224,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 15,
       "stock_min": 100,
       "stock_max": 150
@@ -235,7 +235,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 18,
       "stock_min": 100,
       "stock_max": 150
@@ -246,7 +246,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 15,
       "stock_min": 100,
       "stock_max": 150
@@ -257,7 +257,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 11,
       "stock_min": 100,
       "stock_max": 150
@@ -268,7 +268,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 17,
       "stock_min": 100,
       "stock_max": 150
@@ -279,7 +279,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 13,
       "stock_min": 100,
       "stock_max": 150
@@ -290,7 +290,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 16,
       "stock_min": 100,
       "stock_max": 150
@@ -301,7 +301,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 16,
       "stock_min": 100,
       "stock_max": 150
@@ -312,7 +312,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 20,
       "stock_min": 100,
       "stock_max": 150
@@ -323,7 +323,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 15,
       "stock_min": 100,
       "stock_max": 150
@@ -334,7 +334,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 17,
       "stock_min": 100,
       "stock_max": 150
@@ -345,7 +345,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 22,
       "stock_min": 100,
       "stock_max": 150
@@ -356,7 +356,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 21,
       "stock_min": 100,
       "stock_max": 150
@@ -367,7 +367,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 21,
       "stock_min": 100,
       "stock_max": 150
@@ -378,7 +378,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 22,
       "stock_min": 100,
       "stock_max": 150
@@ -389,7 +389,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 22,
       "stock_min": 100,
       "stock_max": 150
@@ -400,7 +400,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 17,
       "stock_min": 100,
       "stock_max": 150
@@ -411,7 +411,7 @@
       "category": "broth",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 22,
       "stock_min": 100,
       "stock_max": 150
@@ -422,7 +422,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 10,
       "stock_min": 100,
       "stock_max": 150
@@ -433,7 +433,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 10,
       "stock_min": 100,
       "stock_max": 150
@@ -444,7 +444,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 10,
       "stock_min": 100,
       "stock_max": 150
@@ -455,7 +455,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 12,
       "stock_min": 100,
       "stock_max": 150
@@ -466,7 +466,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 11,
       "stock_min": 100,
       "stock_max": 150
@@ -477,7 +477,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 11,
       "stock_min": 100,
       "stock_max": 150
@@ -488,7 +488,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 12,
       "stock_min": 100,
       "stock_max": 150
@@ -499,7 +499,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 12,
       "stock_min": 100,
       "stock_max": 150
@@ -510,7 +510,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 10,
       "stock_min": 100,
       "stock_max": 150
@@ -521,7 +521,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "rare",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 14,
       "stock_min": 100,
       "stock_max": 150
@@ -532,7 +532,7 @@
       "category": "noodles",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 12,
       "stock_min": 100,
       "stock_max": 150
@@ -554,7 +554,7 @@
       "category": "topping",
       "acquisition": "market",
       "tier": "common",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 7,
       "stock_min": 100,
       "stock_max": 150
@@ -565,7 +565,7 @@
       "category": "topping",
       "acquisition": "market",
       "tier": "uncommon",
-      "spoilable": true,
+      "spoilable": false,
       "base_price": 12,
       "stock_min": 100,
       "stock_max": 150
