@@ -1188,7 +1188,7 @@ if (sub === "pantry") {
     user: interaction.member ?? interaction.user
   });
   pantryEmbed.setFooter({
-    text: `Forageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
+    text: `S-:Salvage, S:Standard, G:Good, E:Excellent\n\nForageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
   });
 
   return commit({
@@ -1502,21 +1502,26 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     // Prepend time catch-up and resilience messages
     let finalContent = replyObj.content || "";
-    
-    // Time catch-up messages first (welcome back, spoilage)
-    if (timeCatchup.messages.length > 0) {
-      const catchupMsg = timeCatchup.messages.join("\n\n");
-      finalContent = finalContent 
-        ? `${catchupMsg}\n\n${finalContent}` 
-        : catchupMsg;
-    }
-    
-    // Then resilience messages
-    if (resilience.messages.length > 0 && !finalContent.includes("🆘")) {
-      const resilienceMsg = resilience.messages.join("\n\n");
-      finalContent = finalContent 
-        ? `${resilienceMsg}\n\n${finalContent}` 
-        : resilienceMsg;
+    let finalEmbeds = replyObj.embeds ? [...replyObj.embeds] : undefined;
+
+    const catchupMsg = timeCatchup.messages.length > 0
+      ? timeCatchup.messages.join("\n\n")
+      : "";
+    const resilienceMsg = resilience.messages.length > 0 && !finalContent.includes("🆘")
+      ? resilience.messages.join("\n\n")
+      : "";
+
+    const banner = [catchupMsg, resilienceMsg].filter(Boolean).join("\n\n");
+
+    if (banner) {
+      if (finalEmbeds && finalEmbeds.length > 0) {
+        const first = { ...finalEmbeds[0] };
+        const existing = first.description || "";
+        first.description = existing ? `${banner}\n\n${existing}` : banner;
+        finalEmbeds[0] = first;
+      } else {
+        finalContent = finalContent ? `${banner}\n\n${finalContent}` : banner;
+      }
     }
 
     if (clearedTempRecipes) {
@@ -1527,6 +1532,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const out = {
       ...replyObj,
       content: finalContent,
+      embeds: finalEmbeds ?? replyObj.embeds,
       ephemeral: replyObj.ephemeral ?? false,
       components: replyObj.ephemeral
         ? (replyObj.components ?? [])
@@ -1933,12 +1939,16 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     advanceTutorial(p, "cook");
     p.lifetime.recipes_cooked = (p.lifetime.recipes_cooked || 0) + 1;
 
-    const consumedLine = Object.entries(consumedByItem)
-      .map(([id, qty2]) => `**${qty2}× ${displayItemName(id)}**`)
+    const lostLine = (r.ingredients ?? [])
+      .map((ing) => {
+        const lostQty = (ing.qty ?? 0) * outcome.failed;
+        return lostQty > 0 ? `**${lostQty}× ${displayItemName(ing.item_id)}**` : null;
+      })
+      .filter(Boolean)
       .join(" · ");
     const salvageLine = outcome.salvage > 0 ? ` Salvaged **${outcome.salvage}** bowl(s).` : "";
     const failInfo = outcome.failed > 0
-      ? `⚠️ **Cook failure**: ${outcome.failed} bowl(s) failed. Consumed: ${consumedLine}. Cause: recipe tier risk.${salvageLine}`
+      ? `⚠️ **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: recipe tier risk.${salvageLine}`
       : null;
 
     const cookEmbed = buildMenuEmbed({
@@ -2141,6 +2151,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const board = p.order_board ?? [];
     const results = [];
     const readyBowlsByRecipe = new Map();
+    const acceptedOrdersNow = [];
     let acceptedNow = 0;
 
     for (const tok of tokens) {
@@ -2199,13 +2210,130 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const total = getTotalBowlsForRecipe(p, order.recipe_id);
       if (total > 0) {
         readyBowlsByRecipe.set(order.recipe_id, total);
-      } else {
-        const needs = formatRecipeNeeds({ recipeId: order.recipe_id, content, player: p });
-        if (needs) {
-          results.push(needs, "");
-        }
       }
+      acceptedOrdersNow.push(order);
       acceptedNow += 1;
+    }
+
+    const prepChefLevel = Math.max(0, Number(p.staff_levels?.prep_chef || 0));
+    if (prepChefLevel > 0 && acceptedOrdersNow.length > 0) {
+      const autoOrderCap = prepChefLevel >= 5
+        ? acceptedOrdersNow.length
+        : Math.min(acceptedOrdersNow.length, prepChefLevel);
+
+      const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
+      const stockRemaining = { ...(p.market_stock ?? {}) };
+      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+      const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
+      const countsByType = getIngredientCountsByType(p);
+      const remainingByType = {
+        broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
+        noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
+        spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
+        topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0))
+      };
+      const bowlsRemaining = {};
+      const coinsStart = Number(p.coins || 0);
+      let coinsRemaining = coinsStart;
+
+      for (const order of acceptedOrdersNow) {
+        bowlsRemaining[order.recipe_id] = getTotalBowlsForRecipe(p, order.recipe_id);
+      }
+
+      const purchasedByItem = {};
+      let totalAutoCost = 0;
+      let ordersCovered = 0;
+
+      for (const order of acceptedOrdersNow.slice(0, autoOrderCap)) {
+        const recipe = content.recipes?.[order.recipe_id];
+        if (!recipe?.ingredients) continue;
+
+        if ((bowlsRemaining[order.recipe_id] ?? 0) > 0) {
+          bowlsRemaining[order.recipe_id] -= 1;
+          ordersCovered += 1;
+          continue;
+        }
+
+        const allItems = [];
+        const neededItems = [];
+        let orderCost = 0;
+        let orderOk = true;
+
+        for (const ing of recipe.ingredients) {
+          const itemId = ing.item_id;
+          const need = Math.max(0, Number(ing.qty) || 0);
+          const have = Math.max(0, Number(inventoryAvailable[itemId] || 0));
+          const missing = Math.max(0, need - have);
+
+          const item = content.items?.[itemId];
+          if (!item) {
+            orderOk = false;
+            break;
+          }
+
+          const type = normalizeIngredientType(itemId);
+          allItems.push({ itemId, need, have, missing, type, name: item.name });
+
+          if (missing > 0) {
+            if (!MARKET_ITEM_IDS.includes(itemId)) {
+              orderOk = false;
+              break;
+            }
+
+            const remaining = remainingByType[type] ?? 0;
+            if (remaining < missing) {
+              orderOk = false;
+              break;
+            }
+
+            const stock = stockRemaining[itemId] ?? 0;
+            if (stock < missing) {
+              orderOk = false;
+              break;
+            }
+
+            const basePrice = s.market_prices?.[itemId] ?? item.base_price ?? 0;
+            const price = applyMarketDiscount(basePrice, combinedEffects);
+            orderCost += price * missing;
+            neededItems.push({ itemId, qty: missing, name: item.name, price, type });
+          }
+        }
+
+        if (!orderOk || coinsRemaining < orderCost) {
+          continue;
+        }
+
+        // Reserve inventory and apply purchases for this order
+        for (const item of allItems) {
+          const usedFromInventory = Math.min(item.need, item.have);
+          inventoryAvailable[item.itemId] = Math.max(0, (inventoryAvailable[item.itemId] || 0) - usedFromInventory);
+        }
+
+        for (const needItem of neededItems) {
+          remainingByType[needItem.type] = Math.max(0, (remainingByType[needItem.type] ?? 0) - needItem.qty);
+          stockRemaining[needItem.itemId] = Math.max(0, (stockRemaining[needItem.itemId] ?? 0) - needItem.qty);
+          purchasedByItem[needItem.itemId] = (purchasedByItem[needItem.itemId] ?? 0) + needItem.qty;
+        }
+
+        coinsRemaining -= orderCost;
+        totalAutoCost += orderCost;
+        ordersCovered += 1;
+      }
+
+      const purchasedItems = Object.entries(purchasedByItem)
+        .map(([id, qty]) => `**${qty}× ${displayItemName(id)}**`)
+        .join(" · ");
+
+      if (totalAutoCost > 0) {
+        if (!p.inv_ingredients) p.inv_ingredients = {};
+        if (!p.market_stock) p.market_stock = {};
+        for (const [id, qty] of Object.entries(purchasedByItem)) {
+          p.inv_ingredients[id] = (p.inv_ingredients[id] ?? 0) + qty;
+          p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
+        }
+        p.coins = coinsRemaining;
+        results.push(`🧑‍🍳 Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
+      }
     }
 
     if (acceptedNow > 0) advanceTutorial(p, "accept");
@@ -2554,7 +2682,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     if (!servedCount) {
-      return commitState({ content: results.join("\n") || "Nothing served." });
+      const failEmbed = buildMenuEmbed({
+        title: "🍜 Orders Served",
+        description: results.join("\n") || "Nothing served.",
+        user: interaction.member ?? interaction.user
+      });
+      return commitState({ content: " ", embeds: [failEmbed] });
     }
     
     // If a recipe was unlocked, force regenerate order board to include new recipe
@@ -3164,7 +3297,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
             return componentCommit(interaction, { content: `Unknown item: ${friendly}.`, ephemeral: true });
           }
 
-          const price = s.market_prices?.[id3] ?? it.base_price ?? 0;
+          const basePrice = s.market_prices?.[id3] ?? it.base_price ?? 0;
+          const price = applyMarketDiscount(basePrice, combinedEffects);
           const stock = p2.market_stock?.[id3] ?? 0;
           const type = normalizeIngredientType(id3);
           const remaining = remainingByType[type] ?? 0;
@@ -3245,6 +3379,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? "\n🧺 Pantry capacity limited this purchase." : ""}${tutorialSuffix(p2)}`,
           user: interaction.member ?? interaction.user
         });
+        buyEmbed.setFooter({
+          text: `Coins: ${p2.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
+        });
 
         const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
         const tutorialActive = Boolean(p2.tutorial?.active && getCurrentTutorialStep(p2));
@@ -3263,7 +3400,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`noodle:nav:profile:${interaction.user.id}`)
-              .setLabel("Cancel")
+              .setLabel("Back")
               .setStyle(ButtonStyle.Secondary)
           );
           components = [btnRow, sellRow];

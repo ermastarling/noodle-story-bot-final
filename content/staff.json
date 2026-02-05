@@ -3,10 +3,10 @@
     "prep_chef": {
       "staff_id": "prep_chef",
       "name": "Prep Chef",
-      "description": "Keeps prep work organized and consistent.",
+      "description": "Goes out to buy missing ingredients for you.",
       "category": "kitchen",
       "rarity": "common",
-      "max_level": 20,
+        "max_level": 5,
       "base_cost": 300,
       "cost_scaling": 1.35,
       "effects_per_level": {}
@@ -53,7 +53,7 @@
     "host": {
       "staff_id": "host",
       "name": "Host",
-      "description": "Welcoming presence attracts more customers.",
+      "description": "Welcoming presence increases cook quality, improving dish rewards.",
       "category": "service",
       "rarity": "rare",
       "max_level": 20,
@@ -65,8 +65,8 @@
     },
     "manager": {
       "staff_id": "manager",
-      "name": "Manager",
-      "description": "Optimizes operations, slightly reducing all cooldowns.",
+      "name": "Forage Manager",
+      "description": "Optimizes operations, slightly reducing foraging cooldown.",
       "category": "service",
       "rarity": "epic",
       "max_level": 10,
@@ -79,7 +79,7 @@
     "dishwasher": {
       "staff_id": "dishwasher",
       "name": "Dishwasher",
-      "description": "Keeps the kitchen running smoothly.",
+      "description": "Keeps the kitchen running smoothly, increases bowl capacity.",
       "category": "kitchen",
       "rarity": "common",
       "max_level": 20,
@@ -92,7 +92,7 @@
     "forager": {
       "staff_id": "forager",
       "name": "Forager",
-      "description": "Knows the best spots for wild ingredients.",
+      "description": "Knows the best spots for wild ingredients, adds +1 forage item per level.",
       "category": "support",
       "rarity": "common",
       "max_level": 20,
@@ -118,7 +118,7 @@
     "apprentice": {
       "staff_id": "apprentice",
       "name": "Apprentice",
-      "description": "Eager learner who helps with basic tasks.",
+      "description": "Eager learner who helps with basic tasks, gaining your shop experience.",
       "category": "kitchen",
       "rarity": "common",
       "max_level": 20,

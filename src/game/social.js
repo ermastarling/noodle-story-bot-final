@@ -354,7 +354,7 @@ export function transferTip(db, serverId, senderPlayer, receiverPlayer, amount, 
   
   // Validation
   if (amount < MIN_TIP_AMOUNT || amount > MAX_TIP_AMOUNT) {
-    throw new Error(`Tip amount must be between ${MIN_TIP_AMOUNT} and ${MAX_TIP_AMOUNT} coins`);
+    throw new Error(`Tip amount must be between ${MIN_TIP_AMOUNT} and ${MAX_TIP_AMOUNT}c`);
   }
   
   if (senderPlayer.user_id === receiverPlayer.user_id) {
@@ -362,7 +362,7 @@ export function transferTip(db, serverId, senderPlayer, receiverPlayer, amount, 
   }
   
   if (senderPlayer.coins < amount) {
-    throw new Error(`Insufficient coins. You have ${senderPlayer.coins} coins`);
+    throw new Error(`Insufficient coins. You have ${senderPlayer.coins}c`);
   }
   
   // Transfer coins

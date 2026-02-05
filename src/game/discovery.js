@@ -214,10 +214,10 @@ export function applyDiscovery(player, discovery, content, rng = Math.random) {
     if (player.known_recipes.includes(discovery.recipeId)) {
       // Already unlocked - give coins for duplicate
       player.coins = (player.coins || 0) + CLUE_DUPLICATE_COINS;
-      return { 
-        isDuplicate: true, 
-        reward: `+${CLUE_DUPLICATE_COINS} coins (duplicate clue)` 
-      };
+        return { 
+          isDuplicate: true, 
+          reward: `+${CLUE_DUPLICATE_COINS}c (duplicate clue)` 
+        };
     }
     
     // Get recipe details to find ingredients
@@ -319,10 +319,10 @@ export function applyDiscovery(player, discovery, content, rng = Math.random) {
         };
       } else {
         player.coins = (player.coins || 0) + SCROLL_DUPLICATE_COINS;
-        return { 
-          isDuplicate: true, 
-          reward: `+${SCROLL_DUPLICATE_COINS} coins (duplicate scroll)` 
-        };
+          return { 
+            isDuplicate: true, 
+            reward: `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)` 
+          };
       }
     }
     

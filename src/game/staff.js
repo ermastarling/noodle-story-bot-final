@@ -45,6 +45,20 @@ export function levelUpStaff(player, staffId, staffContent) {
   if (!player.staff_levels) player.staff_levels = {};
   
   const currentLevel = player.staff_levels[staffId] || 0;
+
+  // Enforce staff capacity on first hire
+  if (currentLevel <= 0) {
+    const hiredCount = Object.values(player.staff_levels || {}).filter((lvl) => Number(lvl) > 0).length;
+    const maxCap = getMaxStaffCapacity(player, staffContent);
+    if (hiredCount >= maxCap) {
+      return {
+        success: false,
+        message: `Staff capacity reached (${maxCap}). Upgrade Staff Quarters or level up your shop to hire more staff.`,
+        cost: 0,
+        newLevel: currentLevel
+      };
+    }
+  }
   
   // Check if at max level
   if (currentLevel >= staff.max_level) {
@@ -63,7 +77,7 @@ export function levelUpStaff(player, staffId, staffContent) {
   if (player.coins < cost) {
     return { 
       success: false, 
-      message: `Not enough coins. Need ${cost} coins.`, 
+      message: `Not enough coins. Need ${cost}c.`, 
       cost, 
       newLevel: currentLevel 
     };
@@ -75,7 +89,7 @@ export function levelUpStaff(player, staffId, staffContent) {
   
   return { 
     success: true, 
-    message: `Leveled up ${staff.name} to level ${currentLevel + 1} for ${cost} coins!`, 
+    message: `Leveled up ${staff.name} to level ${currentLevel + 1} for ${cost}c!`, 
     cost, 
     newLevel: currentLevel + 1 
   };
@@ -86,11 +100,12 @@ export function levelUpStaff(player, staffId, staffContent) {
  * @param {Object} player - Player profile
  * @returns {number} Maximum staff capacity
  */
-export function getMaxStaffCapacity(player) {
-  const baseCapacity = 12; // Can level up all 12 staff
+export function getMaxStaffCapacity(player, staffContent = null) {
+  const totalStaff = Object.keys(staffContent?.staff_members || {}).length || 12;
+  const baseCap = Math.max(5, Math.floor(player.shop_level || 1));
   const effects = calculateUpgradeEffects(player, upgradesContent);
   const bonus = Math.floor(effects.staff_capacity || 0);
-  return baseCapacity + bonus;
+  return Math.min(totalStaff, baseCap + bonus);
 }
 
 /**

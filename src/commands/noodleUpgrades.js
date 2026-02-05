@@ -8,6 +8,7 @@ import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
 import { noodleMainMenuRow } from "./noodle.js";
 import {
   purchaseUpgrade,
+  calculateUpgradeCost,
   getUpgradesByCategory,
   calculateUpgradeEffects
 } from "../game/upgrades.js";
@@ -111,7 +112,8 @@ function buildStaffRarityRow(userId, activeRarity = "common") {
   const rarities = [
     { id: "common", label: "⚪ Common" },
     { id: "rare", label: "⭐ Rare" },
-    { id: "epic", label: "🌟 Epic" }
+    { id: "epic", label: "🌟 Epic" },
+    { id: "upgrades", label: "🧰 Upgrades" }
   ];
 
   const buttons = rarities.map((rar) =>
@@ -185,7 +187,7 @@ function buildUpgradesOverviewEmbed(player, user) {
     if (!categoryData.upgrades || categoryData.upgrades.length === 0) continue;
 
     const lines = categoryData.upgrades.map(u => {
-      const status = u.isMaxed ? "✅ MAX" : `${u.nextCost} coins`;
+      const status = u.isMaxed ? "✅ MAX" : `${u.nextCost}c`;
       return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
     });
 
@@ -223,6 +225,33 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
   const categoryData = upgradesContent.upgrade_categories?.[categoryId];
 
   if (categoryId === "staff") {
+    if (staffRarity === "upgrades") {
+      const embed = new EmbedBuilder()
+        .setTitle("🧰 Staff Upgrades")
+        .setDescription(`💰 Coins: **${player.coins}**\n\nUpgrades that improve staff capacity and performance.`)
+        .setColor(0xFF8C00);
+
+      const staffUpgrades = ["u_staff_quarters", "u_manuals"]
+        .map((id) => upgradesContent.upgrades?.[id])
+        .filter(Boolean)
+        .map((upgrade) => {
+          const currentLevel = player.upgrades?.[upgrade.upgrade_id] || 0;
+          const nextCost = calculateUpgradeCost(upgrade, currentLevel);
+          const isMaxed = currentLevel >= upgrade.max_level;
+          const status = isMaxed ? "✅ MAX" : `${nextCost}c`;
+          return `• **${upgrade.name}** (${currentLevel}/${upgrade.max_level}) — ${status}\n  _${upgrade.description}_`;
+        });
+
+      embed.addFields({
+        name: "Staff Upgrades",
+        value: staffUpgrades.length ? staffUpgrades.join("\n") : "_No staff upgrades found._",
+        inline: false
+      });
+
+      applyOwnerFooter(embed, user);
+      return embed;
+    }
+
     const embed = new EmbedBuilder()
       .setTitle("👥 Staff Upgrades")
       .setDescription(`💰 Coins: **${player.coins}**\n\nHire and empower your staff.`)
@@ -246,7 +275,7 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
       .map((staff) => {
         const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
         const cost = calculateStaffCost(staff, currentLevel);
-        const status = currentLevel >= staff.max_level ? "✅ MAX" : `${cost} coins`;
+        const status = currentLevel >= staff.max_level ? "✅ MAX" : `${cost}c`;
         const emoji = shouldHideRarityEmoji(staff) ? "" : `${rarityEmoji(staff.rarity)} `;
         const description = staff.description ? `\n  _${staff.description}_` : "";
         return `• ${emoji}**${staff.name}** (${currentLevel}/${staff.max_level}) — ${status}${description}`.trim();
@@ -276,7 +305,7 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
 
   const upgrades = upgradesByCategory[categoryId]?.upgrades ?? [];
   const lines = upgrades.map((u) => {
-    const status = u.isMaxed ? "✅ MAX" : `${u.nextCost} coins`;
+    const status = u.isMaxed ? "✅ MAX" : `${u.nextCost}c`;
     return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
   });
 
@@ -299,38 +328,40 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
 
   if (categoryId === "staff") {
     rows.push(buildStaffRarityRow(userId, staffRarity));
-    const staffOptions = Object.values(staffContent.staff_members ?? {})
-      .slice()
-      .sort((a, b) => {
-        if (a.rarity === "common" || b.rarity === "common") {
-          const aPinned = a.staff_id === "forager" ? 1 : 0;
-          const bPinned = b.staff_id === "forager" ? 1 : 0;
-          if (aPinned !== bPinned) return bPinned - aPinned;
-        }
-        const aKey = staffSortKey(player, a);
-        const bKey = staffSortKey(player, b);
-        if (aKey.cost !== bKey.cost) return aKey.cost - bKey.cost;
-        return a.name.localeCompare(b.name);
-      })
-      .map((staff) => {
-        const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
-        if (currentLevel >= staff.max_level) return null;
-        const cost = calculateStaffCost(staff, currentLevel);
-        return {
-          label: `${staff.name} — ${cost} coins`,
-          description: `Lv${currentLevel}→${currentLevel + 1}`.slice(0, 100),
-          value: staff.staff_id,
-          emoji: rarityEmoji(staff.rarity)
-        };
-      })
-      .filter(Boolean);
+    if (staffRarity !== "upgrades") {
+      const staffOptions = Object.values(staffContent.staff_members ?? {})
+        .slice()
+        .sort((a, b) => {
+          if (a.rarity === "common" || b.rarity === "common") {
+            const aPinned = a.staff_id === "forager" ? 1 : 0;
+            const bPinned = b.staff_id === "forager" ? 1 : 0;
+            if (aPinned !== bPinned) return bPinned - aPinned;
+          }
+          const aKey = staffSortKey(player, a);
+          const bKey = staffSortKey(player, b);
+          if (aKey.cost !== bKey.cost) return aKey.cost - bKey.cost;
+          return a.name.localeCompare(b.name);
+        })
+        .map((staff) => {
+          const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
+          if (currentLevel >= staff.max_level) return null;
+          const cost = calculateStaffCost(staff, currentLevel);
+          return {
+            label: `${staff.name} — ${cost}c`,
+            description: `Lv${currentLevel}→${currentLevel + 1}`.slice(0, 100),
+            value: staff.staff_id,
+            emoji: rarityEmoji(staff.rarity)
+          };
+        })
+        .filter(Boolean);
 
-    if (staffOptions.length > 0) {
-      const staffMenu = new StringSelectMenuBuilder()
-        .setCustomId(`noodle-upgrades:staff:${userId}`)
-        .setPlaceholder("Level up staff member")
-        .addOptions(staffOptions);
-      rows.push(new ActionRowBuilder().addComponents(staffMenu));
+      if (staffOptions.length > 0) {
+        const staffMenu = new StringSelectMenuBuilder()
+          .setCustomId(`noodle-upgrades:staff:${userId}`)
+          .setPlaceholder("Level up staff member")
+          .addOptions(staffOptions);
+        rows.push(new ActionRowBuilder().addComponents(staffMenu));
+      }
     }
   }
 
@@ -349,7 +380,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
       const description = `Lv${upgrade.currentLevel}→${upgrade.currentLevel + 1}: ${effectStr}`.substring(0, 100);
       
       allOptions.push({
-        label: `${upgrade.name} — ${upgrade.nextCost} coins`,
+        label: `${upgrade.name} — ${upgrade.nextCost}c`,
         description,
         value: upgrade.upgradeId,
         emoji: categoryData.icon || "🔧"

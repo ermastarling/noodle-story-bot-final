@@ -123,8 +123,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       .join(", ");
 
     messages.push(
-      `🕐 *While you were away, some ingredients spoiled:* ${itemsList}\n` +
-      `_(${ticksToApply} ${ticksToApply === 1 ? 'tick' : 'ticks'} evaluated)_`
+      `🕐 *While you were away, some ingredients spoiled:* ${itemsList}`
     );
   }
 

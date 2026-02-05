@@ -144,7 +144,7 @@ test("Discovery: applyDiscovery - duplicate clue gives coins", () => {
   const result = applyDiscovery(player, discovery, mockContent);
   
   assert.strictEqual(result.isDuplicate, true);
-  assert.ok(result.reward.includes("25 coins"));
+  assert.ok(result.reward.includes("25c"));
   assert.strictEqual(player.coins, 125);
 });
 

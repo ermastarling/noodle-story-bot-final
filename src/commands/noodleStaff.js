@@ -10,6 +10,7 @@ import {
   levelUpStaff,
   getStaffLevels,
   calculateStaffEffects,
+  getMaxStaffCapacity,
   calculateStaffCost
 } from "../game/staff.js";
 
@@ -147,6 +148,8 @@ export async function noodleStaffHandler(interaction) {
 function buildStaffOverviewEmbed(player, server, user) {
   const leveledStaff = getStaffLevels(player, staffContent);
   const effects = calculateStaffEffects(player, staffContent);
+  const staffCap = getMaxStaffCapacity(player, staffContent);
+  const hiredCount = Object.values(player.staff_levels || {}).filter((lvl) => Number(lvl) > 0).length;
   
   const embed = new EmbedBuilder()
     .setTitle("👥 Staff Management")
@@ -207,7 +210,7 @@ function buildStaffOverviewEmbed(player, server, user) {
     const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
     const cost = calculateStaffCost(staff, currentLevel);
     const status = currentLevel >= staff.max_level ? "✅ MAX" : `Lv${currentLevel}`;
-    return `${rarityEmoji(staff.rarity)} **${staff.name}** ${categoryEmoji(staff.category)} — ${status} (${cost} coins)`;
+    return `${rarityEmoji(staff.rarity)} **${staff.name}** ${categoryEmoji(staff.category)} — ${status} (${cost}c)`;
   }).filter(Boolean);
 
   if (poolLines.length > 0) {
@@ -224,7 +227,7 @@ function buildStaffOverviewEmbed(player, server, user) {
     });
   }
 
-  embed.setDescription(`💰 Coins: **${player.coins}**`);
+  embed.setDescription(`💰 Coins: **${player.coins}**\n👥 Staff Slots: **${hiredCount}/${staffCap}**`);
   applyOwnerFooter(embed, user);
 
   return embed;
@@ -250,7 +253,7 @@ function buildStaffComponents(userId, player, server) {
       const description = `Lv${currentLevel}→${currentLevel + 1}: ${effectStr}`.substring(0, 100);
 
       return {
-        label: `${staff.name} — ${cost} coins`,
+        label: `${staff.name} — ${cost}c`,
         description,
         value: staff.staff_id,
         emoji: rarityEmoji(staff.rarity)

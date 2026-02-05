@@ -69,10 +69,17 @@ test("Staff: levelUpStaff cost increases with each level", () => {
   assert.ok(cost2 > cost1);
 });
 
-test("Staff: getMaxStaffCapacity returns 12 for all staff", () => {
+test("Staff: getMaxStaffCapacity uses level gating and quarters", () => {
   const player = makeTestPlayer();
-  
-  assert.strictEqual(getMaxStaffCapacity(player), 12);
+  player.shop_level = 1;
+
+  assert.strictEqual(getMaxStaffCapacity(player, staffContent), 5);
+
+  player.shop_level = 8;
+  assert.strictEqual(getMaxStaffCapacity(player, staffContent), 8);
+
+  player.upgrades.u_staff_quarters = 4; // +2 capacity
+  assert.strictEqual(getMaxStaffCapacity(player, staffContent), 10);
 });
 
 test("Staff: calculateStaffEffects aggregates bonuses", () => {
@@ -174,12 +181,12 @@ test("Staff: Epic staff have max level of 10", () => {
   assert.strictEqual(sommelier.max_level, 10);
 });
 
-test("Staff: Common/Rare staff have max level of 20", () => {
+test("Staff: Common/Rare staff have max level of 20 (except Prep Chef)", () => {
   const prepChef = staffContent.staff_members.prep_chef;
   const sousChef = staffContent.staff_members.sous_chef;
   const forager = staffContent.staff_members.forager;
   
-  assert.strictEqual(prepChef.max_level, 20);
+  assert.strictEqual(prepChef.max_level, 5);
   assert.strictEqual(sousChef.max_level, 20);
   assert.strictEqual(forager.max_level, 20);
 });

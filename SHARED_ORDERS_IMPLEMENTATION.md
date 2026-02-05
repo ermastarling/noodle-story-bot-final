@@ -12,7 +12,7 @@ Implemented a complete shared order system for party cooperation in Noodle Story
 
 ### 2. Reward Structure
 Per-serving rewards distributed equally to all contributors:
-- **Coins**: 120 coins per serving
+- **Coins**: 120c per serving
 - **Reputation (REP)**: 6 REP per serving
 - **Skill Experience (SXP)**: 15 SXP per serving
 - **Automatic Level Up**: SXP awards trigger `applySxpLevelUp()` for potential shop level increases

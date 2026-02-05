@@ -728,7 +728,7 @@ async function handleTip(interaction) {
 
         const embed = new EmbedBuilder()
           .setTitle("💰 Tip Sent!")
-          .setDescription(`<@${userId}> tipped <@${targetUser.id}> **${amount} coins**!`)
+          .setDescription(`<@${userId}> tipped <@${targetUser.id}> **${amount}c**!`)
           .setColor(0xffd700);
 
         if (message) {
@@ -1259,7 +1259,7 @@ async function handleComponent(interaction) {
 
             const embed = new EmbedBuilder()
               .setTitle("💰 Tip Sent!")
-              .setDescription(`<@${userId}> tipped <@${targetId}> **${amount} coins**!`)
+              .setDescription(`<@${userId}> tipped <@${targetId}> **${amount}c**!`)
               .setColor(0xffd700);
 
             embed.addFields(
@@ -1563,7 +1563,7 @@ async function handleComponent(interaction) {
             .setDescription(
               `**${recipe.name}**\n\n` +
               `📦 **Servings**: ${servings}\n` +
-                `💰 **Reward**: ${totalReward} coins (${SHARED_ORDER_REWARD.coinsPerServing}c per serving)\n` +
+                `💰 **Reward**: ${totalReward}c (${SHARED_ORDER_REWARD.coinsPerServing}c per serving)\n` +
               `👥 **Ingredients Needed**:\n${ingredientList}`
             )
             .addFields({

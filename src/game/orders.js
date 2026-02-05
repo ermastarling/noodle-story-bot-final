@@ -16,15 +16,20 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
 
   const recipes = Object.values(content.recipes);
 
-  const pickRecipeByTier = (tier) => {
-    const pool = recipes.filter((r) => {
-      if (r.tier !== tier) return false;
-      if (!playerRecipePool.has(r.recipe_id)) return false;
-      if (tier === "seasonal") return r.season === activeSeason;
-      return true;
-    });
-    if (pool.length === 0) return null;
-    return pool[Math.floor(rng()*pool.length)];
+  const getEligibleRecipes = () => recipes.filter((r) => {
+    if (!playerRecipePool.has(r.recipe_id)) return false;
+    if (r.tier === "seasonal") return r.season === activeSeason;
+    return true;
+  });
+
+  const pickWeightedRecipe = () => {
+    const eligible = getEligibleRecipes();
+    if (!eligible.length) return null;
+    const recipeWeights = Object.fromEntries(
+      eligible.map((r) => [r.recipe_id, Math.max(0.0001, Number(tierWeights?.[r.tier] ?? 0.01))])
+    );
+    const pickedId = weightedPick(rng, recipeWeights);
+    return eligible.find((r) => r.recipe_id === pickedId) ?? eligible[Math.floor(rng() * eligible.length)];
   };
 
   const blessing = player ? getActiveBlessing(player) : null;
@@ -56,8 +61,7 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
 
   const board = [];
   for (let i=0;i<count;i++) {
-    const tier = weightedPick(rng, tierWeights);
-    const r = pickRecipeByTier(tier) ?? pickRecipeByTier("common");
+    const r = pickWeightedRecipe();
     if (!r) continue;
 
     const npc = weightedPick(rng, npcWeights);

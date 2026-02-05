@@ -50,7 +50,7 @@ export function purchaseUpgrade(player, upgradeId, upgradesContent) {
   if (player.coins < cost) {
     return { 
       success: false, 
-      message: `Not enough coins. Need ${cost} coins.`, 
+      message: `Not enough coins. Need ${cost}c.`, 
       cost, 
       newLevel: currentLevel 
     };
@@ -62,7 +62,7 @@ export function purchaseUpgrade(player, upgradeId, upgradesContent) {
   
   return { 
     success: true, 
-    message: `Upgraded ${upgrade.name} to level ${currentLevel + 1} for ${cost} coins!`, 
+    message: `Upgraded ${upgrade.name} to level ${currentLevel + 1} for ${cost}c!`, 
     cost, 
     newLevel: currentLevel + 1 
   };

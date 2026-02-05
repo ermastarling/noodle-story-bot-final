@@ -37,8 +37,8 @@ Safe coin transfers between players.
 - `/noodle-social tip user:@player amount:50 message:"Great service!"` - Tip another player
 
 **Mechanics:**
-- Minimum tip: 1 coin (configurable)
-- Maximum tip: 10,000 coins (configurable)
+- Minimum tip: 1c (configurable)
+- Maximum tip: 10,000c (configurable)
 - Cannot tip yourself
 - Requires sufficient coins
 - Tracked in lifetime statistics
