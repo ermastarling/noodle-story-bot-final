@@ -119,7 +119,8 @@ test("C1: applySpoilageCatchup - applies ticks when enabled", () => {
       scallions: { 
         name: "Scallions",
         spoilable: true,
-        tags: ["fresh"]
+        tags: ["fresh"],
+        acquisition: "forage"
       } 
     } 
   };
@@ -129,6 +130,7 @@ test("C1: applySpoilageCatchup - applies ticks when enabled", () => {
   const result = applySpoilageCatchup(player, settings, content, lastActiveAt, now);
 
   // With 100% spoilage chance, should lose items over 5 ticks
+  console.log("[timeCatchup.test] ticksApplied:", result.ticksApplied, "scallions:", player.inv_ingredients.scallions);
   assert.strictEqual(result.ticksApplied, 5);
   assert.ok(player.inv_ingredients.scallions < 10);
   

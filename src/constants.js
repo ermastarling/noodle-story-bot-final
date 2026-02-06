@@ -14,9 +14,9 @@ export const INGREDIENT_CAPACITY_BASE = 50;
 
 export const TUTORIAL_QUESTS = ["intro_order", "intro_market", "intro_forage", "intro_cook", "intro_serve"];
 
-export const COIN_BASE = { common: 27, rare: 68, epic: 245, seasonal: 285 };
-export const SXP_BASE  = { common: 20, rare: 45, epic: 90, seasonal: 110 };
-export const REP_BASE  = { common: 3,  rare: 7,  epic: 15, seasonal: 20 };
+export const COIN_BASE = { common: 27, uncommon: 42, rare: 68, epic: 245, seasonal: 285 };
+export const SXP_BASE  = { common: 20, uncommon: 32, rare: 45, epic: 90, seasonal: 110 };
+export const REP_BASE  = { common: 3,  uncommon: 5,  rare: 7,  epic: 15, seasonal: 20 };
 
 export function sxpToNext(level) {
   return 100 + 25 * level;

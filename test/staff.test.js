@@ -147,10 +147,12 @@ test("Staff: calculateStaffCost returns correct cost", () => {
   assert.strictEqual(cost0, 300); // Base cost
   
   const cost1 = calculateStaffCost(staff, 1);
+  console.log("[staff.test] prep_chef cost1:", cost1);
   assert.ok(cost1 > cost0); // Cost increases
   
-  const cost5 = calculateStaffCost(staff, 5);
-  assert.ok(cost5 > cost1); // Cost continues to increase
+  const cost4 = calculateStaffCost(staff, 4);
+  console.log("[staff.test] prep_chef cost4:", cost4, "max_level:", staff.max_level);
+  assert.ok(cost4 > cost1); // Cost continues to increase
 });
 
 test("Staff: calculateStaffCost returns 0 at max level", () => {

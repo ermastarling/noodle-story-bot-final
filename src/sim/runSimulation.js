@@ -26,7 +26,6 @@ const DEFAULTS = {
   startDate: "2026-01-01",
   output: "sim-output.json",
   onTimeChance: 0.7,
-  upgradePurchasesPerDay: 2,
   upgradeSpendFraction: 0.8
 };
 
@@ -44,7 +43,6 @@ function parseArgs(argv) {
     if (name === "start") out.startDate = String(value);
     if (name === "output") out.output = String(value);
     if (name === "on-time") out.onTimeChance = Math.max(0, Math.min(1, Number(value)));
-    if (name === "upgrade-purchases") out.upgradePurchasesPerDay = Math.max(0, Number(value));
     if (name === "upgrade-spend") out.upgradeSpendFraction = Math.max(0, Math.min(1, Number(value)));
   }
   return out;
@@ -165,13 +163,11 @@ function findAffordableUpgrades(player, upgradesContent, budget) {
   return options;
 }
 
-function purchaseUpgrades({ player, upgradesContent, rng, maxPurchases, spendFraction }) {
-  if (maxPurchases <= 0) return;
+function purchaseUpgrades({ player, upgradesContent, rng, spendFraction }) {
   const budget = Math.floor((player.coins ?? 0) * spendFraction);
   let remaining = Math.min(player.coins ?? 0, budget);
-  let purchases = 0;
 
-  while (purchases < maxPurchases) {
+  while (remaining > 0) {
     const options = findAffordableUpgrades(player, upgradesContent, remaining);
     if (!options.length) break;
 
@@ -181,7 +177,6 @@ function purchaseUpgrades({ player, upgradesContent, rng, maxPurchases, spendFra
     if (!result?.success) break;
 
     remaining = Math.max(0, remaining - result.cost);
-    purchases += 1;
   }
 }
 
@@ -195,7 +190,6 @@ function simulateDay({
   rng,
   ordersPerDay,
   onTimeChance,
-  upgradePurchasesPerDay,
   upgradeSpendFraction,
   upgradesContent,
   staffContent
@@ -250,7 +244,6 @@ function simulateDay({
       player,
       upgradesContent,
       rng: playerRng,
-      maxPurchases: upgradePurchasesPerDay,
       spendFraction: upgradeSpendFraction
     });
   }
@@ -321,7 +314,6 @@ function main() {
       rng,
       ordersPerDay: config.ordersPerDay,
       onTimeChance: config.onTimeChance,
-      upgradePurchasesPerDay: config.upgradePurchasesPerDay,
       upgradeSpendFraction: config.upgradeSpendFraction,
       upgradesContent,
       staffContent

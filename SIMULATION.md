@@ -17,7 +17,6 @@ npm run sim -- --days=30 --players=100 --orders-per-day=8 --seed=1337 --start=20
 - `--start` start date `YYYY-MM-DD` (default: 2026-01-01)
 - `--output` output JSON file (default: sim-output.json)
 - `--on-time` chance limited-time orders are served on time (default: 0.7)
-- `--upgrade-purchases` max upgrades purchased per player per day (default: 2)
 - `--upgrade-spend` fraction of coins allowed for upgrades per day (default: 0.8)
 
 ## Output
