@@ -4,25 +4,43 @@ export function ensureBadgeState(player) {
   if (!player.profile) player.profile = {};
   if (!Array.isArray(player.profile.badges)) player.profile.badges = [];
   if (!("featured_badge_id" in player.profile)) player.profile.featured_badge_id = null;
+  if (!player.profile.badges_temp_expires_at) player.profile.badges_temp_expires_at = {};
+  sweepExpiredTempBadges(player.profile);
   return player.profile;
 }
 
 export function getOwnedBadges(player) {
   const profile = ensureBadgeState(player);
-  return profile.badges ?? [];
+  const activeTemp = Object.keys(profile.badges_temp_expires_at ?? {});
+  return Array.from(new Set([...(profile.badges ?? []), ...activeTemp]));
 }
 
 export function getBadgeById(badgesContent, badgeId) {
   return (badgesContent?.badges ?? []).find((b) => b.badge_id === badgeId) ?? null;
 }
 
-function meetsCondition(player, condition) {
+export function meetsCondition(player, condition) {
   if (!condition) return false;
   if (condition.type === "serve_bowls_total") {
     const total = player?.lifetime?.bowls_served_total ?? 0;
     return total >= Number(condition.value || 0);
   }
   return false;
+}
+
+function sweepExpiredTempBadges(profile, now = nowTs()) {
+  const expiresAt = profile?.badges_temp_expires_at ?? {};
+  let changed = false;
+  for (const [badgeId, ts] of Object.entries(expiresAt)) {
+    if (!ts || now >= ts) {
+      delete expiresAt[badgeId];
+      changed = true;
+    }
+  }
+  if (changed && profile) {
+    profile.badges_temp_expires_at = expiresAt;
+  }
+  return profile;
 }
 
 export function unlockBadges(player, badgesContent) {
@@ -52,4 +70,20 @@ export function unlockBadges(player, badgesContent) {
   }
 
   return newlyUnlocked;
+}
+
+export function grantTemporaryBadge(player, badgesContent, badgeId, durationMs) {
+  const profile = ensureBadgeState(player);
+  const badge = getBadgeById(badgesContent, badgeId);
+  if (!badge) return { status: "missing" };
+  if (!meetsCondition(player, badge.condition)) return { status: "ineligible" };
+
+  const now = nowTs();
+  const expiresAt = now + Math.max(0, Number(durationMs || 0));
+  const tempMap = profile.badges_temp_expires_at ?? {};
+  const wasActive = tempMap[badgeId] && tempMap[badgeId] > now;
+  tempMap[badgeId] = expiresAt;
+  profile.badges_temp_expires_at = tempMap;
+
+  return { status: wasActive ? "refreshed" : "granted", expiresAt };
 }

@@ -11,7 +11,8 @@
     "register": "node src/register-commands.js",
     "register:dev": "NODE_ENV=development node src/register-commands.js",
     "register:prod": "NODE_ENV=production node src/register-commands.js",
-    "test": "node --test"
+    "test": "node --test",
+    "sim": "node src/sim/runSimulation.js"
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.0",

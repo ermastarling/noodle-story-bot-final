@@ -28,6 +28,8 @@ import { fileURLToPath } from "url";
     loadSpecializationsContent
   } = await import("./content/index.js");
   const { openDb, getPlayer } = await import("./db/index.js");
+  const { checkRateLimit } = await import("./infra/rateLimit.js");
+  const { emitTelemetry } = await import("./infra/telemetry.js");
   const { newPlayerProfile } = await import("./game/player.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
   const { noodleCommand } = await import("./commands/noodle.js");
@@ -334,6 +336,36 @@ import { fileURLToPath } from "url";
       } catch (e) {
         console.error("AUTOCOMPLETE ERROR:", e?.stack ?? e);
         try { return interaction.respond([]); } catch { return; }
+      }
+    }
+
+    const userId = interaction.user?.id ?? null;
+    const serverId = interaction.guildId ?? null;
+    const rateLimit = checkRateLimit({
+      userId,
+      serverId,
+      userLimit: 5,
+      serverLimit: 40
+    });
+
+    if (!rateLimit.allowed) {
+      emitTelemetry("rate_limited", {
+        scope: rateLimit.scope,
+        userId,
+        serverId,
+        count: rateLimit.count,
+        limit: rateLimit.limit
+      });
+
+      const slowDownMsg = "Please don't spam interactions! Try again in a bit.";
+      try {
+        if (interaction.replied || interaction.deferred) {
+          return interaction.followUp({ content: slowDownMsg, ephemeral: true });
+        }
+        return interaction.reply({ content: slowDownMsg, flags: MessageFlags.Ephemeral });
+      } catch (e) {
+        console.error("RATE LIMIT REPLY ERROR:", e?.message ?? e);
+        return;
       }
     }
 

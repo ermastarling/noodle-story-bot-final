@@ -63,7 +63,7 @@ import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward } from "../game/daily.js";
-import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges } from "../game/badges.js";
+import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge } from "../game/badges.js";
 import {
   applyCollectionProgressOnServe,
   applyCollectionProgressOnCook,
@@ -147,6 +147,9 @@ const specializationsContent = loadSpecializationsContent();
 const decorContent = loadDecorContent();
 const decorSetsContent = loadDecorSetsContent();
 const db = openDb();
+
+const HERALD_BADGE_ID = "seasonal_herald_placeholder";
+const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -3645,6 +3648,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
       
       results.push(serveMsg);
+
+      if (order.npc_archetype === "seasonal_herald") {
+        const badgeResult = grantTemporaryBadge(p, badgesContent, HERALD_BADGE_ID, HERALD_BADGE_DURATION_MS);
+        if (badgeResult.status === "granted" || badgeResult.status === "refreshed") {
+          const badge = getBadgeById(badgesContent, HERALD_BADGE_ID);
+          const icon = badge?.icon ?? "✨";
+          const name = badge?.name ?? "Herald's Sign";
+          const expiry = badgeResult.expiresAt ? ` (expires <t:${Math.floor(badgeResult.expiresAt / 1000)}:R>)` : "";
+          const verb = badgeResult.status === "refreshed" ? "refreshed" : "awarded";
+          results.push(`${icon} **${name}** badge ${verb} for 24 hours${expiry}.`);
+        }
+      }
 
       applyCollectionProgressOnServe(p, collectionsContent, content, {
         npcArchetype: order.npc_archetype,

@@ -48,6 +48,13 @@
       "icon": "🌙",
       "rarity": "seasonal",
       "condition": { "type": "serve_bowls_total", "value": 10000 }
+    },
+    {
+      "badge_id": "seasonal_herald_placeholder",
+      "name": "Herald's Sign",
+      "icon": "🌟",
+      "rarity": "seasonal",
+      "condition": { "type": "serve_bowls_total", "value": 100 }
     }
   ]
 }
