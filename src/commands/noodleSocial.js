@@ -2042,7 +2042,7 @@ async function handleComponent(interaction) {
                 inline: false
               }
             )
-            .setColor(canComplete ? 0x00ff00 : 0xffaa00)
+            .setColor(canComplete ? theme.colors.success : theme.colors.warning)
             .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • ${canComplete ? `${getIcon("status_complete")} Ready to complete!` : `${getIcon("hourglass")} In progress...`}` });
         }
       }

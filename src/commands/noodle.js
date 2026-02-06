@@ -1002,6 +1002,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   const embed = new EmbedBuilder()
     .setTitle(`${getIcon("profile")} ${player.profile.shop_name}`)
     .setDescription(description)
+    .setColor(theme.colors.primary)
     .addFields(
       { name: `${getIcon("star")} Bowls Served`, value: String(player.lifetime.bowls_served_total || 0), inline: true },
       { name: "Level", value: String(player.shop_level || 1), inline: true },
