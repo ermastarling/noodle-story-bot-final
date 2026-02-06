@@ -12,24 +12,32 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"orders", serverId, dayKey });
   const maxOrders = 100;
   const count = Math.min(Number(settings.ORDERS_BASE_COUNT ?? maxOrders), maxOrders);
-  const tierWeights = settings.ORDER_TIER_WEIGHTS_BASE ?? { common:0.70, rare:0.25, epic:0.04, seasonal:0.01 };
+  const tierWeights = settings.ORDER_TIER_WEIGHTS_BASE ?? { common:0.55, uncommon:0.22, rare:0.15, epic:0.06, seasonal:0.02 };
 
   const recipes = Object.values(content.recipes);
 
-  const getEligibleRecipes = () => recipes.filter((r) => {
+  const eligibleRecipes = recipes.filter((r) => {
     if (!playerRecipePool.has(r.recipe_id)) return false;
     if (r.tier === "seasonal") return r.season === activeSeason;
     return true;
   });
 
-  const pickWeightedRecipe = () => {
-    const eligible = getEligibleRecipes();
-    if (!eligible.length) return null;
+  const seasonalRecipes = eligibleRecipes.filter((r) => r.tier === "seasonal" && r.season === activeSeason);
+  const recipePoolsByTier = {
+    common: eligibleRecipes.filter((r) => r.tier === "common"),
+    uncommon: eligibleRecipes.filter((r) => r.tier === "uncommon"),
+    rare: eligibleRecipes.filter((r) => r.tier === "rare"),
+    epic: eligibleRecipes.filter((r) => r.tier === "epic"),
+    seasonal: seasonalRecipes
+  };
+
+  const pickWeightedRecipeFrom = (recipeList) => {
+    if (!recipeList.length) return null;
     const recipeWeights = Object.fromEntries(
-      eligible.map((r) => [r.recipe_id, Math.max(0.0001, Number(tierWeights?.[r.tier] ?? 0.01))])
+      recipeList.map((r) => [r.recipe_id, Math.max(0.0001, Number(tierWeights?.[r.tier] ?? 0.01))])
     );
     const pickedId = weightedPick(rng, recipeWeights);
-    return eligible.find((r) => r.recipe_id === pickedId) ?? eligible[Math.floor(rng() * eligible.length)];
+    return recipeList.find((r) => r.recipe_id === pickedId) ?? recipeList[Math.floor(rng() * recipeList.length)];
   };
 
   const blessing = player ? getActiveBlessing(player) : null;
@@ -37,10 +45,10 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
   const npcRarityMultipliers = BLESSING_EFFECTS.npc_weight_mult?.rarityMultipliers ?? {};
   const npcRarityWeights = settings.NPC_RARITY_WEIGHTS ?? {
     common: 1,
-    uncommon: 1,
-    rare: 1,
-    epic: 1,
-    seasonal: 1
+    uncommon: 0.85,
+    rare: 0.55,
+    epic: 0.25,
+    seasonal: 0.08
   };
 
   const combinedEffects = player
@@ -49,22 +57,31 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
   const varietyBonus = combinedEffects?.npc_variety_bonus || 0;
   const rarityBoosts = { common: 0, uncommon: 0.5, rare: 1, epic: 1.5, seasonal: 2 };
 
-  const npcWeights = Object.fromEntries(
-    Object.values(content.npcs).map((npc) => {
-      const rarity = npc?.rarity ?? "common";
-      const baseWeight = npcRarityWeights[rarity] ?? 1;
-      const rarityMult = npcBlessingActive ? (npcRarityMultipliers[rarity] ?? 1) : 1;
-      const varietyMult = 1 + varietyBonus * (rarityBoosts[rarity] ?? 0);
-      return [npc.npc_id, Math.max(0.01, baseWeight * rarityMult * varietyMult)];
-    })
+  const buildNpcWeights = ({ allowSeasonal }) => Object.fromEntries(
+    Object.values(content.npcs)
+      .filter((npc) => {
+        const rarity = npc?.rarity ?? "common";
+        if (rarity === "seasonal") return allowSeasonal;
+        return (recipePoolsByTier[rarity] || []).length > 0;
+      })
+      .map((npc) => {
+        const rarity = npc?.rarity ?? "common";
+        const baseWeight = npcRarityWeights[rarity] ?? 1;
+        const rarityMult = npcBlessingActive ? (npcRarityMultipliers[rarity] ?? 1) : 1;
+        const varietyMult = 1 + varietyBonus * (rarityBoosts[rarity] ?? 0);
+        return [npc.npc_id, Math.max(0.01, baseWeight * rarityMult * varietyMult)];
+      })
   );
+
+  const npcWeights = buildNpcWeights({ allowSeasonal: seasonalRecipes.length > 0 });
 
   const board = [];
   for (let i=0;i<count;i++) {
-    const r = pickWeightedRecipe();
-    if (!r) continue;
-
     const npc = weightedPick(rng, npcWeights);
+    const npcRarity = content.npcs?.[npc]?.rarity ?? "common";
+    const recipePool = recipePoolsByTier[npcRarity] || [];
+    const r = pickWeightedRecipeFrom(recipePool);
+    if (!r) continue;
     const isLimited = rng() < Number(settings.LIMITED_TIME_CHANCE ?? 0.20);
     const createdAt = nowTs();
     const expiresAt = isLimited ? createdAt + 30*60*1000 : null;
@@ -119,7 +136,7 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
 
 export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId) {
   const dayKey = dayKeyUTC();
-  const orderSeedVersion = 2; // Increment when seed logic changes
+  const orderSeedVersion = 3; // Increment when seed logic changes
   
   // Include temporary recipes in pool (B5: Order Board Guarantee)
   const permanentRecipes = playerState.known_recipes || [];

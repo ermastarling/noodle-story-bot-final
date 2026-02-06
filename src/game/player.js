@@ -29,7 +29,7 @@ export function newPlayerProfile(userId) {
     staff_levels: {},
 
     daily: { last_claimed_at: null, streak_days: 0, streak_last_day: null },
-    quests: { active: {}, completed: [], claimed: [], daily_day: null, weekly_week: null },
+    quests: { active: {}, completed: [], claimed: [], daily_day: null, weekly_week: null, monthly_month: null },
 
     orders: { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 },
 
@@ -68,6 +68,13 @@ export function newPlayerProfile(userId) {
     social: {
       active_blessing: null,
       last_blessing_at: null
+    },
+
+    notifications: {
+      pending_pantry_messages: [],
+      dm_reminders_opt_out: false,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
     }
   };
 }

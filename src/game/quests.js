@@ -7,6 +7,16 @@ function ensureQuestState(player) {
   if (!player.quests.active) player.quests.active = {};
   if (!player.quests.completed) player.quests.completed = [];
   if (!player.quests.claimed) player.quests.claimed = [];
+  if (!("daily_day" in player.quests)) player.quests.daily_day = null;
+  if (!("weekly_week" in player.quests)) player.quests.weekly_week = null;
+  if (!("monthly_month" in player.quests)) player.quests.monthly_month = null;
+  if (!player.quests.weekly_reset_v2) {
+    for (const [id, quest] of Object.entries(player.quests.active)) {
+      if (quest?.cadence === "weekly") delete player.quests.active[id];
+    }
+    player.quests.weekly_week = null;
+    player.quests.weekly_reset_v2 = true;
+  }
   return player.quests;
 }
 
@@ -16,6 +26,12 @@ function getWeekKey(ts) {
   const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1);
   const monday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), diff));
   return dayKeyUTC(monday.getTime());
+}
+
+function getMonthKey(ts) {
+  const date = new Date(ts);
+  const monthStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  return dayKeyUTC(monthStart.getTime());
 }
 
 function buildWeightedPool(templates) {
@@ -67,8 +83,8 @@ function createQuestInstance(template, instanceId, cadence, rewards) {
 
 export function ensureQuests(player, questsContent, userId, now = nowTs()) {
   const quests = ensureQuestState(player);
-  const counts = questsContent?.counts ?? { daily: 3, weekly: 2, story: 0, seasonal: 0 };
-  const multipliers = questsContent?.cadence_multipliers ?? { daily: 1, weekly: 2.5, story: 4, seasonal: 3 };
+  const counts = questsContent?.counts ?? { daily: 3, weekly: 2, monthly: 1, story: 0, seasonal: 0 };
+  const multipliers = questsContent?.cadence_multipliers ?? { daily: 1, weekly: 2.5, monthly: 4, story: 4, seasonal: 3 };
   const templates = questsContent?.quests ?? [];
 
   const dailyKey = dayKeyUTC(now);
@@ -101,6 +117,22 @@ export function ensureQuests(player, questsContent, userId, now = nowTs()) {
       const instanceId = `${template.quest_id}:${weekKey}`;
       const reward = applyRewardMultiplier(template.reward ?? {}, multipliers.weekly ?? 1);
       quests.active[instanceId] = createQuestInstance(template, instanceId, "weekly", reward);
+    }
+  }
+
+  const monthKey = getMonthKey(now);
+  if (quests.monthly_month !== monthKey) {
+    quests.monthly_month = monthKey;
+    for (const [id, quest] of Object.entries(quests.active)) {
+      if (quest.cadence === "monthly") delete quests.active[id];
+    }
+    const monthlyTemplates = templates.filter((q) => q.cadence === "monthly");
+    const rng = makeStreamRng({ mode: "seeded", seed: 3031, streamName: "quests-monthly", serverId: userId, dayKey: monthKey });
+    const picks = pickQuestTemplates(rng, monthlyTemplates, counts.monthly || 0);
+    for (const template of picks) {
+      const instanceId = `${template.quest_id}:${monthKey}`;
+      const reward = applyRewardMultiplier(template.reward ?? {}, multipliers.monthly ?? 1);
+      quests.active[instanceId] = createQuestInstance(template, instanceId, "monthly", reward);
     }
   }
 

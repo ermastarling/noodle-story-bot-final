@@ -86,7 +86,8 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     order_quality_bonus: 0,
     npc_variety_bonus: 0,
     staff_capacity: 0,
-    staff_effect_multiplier: 0
+    staff_effect_multiplier: 0,
+    prep_batch_bonus: 0
   };
   
   if (!player.upgrades) return effects;

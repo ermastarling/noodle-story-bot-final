@@ -52,34 +52,56 @@
     },
     {
       "quest_id": "serve_30",
-      "name": "Serve 30 orders",
+      "name": "Serve 50 orders",
       "description": "Complete a busy week of service.",
       "cadence": "weekly",
       "type": "serve",
-      "target": 30,
+      "target": 50,
       "weight": 1,
-      "reward": { "coins": 120, "sxp": 40, "rep": 8 }
+      "reward": { "coins": 220, "sxp": 80, "rep": 15 }
     },
     {
       "quest_id": "cook_20",
-      "name": "Cook 20 bowls",
+      "name": "Cook 35 bowls",
       "description": "Cook a large batch of bowls.",
       "cadence": "weekly",
       "type": "cook",
-      "target": 20,
+      "target": 35,
       "weight": 1,
-      "reward": { "coins": 100, "sxp": 35, "rep": 6 }
+      "reward": { "coins": 200, "sxp": 70, "rep": 12 }
+    },
+    {
+      "quest_id": "serve_200",
+      "name": "Serve 200 orders",
+      "description": "Run a full month of service.",
+      "cadence": "monthly",
+      "type": "serve",
+      "target": 200,
+      "weight": 1,
+      "reward": { "coins": 600, "sxp": 220, "rep": 40 }
+    },
+    {
+      "quest_id": "coins_5000",
+      "name": "Earn 5000c",
+      "description": "Earn coins from serving customers.",
+      "cadence": "monthly",
+      "type": "earn_coins",
+      "target": 5000,
+      "weight": 1,
+      "reward": { "coins": 700, "sxp": 200, "rep": 45 }
     }
   ],
   "counts": {
     "daily": 3,
     "weekly": 2,
+    "monthly": 1,
     "story": 0,
     "seasonal": 0
   },
   "cadence_multipliers": {
     "daily": 1,
     "weekly": 2.5,
+    "monthly": 4,
     "story": 4,
     "seasonal": 3
   }

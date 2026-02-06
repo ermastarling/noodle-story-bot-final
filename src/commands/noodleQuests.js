@@ -51,11 +51,6 @@ export const noodleQuestsCommand = {
     )
     .addSubcommand((sub) =>
       sub
-        .setName("quests")
-        .setDescription("View active quests")
-    )
-    .addSubcommand((sub) =>
-      sub
         .setName("claim")
         .setDescription("Claim completed quest rewards")
     ),

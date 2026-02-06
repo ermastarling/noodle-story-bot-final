@@ -629,7 +629,7 @@
     "ginger_soft_noodles": {
       "recipe_id": "ginger_soft_noodles",
       "name": "Ginger Broth with Soft Noodles",
-      "tier": "common",
+      "tier": "uncommon",
       "season": null,
       "ingredients": [
         {
@@ -665,7 +665,7 @@
     "sweet_soy_broth": {
       "recipe_id": "sweet_soy_broth",
       "name": "Sweet Soy Broth",
-      "tier": "common",
+      "tier": "uncommon",
       "season": null,
       "ingredients": [
         {
@@ -681,7 +681,7 @@
     "home_style_chicken_noodle": {
       "recipe_id": "home_style_chicken_noodle",
       "name": "Home-Style Chicken Noodle",
-      "tier": "common",
+      "tier": "uncommon",
       "season": null,
       "ingredients": [
         {
@@ -701,7 +701,7 @@
     "slow_simmered_broth": {
       "recipe_id": "slow_simmered_broth",
       "name": "Slow-Simmered Broth",
-      "tier": "common",
+      "tier": "uncommon",
       "season": null,
       "ingredients": [
         {
@@ -737,7 +737,7 @@
     "extra_broth_udon": {
       "recipe_id": "extra_broth_udon",
       "name": "Extra Broth Udon",
-      "tier": "common",
+      "tier": "uncommon",
       "season": null,
       "ingredients": [
         {
@@ -777,7 +777,7 @@
     "hearty_noodle_stew": {
       "recipe_id": "hearty_noodle_stew",
       "name": "Hearty Noodle Stew",
-      "tier": "common",
+      "tier": "uncommon",
       "season": null,
       "ingredients": [
         {

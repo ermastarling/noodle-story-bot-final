@@ -6,7 +6,7 @@ import crypto from "crypto";
 /* ------------------------------------------------------------------ */
 
 export const BLESSING_DURATION_HOURS = 6;
-export const BLESSING_COOLDOWN_HOURS = 24;
+export const BLESSING_COOLDOWN_HOURS = 6;
 export const MAX_PARTY_SIZE = 4;
 export const MIN_TIP_AMOUNT = 1;
 export const MAX_TIP_AMOUNT = 10000;
@@ -52,7 +52,10 @@ export function grantBlessing(visitorPlayer, hostUserId, blessingType) {
   if (visitorPlayer.social?.active_blessing) {
     const blessing = visitorPlayer.social.active_blessing;
     if (blessing.expires_at > now) {
-      throw new Error("You already have an active blessing");
+      const error = new Error("You already have an active blessing");
+      error.code = "BLESSING_ACTIVE";
+      error.expiresAt = blessing.expires_at;
+      throw error;
     }
   }
 
@@ -60,8 +63,12 @@ export function grantBlessing(visitorPlayer, hostUserId, blessingType) {
   const lastBlessingAt = visitorPlayer.social?.last_blessing_at || 0;
   const cooldownEnds = lastBlessingAt + (BLESSING_COOLDOWN_HOURS * 60 * 60 * 1000);
   if (now < cooldownEnds) {
-    const remainingMinutes = Math.ceil((cooldownEnds - now) / (60 * 1000));
-    throw new Error(`Blessing cooldown active. Try again in ${remainingMinutes} minutes`);
+    const error = new Error(
+      `Blessing cooldown active. Try again <t:${Math.floor(cooldownEnds / 1000)}:F>.`
+    );
+    error.code = "BLESSING_COOLDOWN";
+    error.cooldownEnds = cooldownEnds;
+    throw error;
   }
 
   // Grant the blessing

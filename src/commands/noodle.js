@@ -45,6 +45,7 @@ import {
   PROFILE_COLLECTIONS_SHOWN
 } from "../constants.js";
 import { nowTs } from "../util/time.js";
+import { containsProfanity } from "../util/profanity.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, BLESSING_EFFECTS } from "../game/social.js";
 import {
@@ -240,6 +241,118 @@ function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
   return applyOwnerFooter(embed, user);
 }
 
+function buildHelpPage({ page, userId, user }) {
+  const pages = [
+    {
+      title: "🧾 Help",
+      description: [
+        "**Hello chef! Begin the tutorial with `/noodle start`, you can play exclusively with buttons.**",
+        "\n**When you've completed the tutorial, you will only need to use `/noodle orders` any time you want to access all play commands.**",
+        "",
+        "Error messages are sent only to you.\n\nTip: Copy/paste the '/noodle start' or '/noodle orders' text into a message on this channel and send!"
+      ].join("\n")
+    },
+    {
+      title: "🧾 Help — Buttons",
+      description: [
+        "**Main Menu**",
+        "• `/noodle orders` — View today's orders.",
+        "• `/noodle buy` — Buy ingredients (multi-buy).",
+        "• `/noodle forage` — Forage for ingredients.",
+        "• `/noodle pantry` — View your pantry.",
+        "• `/noodle profile` — View your profile.",
+        "",
+        "**Orders Menu**",
+        "• `/noodle accept` — Accept an order.",
+        "• `/noodle cook` — Cook a recipe.",
+        "• `/noodle serve` — Serve accepted orders.",
+        "• `/noodle cancel` — Cancel an accepted order.",
+        "",
+        "**Profile / Customize**",
+        "• `/noodle specialize` — Choose a shop specialization.",
+        "• `/noodle decor` — View your decor sets.",
+        "• `/noodle recipes` — View your recipes and clues.",
+        "• `/noodle regulars` — View your shop regulars.",
+        "• `/noodle season` — View the current season.",
+        "• `/noodle event` — View the current event.",
+        "",
+        "**Quests Menu**",
+        "• `/noodle quests` — View quests.",
+        "• `/noodle quests_daily` — Claim your daily reward.",
+        "• `/noodle quests_claim` — Claim your quest rewards.",
+        "",
+        "**Party Menu**",
+        "• `/noodle-social party` — Manage your party.",
+        "• `/noodle-social tip` — Tip another player.",
+        "• `/noodle-social visit` — Bless another player's shop.",
+        "• `/noodle-social leaderboard` — View leaderboard.",
+        "• `/noodle-social stats` — View your social stats.",
+        "",
+        "**Upgrades Menu**",
+        "• `/noodle-upgrades` — View your shop upgrades.",
+        "• `/noodle-staff` — Manage your staff."
+      ].join("\n")
+    },
+    {
+      title: "🧾 Help — Slash Commands Only",
+      description: [
+        "Commands without buttons:",
+        "",
+        "**Noodle**",
+        "• `/noodle start` — Start the tutorial.",
+        "• `/noodle help` — Show this help menu."
+      ].join("\n")
+    }
+  ];
+
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), pages.length - 1);
+  const current = pages[safePage];
+  const embed = buildMenuEmbed({
+    title: current.title,
+    description: current.description,
+    user
+  });
+  const ownerText = user ? ownerFooterText(user) : null;
+  const footerText = ownerText
+    ? `Page ${safePage + 1}/${pages.length} • ${ownerText}`
+    : `Page ${safePage + 1}/${pages.length}`;
+  embed.setFooter({ text: footerText });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:help:page:${userId}:${safePage - 1}`)
+      .setLabel("Prev")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage <= 0),
+    new ButtonBuilder()
+      .setCustomId(`noodle:help:page:${userId}:${safePage + 1}`)
+      .setLabel("Next")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage >= pages.length - 1)
+  );
+
+  return { embed, components: [row] };
+}
+
+function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
+  const row = new ActionRowBuilder();
+  if (channelUrl) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setLabel("Open Channel")
+        .setStyle(ButtonStyle.Link)
+        .setURL(channelUrl)
+    );
+  }
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:dm:reminders_toggle:${userId}:${serverId}`)
+      .setLabel(optOut ? "Enable reminders" : "Disable reminders")
+      .setStyle(optOut ? ButtonStyle.Success : ButtonStyle.Secondary)
+  );
+  return [row];
+}
+
 function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization", page = 0, pageSize = 5 }) {
   const completed = new Set(player.profile?.decor_sets_completed ?? []);
   const owned = new Set(getOwnedDecorItems(player));
@@ -423,6 +536,8 @@ new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Eve
 
 function noodleProfileEditRow(userId) {
   return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("🏷️ Shop Name").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("📝 Tagline").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("✨ Specializations").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel("🪞 Decor").setStyle(ButtonStyle.Secondary)
   );
@@ -1471,6 +1586,21 @@ if (group === "dev" && sub === "reset_tutorial") {
 const needsPlayer = group !== "dev" && !["help", "season", "event"].includes(sub);
 const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 
+if (player) {
+  if (!player.notifications) {
+    player.notifications = {
+      pending_pantry_messages: [],
+      dm_reminders_opt_out: false,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
+    };
+  }
+  if (interaction.channelId) {
+    player.notifications.last_noodle_channel_id = interaction.channelId;
+    player.notifications.last_noodle_guild_id = serverId;
+  }
+}
+
 /* ---------------- START ---------------- */
 if (sub === "start") {
   if (!db) {
@@ -1501,13 +1631,16 @@ if (sub === "start") {
 
 /* ---------------- HELP ---------------- */
 if (sub === "help") {
-  const topic = opt.getString("topic") ?? "getting-started";
-  const map = {
-    "getting-started": "Use `/noodle start` to begin the tutorial & use buttons on menu to advance. Sell extra market items with `/noodle sell` item quantity.",
-  };
+  const { embed, components } = buildHelpPage({
+    page: 0,
+    userId,
+    user: interaction.member ?? interaction.user
+  });
 
   return commit({
-    content: map[topic] ?? map["getting-started"]
+    content: " ",
+    embeds: [embed],
+    components
   });
 }
 
@@ -1529,7 +1662,7 @@ if (sub === "profile") {
 if (sub === "profile_edit") {
   const embed = buildMenuEmbed({
     title: "✏️ Customize Profile",
-    description: "Once you unlock specializations, you can change the active specialization and that will update your shop's decor!",
+    description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!",
     user: interaction.member ?? interaction.user
   });
 
@@ -1618,7 +1751,13 @@ if (sub === "pantry") {
     ? `**🍲 Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
     : `**🍲 Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
 
+  const pendingPantryMessages = p.notifications?.pending_pantry_messages ?? [];
+  if (pendingPantryMessages.length > 0) {
+    p.notifications.pending_pantry_messages = [];
+  }
+
   const pantryDescription = [
+    pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
     categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
     bowlsBlock
   ].join("\n\n");
@@ -1942,11 +2081,40 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     p.market_stock_day = null;
     p.market_stock = null;
     rollPlayerMarketStock({ userId, serverId, content, playerState: p });
+    const dailyAvailable = hasDailyRewardAvailable(p, now);
+    const remindersOptOut = p.notifications?.dm_reminders_opt_out === true;
+    if (dailyAvailable && !remindersOptOut) {
+      const guildName = interaction.guild?.name ?? "this server";
+      const lastGuildId = p.notifications?.last_noodle_guild_id ?? serverId;
+      const lastChannelId = p.notifications?.last_noodle_channel_id ?? interaction.channelId ?? null;
+      const channelUrl = lastChannelId
+        ? `https://discord.com/channels/${lastGuildId}/${lastChannelId}`
+        : null;
+      const channelLine = lastChannelId ? `Last kitchen: <#${lastChannelId}>.` : null;
 
-    const guildName = interaction.guild?.name ?? "this server";
-    interaction.user?.send?.(
-      `📬 New daily orders are up in **${guildName}**! Open /noodle orders to accept them.`
-    ).catch(() => {});
+      const reminderEmbed = buildMenuEmbed({
+        title: "📬 Daily Reward Ready",
+        description: [
+          `Your daily reward is ready in **${guildName}**.`,
+          "Open /noodle quests to claim it.",
+          channelLine,
+          "Use the button below to turn reminders on or off."
+        ].filter(Boolean).join("\n"),
+        user: interaction.user
+      });
+
+      const components = buildDmReminderComponents({
+        userId,
+        serverId: lastGuildId,
+        channelUrl,
+        optOut: remindersOptOut
+      });
+
+      interaction.user?.send?.({
+        embeds: [reminderEmbed],
+        components
+      }).catch(() => {});
+    }
   }
 
   // Apply resilience mechanics (B1-B9)
@@ -1982,14 +2150,29 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     let finalContent = replyObj.content || "";
     let finalEmbeds = replyObj.embeds ? [...replyObj.embeds] : undefined;
 
-    const catchupMsg = timeCatchup.messages.length > 0
-      ? timeCatchup.messages.join("\n\n")
-      : "";
-    const resilienceMsg = resilience.messages.length > 0 && !finalContent.includes("🆘")
-      ? resilience.messages.join("\n\n")
+    const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
+    if (spoilageMessages.length > 0) {
+      if (!p.notifications) {
+        p.notifications = {
+          pending_pantry_messages: [],
+          dm_reminders_opt_out: false,
+          last_noodle_channel_id: null,
+          last_noodle_guild_id: null
+        };
+      }
+      if (!Array.isArray(p.notifications.pending_pantry_messages)) {
+        p.notifications.pending_pantry_messages = [];
+      }
+      p.notifications.pending_pantry_messages.push(...spoilageMessages);
+    }
+
+    const spoilageSet = new Set(spoilageMessages);
+    const catchupMsgs = timeCatchup.messages.filter((msg) => !spoilageSet.has(msg));
+    const catchupMsg = catchupMsgs.length > 0
+      ? catchupMsgs.join("\n\n")
       : "";
 
-    const banner = [catchupMsg, resilienceMsg].filter(Boolean).join("\n\n");
+    const banner = [catchupMsg].filter(Boolean).join("\n\n");
 
     if (banner) {
       if (finalEmbeds && finalEmbeds.length > 0) {
@@ -2002,9 +2185,23 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
     }
 
+    const rescueEmbeds = [];
+    if (resilience.messages.length > 0) {
+      rescueEmbeds.push(buildMenuEmbed({
+        title: "🆘 Rescue Mode",
+        description: resilience.messages.join("\n\n"),
+        user: interaction.member ?? interaction.user
+      }));
+    }
     if (clearedTempRecipes) {
-      const recoveryMsg = "✅ **Recovery complete**: You’re back to normal play and your full recipe pool is restored.";
-      finalContent = finalContent ? `${finalContent}\n\n${recoveryMsg}` : recoveryMsg;
+      rescueEmbeds.push(buildMenuEmbed({
+        title: "✅ Recovery Complete",
+        description: "You’re back to normal play and your full recipe pool is restored.",
+        user: interaction.member ?? interaction.user
+      }));
+    }
+    if (rescueEmbeds.length > 0) {
+      finalEmbeds = [...rescueEmbeds, ...(finalEmbeds ?? [])];
     }
 
     const out = {
@@ -2030,17 +2227,31 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "quests") {
     const summary = getQuestSummary(p, questsContent, userId, now);
     const active = summary.active;
+    const cadenceOrder = ["daily", "weekly", "monthly", "story", "seasonal"];
+    const cadenceLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly", story: "Story", seasonal: "Seasonal" };
+    const grouped = cadenceOrder.map((cadence) => ({
+      cadence,
+      label: cadenceLabel[cadence] ?? cadence,
+      quests: active
+        .filter((q) => q.cadence === cadence)
+        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
+    }));
 
     const lines = active.length
-      ? active.map((q) => {
-          const status = q.completed_at ? "✅" : "📝";
-          const rewardParts = [];
-          if (q.reward?.coins) rewardParts.push(`${q.reward.coins}c`);
-          if (q.reward?.sxp) rewardParts.push(`${q.reward.sxp} SXP`);
-          if (q.reward?.rep) rewardParts.push(`${q.reward.rep} REP`);
-          const rewardText = rewardParts.length ? ` — ${rewardParts.join(" · ")}` : "";
-          return `${status} **${q.name}** (${q.progress}/${q.target})${rewardText}`;
-        })
+      ? grouped.flatMap(({ label, quests }) => {
+          if (!quests.length) return [];
+          const header = `**${label}**`;
+          const entries = quests.map((q) => {
+            const status = q.completed_at ? "✅" : "📝";
+            const rewardParts = [];
+            if (q.reward?.coins) rewardParts.push(`${q.reward.coins}c`);
+            if (q.reward?.sxp) rewardParts.push(`${q.reward.sxp} SXP`);
+            if (q.reward?.rep) rewardParts.push(`${q.reward.rep} REP`);
+            const rewardText = rewardParts.length ? ` — Rewards: ${rewardParts.join(" · ")}` : "";
+            return `${status} **${q.name}** (${q.progress}/${q.target})${rewardText}`;
+          });
+          return [header, ...entries, ""];
+        }).filter((line) => line !== "")
       : ["_No quests available right now._"]; 
 
     const questsEmbed = buildMenuEmbed({
@@ -2620,7 +2831,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const now = nowTs();
 
     const qtyToCook = Math.min(qty, remainingBowls);
-    const batchOutput = Math.min(getCookBatchOutput(qtyToCook, p), remainingBowls);
+    const batchOutput = Math.min(getCookBatchOutput(qtyToCook, p, combinedEffects), remainingBowls);
 
     for (const ing of r.ingredients) {
       const haveIng = p.inv_ingredients?.[ing.item_id] ?? 0;
@@ -2974,9 +3185,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const prepChefLevel = Math.max(0, Number(p.staff_levels?.prep_chef || 0));
     if (prepChefLevel > 0 && acceptedOrdersNow.length > 0) {
-      const autoOrderCap = prepChefLevel >= 5
-        ? acceptedOrdersNow.length
-        : Math.min(acceptedOrdersNow.length, prepChefLevel);
+      const autoOrderCap = Math.min(acceptedOrdersNow.length, prepChefLevel);
 
       const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
       const stockRemaining = { ...(p.market_stock ?? {}) };
@@ -3533,12 +3742,6 @@ const customId = String(interaction.customId || "");
 
 // Note: deferUpdate is already called in index.js for most components
 // We don't need to defer again here, just route to the appropriate handler
-
-const serverId = interaction.guildId;
-if (!serverId) {
-return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
-}
-
 const userId = interaction.user.id;
 const id = String(interaction.customId || "");
 const parts = id.split(":"); // noodle:<kind>:<action>:<ownerId>:...
@@ -3551,6 +3754,80 @@ const kind = parts[1] ?? "";
 const action = parts[2] ?? "";
 const ownerId = parts[3] ?? "";
 
+if (kind === "help" && action === "page") {
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+  const page = Number(parts[4] ?? 0);
+  const { embed, components } = buildHelpPage({
+    page,
+    userId,
+    user: interaction.member ?? interaction.user
+  });
+  return componentCommit(interaction, {
+    content: " ",
+    embeds: [embed],
+    components,
+    targetMessageId: interaction.message?.id
+  });
+}
+
+if (kind === "dm" && action === "reminders_toggle") {
+  const targetServerId = parts[4] ?? "";
+  if (!targetServerId) {
+    return componentCommit(interaction, { content: "Missing server info for reminders.", ephemeral: true });
+  }
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That button isn’t for you.", ephemeral: true });
+  }
+
+  const p = ensurePlayer(targetServerId, userId);
+  if (!p.notifications) {
+    p.notifications = {
+      pending_pantry_messages: [],
+      dm_reminders_opt_out: false,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
+    };
+  }
+  const nextOptOut = !(p.notifications.dm_reminders_opt_out === true);
+  p.notifications.dm_reminders_opt_out = nextOptOut;
+
+  if (db) {
+    upsertPlayer(db, targetServerId, userId, p, null, p.schema_version);
+  }
+
+  const guildName = interaction.client?.guilds?.cache?.get(targetServerId)?.name ?? "this server";
+  const channelId = p.notifications.last_noodle_channel_id ?? null;
+  const channelUrl = channelId ? `https://discord.com/channels/${targetServerId}/${channelId}` : null;
+
+  const reminderEmbed = buildMenuEmbed({
+    title: "📬 Daily Rewards Reminder",
+    description: nextOptOut
+      ? `Reminders are now **off** for **${guildName}**.`
+      : `Reminders are now **on** for **${guildName}**.`,
+    user: interaction.user
+  });
+
+  const components = buildDmReminderComponents({
+    userId,
+    serverId: targetServerId,
+    channelUrl,
+    optOut: nextOptOut
+  });
+
+  return componentCommit(interaction, {
+    content: " ",
+    embeds: [reminderEmbed],
+    components
+  });
+}
+
+const serverId = interaction.guildId;
+if (!serverId) {
+  return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
+}
+
 // lock UI to owner when ownerId is present
 if (ownerId && ownerId !== userId && (kind === "nav" || kind === "pick" || kind === "multibuy" || kind === "profile" || kind === "decor")) {
 return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
@@ -3558,6 +3835,45 @@ return componentCommit(interaction, { content: "That menu isn’t for you.", eph
 
 
 /* ---------------- PROFILE SPECIALIZATION BUTTONS ---------------- */
+if (kind === "profile" && (action === "edit_shop_name" || action === "edit_tagline")) {
+  if (!interaction.isButton?.()) {
+    return componentCommit(interaction, { content: "That action isn’t available right now.", ephemeral: true });
+  }
+
+  const p = ensurePlayer(serverId, userId);
+  const sourceMessageId = interaction.message?.id ?? "none";
+  const isShopName = action === "edit_shop_name";
+
+  const modal = new ModalBuilder()
+    .setCustomId(`noodle:profile:${isShopName ? "shop_name_modal" : "tagline_modal"}:${userId}:${sourceMessageId}`)
+    .setTitle(isShopName ? "Edit Shop Name" : "Edit Tagline");
+
+  const input = new TextInputBuilder()
+    .setCustomId("value")
+    .setLabel(isShopName ? "Shop name" : "Tagline")
+    .setStyle(isShopName ? TextInputStyle.Short : TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setPlaceholder(isShopName
+      ? (p.profile?.shop_name ?? "My Noodle Shop")
+      : (p.profile?.tagline ?? PROFILE_DEFAULT_TAGLINE));
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+
+  try {
+    return await interaction.showModal(modal);
+  } catch (e) {
+    console.log(`⚠️ showModal failed for profile edit:`, e?.message);
+    const code = e?.code ?? e?.message;
+    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+      return;
+    }
+    return componentCommit(interaction, {
+      content: "⚠️ Discord couldn't show the edit modal. Try again.",
+      ephemeral: true
+    });
+  }
+}
+
 if (kind === "profile" && action === "specialize_select") {
   const p = ensurePlayer(serverId, userId);
   const now = nowTs();
@@ -4020,6 +4336,109 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     });
 
     return result;
+  }
+
+  /* ---------------- PROFILE EDIT MODALS ---------------- */
+  if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:profile:shop_name_modal:")) {
+    const parts2 = interaction.customId.split(":");
+    const owner = parts2[3];
+    const messageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
+
+    if (owner && owner !== interaction.user.id) {
+      return componentCommit(interaction, { content: "That edit prompt isn’t for you.", ephemeral: true });
+    }
+
+    const raw = String(interaction.fields.getTextInputValue("value") ?? "").trim();
+    const trimmed = raw.replace(/\s+/g, " ");
+    if (!trimmed) {
+      return componentCommit(interaction, { content: "Shop name can't be empty.", ephemeral: true });
+    }
+    if (trimmed.length > 32) {
+      return componentCommit(interaction, { content: "Shop name must be 32 characters or fewer.", ephemeral: true });
+    }
+    if (containsProfanity(trimmed)) {
+      return componentCommit(interaction, { content: "Shop name contains blocked words. Please keep it friendly.", ephemeral: true });
+    }
+
+    if (!interaction.deferred && !interaction.replied) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const p = ensurePlayer(serverId, userId);
+    if (!p.profile) p.profile = { shop_name: "My Noodle Shop", tagline: PROFILE_DEFAULT_TAGLINE };
+    p.profile.shop_name = trimmed;
+
+    if (db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+    }
+
+    const embed = buildMenuEmbed({
+      title: "✅ Shop Name Updated",
+      description: `Your shop is now **${trimmed}**.`,
+      user: interaction.member ?? interaction.user
+    });
+
+    return componentCommit(interaction, {
+      content: " ",
+      embeds: [embed],
+      components: [noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+      targetMessageId: messageId ?? interaction.message?.id
+    });
+  }
+
+  if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:profile:tagline_modal:")) {
+    const parts2 = interaction.customId.split(":");
+    const owner = parts2[3];
+    const messageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
+
+    if (owner && owner !== interaction.user.id) {
+      return componentCommit(interaction, { content: "That edit prompt isn’t for you.", ephemeral: true });
+    }
+
+    const raw = String(interaction.fields.getTextInputValue("value") ?? "").trim();
+    const trimmed = raw.replace(/\s+/g, " ");
+    if (!trimmed) {
+      return componentCommit(interaction, { content: "Tagline can't be empty.", ephemeral: true });
+    }
+    if (trimmed.length > 80) {
+      return componentCommit(interaction, { content: "Tagline must be 80 characters or fewer.", ephemeral: true });
+    }
+    if (containsProfanity(trimmed)) {
+      return componentCommit(interaction, { content: "Tagline contains blocked words. Please keep it friendly.", ephemeral: true });
+    }
+
+    if (!interaction.deferred && !interaction.replied) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const p = ensurePlayer(serverId, userId);
+    if (!p.profile) p.profile = { shop_name: "My Noodle Shop", tagline: PROFILE_DEFAULT_TAGLINE };
+    p.profile.tagline = trimmed;
+
+    if (db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+    }
+
+    const embed = buildMenuEmbed({
+      title: "✅ Tagline Updated",
+      description: `Your tagline is now: *${trimmed}*`,
+      user: interaction.member ?? interaction.user
+    });
+
+    return componentCommit(interaction, {
+      content: " ",
+      embeds: [embed],
+      components: [noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+      targetMessageId: messageId ?? interaction.message?.id
+    });
   }
 
   /* ---------------- MULTI-BUY SELECT MENU ---------------- */
@@ -4628,6 +5047,9 @@ export const noodleCommand = {
     .addSubcommand((sc) => sc.setName("regulars").setDescription("View regular NPCs and their bonuses."))
     .addSubcommand((sc) => sc.setName("status").setDescription("Show reset timestamps (debug info)."))
     .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
+    .addSubcommand((sc) => sc.setName("quests").setDescription("View active quests."))
+    .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
+    .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
     .addSubcommandGroup((group) =>
       group
         .setName("dev")

@@ -708,7 +708,7 @@ return withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (dayChanged) {
     const guildName = interaction.guild?.name ?? "this server";
     interaction.user?.send?.(
-      `📬 New daily orders are up in **${guildName}**! Open /noodle orders to accept them.`
+      `📬 New daily orders are up in **${guildName}**!`
     ).catch(() => {});
   }
 

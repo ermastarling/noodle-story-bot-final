@@ -35,6 +35,7 @@ import {
   BLESSING_TYPES
 } from "../game/social.js";
 import { nowTs } from "../util/time.js";
+import { containsProfanity } from "../util/profanity.js";
 
 const {
   MessageActionRow,
@@ -102,7 +103,7 @@ function socialMainMenuRow(userId) {
       .setLabel("🎪 Party")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle-upgrades:category:${userId}:all`)
+      .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
       .setLabel("🔧 Upgrades")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
@@ -123,7 +124,7 @@ function socialMainMenuRowNoProfile(userId) {
       .setLabel("🎪 Party")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle-upgrades:category:${userId}:all`)
+      .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
       .setLabel("🔧 Upgrades")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
@@ -367,6 +368,11 @@ async function componentCommit(interaction, opts) {
 
   if (ephemeral) {
     if (interaction.deferred || interaction.replied) {
+      try {
+        await interaction.deleteReply();
+      } catch (e) {
+        // ignore if already deleted or not present
+      }
       return interaction.followUp({ ...rest, ephemeral: true });
     }
     return interaction.reply({ ...rest, ephemeral: true });
@@ -400,6 +406,11 @@ async function componentCommit(interaction, opts) {
 async function errorReply(interaction, content) {
   const payload = { content, ephemeral: true };
   if (interaction.deferred || interaction.replied) {
+    try {
+      await interaction.deleteReply();
+    } catch (e) {
+      // ignore if already deleted or not present
+    }
     return interaction.followUp(payload);
   }
   return interaction.reply(payload);
@@ -472,6 +483,13 @@ async function handleParty(interaction) {
       if (!partyName) {
         return errorReply(interaction, "❌ Please provide a party name.");
       }
+      const cleanedName = partyName.trim().replace(/\s+/g, " ");
+      if (!cleanedName) {
+        return errorReply(interaction, "❌ Please provide a party name.");
+      }
+      if (containsProfanity(cleanedName)) {
+        return errorReply(interaction, "❌ Party name contains blocked words. Please keep it friendly.");
+      }
 
       // Check if already in a party
       const currentParty = getUserActiveParty(db, userId);
@@ -479,7 +497,7 @@ async function handleParty(interaction) {
         return errorReply(interaction, `❌ You're already in party **${currentParty.party_name}**. Leave it first to create a new one.`);
       }
 
-      const result = createParty(db, serverId, userId, partyName);
+      const result = createParty(db, serverId, userId, cleanedName);
 
       const embed = new EmbedBuilder()
         .setTitle("🎉 Party Created!")
@@ -608,9 +626,13 @@ async function handleParty(interaction) {
       if (!partyName || !partyName.trim()) {
         return errorReply(interaction, "❌ Please provide a new party name.");
       }
+      const cleanedName = partyName.trim().replace(/\s+/g, " ");
+      if (containsProfanity(cleanedName)) {
+        return errorReply(interaction, "❌ Party name contains blocked words. Please keep it friendly.");
+      }
 
       try {
-        const result = renameParty(db, currentParty.party_id, partyName.trim());
+        const result = renameParty(db, currentParty.party_id, cleanedName);
         await ensurePublicReply();
         const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
         return interaction.editReply({
@@ -812,6 +834,7 @@ async function handleVisit(interaction) {
 
         const blessing = getActiveBlessing(targetPlayer);
         const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
+        const cooldownEnds = (blessing?.expires_at ?? nowTs()) + (BLESSING_COOLDOWN_HOURS * 60 * 60 * 1000);
 
         const blessingNames = {
           discovery_chance_add: "Enhanced Discovery",
@@ -829,7 +852,7 @@ async function handleVisit(interaction) {
             `<@${userId}> visited <@${targetUser.id}>'s shop and granted them a **Blessing**!\n\n` +
             `✨ **Effect**: ${blessingName}\n` +
             `⏰ **Duration**: ${expiresInHours} hours\n` +
-            `🔄 **Cooldown**: ${BLESSING_COOLDOWN_HOURS} hours after expiry`
+            `🔄 **Cooldown ends**: <t:${Math.floor(cooldownEnds / 1000)}:F>`
           )
           .setColor(0xffaa00);
 
@@ -844,6 +867,20 @@ async function handleVisit(interaction) {
         }
        return interaction.editReply(replyObj);
     } catch (err) {
+      if (err?.code === "BLESSING_ACTIVE") {
+        if (interaction.deferred || interaction.replied) {
+          try {
+            await interaction.deleteReply();
+          } catch (e) {
+            // ignore if already deleted
+          }
+        }
+        return errorReply(interaction, "❌ They already have an active blessing.");
+      }
+      if (err?.code === "BLESSING_COOLDOWN" && err?.cooldownEnds) {
+        const ts = Math.floor(err.cooldownEnds / 1000);
+        return errorReply(interaction, `❌ Blessing cooldown active. Try again <t:${ts}:F>.`);
+      }
       return errorReply(interaction, `❌ ${err.message}`);
     }
     });
@@ -1029,6 +1066,10 @@ async function handleComponent(interaction) {
       if (!partyName || partyName.trim().length === 0) {
         return errorReply(interaction, "❌ Party name cannot be empty.");
       }
+      const cleanedName = partyName.trim().replace(/\s+/g, " ");
+      if (containsProfanity(cleanedName)) {
+        return errorReply(interaction, "❌ Party name contains blocked words. Please keep it friendly.");
+      }
 
       const ownerLock = `discord:${interaction.id}`;
       if (!db) {
@@ -1036,7 +1077,7 @@ async function handleComponent(interaction) {
       }
       return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
-          const result = createParty(db, serverId, userId, partyName);
+          const result = createParty(db, serverId, userId, cleanedName);
 
           const embed = new EmbedBuilder()
             .setTitle("🎉 Party Created!")
@@ -1328,6 +1369,7 @@ async function handleComponent(interaction) {
 
             const blessing = getActiveBlessing(targetPlayer);
             const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
+            const cooldownEnds = (blessing?.expires_at ?? nowTs()) + (BLESSING_COOLDOWN_HOURS * 60 * 60 * 1000);
             const blessingNames = {
               discovery_chance_add: "Enhanced Discovery",
               limited_time_window_add: "Extended Time Window",
@@ -1349,7 +1391,7 @@ async function handleComponent(interaction) {
                 `<@${userId}> blessed <@${targetId}>!\n\n` +
                 `✨ **Effect**: ${blessingName}\n` +
                 `⏰ **Duration**: ${expiresInHours} hours\n` +
-                `🔄 **Cooldown**: ${BLESSING_COOLDOWN_HOURS} hours after expiry`
+                `🔄 **Cooldown ends**: <t:${Math.floor(cooldownEnds / 1000)}:F>`
               )
               .setColor(0xffaa00);
 
@@ -1361,6 +1403,13 @@ async function handleComponent(interaction) {
               targetMessageId: sourceMessageId
             });
           } catch (err) {
+            if (err?.code === "BLESSING_ACTIVE") {
+              return componentCommit(interaction, { content: "❌ They already have an active blessing.", ephemeral: true });
+            }
+            if (err?.code === "BLESSING_COOLDOWN" && err?.cooldownEnds) {
+              const ts = Math.floor(err.cooldownEnds / 1000);
+              return componentCommit(interaction, { content: `❌ Blessing cooldown active. Try again <t:${ts}:F>.`, ephemeral: true });
+            }
             return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
           }
         });
@@ -1374,7 +1423,8 @@ async function handleComponent(interaction) {
 
       const parts2 = customId.split(":");
       const ownerId = parts2[3];
-      const ingredientId = parts2.slice(4).join(":");
+      const sourceMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
+      const ingredientId = parts2.slice(5).join(":");
 
       if (ownerId && ownerId !== userId) {
         return componentCommit(interaction, { content: "That contribution prompt isn’t for you.", ephemeral: true });
@@ -1462,7 +1512,8 @@ async function handleComponent(interaction) {
 
           return componentCommit(interaction, {
             embeds: [embed],
-            components: [sharedOrderActionRow(userId, true, isLeader, updatedProgress.isComplete), socialMainMenuRow(userId)]
+            components: [sharedOrderActionRow(userId, true, isLeader, updatedProgress.isComplete), socialMainMenuRow(userId)],
+            targetMessageId: sourceMessageId
           });
         } catch (err) {
           return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
@@ -1517,9 +1568,23 @@ async function handleComponent(interaction) {
         .addOptions(servingOptions);
 
       const recipe = content.recipes[selectedRecipe];
+      const backRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:shared_order:${userId}`)
+          .setLabel("Back")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      const servingsEmbed = new EmbedBuilder()
+        .setTitle("🍜 Create Shared Order")
+        .setDescription(`**Recipe**: ${recipe.name}\n\nStep 2: How many servings should your party make?`)
+        .setColor(0x00aeff);
+
+      applyOwnerFooter(servingsEmbed, interaction.member ?? interaction.user);
+
       return componentCommit(interaction, {
-        content: `🍜 **Create Shared Order**\n\n**Recipe**: ${recipe.name}\n\nStep 2: How many servings should your party make?`,
-        components: [new ActionRowBuilder().addComponents(menu)]
+        embeds: [servingsEmbed],
+        components: [new ActionRowBuilder().addComponents(menu), backRow]
       });
     }
 
@@ -1628,8 +1693,9 @@ async function handleComponent(interaction) {
         return componentCommit(interaction, { content: "✅ That ingredient is already covered.", ephemeral: true });
       }
 
+      const sourceMessageId = interaction.message?.id ?? "none";
       const modal = new ModalBuilder()
-        .setCustomId(`noodle-social:modal:contribute_shared_order_qty:${userId}:${ingredientId}`)
+        .setCustomId(`noodle-social:modal:contribute_shared_order_qty:${userId}:${sourceMessageId}:${ingredientId}`)
         .setTitle("Contribute Ingredient");
 
       const input = new TextInputBuilder()
@@ -1986,9 +2052,18 @@ async function handleComponent(interaction) {
       if (embed) {
         replyObj.embeds = [embed];
       } else {
-        replyObj.content = isLeader
-          ? "🍜 **Shared Order**\n\nNo active order. Click **Create Shared Order** to start one."
-          : "🍜 **Shared Order**\n\nNo active order yet. Ask your party leader to create one!";
+        const emptyEmbed = new EmbedBuilder()
+          .setTitle("🍜 Shared Order")
+          .setDescription(
+            isLeader
+              ? "No active order. Click **Create Shared Order** to start one."
+              : "No active order yet. Ask your party leader to create one!"
+          )
+          .setColor(0xffaa00);
+
+        applyOwnerFooter(emptyEmbed, interaction.member ?? interaction.user);
+
+        replyObj.embeds = [emptyEmbed];
       }
 
       return componentCommit(interaction, replyObj);
@@ -2051,9 +2126,23 @@ async function handleComponent(interaction) {
         .setPlaceholder("Choose a recipe for the shared order")
         .addOptions(recipeOptions);
 
+      const backRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:shared_order:${userId}`)
+          .setLabel("Back")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      const createEmbed = new EmbedBuilder()
+        .setTitle("🍜 Create Shared Order")
+        .setDescription("Step 1: Pick a recipe that your party members know.")
+        .setColor(0x00aeff);
+
+      applyOwnerFooter(createEmbed, interaction.member ?? interaction.user);
+
       return componentCommit(interaction, {
-        content: "🍜 **Create Shared Order**\n\nStep 1: Pick a recipe that your party members know.",
-        components: [new ActionRowBuilder().addComponents(menu)]
+        embeds: [createEmbed],
+        components: [new ActionRowBuilder().addComponents(menu), backRow]
       });
     }
 
@@ -2217,8 +2306,15 @@ async function handleComponent(interaction) {
         .addOptions(ingredientOptions);
 
       const isLeader = party.leader_user_id === userId;
+      const contributeEmbed = new EmbedBuilder()
+        .setTitle("🥕 Contribute Ingredients")
+        .setDescription("Pick an ingredient to add:")
+        .setColor(0x00aeff);
+
+      applyOwnerFooter(contributeEmbed, interaction.member ?? interaction.user);
+
       return componentCommit(interaction, {
-        content: "🥕 **Contribute Ingredients**\n\nPick an ingredient to add:",
+        embeds: [contributeEmbed],
         components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, progress.isComplete), socialMainMenuRow(userId)]
       });
     }
@@ -2306,8 +2402,19 @@ async function handleComponent(interaction) {
         });
       }
 
+      const recipe = content.recipes?.[sharedOrder.order_id];
+      const promptEmbed = new EmbedBuilder()
+        .setTitle("⚠️ Cancel Shared Order?")
+        .setDescription(
+          `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
+          "Contributors will not receive rewards, but their ingredients will be returned."
+        )
+        .setColor(0xffaa00);
+
+      applyOwnerFooter(promptEmbed, interaction.member ?? interaction.user);
+
       return componentCommit(interaction, {
-        content: "⚠️ Cancel this shared order? Contributors will not receive rewards, but their ingredients will be returned.",
+        embeds: [promptEmbed],
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -2473,8 +2580,19 @@ async function handleComponent(interaction) {
 
       const isLeader = party.leader_user_id === userId;
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
+      const recipe = existingOrder ? content.recipes?.[existingOrder.order_id] : null;
+      const cancelEmbed = new EmbedBuilder()
+        .setTitle("❌ Cancelled")
+        .setDescription(
+          `${recipe?.name ? `**${recipe.name}** (${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
+          "Shared order completion cancelled."
+        )
+        .setColor(0xffaa00);
+
+      applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
+
       return componentCommit(interaction, {
-        content: "Cancelled.",
+        embeds: [cancelEmbed],
         components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
       });
     }
@@ -2535,8 +2653,19 @@ async function handleComponent(interaction) {
 
       cancelSharedOrder(db, sharedOrder.shared_order_id);
 
+      const recipe = content.recipes?.[sharedOrder.order_id];
+      const cancelEmbed = new EmbedBuilder()
+        .setTitle("🧹 Shared Order Cancelled")
+        .setDescription(
+          `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
+          "Contributions have been returned to the party."
+        )
+        .setColor(0xffaa00);
+
+      applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
+
       return componentCommit(interaction, {
-        content: "🧹 Shared order cancelled. Contributions have been returned.",
+        embeds: [cancelEmbed],
         components: [sharedOrderActionRow(userId, false, true), socialMainMenuRow(userId)]
       });
     }
@@ -2565,8 +2694,15 @@ async function handleComponent(interaction) {
           canComplete = progress.isComplete;
         }
       }
+      const keepEmbed = new EmbedBuilder()
+        .setTitle("✅ Shared Order Kept")
+        .setDescription("Keeping the shared order active.")
+        .setColor(0x00aeff);
+
+      applyOwnerFooter(keepEmbed, interaction.member ?? interaction.user);
+
       return componentCommit(interaction, {
-        content: "Keeping the shared order active.",
+        embeds: [keepEmbed],
         components: [sharedOrderActionRow(userId, !!existingOrder, isLeader, canComplete), socialMainMenuRow(userId)]
       });
     }

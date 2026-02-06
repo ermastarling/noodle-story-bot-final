@@ -40,10 +40,11 @@
     "type": "json",
     "scope": "server",
     "default": {
-      "common": 0.7,
-      "rare": 0.25,
-      "epic": 0.04,
-      "seasonal": 0.01
+      "common": 0.55,
+      "uncommon": 0.22,
+      "rare": 0.15,
+      "epic": 0.06,
+      "seasonal": 0.02
     },
     "description": "Base order tier weights.",
     "requires_permission": "manage_guild",
@@ -56,10 +57,10 @@
     "scope": "server",
     "default": {
       "common": 1,
-      "uncommon": 0.6,
-      "rare": 0.3,
-      "epic": 0.12,
-      "seasonal": 0.06
+      "uncommon": 0.85,
+      "rare": 0.55,
+      "epic": 0.25,
+      "seasonal": 0.08
     },
     "description": "Base NPC rarity weights for order generation.",
     "requires_permission": "manage_guild",

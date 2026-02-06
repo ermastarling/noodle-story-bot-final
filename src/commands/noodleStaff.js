@@ -205,7 +205,7 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (level <= 0) continue;
 
     if (staffId === "prep_chef") {
-      effectLines.push(`**${staff.name}** — auto-buys missing non-forage ingredients for up to ${level} orders`);
+      effectLines.push(`**${staff.name}** — auto-buys missing non-forage ingredients for up to ${level} orders per accept action`);
       continue;
     }
 

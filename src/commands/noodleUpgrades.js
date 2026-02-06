@@ -71,6 +71,10 @@ function formatEffects(effects) {
     else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(1)}% NPC variety`);
     else if (key === "staff_capacity") lines.push(`+${value.toFixed(1)} staff capacity`);
     else if (key === "staff_effect_multiplier") lines.push(`+${(value * 100).toFixed(1)}% staff effects`);
+    else if (key === "prep_batch_bonus") {
+      const divisor = value > 0 ? Math.round(1 / value) : 0;
+      lines.push(`+1 bowl per ${divisor} prep levels`);
+    }
   }
   return lines.join(", ");
 }
@@ -90,7 +94,7 @@ function staffSortKey(player, staff) {
   return { cost, isMaxed };
 }
 
-function buildCategoryButtonsRow(userId, activeCategory = null) {
+function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
   const categories = [
     { id: "staff", label: "👥 Staff" },
     { id: "kitchen", label: "🍳 Kitchen" },
@@ -101,7 +105,11 @@ function buildCategoryButtonsRow(userId, activeCategory = null) {
 
   const buttons = categories.map((cat) =>
     new ButtonBuilder()
-      .setCustomId(`noodle-upgrades:category:${userId}:${cat.id}`)
+      .setCustomId(
+        source
+          ? `noodle-upgrades:category:${userId}:${cat.id}:${source}`
+          : `noodle-upgrades:category:${userId}:${cat.id}`
+      )
       .setLabel(cat.label)
       .setStyle(cat.id === activeCategory ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
@@ -109,7 +117,7 @@ function buildCategoryButtonsRow(userId, activeCategory = null) {
   return new ActionRowBuilder().addComponents(buttons);
 }
 
-function buildStaffRarityRow(userId, activeRarity = "common") {
+function buildStaffRarityRow(userId, activeRarity = "common", source = null) {
   const rarities = [
     { id: "overview", label: "👥 Staff" },
     { id: "common", label: "⚪ Common" },
@@ -120,7 +128,11 @@ function buildStaffRarityRow(userId, activeRarity = "common") {
 
   const buttons = rarities.map((rar) =>
     new ButtonBuilder()
-      .setCustomId(`noodle-upgrades:staffpage:${userId}:${rar.id}`)
+      .setCustomId(
+        source
+          ? `noodle-upgrades:staffpage:${userId}:${rar.id}:${source}`
+          : `noodle-upgrades:staffpage:${userId}:${rar.id}`
+      )
       .setLabel(rar.label)
       .setStyle(rar.id === activeRarity ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
@@ -161,8 +173,8 @@ export async function noodleUpgradesHandler(interaction) {
       p = getPlayer(db, serverId, userId);
     }
 
-    const embed = buildUpgradesOverviewEmbed(p, interaction.member ?? interaction.user);
-    const components = buildUpgradesComponents(userId, p);
+    const embed = buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user);
+    const components = buildUpgradesComponents(userId, p, { source: "profile" });
 
     const response = {
       embeds: [embed],
@@ -213,6 +225,87 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effectLines.length > 0) {
     embed.addFields({
       name: "📊 Total Upgrade Bonuses",
+      value: effectLines.join("\n"),
+      inline: false
+    });
+  }
+
+  applyOwnerFooter(embed, user);
+  return embed;
+}
+
+function buildUpgradesManagementEmbed(player, user) {
+  const embed = new EmbedBuilder()
+    .setTitle("🔧 Upgrades Management")
+    .setColor(0xFF8C00);
+
+  const upgrades = Object.values(upgradesContent.upgrades ?? {});
+  const totalUpgrades = upgrades.length;
+  const leveledEntries = Object.entries(player.upgrades ?? {})
+    .filter(([, level]) => Number(level) > 0)
+    .map(([upgradeId, levelRaw]) => {
+      const upgrade = upgradesContent.upgrades?.[upgradeId];
+      if (!upgrade) return null;
+      const level = Math.max(0, Number(levelRaw) || 0);
+      return { upgrade, level };
+    })
+    .filter(Boolean);
+
+  embed.setDescription(`💰 Coins: **${player.coins}**\n🔧 Upgrades: **${leveledEntries.length}/${totalUpgrades}**`);
+
+  if (leveledEntries.length > 0) {
+    const upgradeLines = leveledEntries.map(({ upgrade, level }) => {
+      const category = upgradesContent.upgrade_categories?.[upgrade.category] ?? {};
+      const icon = category.icon ? `${category.icon} ` : "";
+      return `${icon}**${upgrade.name}** — Lv${level}/${upgrade.max_level}`;
+    });
+    embed.addFields({
+      name: "Your Upgrades",
+      value: upgradeLines.join("\n"),
+      inline: false
+    });
+  } else {
+    embed.addFields({
+      name: "Your Upgrades",
+      value: "_No upgrades purchased yet._",
+      inline: false
+    });
+  }
+
+  const formatUpgradeEffectValue = (upgrade, level, effectKey, perLevel) => {
+    const total = perLevel * level;
+    if (effectKey === "ingredient_save_chance") return `+${(total * 100).toFixed(1)}% ingredient save`;
+    if (effectKey === "bowl_capacity_bonus") return `+${total} bowl capacity`;
+    if (effectKey === "ingredient_capacity") return `+${total} ingredient storage`;
+    if (effectKey === "spoilage_reduction") return `-${(total * 100).toFixed(1)}% spoilage`;
+    if (effectKey === "bowl_storage_capacity") return `+${total} bowl storage`;
+    if (effectKey === "rep_bonus_flat") return `+${total.toFixed(1)} rep per serve`;
+    if (effectKey === "rep_bonus_percent") return `+${(total * 100).toFixed(1)}% rep`;
+    if (effectKey === "order_quality_bonus") return `+${(total * 100).toFixed(1)}% order quality`;
+    if (effectKey === "npc_variety_bonus") return `+${(total * 100).toFixed(1)}% NPC variety`;
+    if (effectKey === "staff_capacity") return `+${total.toFixed(1)} staff capacity`;
+    if (effectKey === "staff_effect_multiplier") return `+${(total * 100).toFixed(1)}% staff effects`;
+    if (effectKey === "prep_batch_bonus") {
+      const divisor = perLevel > 0 ? Math.round(1 / perLevel) : 0;
+      const bonus = divisor > 0 ? Math.floor(level / divisor) : 0;
+      return bonus > 0 ? `+${bonus} bowls per batch` : `+1 bowl per ${divisor} prep levels`;
+    }
+    return null;
+  };
+
+  const effectLines = [];
+  for (const { upgrade, level } of leveledEntries) {
+    const effectsPerLevel = upgrade.effects_per_level ?? {};
+    for (const [effectKey, perLevel] of Object.entries(effectsPerLevel)) {
+      const formatted = formatUpgradeEffectValue(upgrade, level, effectKey, perLevel);
+      if (!formatted) continue;
+      effectLines.push(`**${upgrade.name}** — ${formatted}`);
+    }
+  }
+
+  if (effectLines.length > 0) {
+    embed.addFields({
+      name: "Active Bonuses",
       value: effectLines.join("\n"),
       inline: false
     });
@@ -313,7 +406,8 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
   const upgrades = upgradesByCategory[categoryId]?.upgrades ?? [];
   const lines = upgrades.map((u) => {
     const status = u.isMaxed ? "✅ MAX" : `${u.nextCost}c`;
-    return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
+    const desc = u.description ? `\n  _${u.description}_` : "";
+    return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}${desc}`;
   });
 
   embed.addFields({
@@ -326,15 +420,15 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
   return embed;
 }
 
-function buildUpgradesComponents(userId, player, { categoryId = null, staffRarity = "common" } = {}) {
+function buildUpgradesComponents(userId, player, { categoryId = null, staffRarity = "common", source = null } = {}) {
   const rows = [];
   if (categoryId !== "staff") {
-    rows.push(buildCategoryButtonsRow(userId, categoryId));
+    rows.push(buildCategoryButtonsRow(userId, categoryId, source));
   }
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
 
   if (categoryId === "staff") {
-    rows.push(buildStaffRarityRow(userId, staffRarity));
+    rows.push(buildStaffRarityRow(userId, staffRarity, source));
     if (staffRarity !== "upgrades") {
       const staffOptions = Object.values(staffContent.staff_members ?? {})
         .slice()
@@ -364,7 +458,11 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
 
       if (staffOptions.length > 0) {
         const staffMenu = new StringSelectMenuBuilder()
-          .setCustomId(`noodle-upgrades:staff:${userId}`)
+          .setCustomId(
+            source
+              ? `noodle-upgrades:staff:${userId}:${source}`
+              : `noodle-upgrades:staff:${userId}`
+          )
           .setPlaceholder("Level up staff member")
           .addOptions(staffOptions);
         rows.push(new ActionRowBuilder().addComponents(staffMenu));
@@ -407,7 +505,11 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
         ? "Purchase Staff Upgrades"
         : "Purchase Shop Upgrades";
       const menu = new StringSelectMenuBuilder()
-        .setCustomId(`noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}`)
+        .setCustomId(
+          source
+            ? `noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}:${source}`
+            : `noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}`
+        )
         .setPlaceholder(placeholder)
         .addOptions(chunk);
       rows.push(new ActionRowBuilder().addComponents(menu));
@@ -415,12 +517,24 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
   }
 
   if (!categoryId) {
-    rows.push(noodleMainMenuRow(userId));
+    if (source === "profile") {
+      const backButton = new ButtonBuilder()
+        .setCustomId(`noodle:nav:profile:${userId}`)
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary);
+      rows.push(new ActionRowBuilder().addComponents(backButton));
+    } else {
+      rows.push(noodleMainMenuRow(userId));
+    }
   }
 
   if (categoryId) {
     const backButton = new ButtonBuilder()
-      .setCustomId(`noodle-upgrades:category:${userId}:all`)
+      .setCustomId(
+        source
+          ? `noodle-upgrades:category:${userId}:all:${source}`
+          : `noodle-upgrades:category:${userId}:all`
+      )
       .setLabel("⬅️ Back")
       .setStyle(ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(backButton));
@@ -474,19 +588,35 @@ export async function noodleUpgradesInteractionHandler(interaction) {
 
     const resolveStaffRarity = () => {
       if (action === "staffpage") return parts[3] ?? "common";
-      if (action === "category" && parts[3] === "staff") return parts[4] ?? "overview";
+      if (action === "category" && parts[3] === "staff") {
+        const candidate = parts[4];
+        const allowed = new Set(["overview", "common", "rare", "epic", "upgrades"]);
+        return allowed.has(candidate) ? candidate : "overview";
+      }
       return "common";
+    };
+
+    const resolveSource = () => {
+      if (action === "category") return parts[4] ?? null;
+      if (action === "staffpage") return parts[4] ?? null;
+      if (action === "buy") return parts[5] ?? null;
+      if (action === "staff") return parts[3] ?? null;
+      return null;
     };
 
     const categoryId = resolveCategory();
     const staffRarity = resolveStaffRarity();
+    const source = resolveSource();
     const refreshed = getPlayer(db, serverId, userId) ?? p;
     const embed = categoryId && categoryId !== "all"
       ? buildUpgradesCategoryEmbed(refreshed, interaction.member ?? interaction.user, categoryId, { staffRarity })
-      : buildUpgradesOverviewEmbed(refreshed, interaction.member ?? interaction.user);
+      : (source === "profile"
+        ? buildUpgradesManagementEmbed(refreshed, interaction.member ?? interaction.user)
+        : buildUpgradesOverviewEmbed(refreshed, interaction.member ?? interaction.user));
     const components = buildUpgradesComponents(userId, refreshed, {
       categoryId: categoryId && categoryId !== "all" ? categoryId : null,
-      staffRarity
+      staffRarity,
+      source
     });
 
     // Handle purchase
@@ -501,10 +631,13 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
       const updatedEmbed = categoryId && categoryId !== "all"
         ? buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, categoryId, { staffRarity })
-        : buildUpgradesOverviewEmbed(updatedPlayer, interaction.member ?? interaction.user);
+        : (source === "profile"
+          ? buildUpgradesManagementEmbed(updatedPlayer, interaction.member ?? interaction.user)
+          : buildUpgradesOverviewEmbed(updatedPlayer, interaction.member ?? interaction.user));
       const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, {
         categoryId: categoryId && categoryId !== "all" ? categoryId : null,
-        staffRarity
+        staffRarity,
+        source
       });
 
       return {
@@ -524,7 +657,7 @@ export async function noodleUpgradesInteractionHandler(interaction) {
 
       const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
       const updatedEmbed = buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, "staff", { staffRarity });
-      const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, { categoryId: "staff", staffRarity });
+      const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, { categoryId: "staff", staffRarity, source });
 
       return {
         content: result.message,

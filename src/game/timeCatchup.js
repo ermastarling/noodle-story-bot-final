@@ -53,7 +53,6 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
   const maxCatchupTicks = settings.SPOILAGE_MAX_CATCHUP_TICKS ?? 24;
   const baseChance = settings.SPOILAGE_BASE_CHANCE ?? 0.05;
   const reduction = Math.max(0, Math.min(0.95, effects?.spoilage_reduction || 0));
-  const adjustedBaseChance = baseChance * (1 - reduction);
 
   // Calculate elapsed time and number of ticks
   const elapsedMs = now - lastActiveAt;
@@ -66,11 +65,6 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
   if (ticksToApply <= 0) {
     return { applied: false, spoiled: {}, ticksApplied: 0, messages: [] };
   }
-
-  // Get player upgrades for protected storage
-  const upgrades = player.upgrades || {};
-  const coldCellarLevel = upgrades.u_cold_cellar || 0;
-  const secureCratesLevel = upgrades.u_secure_crates || 0;
 
   // Track spoiled items
   const spoiled = {};
@@ -91,7 +85,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       if (!item) continue;
 
       // Get spoilage reduction from upgrades and tier
-      const { reduction, tierMultiplier } = getSpoilageReduction(item, coldCellarLevel, secureCratesLevel);
+      const { reduction, tierMultiplier } = getSpoilageReduction(item, effects);
 
       // Calculate effective spoilage chance
       // Formula: baseChance * tierMultiplier * (1 - coldStorageReduction)
@@ -139,15 +133,13 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
  * Check if an item is protected by storage upgrades
  * Returns reduction factor (0.0 = no protection, 1.0 = full protection)
  */
-function getSpoilageReduction(item, coldCellarLevel, secureCratesLevel) {
+function getSpoilageReduction(item, effects) {
   let reduction = 0;
-  
-  // Cold Cellar protects fresh/spoilable ingredients
-  // Each level reduces spoilage by 1%, up to 50% maximum
-  if (coldCellarLevel > 0 && item.tags?.includes('fresh')) {
-    reduction = Math.min(0.5, coldCellarLevel * 0.01);
+  const effectReduction = Math.max(0, Math.min(0.95, effects?.spoilage_reduction || 0));
+  if (item.tags?.includes("fresh")) {
+    reduction = effectReduction;
   }
-  
+
   // Tier-based reduction (rarer items spoil slower)
   const tierMultipliers = {
     common: 1.0,

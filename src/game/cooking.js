@@ -16,11 +16,16 @@ export function loadCookingRules() {
   return cachedRules;
 }
 
-export function getCookBatchOutput(quantity, player) {
+export function getCookBatchOutput(quantity, player, effects = null) {
   const rules = loadCookingRules();
-  const divisor = Math.max(1, Number(rules.batch?.prep_bonus_divisor) || 4);
-  const prep = Math.max(0, Number(player?.upgrades?.u_prep) || 0);
-  const bonus = Math.floor(prep / divisor);
+  const prepBonus = Math.max(0, Number(effects?.prep_batch_bonus) || 0);
+  let bonus = Math.floor(prepBonus);
+
+  if (!bonus) {
+    const divisor = Math.max(1, Number(rules.batch?.prep_bonus_divisor) || 4);
+    const prep = Math.max(0, Number(player?.upgrades?.u_prep) || 0);
+    bonus = Math.floor(prep / divisor);
+  }
   return quantity + bonus;
 }
 
