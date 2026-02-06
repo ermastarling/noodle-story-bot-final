@@ -37,7 +37,7 @@ import {
 import { nowTs } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
 import { theme } from "../ui/theme.js";
-import { getIcon } from "../ui/icons.js";
+import { getIcon, getButtonEmoji } from "../ui/icons.js";
 
 const {
   MessageActionRow,
@@ -102,19 +102,19 @@ function socialMainMenuRow(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
-      .setLabel(`${getIcon("party")} Party`)
+      .setLabel("Party").setEmoji(getButtonEmoji("party"))
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
-      .setLabel(`${getIcon("upgrades")} Upgrades`)
+      .setLabel("Upgrades").setEmoji(getButtonEmoji("upgrades"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
-      .setLabel(`${getIcon("stats")} Stats`)
+      .setLabel("Stats").setEmoji(getButtonEmoji("stats"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
-      .setLabel(`${getIcon("profile")} Profile`)
+      .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -123,23 +123,23 @@ function socialMainMenuRowNoProfile(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
-      .setLabel(`${getIcon("party")} Party`)
+      .setLabel("Party").setEmoji(getButtonEmoji("party"))
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
-      .setLabel(`${getIcon("upgrades")} Upgrades`)
+      .setLabel("Upgrades").setEmoji(getButtonEmoji("upgrades"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
-      .setLabel(`${getIcon("stats")} Stats`)
+      .setLabel("Stats").setEmoji(getButtonEmoji("stats"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel(`${getIcon("quests")} Quests`)
+      .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:profile_edit:${userId}`)
-      .setLabel(`${getIcon("customize")} Customize`)
+      .setLabel("Customize").setEmoji(getButtonEmoji("customize"))
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -187,11 +187,11 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
   components.push(
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:tip:${userId}`)
-      .setLabel(`${getIcon("tips")} Tip`)
+      .setLabel("Tip").setEmoji(getButtonEmoji("tips"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:bless:${userId}`)
-      .setLabel(`${getIcon("bless")} Bless`)
+      .setLabel("Bless").setEmoji(getButtonEmoji("bless"))
       .setStyle(ButtonStyle.Secondary)
   );
   
@@ -200,7 +200,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:shared_order:${userId}`)
-        .setLabel(`${getIcon("bowl")} Shared Order`)
+        .setLabel("Shared Order").setEmoji(getButtonEmoji("bowl"))
         .setStyle(ButtonStyle.Primary)
     );
   }
@@ -210,7 +210,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:party_invite:${userId}`)
-        .setLabel(`${getIcon("add")} Invite User`)
+        .setLabel("Invite User").setEmoji(getButtonEmoji("add"))
         .setStyle(ButtonStyle.Primary)
     );
   }
@@ -220,7 +220,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:party_leave:${userId}`)
-        .setLabel(`${getIcon("door")} Leave Party`)
+        .setLabel("Leave Party").setEmoji(getButtonEmoji("door"))
         .setStyle(ButtonStyle.Danger)
     );
   }
@@ -235,7 +235,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:shared_order_contribute:${userId}`)
-        .setLabel(`${getIcon("contribute")} Contribute`)
+        .setLabel("Contribute").setEmoji(getButtonEmoji("contribute"))
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -243,7 +243,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
       components.push(
         new ButtonBuilder()
           .setCustomId(`noodle-social:action:shared_order_cancel:${userId}`)
-            .setLabel(`${getIcon("broom")} Cancel Order`)
+            .setLabel("Cancel Order").setEmoji(getButtonEmoji("broom"))
           .setStyle(ButtonStyle.Danger)
       );
 
@@ -251,7 +251,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
         components.push(
           new ButtonBuilder()
             .setCustomId(`noodle-social:action:shared_order_complete:${userId}`)
-              .setLabel(`${getIcon("status_complete")} Complete Order`)
+              .setLabel("Complete Order").setEmoji(getButtonEmoji("status_complete"))
             .setStyle(ButtonStyle.Success)
         );
       }
@@ -261,7 +261,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
       components.push(
         new ButtonBuilder()
           .setCustomId(`noodle-social:action:shared_order_create:${userId}`)
-          .setLabel(`${getIcon("bowl")} Create Shared Order`)
+          .setLabel("Create Shared Order").setEmoji(getButtonEmoji("bowl"))
           .setStyle(ButtonStyle.Primary)
       );
     }
@@ -300,19 +300,19 @@ function partyCreationRow(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:tip:${userId}`)
-      .setLabel(`${getIcon("tips")} Tip`)
+      .setLabel("Tip").setEmoji(getButtonEmoji("tips"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:bless:${userId}`)
-      .setLabel(`${getIcon("bless")} Bless`)
+      .setLabel("Bless").setEmoji(getButtonEmoji("bless"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:party_create:${userId}`)
-      .setLabel(`${getIcon("party")} Create Party`)
+      .setLabel("Create Party").setEmoji(getButtonEmoji("party"))
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:party_join:${userId}`)
-      .setLabel(`${getIcon("inbox")} Join Party`)
+      .setLabel("Join Party").setEmoji(getButtonEmoji("inbox"))
       .setStyle(ButtonStyle.Primary)
   );
 }
@@ -324,34 +324,34 @@ function statsViewButtons(userId) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
-      .setLabel(`${getIcon("party")} Party`)
+      .setLabel("Party").setEmoji(getButtonEmoji("party"))
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
-      .setLabel(`${getIcon("leaderboard")} Leaderboard`)
+      .setLabel("Leaderboard").setEmoji(getButtonEmoji("leaderboard"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:collections:${userId}`)
-      .setLabel(`${getIcon("collections")} Collections`)
+      .setLabel("Collections").setEmoji(getButtonEmoji("collections"))
       .setStyle(ButtonStyle.Secondary)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:orders:${userId}`)
-      .setLabel(`${getIcon("orders")} Orders`)
+      .setLabel("Orders").setEmoji(getButtonEmoji("orders"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:buy:${userId}`)
-      .setLabel(`${getIcon("cart")} Buy`)
+      .setLabel("Buy").setEmoji(getButtonEmoji("cart"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:forage:${userId}`)
-      .setLabel(`${getIcon("forage")} Forage`)
+      .setLabel("Forage").setEmoji(getButtonEmoji("forage"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
-      .setLabel(`${getIcon("profile")} Profile`)
+      .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -2369,11 +2369,11 @@ async function handleComponent(interaction) {
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_confirm_complete:${userId}`)
-              .setLabel(`${getIcon("status_complete")} Confirm Complete`)
+              .setLabel("Confirm Complete").setEmoji(getButtonEmoji("status_complete"))
               .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_cancel_complete:${userId}`)
-              .setLabel(`${getIcon("cancel")} Cancel`)
+              .setLabel("Cancel").setEmoji(getButtonEmoji("cancel"))
               .setStyle(ButtonStyle.Secondary)
           )
         ]
@@ -2421,7 +2421,7 @@ async function handleComponent(interaction) {
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_confirm_cancel:${userId}`)
-              .setLabel(`${getIcon("broom")} Confirm Cancel`)
+              .setLabel("Confirm Cancel").setEmoji(getButtonEmoji("broom"))
               .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_abort_cancel:${userId}`)
@@ -2746,7 +2746,7 @@ async function handleComponent(interaction) {
       } catch (e) {
         console.log(`${getIcon("warning")} showModal failed for party_create:`, e?.message);
         return componentCommit(interaction, { 
-          content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.", 
+          content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.`, 
           ephemeral: true 
         });
       }
@@ -2789,7 +2789,7 @@ async function handleComponent(interaction) {
       } catch (e) {
         console.log(`${getIcon("warning")} showModal failed for party_join:`, e?.message);
         return componentCommit(interaction, { 
-          content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.", 
+          content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.`, 
           ephemeral: true 
         });
       }

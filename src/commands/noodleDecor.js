@@ -8,7 +8,7 @@ import {
   getOwnedDecorItems
 } from "../game/decor.js";
 import { theme } from "../ui/theme.js";
-import { getIcon } from "../ui/icons.js";
+import { getIcon, getButtonEmoji } from "../ui/icons.js";
 
 const { MessageEmbed } = discordPkg;
 const EmbedBuilder = MessageEmbed;

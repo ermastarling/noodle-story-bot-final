@@ -9,7 +9,7 @@ import { loadQuestsContent, loadDailyRewards } from "../content/index.js";
 import { claimDailyReward } from "../game/daily.js";
 import { claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { theme } from "../ui/theme.js";
-import { getIcon } from "../ui/icons.js";
+import { getIcon, getButtonEmoji } from "../ui/icons.js";
 
 const {
   MessageEmbed

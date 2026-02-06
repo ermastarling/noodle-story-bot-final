@@ -14,7 +14,7 @@ import {
 } from "../game/staff.js";
 import { calculateUpgradeEffects } from "../game/upgrades.js";
 import { theme } from "../ui/theme.js";
-import { getIcon } from "../ui/icons.js";
+import { getIcon, getButtonEmoji } from "../ui/icons.js";
 
 const {
   MessageActionRow,
@@ -273,7 +273,7 @@ function buildStaffComponents(userId, player, server) {
   // Refresh button
   const refreshButton = new ButtonBuilder()
     .setCustomId(`noodle-staff:refresh:${userId}`)
-    .setLabel(`${getIcon("refresh")} Refresh`)
+    .setLabel("Refresh").setEmoji(getButtonEmoji("refresh"))
     .setStyle(ButtonStyle.Secondary);
   rows.push(new ActionRowBuilder().addComponents(refreshButton));
 

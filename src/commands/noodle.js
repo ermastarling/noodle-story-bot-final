@@ -100,7 +100,7 @@ import {
 } from "../game/upgrades.js";
 import { calculateStaffEffects } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
-import { getIcon, getIconUrl } from "../ui/icons.js";
+import { getIcon, getIconUrl, getButtonEmoji } from "../ui/icons.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -479,85 +479,85 @@ function formatDecorUnlockRequirement(item) {
 
 function noodleMainMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel(`${getIcon("basket")} Pantry`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("profile")} Profile`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("basket")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleTutorialMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialBuyRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialForageRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialCookRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialServeRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleOrdersAcceptOnlyRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success)
 );
 }
 
 function noodleMainMenuRowNoProfile(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel(`${getIcon("basket")} Pantry`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("basket")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleRecipesMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel(`${getIcon("recipes")} Recipes`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel(`${getIcon("chef")} Regulars`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleSecondaryMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel(`${getIcon("quests")} Quests`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel(`${getIcon("party")} Event`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("Quests").setEmoji(getButtonEmoji("quests")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("party")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleProfileEditRow(userId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel(`${getIcon("tag")} Shop Name`).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel(`${getIcon("note")} Tagline`).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel(`${getIcon("sparkle")} Specializations`).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel(`${getIcon("decor")} Decor`).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel("Decor").setEmoji(getButtonEmoji("decor")).setStyle(ButtonStyle.Secondary)
   );
 }
 
 function noodleProfileEditBackRow(userId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -576,22 +576,22 @@ function noodleDecorMenuRow() {
 
 function noodleDecorBackRow(userId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:profile_edit:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:profile_edit:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
   );
 }
 
 
 function noodleQuestsActionRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel(`${getIcon("daily_reward")} Daily Reward`).setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel(`${getIcon("status_complete")} Claim Quests`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleQuestsSecondaryRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel(`${getIcon("season")} Season`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel(`${getIcon("party")} Event`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("Season").setEmoji(getButtonEmoji("season")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("party")).setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -612,23 +612,23 @@ const dailyAvailable = showDaily ?? true;
 const primaryButton = showQuests
   ? new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel(`${getIcon("quests")} Quests`)
+      .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
       .setStyle(ButtonStyle.Secondary)
   : new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel(`${getIcon("daily_reward")} Daily Reward`)
+      .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
       .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary);
 const row = new ActionRowBuilder().addComponents(primaryButton);
 
 if (showClaim) {
   row.addComponents(
-    new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel(`${getIcon("status_complete")} Claim Quests`).setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Primary)
   );
 }
 
 row.addComponents(
-  new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel(`${getIcon("season")} Season`).setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel(`${getIcon("party")} Event`).setStyle(ButtonStyle.Secondary)
+  new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("Season").setEmoji(getButtonEmoji("season")).setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("party")).setStyle(ButtonStyle.Secondary)
 );
 
 return row;
@@ -636,55 +636,55 @@ return row;
 
 function noodleQuestsBackRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleMainMenuRowNoPantry(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("profile")} Profile`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleMainMenuRowNoOrders(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel(`${getIcon("basket")} Pantry`).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("profile")} Profile`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("basket")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleOrdersActionRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleOrdersActionRowWithBack(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleOrdersMenuActionRow(userId, { showCancel = false } = {}) {
 const row = new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary)
 );
 
 if (showCancel) {
   row.addComponents(
-    new ButtonBuilder().setCustomId(`noodle:pick:cancel:${userId}`).setLabel(`${getIcon("cancel")} Cancel`).setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId(`noodle:pick:cancel:${userId}`).setLabel("Cancel").setEmoji(getButtonEmoji("cancel")).setStyle(ButtonStyle.Danger)
   );
 }
 
@@ -1869,12 +1869,14 @@ if (sub === "recipes") {
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:recipes:${userId}:${page - 1}`)
-      .setLabel("◀ Prev")
+      .setLabel("Prev")
+      .setEmoji(getButtonEmoji("prev"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 0),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:recipes:${userId}:${page + 1}`)
-      .setLabel("Next ▶")
+      .setLabel("Next")
+      .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page >= totalPages - 1)
   );
@@ -1922,12 +1924,14 @@ if (sub === "regulars") {
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:regulars:${userId}:${page - 1}`)
-      .setLabel("◀ Prev")
+      .setLabel("Prev")
+      .setEmoji(getButtonEmoji("prev"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 0),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:regulars:${userId}:${page + 1}`)
-      .setLabel("Next ▶")
+      .setLabel("Next")
+      .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page >= totalPages - 1)
   );
@@ -1971,20 +1975,20 @@ if (sub === "season") {
   const seasonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel(`${getIcon("daily_reward")} Daily Reward`)
+      .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
       .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel(`${getIcon("quests")} Quests`)
+      .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:event:${userId}`)
-      .setLabel(`${getIcon("party")} Event`)
+      .setLabel("Event").setEmoji(getButtonEmoji("party"))
       .setStyle(ButtonStyle.Secondary)
   );
 
   const backRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
   );
 
   return commit({
@@ -2035,20 +2039,20 @@ if (sub === "event") {
   const eventRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel(`${getIcon("daily_reward")} Daily Reward`)
+      .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
       .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel(`${getIcon("quests")} Quests`)
+      .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:season:${userId}`)
-      .setLabel(`${getIcon("season")} Season`)
+      .setLabel("Season").setEmoji(getButtonEmoji("season"))
       .setStyle(ButtonStyle.Secondary)
   );
 
   const backRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
   );
 
   const eventEmbed = buildMenuEmbed({
@@ -2538,7 +2542,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       components: [new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle-social:nav:stats:${userId}`)
-          .setLabel("⬅️ Back")
+          .setLabel("Back")
+          .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
       )]
     });
@@ -2615,7 +2620,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!Object.keys(accepted).length) {
       setForageCooldown(p, now);
       return commitState({
-        content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room."
+        content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.`
       });
     }
 
@@ -2721,7 +2726,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle:nav:sell:${userId}`)
-              .setLabel(`${getIcon("coins")} Sell Items`)
+              .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`noodle:nav:profile:${userId}`)
@@ -3176,7 +3181,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
 
       if (p.orders.accepted[order.order_id]) {
-        results.push(`${getIcon("fast_forward")} Already accepted \`${shortOrderId(order.order_id)}\`.`);
+        results.push(`${getIcon("skip")} Already accepted \`${shortOrderId(order.order_id)}\`.`);
         continue;
       }
 
@@ -4518,7 +4523,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const sellButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-        .setLabel(`${getIcon("coins")} Sell Items`)
+        .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -4650,7 +4655,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const sellButton = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-          .setLabel(`${getIcon("coins")} Sell Items`)
+          .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
           .setStyle(ButtonStyle.Secondary)
       );
       const selectionEmbed = buildMenuEmbed({
@@ -4757,7 +4762,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         if (!buyLines.length) {
           return componentCommit(interaction, {
-            content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.",
+            content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
             ephemeral: true
           });
         }
@@ -4827,7 +4832,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           const sellRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-              .setLabel(`${getIcon("coins")} Sell Items`)
+              .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`noodle:nav:profile:${interaction.user.id}`)
@@ -5007,7 +5012,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         if (!sellLines.length) {
           return componentCommit(interaction, {
-            content: `${getIcon("cancel")} You don't have any of those items to sell.",
+            content: `${getIcon("cancel")} You don't have any of those items to sell.`,
             ephemeral: true
           });
         }

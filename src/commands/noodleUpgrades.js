@@ -15,7 +15,7 @@ import {
 } from "../game/upgrades.js";
 import { calculateStaffCost, levelUpStaff } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
-import { getIcon } from "../ui/icons.js";
+import { getIcon, getButtonEmoji } from "../ui/icons.js";
 
 const {
   MessageActionRow,
@@ -523,7 +523,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
     if (source === "profile") {
       const backButton = new ButtonBuilder()
         .setCustomId(`noodle:nav:profile:${userId}`)
-        .setLabel(`${getIcon("back")} Back`)
+        .setLabel("Back").setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary);
       rows.push(new ActionRowBuilder().addComponents(backButton));
     } else {
@@ -538,7 +538,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
           ? `noodle-upgrades:category:${userId}:all:${source}`
           : `noodle-upgrades:category:${userId}:all`
       )
-      .setLabel(`${getIcon("back")} Back`)
+      .setLabel("Back").setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(backButton));
   }

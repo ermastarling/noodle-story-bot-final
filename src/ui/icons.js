@@ -23,6 +23,26 @@ export function getIcon(id, fallback = "?") {
   return value;
 }
 
+const CUSTOM_EMOJI_RE = /^<a?:([^:]+):(\d+)>$/;
+
+export function getButtonEmoji(id) {
+  const icons = loadIcons();
+  const value = icons?.[id];
+  if (!value || typeof value !== "string") return null;
+  if (value.startsWith("http")) return null;
+  const match = value.match(CUSTOM_EMOJI_RE);
+  if (match) {
+    return { name: match[1], id: match[2], animated: value.startsWith("<a:") };
+  }
+  return value;
+}
+
+export function applyButtonEmoji(button, iconId) {
+  const emoji = getButtonEmoji(iconId);
+  if (emoji) button.setEmoji(emoji);
+  return button;
+}
+
 export function getIconUrl(id) {
   const icons = loadIcons();
   const value = icons?.[id];
