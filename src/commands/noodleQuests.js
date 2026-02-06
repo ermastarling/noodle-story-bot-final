@@ -8,6 +8,8 @@ import { newServerState } from "../game/server.js";
 import { loadQuestsContent, loadDailyRewards } from "../content/index.js";
 import { claimDailyReward } from "../game/daily.js";
 import { claimCompletedQuests, getQuestSummary } from "../game/quests.js";
+import { theme } from "../ui/theme.js";
+import { getIcon } from "../ui/icons.js";
 
 const {
   MessageEmbed
@@ -35,7 +37,7 @@ function applyOwnerFooter(embed, user) {
   return embed;
 }
 
-function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
+function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
   const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
   return applyOwnerFooter(embed, user);
 }
@@ -90,21 +92,21 @@ export async function noodleQuestsHandler(interaction) {
       const result = claimDailyReward(player, dailyRewards);
       if (!result.ok) {
         const embed = buildMenuEmbed({
-          title: "🎁 Daily Reward",
+          title: `${getIcon("daily_reward")} Daily Reward`,
           description: result.message,
           user: interaction.member ?? interaction.user
         });
         reply = { content: " ", embeds: [embed], ephemeral: true };
       } else {
         const rewardLines = [];
-        if (result.reward.coins) rewardLines.push(`💰 **${result.reward.coins}c**`);
-        if (result.reward.sxp) rewardLines.push(`✨ **${result.reward.sxp} SXP**`);
-        if (result.reward.rep) rewardLines.push(`⭐ **${result.reward.rep} REP**`);
+        if (result.reward.coins) rewardLines.push(`${getIcon("coins")} **${result.reward.coins}c**`);
+        if (result.reward.sxp) rewardLines.push(`${getIcon("sxp")} **${result.reward.sxp} SXP**`);
+        if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
 
         const levelLine = result.leveledUp > 0 ? `
-🎉 Level up! **+${result.leveledUp}**` : "";
+${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
         const embed = buildMenuEmbed({
-          title: "🎁 Daily Reward",
+          title: `${getIcon("daily_reward")} Daily Reward`,
           description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")}${levelLine}`,
           user: interaction.member ?? interaction.user
         });
@@ -117,14 +119,14 @@ export async function noodleQuestsHandler(interaction) {
       const active = summary.active;
       if (!active.length) {
         const embed = buildMenuEmbed({
-          title: "📜 Quests",
+          title: `${getIcon("quests")} Quests`,
           description: "_No quests available right now._",
           user: interaction.member ?? interaction.user
         });
         reply = { content: " ", embeds: [embed], ephemeral: true };
       } else {
         const lines = active.map((q) => {
-          const status = q.completed_at ? "✅" : "📝";
+          const status = q.completed_at ? getIcon("status_complete") : getIcon("status_pending");
           const rewardParts = [];
           if (q.reward?.coins) rewardParts.push(`${q.reward.coins}c`);
           if (q.reward?.sxp) rewardParts.push(`${q.reward.sxp} SXP`);
@@ -134,7 +136,7 @@ export async function noodleQuestsHandler(interaction) {
         });
 
         const embed = buildMenuEmbed({
-          title: "📜 Quests",
+          title: `${getIcon("quests")} Quests`,
           description: lines.join("\n"),
           user: interaction.member ?? interaction.user
         });
@@ -146,7 +148,7 @@ export async function noodleQuestsHandler(interaction) {
       const result = claimCompletedQuests(player);
       if (!result.claimed.length) {
         const embed = buildMenuEmbed({
-          title: "✅ Quest Rewards",
+          title: `${getIcon("quest_rewards")} Quest Rewards`,
           description: "_No completed quests to claim._",
           user: interaction.member ?? interaction.user
         });
@@ -157,13 +159,13 @@ export async function noodleQuestsHandler(interaction) {
           if (entry.reward?.coins) rewardParts.push(`${entry.reward.coins}c`);
           if (entry.reward?.sxp) rewardParts.push(`${entry.reward.sxp} SXP`);
           if (entry.reward?.rep) rewardParts.push(`${entry.reward.rep} REP`);
-          return `✅ **${entry.quest.name}** — ${rewardParts.join(" · ")}`;
+          return `${getIcon("status_complete")} **${entry.quest.name}** — ${rewardParts.join(" · ")}`;
         });
 
         const levelLine = result.leveledUp > 0 ? `
-🎉 Level up! **+${result.leveledUp}**` : "";
+${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
         const embed = buildMenuEmbed({
-          title: "✅ Quest Rewards",
+          title: `${getIcon("quest_rewards")} Quest Rewards`,
           description: `${lines.join("\n")}${levelLine}`,
           user: interaction.member ?? interaction.user
         });

@@ -36,6 +36,8 @@ import {
 } from "../game/social.js";
 import { nowTs } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
+import { theme } from "../ui/theme.js";
+import { getIcon } from "../ui/icons.js";
 
 const {
   MessageActionRow,
@@ -100,19 +102,19 @@ function socialMainMenuRow(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
-      .setLabel("🎪 Party")
+      .setLabel(`${getIcon("party")} Party`)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
-      .setLabel("🔧 Upgrades")
+      .setLabel(`${getIcon("upgrades")} Upgrades`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
-      .setLabel("📈 Stats")
+      .setLabel(`${getIcon("stats")} Stats`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
-      .setLabel("🍜 Profile")
+      .setLabel(`${getIcon("profile")} Profile`)
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -121,23 +123,23 @@ function socialMainMenuRowNoProfile(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
-      .setLabel("🎪 Party")
+      .setLabel(`${getIcon("party")} Party`)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
-      .setLabel("🔧 Upgrades")
+      .setLabel(`${getIcon("upgrades")} Upgrades`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
-      .setLabel("📈 Stats")
+      .setLabel(`${getIcon("stats")} Stats`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel("📜 Quests")
+      .setLabel(`${getIcon("quests")} Quests`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:profile_edit:${userId}`)
-      .setLabel("✏️ Customize")
+      .setLabel(`${getIcon("edit")} Customize`)
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -185,11 +187,11 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
   components.push(
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:tip:${userId}`)
-      .setLabel("💰 Tip")
+      .setLabel(`${getIcon("tips")} Tip`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:bless:${userId}`)
-      .setLabel("✨ Bless")
+      .setLabel(`${getIcon("bless")} Bless`)
       .setStyle(ButtonStyle.Secondary)
   );
   
@@ -198,7 +200,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:shared_order:${userId}`)
-        .setLabel("🍜 Shared Order")
+        .setLabel(`${getIcon("bowl")} Shared Order`)
         .setStyle(ButtonStyle.Primary)
     );
   }
@@ -208,7 +210,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:party_invite:${userId}`)
-        .setLabel("➕ Invite User")
+        .setLabel(`${getIcon("add")} Invite User`)
         .setStyle(ButtonStyle.Primary)
     );
   }
@@ -218,7 +220,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:party_leave:${userId}`)
-        .setLabel("🚪 Leave Party")
+        .setLabel(`${getIcon("door")} Leave Party`)
         .setStyle(ButtonStyle.Danger)
     );
   }
@@ -233,7 +235,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:shared_order_contribute:${userId}`)
-        .setLabel("🥕 Contribute")
+        .setLabel(`${getIcon("carrot")} Contribute`)
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -241,7 +243,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
       components.push(
         new ButtonBuilder()
           .setCustomId(`noodle-social:action:shared_order_cancel:${userId}`)
-          .setLabel("🧹 Cancel Order")
+            .setLabel(`${getIcon("broom")} Cancel Order`)
           .setStyle(ButtonStyle.Danger)
       );
 
@@ -249,7 +251,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
         components.push(
           new ButtonBuilder()
             .setCustomId(`noodle-social:action:shared_order_complete:${userId}`)
-            .setLabel("✅ Complete Order")
+              .setLabel(`${getIcon("status_complete")} Complete Order`)
             .setStyle(ButtonStyle.Success)
         );
       }
@@ -259,7 +261,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
       components.push(
         new ButtonBuilder()
           .setCustomId(`noodle-social:action:shared_order_create:${userId}`)
-          .setLabel("🍜 Create Shared Order")
+          .setLabel(`${getIcon("bowl")} Create Shared Order`)
           .setStyle(ButtonStyle.Primary)
       );
     }
@@ -298,19 +300,19 @@ function partyCreationRow(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:tip:${userId}`)
-      .setLabel("💰 Tip")
+      .setLabel(`${getIcon("tips")} Tip`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:bless:${userId}`)
-      .setLabel("✨ Bless")
+      .setLabel(`${getIcon("bless")} Bless`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:party_create:${userId}`)
-      .setLabel("🎪 Create Party")
+      .setLabel(`${getIcon("party")} Create Party`)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:action:party_join:${userId}`)
-      .setLabel("📥 Join Party")
+      .setLabel(`${getIcon("inbox")} Join Party`)
       .setStyle(ButtonStyle.Primary)
   );
 }
@@ -322,34 +324,34 @@ function statsViewButtons(userId) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
-      .setLabel("🎪 Party")
+      .setLabel(`${getIcon("party")} Party`)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:leaderboard:${userId}`)
-      .setLabel("📊 Leaderboard")
+      .setLabel(`${getIcon("leaderboard")} Leaderboard`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:collections:${userId}`)
-      .setLabel("📚 Collections")
+      .setLabel(`${getIcon("collections")} Collections`)
       .setStyle(ButtonStyle.Secondary)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:orders:${userId}`)
-      .setLabel("📋 Orders")
+      .setLabel(`${getIcon("orders")} Orders`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:buy:${userId}`)
-      .setLabel("🛒 Buy")
+      .setLabel(`${getIcon("cart")} Buy`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:forage:${userId}`)
-      .setLabel("🌿 Forage")
+      .setLabel(`${getIcon("forage")} Forage`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
-      .setLabel("🍜 Profile")
+      .setLabel(`${getIcon("profile")} Profile`)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -481,32 +483,32 @@ async function handleParty(interaction) {
 
     if (action === "create") {
       if (!partyName) {
-        return errorReply(interaction, "❌ Please provide a party name.");
+        return errorReply(interaction, `${getIcon("error")} Please provide a party name.`);
       }
       const cleanedName = partyName.trim().replace(/\s+/g, " ");
       if (!cleanedName) {
-        return errorReply(interaction, "❌ Please provide a party name.");
+        return errorReply(interaction, `${getIcon("error")} Please provide a party name.`);
       }
       if (containsProfanity(cleanedName)) {
-        return errorReply(interaction, "❌ Party name contains blocked words. Please keep it friendly.");
+        return errorReply(interaction, `${getIcon("error")} Party name contains blocked words. Please keep it friendly.`);
       }
 
       // Check if already in a party
       const currentParty = getUserActiveParty(db, userId);
       if (currentParty) {
-        return errorReply(interaction, `❌ You're already in party **${currentParty.party_name}**. Leave it first to create a new one.`);
+        return errorReply(interaction, `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to create a new one.`);
       }
 
       const result = createParty(db, serverId, userId, cleanedName);
 
       const embed = new EmbedBuilder()
-        .setTitle("🎉 Party Created!")
+        .setTitle(`${getIcon("level_up")} Party Created!`)
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
           { name: "Party ID", value: `\`\`\`${formatPartyId(result.partyId)}\`\`\``, inline: true },
           { name: "Leader", value: `<@${userId}>`, inline: true }
         )
-        .setColor(0x00ff00);
+        .setColor(theme.colors.success);
 
       applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -519,16 +521,16 @@ async function handleParty(interaction) {
 
     if (action === "join") {
       if (!partyId) {
-        return errorReply(interaction, "❌ Please provide a party ID to join.");
+        return errorReply(interaction, `${getIcon("error")} Please provide a party ID to join.`);
       }
 
       try {
         const result = joinParty(db, partyId, userId);
         
         const embed = new EmbedBuilder()
-          .setTitle("🎊 Joined Party!")
+          .setTitle(`${getIcon("confetti")} Joined Party!`)
           .setDescription(`You've joined the party **${result.partyName}**`)
-          .setColor(0x00ff00);
+          .setColor(theme.colors.success);
 
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -538,23 +540,23 @@ async function handleParty(interaction) {
           components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)] 
         });
       } catch (err) {
-        return errorReply(interaction, `❌ ${err.message}`);
+        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
       }
     }
 
     if (action === "leave") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, "❌ You're not in any party.");
+        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
       }
 
       try {
         leaveParty(db, currentParty.party_id, userId);
 
         const embed = new EmbedBuilder()
-          .setTitle("🎪 Party")
-          .setDescription(`✅ You've left the party **${currentParty.party_name}**.`)
-          .setColor(0x00aeff);
+          .setTitle(`${getIcon("party")} Party`)
+          .setDescription(`${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`)
+          .setColor(theme.colors.info);
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = {
@@ -580,14 +582,14 @@ async function handleParty(interaction) {
         await ensurePublicReply();
         return interaction.editReply(replyObj);
       } catch (err) {
-        return errorReply(interaction, `❌ ${err.message}`);
+        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
       }
     }
 
     if (action === "info") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, "❌ You're not in any party.");
+        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
       }
 
       const memberList = currentParty.members
@@ -595,14 +597,14 @@ async function handleParty(interaction) {
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle(`🎪 ${currentParty.party_name}`)
+        .setTitle(`${getIcon("party")} ${currentParty.party_name}`)
         .setDescription(`Party ID:\n\`\`\`${formatPartyId(currentParty.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${currentParty.leader_user_id}>`, inline: true },
           { name: "Members", value: `${currentParty.members.length}/${currentParty.max_members}`, inline: true },
           { name: "Member List", value: memberList || "No members", inline: false }
         )
-        .setColor(0x00aeff);
+        .setColor(theme.colors.info);
 
       applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -618,17 +620,17 @@ async function handleParty(interaction) {
     if (action === "rename") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, "❌ You're not in any party.");
+        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
       }
       if (currentParty.leader_user_id !== userId) {
-        return errorReply(interaction, "❌ Only the party leader can rename the party.");
+        return errorReply(interaction, `${getIcon("error")} Only the party leader can rename the party.`);
       }
       if (!partyName || !partyName.trim()) {
-        return errorReply(interaction, "❌ Please provide a new party name.");
+        return errorReply(interaction, `${getIcon("error")} Please provide a new party name.`);
       }
       const cleanedName = partyName.trim().replace(/\s+/g, " ");
       if (containsProfanity(cleanedName)) {
-        return errorReply(interaction, "❌ Party name contains blocked words. Please keep it friendly.");
+        return errorReply(interaction, `${getIcon("error")} Party name contains blocked words. Please keep it friendly.`);
       }
 
       try {
@@ -636,36 +638,36 @@ async function handleParty(interaction) {
         await ensurePublicReply();
         const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
         return interaction.editReply({
-          content: `✅ Party renamed to **${result.partyName}**.`,
+          content: `${getIcon("status_complete")} Party renamed to **${result.partyName}**.`,
           components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
         });
       } catch (err) {
-        return errorReply(interaction, `❌ ${err.message}`);
+        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
       }
     }
 
     if (action === "transfer_leader") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, "❌ You're not in any party.");
+        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
       }
       if (currentParty.leader_user_id !== userId) {
-        return errorReply(interaction, "❌ Only the party leader can transfer leadership.");
+        return errorReply(interaction, `${getIcon("error")} Only the party leader can transfer leadership.`);
       }
 
       const targetUser = interaction.options.getUser("user");
       if (!targetUser) {
-        return errorReply(interaction, "❌ Please select a party member.");
+        return errorReply(interaction, `${getIcon("error")} Please select a party member.`);
       }
       if (targetUser.id === userId) {
-        return errorReply(interaction, "❌ You are already the leader.");
+        return errorReply(interaction, `${getIcon("error")} You are already the leader.`);
       }
 
       const membership = db.prepare(
         "SELECT * FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL"
       ).get(currentParty.party_id, targetUser.id);
       if (!membership) {
-        return errorReply(interaction, "❌ That user is not in your party.");
+        return errorReply(interaction, `${getIcon("error")} That user is not in your party.`);
       }
 
       try {
@@ -673,45 +675,45 @@ async function handleParty(interaction) {
         await ensurePublicReply();
         const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
         return interaction.editReply({
-          content: `✅ Leadership transferred to <@${targetUser.id}>.`,
+          content: `${getIcon("status_complete")} Leadership transferred to <@${targetUser.id}>.`,
           components: [partyActionRow(userId, true, false, !!existingOrder), socialMainMenuRow(userId)]
         });
       } catch (err) {
-        return errorReply(interaction, `❌ ${err.message}`);
+        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
       }
     }
 
     if (action === "kick") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, "❌ You're not in any party.");
+        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
       }
       if (currentParty.leader_user_id !== userId) {
-        return errorReply(interaction, "❌ Only the party leader can kick members.");
+        return errorReply(interaction, `${getIcon("error")} Only the party leader can kick members.`);
       }
 
       const targetUser = interaction.options.getUser("user");
       if (!targetUser) {
-        return errorReply(interaction, "❌ Please select a party member to kick.");
+        return errorReply(interaction, `${getIcon("error")} Please select a party member to kick.`);
       }
       if (targetUser.id === userId) {
-        return errorReply(interaction, "❌ You cannot kick yourself.");
+        return errorReply(interaction, `${getIcon("error")} You cannot kick yourself.`);
       }
 
       const isMember = currentParty.members.some((m) => m.user_id === targetUser.id);
       if (!isMember) {
-        return errorReply(interaction, "❌ That user is not in your party.");
+        return errorReply(interaction, `${getIcon("error")} That user is not in your party.`);
       }
 
       try {
         kickPartyMember(db, currentParty.party_id, targetUser.id);
-        return errorReply(interaction, `✅ Removed <@${targetUser.id}> from the party.`);
+        return errorReply(interaction, `${getIcon("status_complete")} Removed <@${targetUser.id}> from the party.`);
       } catch (err) {
-        return errorReply(interaction, `❌ ${err.message}`);
+        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
       }
     }
 
-    return errorReply(interaction, "❌ Unknown party action.");
+    return errorReply(interaction, `${getIcon("error")} Unknown party action.`);
   });
 }
 
@@ -723,11 +725,11 @@ async function handleTip(interaction) {
   const message = interaction.options.getString("message");
 
   if (!targetUser) {
-    return interaction.reply({ content: "❌ Please specify a user to tip.", ephemeral: true });
+    return interaction.reply({ content: `${getIcon("error")} Please specify a user to tip.`, ephemeral: true });
   }
 
   if (targetUser.id === userId) {
-    return interaction.reply({ content: "❌ You cannot tip yourself!", ephemeral: true });
+    return interaction.reply({ content: `${getIcon("error")} You cannot tip yourself!`, ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: false });
@@ -757,9 +759,9 @@ async function handleTip(interaction) {
         }
 
         const embed = new EmbedBuilder()
-          .setTitle("💰 Tip Sent!")
+          .setTitle(`${getIcon("tips")} Tip Sent!`)
           .setDescription(`<@${userId}> tipped <@${targetUser.id}> **${amount}c**!`)
-          .setColor(0xffd700);
+          .setColor(theme.colors.highlight);
 
         if (message) {
           embed.addFields({ name: "Message", value: message, inline: false });
@@ -781,7 +783,7 @@ async function handleTip(interaction) {
         }
         return interaction.editReply(replyObj);
       } catch (err) {
-        return errorReply(interaction, `❌ ${err.message}`);
+        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
       }
     });
   });
@@ -793,11 +795,11 @@ async function handleVisit(interaction) {
   const targetUser = interaction.options.getUser("user");
 
   if (!targetUser) {
-    return interaction.reply({ content: "❌ Please specify a user to visit.", ephemeral: true });
+    return interaction.reply({ content: `${getIcon("error")} Please specify a user to visit.`, ephemeral: true });
   }
 
   if (targetUser.id === userId) {
-    return interaction.reply({ content: "❌ You cannot visit yourself!", ephemeral: true });
+    return interaction.reply({ content: `${getIcon("error")} You cannot visit yourself!`, ephemeral: true });
   }
 
   await interaction.deferReply({ ephemeral: false });
@@ -847,14 +849,14 @@ async function handleVisit(interaction) {
         const blessingName = blessingNames[blessingType] || blessingType;
 
         const embed = new EmbedBuilder()
-          .setTitle("🌟 Shop Visit!")
+          .setTitle(`${getIcon("star")} Shop Visit!`)
           .setDescription(
             `<@${userId}> visited <@${targetUser.id}>'s shop and granted them a **Blessing**!\n\n` +
-            `✨ **Effect**: ${blessingName}\n` +
-            `⏰ **Duration**: ${expiresInHours} hours\n` +
-            `🔄 **Cooldown ends**: <t:${Math.floor(cooldownEnds / 1000)}:F>`
+            `${getIcon("effect")} **Effect**: ${blessingName}\n` +
+            `${getIcon("time")} **Duration**: ${expiresInHours} hours\n` +
+            `${getIcon("cooldown")} **Cooldown ends**: <t:${Math.floor(cooldownEnds / 1000)}:F>`
           )
-          .setColor(0xffaa00);
+          .setColor(theme.colors.warning);
 
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -875,13 +877,13 @@ async function handleVisit(interaction) {
             // ignore if already deleted
           }
         }
-        return errorReply(interaction, "❌ They already have an active blessing.");
+        return errorReply(interaction, `${getIcon("error")} They already have an active blessing.`);
       }
       if (err?.code === "BLESSING_COOLDOWN" && err?.cooldownEnds) {
         const ts = Math.floor(err.cooldownEnds / 1000);
-        return errorReply(interaction, `❌ Blessing cooldown active. Try again <t:${ts}:F>.`);
+        return errorReply(interaction, `${getIcon("error")} Blessing cooldown active. Try again <t:${ts}:F>.`);
       }
-      return errorReply(interaction, `❌ ${err.message}`);
+      return errorReply(interaction, `${getIcon("error")} ${err.message}`);
     }
     });
   });
@@ -903,7 +905,7 @@ async function handleLeaderboard(interaction) {
     `).all(serverId);
 
     if (allPlayers.length === 0) {
-      return errorReply(interaction, "❌ No players found in this server yet.");
+      return errorReply(interaction, `${getIcon("error")} No players found in this server yet.`);
     }
 
     // Parse and sort
@@ -918,31 +920,31 @@ async function handleLeaderboard(interaction) {
 
     if (type === "coins") {
       sortedPlayers = playerData.sort((a, b) => (b.coins || 0) - (a.coins || 0)).slice(0, 10);
-      fieldName = "💰 Top Coin Holders";
+      fieldName = `${getIcon("coins")} Top Coin Holders`;
       fieldValue = player => `${player.coins || 0}c`;
     } else if (type === "rep") {
       sortedPlayers = playerData.sort((a, b) => (b.rep || 0) - (a.rep || 0)).slice(0, 10);
-      fieldName = "⭐ Top Reputation";
+      fieldName = `${getIcon("rep")} Top Reputation`;
       fieldValue = player => `${player.rep || 0} REP`;
     } else if (type === "bowls") {
       sortedPlayers = playerData.sort((a, b) => (b.lifetime?.bowls_served_total || 0) - (a.lifetime?.bowls_served_total || 0)).slice(0, 10);
-      fieldName = "🍜 Most Bowls Served";
+      fieldName = `${getIcon("bowl")} Most Bowls Served`;
       fieldValue = player => `${player.lifetime?.bowls_served_total || 0} bowls`;
     } else {
-      return errorReply(interaction, "❌ Unknown leaderboard type.");
+      return errorReply(interaction, `${getIcon("error")} Unknown leaderboard type.`);
     }
 
     const leaderboardText = sortedPlayers
       .map((p, i) => {
-        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+        const medal = i === 0 ? getIcon("medal_gold") : i === 1 ? getIcon("medal_silver") : i === 2 ? getIcon("medal_bronze") : `${i + 1}.`;
         return `${medal} <@${p.user_id}> — ${fieldValue(p)}`;
       })
       .join("\n");
 
     const embed = new EmbedBuilder()
-      .setTitle("📊 Noodle Story Leaderboard")
+      .setTitle(`${getIcon("leaderboard")} Noodle Story Leaderboard`)
       .setDescription(`**${fieldName}**\n\n${leaderboardText}`)
-      .setColor(0x00aaff)
+      .setColor(theme.colors.info)
       .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • Rankings are read-only and for fun!` });
 
     return interaction.editReply({ 
@@ -951,7 +953,7 @@ async function handleLeaderboard(interaction) {
     });
   } catch (err) {
     console.error("Leaderboard error:", err);
-    return errorReply(interaction, `❌ Error loading leaderboard: ${err.message}`);
+    return errorReply(interaction, `${getIcon("error")} Error loading leaderboard: ${err.message}`);
   }
 }
 
@@ -968,14 +970,14 @@ async function handleStats(interaction) {
     const blessing = getActiveBlessing(player);
 
     const embed = new EmbedBuilder()
-      .setTitle("📊 Your Social Stats")
-      .setColor(0x00ff88);
+      .setTitle(`${getIcon("stats")} Your Social Stats`)
+      .setColor(theme.colors.success);
 
     applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
     // Tips
     embed.addFields({
-      name: "💰 Tips",
+      name: `${getIcon("tips")} Tips`,
       value: `Sent: ${tipStats.sent.count} tips (${tipStats.sent.total}c)\nReceived: ${tipStats.received.count} tips (${tipStats.received.total}c)`,
       inline: false
     });
@@ -984,13 +986,13 @@ async function handleStats(interaction) {
     if (party) {
       const memberInfo = party.members.find(m => m.user_id === userId);
       embed.addFields({
-        name: "🎪 Party",
+        name: `${getIcon("party")} Party`,
         value: `**${party.party_name}**\nYour contributions: ${memberInfo?.contribution_points || 0} points`,
         inline: false
       });
     } else {
       embed.addFields({
-        name: "🎪 Party",
+        name: `${getIcon("party")} Party`,
         value: "Not in a party",
         inline: false
       });
@@ -1010,13 +1012,13 @@ async function handleStats(interaction) {
       };
       const blessingName = blessingNames[blessing.type] || blessing.type;
       embed.addFields({
-        name: "✨ Active Blessing",
+        name: `${getIcon("bless")} Active Blessing`,
         value: `**${blessingName}**\nExpires in: ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`,
         inline: false
       });
     } else {
       embed.addFields({
-        name: "✨ Active Blessing",
+        name: `${getIcon("bless")} Active Blessing`,
         value: "None",
         inline: false
       });
@@ -1028,7 +1030,7 @@ async function handleStats(interaction) {
     });
   } catch (err) {
     console.error("Stats error:", err);
-    return errorReply(interaction, `❌ Error loading stats: ${err.message}`);
+    return errorReply(interaction, `${getIcon("error")} Error loading stats: ${err.message}`);
   }
 }
 
@@ -1064,11 +1066,11 @@ async function handleComponent(interaction) {
       const partyName = interaction.fields.getTextInputValue("party_name");
       
       if (!partyName || partyName.trim().length === 0) {
-        return errorReply(interaction, "❌ Party name cannot be empty.");
+        return errorReply(interaction, `${getIcon("error")} Party name cannot be empty.`);
       }
       const cleanedName = partyName.trim().replace(/\s+/g, " ");
       if (containsProfanity(cleanedName)) {
-        return errorReply(interaction, "❌ Party name contains blocked words. Please keep it friendly.");
+        return errorReply(interaction, `${getIcon("error")} Party name contains blocked words. Please keep it friendly.`);
       }
 
       const ownerLock = `discord:${interaction.id}`;
@@ -1080,13 +1082,13 @@ async function handleComponent(interaction) {
           const result = createParty(db, serverId, userId, cleanedName);
 
           const embed = new EmbedBuilder()
-            .setTitle("🎉 Party Created!")
+            .setTitle(`${getIcon("level_up")} Party Created!`)
             .setDescription(`You've created the party **${result.partyName}**`)
             .addFields(
               { name: "Party ID", value: `\`\`\`${formatPartyId(result.partyId)}\`\`\``, inline: true },
               { name: "Leader", value: `<@${userId}>`, inline: true }
             )
-            .setColor(0x00ff00);
+            .setColor(theme.colors.success);
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
           const replyObj = {
@@ -1107,7 +1109,7 @@ async function handleComponent(interaction) {
 
           return interaction.editReply(replyObj);
         } catch (err) {
-          return errorReply(interaction, `❌ ${err.message}`);
+          return errorReply(interaction, `${getIcon("error")} ${err.message}`);
         }
       });
     }
@@ -1124,7 +1126,7 @@ async function handleComponent(interaction) {
       const partyId = interaction.fields.getTextInputValue("party_id");
 
       if (!partyId || partyId.trim().length === 0) {
-        return errorReply(interaction, "❌ Party ID cannot be empty.");
+        return errorReply(interaction, `${getIcon("error")} Party ID cannot be empty.`);
       }
 
       const ownerLock = `discord:${interaction.id}`;
@@ -1136,9 +1138,9 @@ async function handleComponent(interaction) {
           const result = joinParty(db, serverId, partyId, userId);
           
           const embed = new EmbedBuilder()
-            .setTitle("🎊 Joined Party!")
+            .setTitle(`${getIcon("confetti")} Joined Party!`)
             .setDescription(`You've joined the party **${result.partyName}**`)
-            .setColor(0x00ff00);
+            .setColor(theme.colors.success);
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -1161,7 +1163,7 @@ async function handleComponent(interaction) {
             components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)] 
           });
         } catch (err) {
-          return errorReply(interaction, `❌ ${err.message}`);
+          return errorReply(interaction, `${getIcon("error")} ${err.message}`);
         }
       });
     }
@@ -1170,7 +1172,7 @@ async function handleComponent(interaction) {
       const nameInput = interaction.fields.getTextInputValue("name");
 
       if (!nameInput || nameInput.trim().length === 0) {
-        return errorReply(interaction, "❌ Name cannot be empty.");
+        return errorReply(interaction, `${getIcon("error")} Name cannot be empty.`);
       }
 
       const searchName = nameInput.trim().toLowerCase();
@@ -1198,7 +1200,7 @@ async function handleComponent(interaction) {
               const globalName = member.user.globalName?.toLowerCase();
               
               if (nickname === searchName || username === searchName || displayName === searchName || globalName === searchName) {
-                console.log(`✅ Found user in cache: ${member.displayName}`);
+                  console.log(`${getIcon("status_complete")} Found user in cache: ${member.displayName}`);
                 targetMember = member;
                 break;
               }
@@ -1207,35 +1209,35 @@ async function handleComponent(interaction) {
             // If not in cache, try to search with a query (limited fetch)
             if (!targetMember) {
               try {
-                console.log(`🔍 Searching for user: ${searchName}`);
+                console.log(`${getIcon("search")} Searching for user: ${searchName}`);
                 const searchResults = await guild.members.search({ query: searchName, limit: 10 });
-                console.log(`📋 Found ${searchResults.size} search results`);
+                console.log(`${getIcon("list")} Found ${searchResults.size} search results`);
                 if (searchResults.size > 0) {
                   targetMember = searchResults.first();
-                  console.log(`✅ Found via search: ${targetMember.displayName}`);
+                  console.log(`${getIcon("status_complete")} Found via search: ${targetMember.displayName}`);
                 }
               } catch (e) {
-                console.log(`⚠️ Member search failed:`, e?.message);
+                console.log(`${getIcon("warning")} Member search failed:`, e?.message);
               }
             }
 
             if (!targetMember) {
-              return errorReply(interaction, `❌ User **${searchName}** not found. Make sure they're in this server and try their exact username or nickname.`);
+              return errorReply(interaction, `${getIcon("error")} User **${searchName}** not found. Make sure they're in this server and try their exact username or nickname.`);
             }
             const inviteTargetId = targetMember.user.id;
             const currentParty = getUserActiveParty(db, userId);
             if (!currentParty) {
-              return errorReply(interaction, "❌ You're not in a party anymore.");
+              return errorReply(interaction, `${getIcon("error")} You're not in a party anymore.`);
             }
 
-            console.log(`🎪 Inviting to party: ${currentParty.party_name}`);
+            console.log(`${getIcon("party")} Inviting to party: ${currentParty.party_name}`);
             const result = inviteUserToParty(db, serverId, currentParty.party_id, inviteTargetId);
-            console.log(`✅ Invite successful, sending response`);
+            console.log(`${getIcon("status_complete")} Invite successful, sending response`);
             
             const embed = new EmbedBuilder()
-              .setTitle("✅ User Invited!")
+              .setTitle(`${getIcon("status_complete")} User Invited!`)
               .setDescription(`**${targetMember.displayName}** has been invited to **${result.partyName}**`)
-              .setColor(0x00ff00);
+              .setColor(theme.colors.success);
 
             applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -1245,16 +1247,16 @@ async function handleComponent(interaction) {
               components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)] 
             });
           } catch (err) {
-            console.error(`❌ Error in invite handler:`, err);
-            return errorReply(interaction, `❌ ${err.message}`);
+            console.error(`${getIcon("error")} Error in invite handler:`, err);
+            return errorReply(interaction, `${getIcon("error")} ${err.message}`);
           }
         });
       } catch (err) {
-        console.error(`❌ withLock failed:`, err);
+        console.error(`${getIcon("error")} withLock failed:`, err);
         try {
-          return errorReply(interaction, `❌ ${err.message}`);
+          return errorReply(interaction, `${getIcon("error")} ${err.message}`);
         } catch (e) {
-          console.log(`⚠️ editReply also failed:`, e?.message);
+          console.log(`${getIcon("warning")} editReply also failed:`, e?.message);
         }
       }
     }
@@ -1267,20 +1269,20 @@ async function handleComponent(interaction) {
 
       const targetId = await resolveUserIdFromInput(targetInput, interaction);
       if (!targetId) {
-        return errorReply(interaction, "❌ Enter a nickname or username.");
+        return errorReply(interaction, `${getIcon("error")} Enter a nickname or username.`);
       }
       if (targetId === userId) {
-        return errorReply(interaction, "❌ You cannot tip yourself!");
+        return errorReply(interaction, `${getIcon("error")} You cannot tip yourself!`);
       }
 
       const amount = Number.parseInt(String(amountInput ?? "").trim(), 10);
       if (!Number.isFinite(amount)) {
-        return errorReply(interaction, "❌ Enter a valid amount.");
+        return errorReply(interaction, `${getIcon("error")} Enter a valid amount.`);
       }
 
       const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
       if (!targetUser) {
-        return errorReply(interaction, "❌ User not found.");
+        return errorReply(interaction, `${getIcon("error")} User not found.`);
       }
 
       const ownerLock = `discord:${interaction.id}`;
@@ -1307,9 +1309,9 @@ async function handleComponent(interaction) {
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
             const embed = new EmbedBuilder()
-              .setTitle("💰 Tip Sent!")
+              .setTitle(`${getIcon("tips")} Tip Sent!`)
               .setDescription(`<@${userId}> tipped <@${targetId}> **${amount}c**!`)
-              .setColor(0xffd700);
+              .setColor(theme.colors.highlight);
 
             embed.addFields(
               { name: "Your Balance", value: `${result.sender.coins}c`, inline: true },
@@ -1324,7 +1326,7 @@ async function handleComponent(interaction) {
               targetMessageId: sourceMessageId
             });
           } catch (err) {
-            return errorReply(interaction, `❌ ${err.message}`);
+            return errorReply(interaction, `${getIcon("error")} ${err.message}`);
           }
         });
       });
@@ -1336,15 +1338,15 @@ async function handleComponent(interaction) {
       const targetInput = interaction.fields.getTextInputValue("target_user");
       const targetId = await resolveUserIdFromInput(targetInput, interaction);
       if (!targetId) {
-        return componentCommit(interaction, { content: "❌ Enter a nickname or username.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} Enter a nickname or username.`, ephemeral: true });
       }
       if (targetId === userId) {
-        return componentCommit(interaction, { content: "❌ You cannot bless yourself!", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} You cannot bless yourself!`, ephemeral: true });
       }
 
       const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
       if (!targetUser) {
-        return componentCommit(interaction, { content: "❌ User not found.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} User not found.`, ephemeral: true });
       }
 
       const ownerLock = `discord:${interaction.id}`;
@@ -1386,14 +1388,14 @@ async function handleComponent(interaction) {
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
             const embed = new EmbedBuilder()
-              .setTitle("🌟 Blessing Granted!")
+              .setTitle(`${getIcon("star")} Blessing Granted!`)
               .setDescription(
                 `<@${userId}> blessed <@${targetId}>!\n\n` +
-                `✨ **Effect**: ${blessingName}\n` +
-                `⏰ **Duration**: ${expiresInHours} hours\n` +
-                `🔄 **Cooldown ends**: <t:${Math.floor(cooldownEnds / 1000)}:F>`
+                `${getIcon("effect")} **Effect**: ${blessingName}\n` +
+                `${getIcon("time")} **Duration**: ${expiresInHours} hours\n` +
+                `${getIcon("cooldown")} **Cooldown ends**: <t:${Math.floor(cooldownEnds / 1000)}:F>`
               )
-              .setColor(0xffaa00);
+              .setColor(theme.colors.warning);
 
             applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -1404,13 +1406,13 @@ async function handleComponent(interaction) {
             });
           } catch (err) {
             if (err?.code === "BLESSING_ACTIVE") {
-              return componentCommit(interaction, { content: "❌ They already have an active blessing.", ephemeral: true });
+              return componentCommit(interaction, { content: `${getIcon("error")} They already have an active blessing.`, ephemeral: true });
             }
             if (err?.code === "BLESSING_COOLDOWN" && err?.cooldownEnds) {
               const ts = Math.floor(err.cooldownEnds / 1000);
-              return componentCommit(interaction, { content: `❌ Blessing cooldown active. Try again <t:${ts}:F>.`, ephemeral: true });
+              return componentCommit(interaction, { content: `${getIcon("error")} Blessing cooldown active. Try again <t:${ts}:F>.`, ephemeral: true });
             }
-            return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} ${err.message}`, ephemeral: true });
           }
         });
       });
@@ -1433,12 +1435,12 @@ async function handleComponent(interaction) {
       const quantityInput = interaction.fields.getTextInputValue("quantity");
       const quantity = Number.parseInt(String(quantityInput ?? "").trim(), 10);
       if (!Number.isFinite(quantity) || quantity < 1) {
-        return componentCommit(interaction, { content: "❌ Quantity must be at least 1.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} Quantity must be at least 1.`, ephemeral: true });
       }
 
       const ingredient = content.items[ingredientId];
       if (!ingredient) {
-        return componentCommit(interaction, { content: "❌ Ingredient not found.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} Ingredient not found.`, ephemeral: true });
       }
 
       const ownerLock = `discord:${interaction.id}`;
@@ -1449,17 +1451,17 @@ async function handleComponent(interaction) {
         try {
           const party = getUserActiveParty(db, userId);
           if (!party) {
-            return componentCommit(interaction, { content: "❌ You're not in a party.", ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} You're not in a party.`, ephemeral: true });
           }
 
           const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
           if (!sharedOrder) {
-            return componentCommit(interaction, { content: "❌ No active shared order.", ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} No active shared order.`, ephemeral: true });
           }
 
           const recipe = content.recipes[sharedOrder.order_id];
           if (!recipe) {
-            return componentCommit(interaction, { content: "❌ Recipe not found.", ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} Recipe not found.`, ephemeral: true });
           }
 
           const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
@@ -1471,17 +1473,17 @@ async function handleComponent(interaction) {
 
           const selected = progress.items.find((i) => i.ingredientId === ingredientId);
           if (!selected || selected.remaining <= 0) {
-            return componentCommit(interaction, { content: "✅ That ingredient is already covered.", ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true });
           }
 
           if (quantity > selected.remaining) {
-            return componentCommit(interaction, { content: `❌ Max remaining is ${selected.remaining}.`, ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} Max remaining is ${selected.remaining}.`, ephemeral: true });
           }
 
           const player = ensurePlayer(serverId, userId);
           const owned = player.inv_ingredients?.[ingredientId] ?? 0;
           if (owned < quantity) {
-            return componentCommit(interaction, { content: `❌ You only have ${owned}.`, ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} You only have ${owned}.`, ephemeral: true });
           }
 
           player.inv_ingredients[ingredientId] = owned - quantity;
@@ -1493,12 +1495,12 @@ async function handleComponent(interaction) {
           contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity);
 
           const embed = new EmbedBuilder()
-            .setTitle("✅ Contribution Recorded!")
+            .setTitle(`${getIcon("status_complete")} Contribution Recorded!`)
             .setDescription(
               `You contributed **${quantity}x ${ingredient.name}** to the shared order.\n\n` +
-              `Thank you for helping the party! 🎪`
+              `Thank you for helping the party! ${getIcon("party")}`
             )
-            .setColor(0x00ff88);
+            .setColor(theme.colors.success);
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -1516,7 +1518,7 @@ async function handleComponent(interaction) {
             targetMessageId: sourceMessageId
           });
         } catch (err) {
-          return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
+          return componentCommit(interaction, { content: `${getIcon("error")} ${err.message}`, ephemeral: true });
         }
       });
     }
@@ -1549,7 +1551,7 @@ async function handleComponent(interaction) {
       const selectedRecipe = interaction.values?.[0];
       if (!selectedRecipe || !content.recipes[selectedRecipe]) {
         return componentCommit(interaction, {
-          content: "❌ Invalid recipe selection.",
+          content: `${getIcon("error")} Invalid recipe selection.`,
           ephemeral: true
         });
       }
@@ -1576,9 +1578,9 @@ async function handleComponent(interaction) {
       );
 
       const servingsEmbed = new EmbedBuilder()
-        .setTitle("🍜 Create Shared Order")
+        .setTitle(`${getIcon("bowl")} Create Shared Order`)
         .setDescription(`**Recipe**: ${recipe.name}\n\nStep 2: How many servings should your party make?`)
-        .setColor(0x00aeff);
+        .setColor(theme.colors.info);
 
       applyOwnerFooter(servingsEmbed, interaction.member ?? interaction.user);
 
@@ -1595,7 +1597,7 @@ async function handleComponent(interaction) {
 
       if (!recipeId || !content.recipes[recipeId] || !Number.isFinite(servings)) {
         return componentCommit(interaction, {
-          content: "❌ Invalid selection.",
+          content: `${getIcon("error")} Invalid selection.`,
           ephemeral: true
         });
       }
@@ -1607,18 +1609,18 @@ async function handleComponent(interaction) {
         try {
           const party = getUserActiveParty(db, userId);
           if (!party) {
-            return componentCommit(interaction, { content: "❌ You're not in a party.", ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} You're not in a party.`, ephemeral: true });
           }
 
           if (party.leader_user_id !== userId) {
-            return componentCommit(interaction, { content: "❌ Only the party leader can create shared orders.", ephemeral: true });
+            return componentCommit(interaction, { content: `${getIcon("error")} Only the party leader can create shared orders.`, ephemeral: true });
           }
 
           // Check if there's already an active shared order
           const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
           if (existingOrder) {
             return componentCommit(interaction, { 
-              content: "❌ Your party already has an active shared order. Complete it first.", 
+              content: `${getIcon("error")} Your party already has an active shared order. Complete it first.`, 
               ephemeral: true 
             });
           }
@@ -1632,19 +1634,19 @@ async function handleComponent(interaction) {
 
             const totalReward = servings * SHARED_ORDER_REWARD.coinsPerServing;
           const embed = new EmbedBuilder()
-            .setTitle("🍜 Shared Order Created!")
+            .setTitle(`${getIcon("bowl")} Shared Order Created!`)
             .setDescription(
               `**${recipe.name}**\n\n` +
-              `📦 **Servings**: ${servings}\n` +
-                `💰 **Reward**: ${totalReward}c (${SHARED_ORDER_REWARD.coinsPerServing}c per serving)\n` +
-              `👥 **Ingredients Needed**:\n${ingredientList}`
+              `${getIcon("ingredient_capacity")} **Servings**: ${servings}\n` +
+              `${getIcon("coins")} **Reward**: ${totalReward}c (${SHARED_ORDER_REWARD.coinsPerServing}c per serving)\n` +
+              `${getIcon("group")} **Ingredients Needed**:\n${ingredientList}`
             )
             .addFields({
-              name: "💡 How It Works",
+              name: `${getIcon("idea")} How It Works`,
               value: "Party members tap **Contribute** to add ingredients. When complete, everyone who helped gets rewarded!",
               inline: false
             })
-            .setColor(0x00ff88);
+            .setColor(theme.colors.success);
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -1654,7 +1656,7 @@ async function handleComponent(interaction) {
             components: [partyActionRow(userId, true, isLeader, true), socialMainMenuRow(userId)]
           });
         } catch (err) {
-          return componentCommit(interaction, { content: `❌ ${err.message}`, ephemeral: true });
+          return componentCommit(interaction, { content: `${getIcon("error")} ${err.message}`, ephemeral: true });
         }
       });
     }
@@ -1663,22 +1665,22 @@ async function handleComponent(interaction) {
       const ingredientId = interaction.values?.[0];
 
       if (!ingredientId) {
-        return componentCommit(interaction, { content: "❌ Invalid selection.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} Invalid selection.`, ephemeral: true });
       }
 
       const party = getUserActiveParty(db, userId);
       if (!party) {
-        return componentCommit(interaction, { content: "❌ You're not in a party.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} You're not in a party.`, ephemeral: true });
       }
 
       const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (!sharedOrder) {
-        return componentCommit(interaction, { content: "❌ No active shared order.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} No active shared order.`, ephemeral: true });
       }
 
       const recipe = content.recipes[sharedOrder.order_id];
       if (!recipe) {
-        return componentCommit(interaction, { content: "❌ Recipe not found.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} Recipe not found.`, ephemeral: true });
       }
 
       const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
@@ -1690,7 +1692,7 @@ async function handleComponent(interaction) {
 
       const selected = progress.items.find((i) => i.ingredientId === ingredientId);
       if (!selected || selected.remaining <= 0) {
-        return componentCommit(interaction, { content: "✅ That ingredient is already covered.", ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true });
       }
 
       const sourceMessageId = interaction.message?.id ?? "none";
@@ -1710,9 +1712,9 @@ async function handleComponent(interaction) {
       try {
         return await interaction.showModal(modal);
       } catch (e) {
-        console.log(`⚠️ showModal failed for shared_order_contribute:`, e?.message);
+        console.log(`${getIcon("warning")} showModal failed for shared_order_contribute:`, e?.message);
         return componentCommit(interaction, {
-          content: "⚠️ Discord couldn't show the modal.",
+          content: `${getIcon("warning")} Discord couldn't show the modal.`,
           ephemeral: true
         });
       }
@@ -1729,9 +1731,9 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         const embed = new EmbedBuilder()
-          .setTitle("🎪 Party")
+          .setTitle(`${getIcon("party")} Party`)
           .setDescription("You're not in any party. Create or join one!")
-          .setColor(0x00aeff);
+          .setColor(theme.colors.info);
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
         return componentCommit(interaction, {
           content: " ",
@@ -1746,14 +1748,14 @@ async function handleComponent(interaction) {
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle(`🎪 ${party.party_name}`)
+        .setTitle(`${getIcon("party")} ${party.party_name}`)
         .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
           { name: "Member List", value: memberList || "No members", inline: false }
         )
-        .setColor(0x00aeff);
+        .setColor(theme.colors.info);
 
       applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -1766,13 +1768,13 @@ async function handleComponent(interaction) {
         const recipeName = recipe?.name ?? existingOrder.order_id;
         const servings = existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS;
         embed.addFields({
-          name: "\n🍜 Shared Order",
+          name: `\n${getIcon("bowl")} Shared Order`,
           value: `Active — **${recipeName}** (${servings} servings)`,
           inline: false
         });
       } else {
         embed.addFields({
-          name: "\n🍜 Shared Order",
+          name: `\n${getIcon("bowl")} Shared Order`,
           value: "None active.",
           inline: false
         });
@@ -1797,7 +1799,7 @@ async function handleComponent(interaction) {
 
       if (allPlayers.length === 0) {
         return componentCommit(interaction, {
-          content: "❌ No players found in this server yet.",
+          content: `${getIcon("error")} No players found in this server yet.`,
           ephemeral: false
         });
       }
@@ -1810,15 +1812,15 @@ async function handleComponent(interaction) {
       const sortedPlayers = playerData.sort((a, b) => (b.coins || 0) - (a.coins || 0)).slice(0, 10);
       const leaderboardText = sortedPlayers
         .map((p, i) => {
-          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+          const medal = i === 0 ? getIcon("medal_gold") : i === 1 ? getIcon("medal_silver") : i === 2 ? getIcon("medal_bronze") : `${i + 1}.`;
           return `${medal} <@${p.user_id}> — ${p.coins || 0}c`;
         })
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle("📊 Noodle Story Leaderboard")
-        .setDescription(`**💰 Top Coin Holders**\n\n${leaderboardText}`)
-        .setColor(0x00aaff)
+        .setTitle(`${getIcon("leaderboard")} Noodle Story Leaderboard`)
+        .setDescription(`**${getIcon("coins")} Top Coin Holders**\n\n${leaderboardText}`)
+        .setColor(theme.colors.info)
         .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • Rankings are read-only and for fun!` });
 
       return componentCommit(interaction, {
@@ -1834,13 +1836,13 @@ async function handleComponent(interaction) {
       const blessing = getActiveBlessing(player);
 
       const embed = new EmbedBuilder()
-        .setTitle("📊 Your Social Stats")
-        .setColor(0x00ff88);
+        .setTitle(`${getIcon("stats")} Your Social Stats`)
+        .setColor(theme.colors.success);
 
       applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       embed.addFields({
-        name: "💰 Tips",
+        name: `${getIcon("tips")} Tips`,
         value: `Sent: ${tipStats.sent.count} tips (${tipStats.sent.total}c)\nReceived: ${tipStats.received.count} tips (${tipStats.received.total}c)`,
         inline: false
       });
@@ -1848,13 +1850,13 @@ async function handleComponent(interaction) {
       if (party) {
         const memberInfo = party.members.find(m => m.user_id === userId);
         embed.addFields({
-          name: "🎪 Party",
+          name: `${getIcon("party")} Party`,
           value: `**${party.party_name}**\nYour contributions: ${memberInfo?.contribution_points || 0} points`,
           inline: false
         });
       } else {
         embed.addFields({
-          name: "🎪 Party",
+          name: `${getIcon("party")} Party`,
           value: "Not in a party",
           inline: false
         });
@@ -1873,13 +1875,13 @@ async function handleComponent(interaction) {
         };
         const blessingName = blessingNames[blessing.type] || blessing.type;
         embed.addFields({
-          name: "✨ Active Blessing",
+          name: `${getIcon("bless")} Active Blessing`,
           value: `**${blessingName}**\nExpires in: ${remainingHours} hour${remainingHours !== 1 ? "s" : ""}`,
           inline: false
         });
       } else {
         embed.addFields({
-          name: "✨ Active Blessing",
+          name: `${getIcon("bless")} Active Blessing`,
           value: "None",
           inline: false
         });
@@ -1951,9 +1953,9 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for tip:`, e?.message);
+        console.log(`${getIcon("warning")} showModal failed for tip:`, e?.message);
         return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal.", 
+          content: `${getIcon("warning")} Discord couldn't show the modal.`, 
           ephemeral: true 
         });
       }
@@ -1986,9 +1988,9 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for bless:`, e?.message);
+        console.log(`${getIcon("warning")} showModal failed for bless:`, e?.message);
         return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal.", 
+          content: `${getIcon("warning")} Discord couldn't show the modal.`, 
           ephemeral: true 
         });
       }
@@ -1998,7 +2000,7 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
@@ -2026,22 +2028,22 @@ async function handleComponent(interaction) {
             const itemName = itemData?.name || `Item #${item.ingredientId}`;
             const bar = item.remaining > 0 
               ? `[${item.contributed}/${item.required}]` 
-              : `✅ [${item.required}/${item.required}]`;
+              : `${getIcon("status_complete")} [${item.required}/${item.required}]`;
             return `${itemName} ${bar}`;
           }).join('\n');
 
           embed = new EmbedBuilder()
-            .setTitle(`🍜 ${recipe.name}`)
+            .setTitle(`${getIcon("bowl")} ${recipe.name}`)
             .setDescription(`**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
             .addFields(
               {
-                name: "📦 Ingredients",
+                name: `${getIcon("ingredient_capacity")} Ingredients`,
                 value: ingredientLines || "No ingredients",
                 inline: false
               }
             )
             .setColor(canComplete ? 0x00ff00 : 0xffaa00)
-            .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • ${canComplete ? "✅ Ready to complete!" : "⏳ In progress..."}` });
+            .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • ${canComplete ? `${getIcon("status_complete")} Ready to complete!` : `${getIcon("hourglass")} In progress...`}` });
         }
       }
 
@@ -2053,13 +2055,13 @@ async function handleComponent(interaction) {
         replyObj.embeds = [embed];
       } else {
         const emptyEmbed = new EmbedBuilder()
-          .setTitle("🍜 Shared Order")
+          .setTitle(`${getIcon("bowl")} Shared Order`)
           .setDescription(
             isLeader
               ? "No active order. Click **Create Shared Order** to start one."
               : "No active order yet. Ask your party leader to create one!"
           )
-          .setColor(0xffaa00);
+          .setColor(theme.colors.warning);
 
         applyOwnerFooter(emptyEmbed, interaction.member ?? interaction.user);
 
@@ -2073,14 +2075,14 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
 
       if (party.leader_user_id !== userId) {
         return componentCommit(interaction, {
-          content: "❌ Only the party leader can create shared orders.",
+          content: `${getIcon("error")} Only the party leader can create shared orders.`,
           ephemeral: true
         });
       }
@@ -2088,7 +2090,7 @@ async function handleComponent(interaction) {
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (existingOrder) {
         return componentCommit(interaction, {
-          content: "❌ Your party already has an active shared order.",
+          content: `${getIcon("error")} Your party already has an active shared order.`,
           ephemeral: true
         });
       }
@@ -2116,7 +2118,7 @@ async function handleComponent(interaction) {
 
       if (!recipeOptions.length) {
         return componentCommit(interaction, {
-          content: "❌ No recipes available. Party members need to unlock recipes first!",
+          content: `${getIcon("error")} No recipes available. Party members need to unlock recipes first!`,
           ephemeral: true
         });
       }
@@ -2134,9 +2136,9 @@ async function handleComponent(interaction) {
       );
 
       const createEmbed = new EmbedBuilder()
-        .setTitle("🍜 Create Shared Order")
+        .setTitle(`${getIcon("bowl")} Create Shared Order`)
         .setDescription("Step 1: Pick a recipe that your party members know.")
-        .setColor(0x00aeff);
+        .setColor(theme.colors.info);
 
       applyOwnerFooter(createEmbed, interaction.member ?? interaction.user);
 
@@ -2150,7 +2152,7 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in any party.",
+          content: `${getIcon("error")} You're not in any party.`,
           embeds: [],
           ephemeral: false
         });
@@ -2161,14 +2163,14 @@ async function handleComponent(interaction) {
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle(`🎪 ${party.party_name}`)
+        .setTitle(`${getIcon("party")} ${party.party_name}`)
         .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
           { name: "Member List", value: memberList || "No members", inline: false }
         )
-        .setColor(0x00aeff);
+        .setColor(theme.colors.info);
 
       return componentCommit(interaction, {
         embeds: [embed],
@@ -2180,7 +2182,7 @@ async function handleComponent(interaction) {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
         return componentCommit(interaction, {
-          content: "❌ You're not in any party.",
+          content: `${getIcon("error")} You're not in any party.`,
           ephemeral: false
         });
       }
@@ -2188,13 +2190,13 @@ async function handleComponent(interaction) {
       try {
         leaveParty(db, currentParty.party_id, userId);
         return componentCommit(interaction, {
-          content: `✅ You've left the party **${currentParty.party_name}**.`,
+          content: `${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`,
           embeds: [],
           components: [socialMainMenuRow(userId)]
         });
       } catch (err) {
         return componentCommit(interaction, {
-          content: `❌ ${err.message}`,
+          content: `${getIcon("error")} ${err.message}`,
           ephemeral: true
         });
       }
@@ -2204,14 +2206,14 @@ async function handleComponent(interaction) {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
         return componentCommit(interaction, {
-          content: "❌ You're not in any party.",
+          content: `${getIcon("error")} You're not in any party.`,
           ephemeral: true
         });
       }
 
       if (currentParty.leader_user_id !== userId) {
         return componentCommit(interaction, {
-          content: "❌ Only the party leader can invite members.",
+          content: `${getIcon("error")} Only the party leader can invite members.`,
           ephemeral: true
         });
       }
@@ -2237,9 +2239,9 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for party_invite:`, e?.message);
+        console.log(`${getIcon("warning")} showModal failed for party_invite:`, e?.message);
         return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal.", 
+          content: `${getIcon("warning")} Discord couldn't show the modal.`, 
           ephemeral: true 
         });
       }
@@ -2249,7 +2251,7 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
@@ -2257,7 +2259,7 @@ async function handleComponent(interaction) {
       const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (!sharedOrder) {
         return componentCommit(interaction, {
-          content: "❌ No active shared order in your party.",
+          content: `${getIcon("error")} No active shared order in your party.`,
           ephemeral: true
         });
       }
@@ -2265,7 +2267,7 @@ async function handleComponent(interaction) {
       const recipe = content.recipes[sharedOrder.order_id];
       if (!recipe) {
         return componentCommit(interaction, {
-          content: "❌ Recipe not found.",
+          content: `${getIcon("error")} Recipe not found.`,
           ephemeral: true
         });
       }
@@ -2293,7 +2295,7 @@ async function handleComponent(interaction) {
 
       if (!ingredientOptions.length) {
         return componentCommit(interaction, {
-          content: "✅ All ingredients are already covered!",
+          content: `${getIcon("status_complete")} All ingredients are already covered!`,
           ephemeral: true
         });
       }
@@ -2307,9 +2309,9 @@ async function handleComponent(interaction) {
 
       const isLeader = party.leader_user_id === userId;
       const contributeEmbed = new EmbedBuilder()
-        .setTitle("🥕 Contribute Ingredients")
+        .setTitle(`${getIcon("carrot")} Contribute Ingredients`)
         .setDescription("Pick an ingredient to add:")
-        .setColor(0x00aeff);
+        .setColor(theme.colors.info);
 
       applyOwnerFooter(contributeEmbed, interaction.member ?? interaction.user);
 
@@ -2409,7 +2411,7 @@ async function handleComponent(interaction) {
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributors will not receive rewards, but their ingredients will be returned."
         )
-        .setColor(0xffaa00);
+        .setColor(theme.colors.warning);
 
       applyOwnerFooter(promptEmbed, interaction.member ?? interaction.user);
 
@@ -2551,7 +2553,7 @@ async function handleComponent(interaction) {
             `👥 **Contributors**: ${Object.keys(contributorQuantities).length}\n` +
             `📊 **Rewards**:\n${rewardText}`
           )
-          .setColor(0x00ff00);
+          .setColor(theme.colors.success);
 
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
@@ -2587,7 +2589,7 @@ async function handleComponent(interaction) {
           `${recipe?.name ? `**${recipe.name}** (${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Shared order completion cancelled."
         )
-        .setColor(0xffaa00);
+        .setColor(theme.colors.warning);
 
       applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
 
@@ -2660,7 +2662,7 @@ async function handleComponent(interaction) {
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributions have been returned to the party."
         )
-        .setColor(0xffaa00);
+        .setColor(theme.colors.warning);
 
       applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
 
@@ -2697,7 +2699,7 @@ async function handleComponent(interaction) {
       const keepEmbed = new EmbedBuilder()
         .setTitle("✅ Shared Order Kept")
         .setDescription("Keeping the shared order active.")
-        .setColor(0x00aeff);
+        .setColor(theme.colors.info);
 
       applyOwnerFooter(keepEmbed, interaction.member ?? interaction.user);
 

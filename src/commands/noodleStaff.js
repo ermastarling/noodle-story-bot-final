@@ -13,6 +13,8 @@ import {
   calculateStaffCost
 } from "../game/staff.js";
 import { calculateUpgradeEffects } from "../game/upgrades.js";
+import { theme } from "../ui/theme.js";
+import { getIcon } from "../ui/icons.js";
 
 const {
   MessageActionRow,
@@ -61,10 +63,10 @@ function rarityEmoji(rarity) {
 }
 
 function categoryEmoji(category) {
-  if (category === "kitchen") return "🍳";
-  if (category === "service") return "🍜";
-  if (category === "support") return "🛠️";
-  return "📋";
+  if (category === "kitchen") return getIcon("category_kitchen");
+  if (category === "service") return getIcon("category_service");
+  if (category === "support") return getIcon("category_support");
+  return getIcon("category_default");
 }
 
 function staffSortKey(player, staff) {
@@ -152,8 +154,8 @@ export function buildStaffOverviewEmbed(player, server, user) {
   const hiredCount = Object.values(player.staff_levels || {}).filter((lvl) => Number(lvl) > 0).length;
   
   const embed = new EmbedBuilder()
-    .setTitle("👥 Staff Management")
-    .setColor(0x4169E1);
+    .setTitle(`${getIcon("staff_management")} Staff Management`)
+    .setColor(theme.colors.info);
 
   // Current staff levels
   if (leveledStaff.length > 0) {
@@ -226,7 +228,7 @@ export function buildStaffOverviewEmbed(player, server, user) {
     });
   }
 
-  embed.setDescription(`💰 Coins: **${player.coins}**\n👥 Staff Slots: **${hiredCount}/${staffCap}**`);
+  embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${hiredCount}/${staffCap}**`);
   applyOwnerFooter(embed, user);
 
   return embed;
@@ -271,7 +273,7 @@ function buildStaffComponents(userId, player, server) {
   // Refresh button
   const refreshButton = new ButtonBuilder()
     .setCustomId(`noodle-staff:refresh:${userId}`)
-    .setLabel("🔄 Refresh")
+    .setLabel(`${getIcon("refresh")} Refresh`)
     .setStyle(ButtonStyle.Secondary);
   rows.push(new ActionRowBuilder().addComponents(refreshButton));
 
@@ -291,7 +293,7 @@ export async function noodleStaffInteractionHandler(interaction) {
   // Ownership check
   if (targetUserId !== userId) {
     return {
-      content: "❌ This is not your staff menu.",
+      content: `${getIcon("error")} This is not your staff menu.`,
       ephemeral: true
     };
   }

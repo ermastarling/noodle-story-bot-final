@@ -14,6 +14,8 @@ import {
   calculateUpgradeEffects
 } from "../game/upgrades.js";
 import { calculateStaffCost, levelUpStaff } from "../game/staff.js";
+import { theme } from "../ui/theme.js";
+import { getIcon } from "../ui/icons.js";
 
 const {
   MessageActionRow,
@@ -96,11 +98,11 @@ function staffSortKey(player, staff) {
 
 function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
   const categories = [
-    { id: "staff", label: "👥 Staff" },
-    { id: "kitchen", label: "🍳 Kitchen" },
-    { id: "storage", label: "📦 Storage" },
-    { id: "service", label: "🍜 Service" },
-    { id: "ambience", label: "✨ Ambiance" }
+    { id: "staff", label: `${getIcon("staff_management")} Staff` },
+    { id: "kitchen", label: `${getIcon("category_kitchen")} Kitchen` },
+    { id: "storage", label: `${getIcon("category_storage")} Storage` },
+    { id: "service", label: `${getIcon("category_service")} Service` },
+    { id: "ambience", label: `${getIcon("category_ambience")} Ambiance` }
   ];
 
   const buttons = categories.map((cat) =>
@@ -119,11 +121,11 @@ function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
 
 function buildStaffRarityRow(userId, activeRarity = "common", source = null) {
   const rarities = [
-    { id: "overview", label: "👥 Staff" },
-    { id: "common", label: "⚪ Common" },
-    { id: "rare", label: "⭐ Rare" },
-    { id: "epic", label: "🌟 Epic" },
-    { id: "upgrades", label: "🧰 Upgrades" }
+    { id: "overview", label: `${getIcon("staff_management")} Staff` },
+    { id: "common", label: `${getIcon("rarity_common")} Common` },
+    { id: "rare", label: `${getIcon("rarity_rare")} Rare` },
+    { id: "epic", label: `${getIcon("rarity_epic")} Epic` },
+    { id: "upgrades", label: `${getIcon("staff_upgrades")} Upgrades` }
   ];
 
   const buttons = rarities.map((rar) =>
@@ -192,16 +194,16 @@ function buildUpgradesOverviewEmbed(player, user) {
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
   
   const embed = new EmbedBuilder()
-    .setTitle("🔧 Shop Upgrades")
-    .setDescription(`💰 Coins: **${player.coins}**\n\nUpgrade your shop to unlock powerful bonuses!`)
-    .setColor(0xFF8C00);
+    .setTitle(`${getIcon("upgrades")} Shop Upgrades`)
+    .setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n\nUpgrade your shop to unlock powerful bonuses!`)
+    .setColor(theme.colors.accent);
 
   // Display upgrades by category
   for (const [categoryId, categoryData] of Object.entries(upgradesByCategory)) {
     if (!categoryData.upgrades || categoryData.upgrades.length === 0) continue;
 
     const lines = categoryData.upgrades.map(u => {
-      const status = u.isMaxed ? "✅ MAX" : `${u.nextCost}c`;
+      const status = u.isMaxed ? `${getIcon("status_complete")} MAX` : `${u.nextCost}c`;
       return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
     });
 
@@ -214,17 +216,17 @@ function buildUpgradesOverviewEmbed(player, user) {
 
   // Active effects summary
   const effectLines = [];
-  if (effects.ingredient_save_chance > 0) effectLines.push(`🧺 ${(effects.ingredient_save_chance * 100).toFixed(1)}% ingredient save`);
-  if (effects.bowl_capacity_bonus > 0) effectLines.push(`🍜 +${effects.bowl_capacity_bonus} bowl capacity`);
-  if (effects.ingredient_capacity > 0) effectLines.push(`📦 +${effects.ingredient_capacity} ingredient capacity`);
-  if (effects.bowl_storage_capacity > 0) effectLines.push(`🗄️ +${effects.bowl_storage_capacity} bowl storage`);
-  if (effects.rep_bonus_flat > 0) effectLines.push(`⭐ +${effects.rep_bonus_flat.toFixed(1)} rep per serve`);
-  if (effects.rep_bonus_percent > 0) effectLines.push(`⭐ +${(effects.rep_bonus_percent * 100).toFixed(1)}% rep`);
-  if (effects.staff_effect_multiplier > 0) effectLines.push(`👥 +${(effects.staff_effect_multiplier * 100).toFixed(0)}% staff effects`);
+  if (effects.ingredient_save_chance > 0) effectLines.push(`${getIcon("ingredient_save")} ${(effects.ingredient_save_chance * 100).toFixed(1)}% ingredient save`);
+  if (effects.bowl_capacity_bonus > 0) effectLines.push(`${getIcon("bowl_capacity")} +${effects.bowl_capacity_bonus} bowl capacity`);
+  if (effects.ingredient_capacity > 0) effectLines.push(`${getIcon("ingredient_capacity")} +${effects.ingredient_capacity} ingredient capacity`);
+  if (effects.bowl_storage_capacity > 0) effectLines.push(`${getIcon("bowl_storage")} +${effects.bowl_storage_capacity} bowl storage`);
+  if (effects.rep_bonus_flat > 0) effectLines.push(`${getIcon("rep")} +${effects.rep_bonus_flat.toFixed(1)} rep per serve`);
+  if (effects.rep_bonus_percent > 0) effectLines.push(`${getIcon("rep")} +${(effects.rep_bonus_percent * 100).toFixed(1)}% rep`);
+  if (effects.staff_effect_multiplier > 0) effectLines.push(`${getIcon("staff_management")} +${(effects.staff_effect_multiplier * 100).toFixed(0)}% staff effects`);
 
   if (effectLines.length > 0) {
     embed.addFields({
-      name: "📊 Total Upgrade Bonuses",
+      name: `${getIcon("stats")} Total Upgrade Bonuses`,
       value: effectLines.join("\n"),
       inline: false
     });
@@ -236,8 +238,8 @@ function buildUpgradesOverviewEmbed(player, user) {
 
 function buildUpgradesManagementEmbed(player, user) {
   const embed = new EmbedBuilder()
-    .setTitle("🔧 Upgrades Management")
-    .setColor(0xFF8C00);
+    .setTitle(`${getIcon("upgrades")} Upgrades Management`)
+    .setColor(theme.colors.accent);
 
   const upgrades = Object.values(upgradesContent.upgrades ?? {});
   const totalUpgrades = upgrades.length;
@@ -251,12 +253,13 @@ function buildUpgradesManagementEmbed(player, user) {
     })
     .filter(Boolean);
 
-  embed.setDescription(`💰 Coins: **${player.coins}**\n🔧 Upgrades: **${leveledEntries.length}/${totalUpgrades}**`);
+  embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("upgrades")} Upgrades: **${leveledEntries.length}/${totalUpgrades}**`);
 
   if (leveledEntries.length > 0) {
     const upgradeLines = leveledEntries.map(({ upgrade, level }) => {
       const category = upgradesContent.upgrade_categories?.[upgrade.category] ?? {};
-      const icon = category.icon ? `${category.icon} ` : "";
+      const iconKey = category?.icon_key ?? null;
+      const icon = iconKey ? `${getIcon(iconKey)} ` : (category.icon ? `${category.icon} ` : "");
       return `${icon}**${upgrade.name}** — Lv${level}/${upgrade.max_level}`;
     });
     embed.addFields({
@@ -322,14 +325,14 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
   if (categoryId === "staff") {
     if (staffRarity === "overview") {
       const embed = buildStaffOverviewEmbed(player, null, user);
-      embed.setTitle("👥 Staff Management");
+      embed.setTitle(`${getIcon("staff_management")} Staff Management`);
       return embed;
     }
     if (staffRarity === "upgrades") {
       const embed = new EmbedBuilder()
-        .setTitle("🧰 Staff Upgrades")
-        .setDescription(`💰 Coins: **${player.coins}**\n\nUpgrades that improve staff capacity and performance.`)
-        .setColor(0xFF8C00);
+        .setTitle(`${getIcon("staff_upgrades")} Staff Upgrades`)
+        .setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n\nUpgrades that improve staff capacity and performance.`)
+        .setColor(theme.colors.accent);
 
       const staffUpgrades = ["u_staff_quarters", "u_manuals"]
         .map((id) => upgradesContent.upgrades?.[id])
@@ -338,7 +341,7 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
           const currentLevel = player.upgrades?.[upgrade.upgrade_id] || 0;
           const nextCost = calculateUpgradeCost(upgrade, currentLevel);
           const isMaxed = currentLevel >= upgrade.max_level;
-          const status = isMaxed ? "✅ MAX" : `${nextCost}c`;
+          const status = isMaxed ? `${getIcon("status_complete")} MAX` : `${nextCost}c`;
           return `• **${upgrade.name}** (${currentLevel}/${upgrade.max_level}) — ${status}\n  _${upgrade.description}_`;
         });
 
@@ -353,9 +356,9 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
     }
 
     const embed = new EmbedBuilder()
-      .setTitle("👥 Staff Upgrades")
-      .setDescription(`💰 Coins: **${player.coins}**\n\nHire and empower your staff.`)
-      .setColor(0xFF8C00);
+      .setTitle(`${getIcon("staff_upgrades")} Staff Upgrades`)
+      .setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n\nHire and empower your staff.`)
+      .setColor(theme.colors.accent);
 
     const allStaff = Object.values(staffContent.staff_members ?? {});
     const staffLines = allStaff
@@ -375,7 +378,7 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
       .map((staff) => {
         const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
         const cost = calculateStaffCost(staff, currentLevel);
-        const status = currentLevel >= staff.max_level ? "✅ MAX" : `${cost}c`;
+        const status = currentLevel >= staff.max_level ? `${getIcon("status_complete")} MAX` : `${cost}c`;
         const emoji = shouldHideRarityEmoji(staff) ? "" : `${rarityEmoji(staff.rarity)} `;
         const description = staff.description ? `\n  _${staff.description}_` : "";
         return `• ${emoji}**${staff.name}** (${currentLevel}/${staff.max_level}) — ${status}${description}`.trim();
@@ -392,20 +395,20 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
     return embed;
   }
 
-  const title = `${categoryData?.icon || "🔧"} ${categoryData?.display_name || categoryId}`;
+  const title = `${categoryData?.icon || getIcon("upgrades")} ${categoryData?.display_name || categoryId}`;
   const descLines = [
-    `💰 Coins: **${player.coins}**`,
+    `${getIcon("coins")} Coins: **${player.coins}**`,
     categoryData?.description ? `\n${categoryData.description}` : ""
   ].join("\n");
 
   const embed = new EmbedBuilder()
     .setTitle(title)
     .setDescription(descLines.trim())
-    .setColor(0xFF8C00);
+    .setColor(theme.colors.accent);
 
   const upgrades = upgradesByCategory[categoryId]?.upgrades ?? [];
   const lines = upgrades.map((u) => {
-    const status = u.isMaxed ? "✅ MAX" : `${u.nextCost}c`;
+    const status = u.isMaxed ? `${getIcon("status_complete")} MAX` : `${u.nextCost}c`;
     const desc = u.description ? `\n  _${u.description}_` : "";
     return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}${desc}`;
   });
@@ -449,7 +452,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
           const cost = calculateStaffCost(staff, currentLevel);
           return {
             label: `${staff.name} — ${cost}c`,
-            description: `Lv${currentLevel}→${currentLevel + 1}`.slice(0, 100),
+            description: `Lv${currentLevel}->${currentLevel + 1}`.slice(0, 100),
             value: staff.staff_id,
             emoji: rarityEmoji(staff.rarity)
           };
@@ -482,13 +485,13 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
       if (upgrade.isMaxed) continue;
 
       const effectStr = formatEffects(upgrade.effects);
-      const description = `Lv${upgrade.currentLevel}→${upgrade.currentLevel + 1}: ${effectStr}`.substring(0, 100);
+      const description = `Lv${upgrade.currentLevel}->${upgrade.currentLevel + 1}: ${effectStr}`.substring(0, 100);
       
       allOptions.push({
         label: `${upgrade.name} — ${upgrade.nextCost}c`,
         description,
         value: upgrade.upgradeId,
-        emoji: categoryData.icon || "🔧"
+        emoji: categoryData.icon || getIcon("upgrades")
       });
     }
   }
@@ -520,7 +523,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
     if (source === "profile") {
       const backButton = new ButtonBuilder()
         .setCustomId(`noodle:nav:profile:${userId}`)
-        .setLabel("⬅️ Back")
+        .setLabel(`${getIcon("back")} Back`)
         .setStyle(ButtonStyle.Secondary);
       rows.push(new ActionRowBuilder().addComponents(backButton));
     } else {
@@ -535,7 +538,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
           ? `noodle-upgrades:category:${userId}:all:${source}`
           : `noodle-upgrades:category:${userId}:all`
       )
-      .setLabel("⬅️ Back")
+      .setLabel(`${getIcon("back")} Back`)
       .setStyle(ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(backButton));
   }
@@ -556,7 +559,7 @@ export async function noodleUpgradesInteractionHandler(interaction) {
   // Ownership check
   if (targetUserId !== userId) {
     return {
-      content: "❌ This is not your upgrades menu.",
+      content: `${getIcon("error")} This is not your upgrades menu.`,
       ephemeral: true
     };
   }

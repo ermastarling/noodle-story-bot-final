@@ -7,6 +7,8 @@ import {
   getDecorItemsBySlot,
   getOwnedDecorItems
 } from "../game/decor.js";
+import { theme } from "../ui/theme.js";
+import { getIcon } from "../ui/icons.js";
 
 const { MessageEmbed } = discordPkg;
 const EmbedBuilder = MessageEmbed;
@@ -27,7 +29,7 @@ function applyOwnerFooter(embed, user) {
   return embed;
 }
 
-function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
+function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
   const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
   return applyOwnerFooter(embed, user);
 }
@@ -35,7 +37,7 @@ function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
 export function renderDecorOwnedEmbed({ player, decorContent, serverState, ownerUser }) {
   const description = buildDecorOwnershipSummary(player, decorContent, serverState);
   return buildMenuEmbed({
-    title: "🪞 Décor — Owned",
+    title: `${getIcon("decor")} Décor — Owned`,
     description,
     user: ownerUser
   });
@@ -51,7 +53,7 @@ export function renderDecorSlotsEmbed({ player, decorContent, ownerUser }) {
   });
 
   return buildMenuEmbed({
-    title: "🪞 Décor — Equipped",
+    title: `${getIcon("decor")} Décor — Equipped`,
     description: lines.join("\n"),
     user: ownerUser
   });
@@ -60,13 +62,13 @@ export function renderDecorSlotsEmbed({ player, decorContent, ownerUser }) {
 export function renderDecorSetsEmbed({ player, decorSetsContent, ownerUser }) {
   const completed = new Set(player.profile?.decor_sets_completed ?? []);
   const lines = (decorSetsContent?.sets ?? []).map((set) => {
-    const status = completed.has(set.set_id) ? "✅" : "🧩";
+    const status = completed.has(set.set_id) ? getIcon("status_complete") : getIcon("status_incomplete");
     const pieces = (set.pieces ?? []).map((p) => p.item_id).join(", ");
     return `${status} **${set.name}**\n${pieces}`;
   });
 
   return buildMenuEmbed({
-    title: "🪞 Décor — Sets",
+    title: `${getIcon("decor")} Décor — Sets`,
     description: lines.length ? lines.join("\n\n") : "_No sets defined yet._",
     user: ownerUser
   });
@@ -87,7 +89,7 @@ export function renderDecorShopEmbed({ player, decorContent, ownerUser }) {
   }
 
   return buildMenuEmbed({
-    title: "🪞 Décor — Shop",
+    title: `${getIcon("decor")} Décor — Shop`,
     description: lines.length ? lines.join("\n\n") : "_No new décor available._",
     user: ownerUser
   });

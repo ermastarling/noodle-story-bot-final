@@ -99,6 +99,7 @@ import {
   rollDoubleCraft
 } from "../game/upgrades.js";
 import { calculateStaffEffects } from "../game/staff.js";
+import { theme } from "../ui/theme.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -240,7 +241,7 @@ function applyOwnerFooter(embed, user) {
   return embed;
 }
 
-function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
+function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
   const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
   return applyOwnerFooter(embed, user);
 }
