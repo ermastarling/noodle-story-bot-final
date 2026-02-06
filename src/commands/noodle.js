@@ -150,6 +150,7 @@ const db = openDb();
 
 const HERALD_BADGE_ID = "seasonal_herald_placeholder";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
+const DEV_ADMIN_USER_ID = "705521883335885031";
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -242,6 +243,10 @@ function applyOwnerFooter(embed, user) {
 function buildMenuEmbed({ title, description, user, color = 0x2f3136 } = {}) {
   const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
   return applyOwnerFooter(embed, user);
+}
+
+function isDevAdmin(userId) {
+  return String(userId ?? "") === DEV_ADMIN_USER_ID;
 }
 
 function buildHelpPage({ page, userId, user }) {
@@ -1557,6 +1562,9 @@ const owner = `discord:${interaction.id}`;
   rollMarket({ serverId, content, serverState: server });
 
 if (group === "dev" && sub === "reset_tutorial") {
+  if (!isDevAdmin(userId)) {
+    return commit({ content: "You don’t have access to that command.", ephemeral: true });
+  }
   const target = opt.getUser("user");
   if (!target) {
     return commit({ content: "Pick a user to reset.", ephemeral: true });
@@ -1966,6 +1974,9 @@ if (sub === "season") {
 
 /* ---------------- STATUS (DEBUG) ------------ */
 if (sub === "status") {
+  if (!isDevAdmin(userId)) {
+    return commit({ content: "You don’t have access to that command.", ephemeral: true });
+  }
   const p = ensurePlayer(serverId, userId);
   const ordersDay = p.orders_day ?? "unknown";
   const marketDay = server.market_day ?? "unknown";
