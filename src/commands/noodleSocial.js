@@ -139,7 +139,7 @@ function socialMainMenuRowNoProfile(userId) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:profile_edit:${userId}`)
-      .setLabel(`${getIcon("edit")} Customize`)
+      .setLabel(`${getIcon("customize")} Customize`)
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -235,7 +235,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:shared_order_contribute:${userId}`)
-        .setLabel(`${getIcon("carrot")} Contribute`)
+        .setLabel(`${getIcon("contribute")} Contribute`)
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -1187,7 +1187,7 @@ async function handleComponent(interaction) {
             // Only allow inviting users in this server
             const guild = interaction.guild;
             if (!guild) {
-              return errorReply(interaction, "❌ This command only works in a server.");
+              return errorReply(interaction, `${getIcon("error")} This command only works in a server.`);
             }
 
             let targetMember = null;
@@ -2309,7 +2309,7 @@ async function handleComponent(interaction) {
 
       const isLeader = party.leader_user_id === userId;
       const contributeEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("carrot")} Contribute Ingredients`)
+        .setTitle(`${getIcon("contribute")} Contribute Ingredients`)
         .setDescription("Pick an ingredient to add:")
         .setColor(theme.colors.info);
 
@@ -2325,14 +2325,14 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
 
       if (party.leader_user_id !== userId) {
         return componentCommit(interaction, {
-          content: "❌ Only the party leader can complete orders.",
+          content: `${getIcon("error")} Only the party leader can complete orders.`,
           ephemeral: true
         });
       }
@@ -2340,7 +2340,7 @@ async function handleComponent(interaction) {
       const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (!sharedOrder) {
         return componentCommit(interaction, {
-          content: "❌ No active shared order.",
+          content: `${getIcon("error")} No active shared order.`,
           ephemeral: true
         });
       }
@@ -2356,7 +2356,7 @@ async function handleComponent(interaction) {
 
         if (!progress.isComplete) {
           return componentCommit(interaction, {
-            content: "❌ The order isn’t complete yet. Add all required ingredients first.",
+            content: `${getIcon("error")} The order isn’t complete yet. Add all required ingredients first.`,
             ephemeral: true
           });
         }
@@ -2364,16 +2364,16 @@ async function handleComponent(interaction) {
 
       // Confirm completion
       return componentCommit(interaction, {
-        content: "⚠️ Mark this shared order as complete? This will distribute rewards to all contributors.",
+        content: `${getIcon("warning")} Mark this shared order as complete? This will distribute rewards to all contributors.`,
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_confirm_complete:${userId}`)
-              .setLabel("✅ Confirm Complete")
+              .setLabel(`${getIcon("status_complete")} Confirm Complete`)
               .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_cancel_complete:${userId}`)
-              .setLabel("❌ Cancel")
+              .setLabel(`${getIcon("cancel")} Cancel`)
               .setStyle(ButtonStyle.Secondary)
           )
         ]
@@ -2384,14 +2384,14 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
 
       if (party.leader_user_id !== userId) {
         return componentCommit(interaction, {
-          content: "❌ Only the party leader can cancel shared orders.",
+          content: `${getIcon("error")} Only the party leader can cancel shared orders.`,
           ephemeral: true
         });
       }
@@ -2399,14 +2399,14 @@ async function handleComponent(interaction) {
       const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (!sharedOrder) {
         return componentCommit(interaction, {
-          content: "❌ No active shared order to cancel.",
+          content: `${getIcon("error")} No active shared order to cancel.`,
           ephemeral: true
         });
       }
 
       const recipe = content.recipes?.[sharedOrder.order_id];
       const promptEmbed = new EmbedBuilder()
-        .setTitle("⚠️ Cancel Shared Order?")
+        .setTitle(`${getIcon("warning")} Cancel Shared Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributors will not receive rewards, but their ingredients will be returned."
@@ -2421,7 +2421,7 @@ async function handleComponent(interaction) {
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_confirm_cancel:${userId}`)
-              .setLabel("🧹 Confirm Cancel")
+              .setLabel(`${getIcon("broom")} Confirm Cancel`)
               .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
               .setCustomId(`noodle-social:action:shared_order_abort_cancel:${userId}`)
@@ -2447,14 +2447,14 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
 
       if (party.leader_user_id !== userId) {
         return componentCommit(interaction, {
-          content: "❌ Only the party leader can complete orders.",
+          content: `${getIcon("error")} Only the party leader can complete orders.`,
           ephemeral: true
         });
       }
@@ -2462,7 +2462,7 @@ async function handleComponent(interaction) {
       const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (!sharedOrder) {
         return componentCommit(interaction, {
-          content: "❌ No active shared order.",
+          content: `${getIcon("error")} No active shared order.`,
           ephemeral: true
         });
       }
@@ -2474,7 +2474,7 @@ async function handleComponent(interaction) {
         const recipe = content.recipes[sharedOrder.order_id];
         if (!recipe) {
           return componentCommit(interaction, {
-            content: "❌ Recipe not found.",
+            content: `${getIcon("error")} Recipe not found.`,
             ephemeral: true
           });
         }
@@ -2540,18 +2540,18 @@ async function handleComponent(interaction) {
         // Build reward message with individual scaled amounts
         const rewardLines = Object.entries(contributorRewards).map(([cId, rewards]) => {
           const contributionQty = contributorQuantities[cId];
-          return `<@${cId}>: 💰 ${rewards.coinsReward}c | ⭐ ${rewards.repReward} REP | ✨ ${rewards.sxpReward} SXP (contributed ${contributionQty} ingredient${contributionQty !== 1 ? 's' : ''})`;
+          return `<@${cId}>: ${getIcon("coins")} ${rewards.coinsReward}c | ${getIcon("rep")} ${rewards.repReward} REP | ${getIcon("sparkle")} ${rewards.sxpReward} SXP (contributed ${contributionQty} ingredient${contributionQty !== 1 ? 's' : ''})`;
         });
         const rewardText = rewardLines.length > 0
           ? rewardLines.join("\n")
           : "No contributions recorded.";
 
         const embed = new EmbedBuilder()
-          .setTitle("🎉 Shared Order Complete!")
+          .setTitle(`${getIcon("level_up")} Shared Order Complete!`)
           .setDescription(
             `**${recipe.name}** (${servings} servings)\n\n` +
-            `👥 **Contributors**: ${Object.keys(contributorQuantities).length}\n` +
-            `📊 **Rewards**:\n${rewardText}`
+            `${getIcon("group")} **Contributors**: ${Object.keys(contributorQuantities).length}\n` +
+            `${getIcon("leaderboard")} **Rewards**:\n${rewardText}`
           )
           .setColor(theme.colors.success);
 
@@ -2565,7 +2565,7 @@ async function handleComponent(interaction) {
         });
       } catch (err) {
         return componentCommit(interaction, {
-          content: `❌ ${err.message}`,
+          content: `${getIcon("error")} ${err.message}`,
           ephemeral: true
         });
       }
@@ -2575,7 +2575,7 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
@@ -2584,7 +2584,7 @@ async function handleComponent(interaction) {
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
       const recipe = existingOrder ? content.recipes?.[existingOrder.order_id] : null;
       const cancelEmbed = new EmbedBuilder()
-        .setTitle("❌ Cancelled")
+        .setTitle(`${getIcon("cancel")} Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Shared order completion cancelled."
@@ -2606,14 +2606,14 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
 
       if (party.leader_user_id !== userId) {
         return componentCommit(interaction, {
-          content: "❌ Only the party leader can cancel shared orders.",
+          content: `${getIcon("error")} Only the party leader can cancel shared orders.`,
           ephemeral: true
         });
       }
@@ -2621,7 +2621,7 @@ async function handleComponent(interaction) {
       const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
       if (!sharedOrder) {
         return componentCommit(interaction, {
-          content: "❌ No active shared order to cancel.",
+          content: `${getIcon("error")} No active shared order to cancel.`,
           ephemeral: true
         });
       }
@@ -2657,7 +2657,7 @@ async function handleComponent(interaction) {
 
       const recipe = content.recipes?.[sharedOrder.order_id];
       const cancelEmbed = new EmbedBuilder()
-        .setTitle("🧹 Shared Order Cancelled")
+        .setTitle(`${getIcon("broom")} Shared Order Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributions have been returned to the party."
@@ -2676,7 +2676,7 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
-          content: "❌ You're not in a party.",
+          content: `${getIcon("error")} You're not in a party.`,
           ephemeral: true
         });
       }
@@ -2697,7 +2697,7 @@ async function handleComponent(interaction) {
         }
       }
       const keepEmbed = new EmbedBuilder()
-        .setTitle("✅ Shared Order Kept")
+        .setTitle(`${getIcon("status_complete")} Shared Order Kept`)
         .setDescription("Keeping the shared order active.")
         .setColor(theme.colors.info);
 
@@ -2713,7 +2713,7 @@ async function handleComponent(interaction) {
       const currentParty = getUserActiveParty(db, userId);
       if (currentParty) {
         return componentCommit(interaction, {
-          content: `❌ You're already in party **${currentParty.party_name}**. Leave it first to create a new one.`,
+          content: `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to create a new one.`,
           ephemeral: true
         });
       }
@@ -2744,9 +2744,9 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for party_create:`, e?.message);
+        console.log(`${getIcon("warning")} showModal failed for party_create:`, e?.message);
         return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal. Try using `/noodle-social party` command instead.", 
+          content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.", 
           ephemeral: true 
         });
       }
@@ -2756,7 +2756,7 @@ async function handleComponent(interaction) {
       const currentParty = getUserActiveParty(db, userId);
       if (currentParty) {
         return componentCommit(interaction, {
-          content: `❌ You're already in party **${currentParty.party_name}**. Leave it first to join another.`,
+          content: `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to join another.`,
           ephemeral: true
         });
       }
@@ -2787,9 +2787,9 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for party_join:`, e?.message);
+        console.log(`${getIcon("warning")} showModal failed for party_join:`, e?.message);
         return componentCommit(interaction, { 
-          content: "⚠️ Discord couldn't show the modal. Try using `/noodle-social party` command instead.", 
+          content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.", 
           ephemeral: true 
         });
       }
@@ -2797,7 +2797,7 @@ async function handleComponent(interaction) {
   }
 
   return componentCommit(interaction, {
-    content: "❌ Unknown action.",
+    content: `${getIcon("error")} Unknown action.`,
     ephemeral: true
   });
 }
@@ -2888,13 +2888,13 @@ export const noodleSocialCommand = {
         case "stats":
           return await handleStats(interaction);
         default:
-          return interaction.reply({ content: "❌ Unknown subcommand.", ephemeral: true });
+          return interaction.reply({ content: `${getIcon("error")} Unknown subcommand.`, ephemeral: true });
       }
     } catch (err) {
       console.error(`Error in noodle-social ${sub}:`, err);
       const errorMsg = cozyError(err);
       
-      return errorReply(interaction, `❌ ${errorMsg}`);
+      return errorReply(interaction, `${getIcon("error")} ${errorMsg}`);
     }
   },
 

@@ -100,6 +100,7 @@ import {
 } from "../game/upgrades.js";
 import { calculateStaffEffects } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
+import { getIcon, getIconUrl } from "../ui/icons.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -253,7 +254,7 @@ function isDevAdmin(userId) {
 function buildHelpPage({ page, userId, user }) {
   const pages = [
     {
-      title: "🧾 Help",
+        title: `${getIcon("help")} Help`,
       description: [
         "**Hello chef! Begin the tutorial with `/noodle start`, you can play exclusively with buttons.**",
         "\n**When you've completed the tutorial, you will only need to use `/noodle orders` any time you want to access all play commands.**",
@@ -262,7 +263,7 @@ function buildHelpPage({ page, userId, user }) {
       ].join("\n")
     },
     {
-      title: "🧾 Help — Buttons",
+      title: `${getIcon("help")} Help — Buttons`,
       description: [
         "**Main Menu**",
         "• `/noodle orders` — View today's orders.",
@@ -303,7 +304,7 @@ function buildHelpPage({ page, userId, user }) {
       ].join("\n")
     },
     {
-      title: "🧾 Help — Slash Commands Only",
+      title: `${getIcon("help")} Help — Slash Commands Only`,
       description: [
         "Commands without buttons:",
         "",
@@ -385,15 +386,15 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
     const reqCheck = spec ? meetsSpecializationRequirements(player, requirements) : { ok: false, reason: "Unavailable." };
     const status = showSpecialization
       ? (equippedSetId === set.set_id
-        ? "✅ Equipped"
+        ? `${getIcon("status_complete")} Equipped`
         : reqCheck.ok
           ? "Available"
-          : `🔒 ${reqCheck.reason}`)
+          : `${getIcon("lock")} ${reqCheck.reason}`)
       : (equippedSetId === set.set_id
-        ? "✅ Equipped"
+        ? `${getIcon("status_complete")} Equipped`
         : completed.has(set.set_id)
-          ? "✅ Complete"
-          : "🧩");
+          ? `${getIcon("status_complete")} Complete`
+          : `${getIcon("status_incomplete")}`);
     const description = set.description ? `_${set.description}_` : "_No description._";
 
     const pieces = (set.pieces ?? []).map((p) => {
@@ -443,7 +444,9 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
   }
 
   const embed = buildMenuEmbed({
-    title: showSpecialization ? "🪞 Décor — Specialization Sets" : "🪞 Décor — Collection Sets",
+    title: showSpecialization
+      ? `${getIcon("decor")} Decor — Specialization Sets`
+      : `${getIcon("decor")} Decor — Collection Sets`,
     description,
     user: ownerUser
   });
@@ -476,85 +479,85 @@ function formatDecorUnlockRequirement(item) {
 
 function noodleMainMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel(`${getIcon("basket")} Pantry`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("profile")} Profile`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleTutorialMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialBuyRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialForageRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialCookRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleTutorialServeRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleOrdersAcceptOnlyRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success)
 );
 }
 
 function noodleMainMenuRowNoProfile(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel(`${getIcon("basket")} Pantry`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleRecipesMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("📖 Recipes").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("🧑‍🍳 Regulars").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel(`${getIcon("recipes")} Recipes`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel(`${getIcon("chef")} Regulars`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleSecondaryMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("📜 Quests").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel(`${getIcon("quests")} Quests`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel(`${getIcon("party")} Event`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleProfileEditRow(userId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("🏷️ Shop Name").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("📝 Tagline").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("✨ Specializations").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel("🪞 Decor").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel(`${getIcon("tag")} Shop Name`).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel(`${getIcon("note")} Tagline`).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel(`${getIcon("sparkle")} Specializations`).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel(`${getIcon("decor")} Decor`).setStyle(ButtonStyle.Secondary)
   );
 }
 
 function noodleProfileEditBackRow(userId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -580,15 +583,15 @@ function noodleDecorBackRow(userId) {
 
 function noodleQuestsActionRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel("🎁 Daily Reward").setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("✅ Claim Quests").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel(`${getIcon("daily_reward")} Daily Reward`).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel(`${getIcon("status_complete")} Claim Quests`).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleQuestsSecondaryRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🍂 Season").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel(`${getIcon("season")} Season`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel(`${getIcon("party")} Event`).setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -609,23 +612,23 @@ const dailyAvailable = showDaily ?? true;
 const primaryButton = showQuests
   ? new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel("📜 Quests")
+      .setLabel(`${getIcon("quests")} Quests`)
       .setStyle(ButtonStyle.Secondary)
   : new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel("🎁 Daily Reward")
+      .setLabel(`${getIcon("daily_reward")} Daily Reward`)
       .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary);
 const row = new ActionRowBuilder().addComponents(primaryButton);
 
 if (showClaim) {
   row.addComponents(
-    new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("✅ Claim Quests").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel(`${getIcon("status_complete")} Claim Quests`).setStyle(ButtonStyle.Primary)
   );
 }
 
 row.addComponents(
-  new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("🍂 Season").setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("🎪 Event").setStyle(ButtonStyle.Secondary)
+  new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel(`${getIcon("season")} Season`).setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel(`${getIcon("party")} Event`).setStyle(ButtonStyle.Secondary)
 );
 
 return row;
@@ -633,55 +636,55 @@ return row;
 
 function noodleQuestsBackRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleMainMenuRowNoPantry(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("📋 Orders").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("orders")} Orders`).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("profile")} Profile`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleMainMenuRowNoOrders(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("🛒 Buy").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("🌿 Forage").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("🧺 Pantry").setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("🍜 Profile").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel(`${getIcon("cart")} Buy`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel(`${getIcon("forage")} Forage`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel(`${getIcon("basket")} Pantry`).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("profile")} Profile`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleOrdersActionRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary)
 );
 }
 
 function noodleOrdersActionRowWithBack(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function noodleOrdersMenuActionRow(userId, { showCancel = false } = {}) {
 const row = new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("✅ Accept").setStyle(ButtonStyle.Success),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("🍲 Cook").setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("🍜 Serve").setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel(`${getIcon("status_complete")} Accept`).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel(`${getIcon("cook")} Cook`).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel(`${getIcon("bowl")} Serve`).setStyle(ButtonStyle.Primary)
 );
 
 if (showCancel) {
   row.addComponents(
-    new ButtonBuilder().setCustomId(`noodle:pick:cancel:${userId}`).setLabel("❌ Cancel").setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId(`noodle:pick:cancel:${userId}`).setLabel(`${getIcon("cancel")} Cancel`).setStyle(ButtonStyle.Danger)
   );
 }
 
@@ -947,13 +950,13 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   const activeSpec = getActiveSpecialization(player, specializationsContent);
   const specState = ensureSpecializationState(player);
   if (activeSpec) {
-    const specIcon = activeSpec.icon ?? "✨";
+    const specIcon = activeSpec.icon ?? getIcon("sparkle");
     description += `\n${specIcon} **${activeSpec.name}**`;
   } else if (specState?.active_spec_id) {
-    description += `\n✨ **${specState.active_spec_id}**`;
+    description += `\n${getIcon("sparkle")} **${specState.active_spec_id}**`;
   }
   if (partyName) {
-    description += `\n\n🎪 **${partyName}**`;
+    description += `\n\n${getIcon("party")} **${partyName}**`;
   }
   if (!player.lifetime) {
     player.lifetime = { bowls_served_total: 0 };
@@ -967,7 +970,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
 
   const badgeLines = orderedBadges.map((id) => {
     const badge = getBadgeById(badgesContent, id);
-    const icon = badge?.icon ?? "🏷️";
+    const icon = badge?.icon ?? getIcon("tag");
     return `${icon}`;
   });
 
@@ -985,18 +988,33 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
     ? completedNames.map((name) => `• ${name}`).join("\n")
     : "_No collections completed yet._";
 
+  const activeSpecId = activeSpec?.spec_id ?? specState?.active_spec_id ?? null;
+  const decorSetId = activeSpecId ? getDecorSetIdForSpec(activeSpecId) : null;
+  const decorSet = decorSetId
+    ? (decorSetsContent?.sets ?? []).find((set) => set.set_id === decorSetId)
+    : null;
+  const decorSetName = decorSet?.name ?? (decorSetId ? decorSetId : null);
+  const decorSetValue = decorSetName ? `**${decorSetName}**` : "_No decor set equipped._";
+  const decorSetImageUrl = activeSpecId
+    ? (decorSet?.image_url ?? getIconUrl(`decor_set_${decorSetId}`) ?? getIconUrl("decor_set_placeholder"))
+    : null;
+
   const embed = new EmbedBuilder()
-    .setTitle(`🍜 ${player.profile.shop_name}`)
+    .setTitle(`${getIcon("profile")} ${player.profile.shop_name}`)
     .setDescription(description)
     .addFields(
-      { name: "⭐ Bowls Served", value: String(player.lifetime.bowls_served_total || 0), inline: true },
+      { name: `${getIcon("star")} Bowls Served`, value: String(player.lifetime.bowls_served_total || 0), inline: true },
       { name: "Level", value: String(player.shop_level || 1), inline: true },
       { name: "REP", value: String(player.rep || 0), inline: true },
       { name: "Coins", value: `${player.coins || 0}c`, inline: true },
-      { name: "🏅 Badges", value: badgesText, inline: false },
-      { name: "📚 Collections", value: collectionsText, inline: false },
-      { name: "🪞 Decor Set", value: " ", inline: false }
+      { name: `${getIcon("badges")} Badges`, value: badgesText, inline: false },
+      { name: `${getIcon("collections")} Collections`, value: collectionsText, inline: false },
+      { name: `${getIcon("decor")} Decor Set`, value: decorSetValue, inline: false }
     );
+
+  if (decorSetImageUrl) {
+    embed.setImage(decorSetImageUrl);
+  }
 
   applyOwnerFooter(embed, ownerUser);
   return embed;
@@ -1020,17 +1038,17 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
     const isActive = state.active_spec_id === spec.spec_id;
     const check = canSelectSpecialization(player, specializationsContent, spec.spec_id, now);
     const status = isActive
-      ? "✅ Equipped"
+      ? `${getIcon("status_complete")} Equipped`
       : check.ok
         ? "Available"
-        : `🔒 ${check.reason}`;
-    const icon = spec.icon ?? "✨";
+        : `${getIcon("lock")} ${check.reason}`;
+    const icon = spec.icon ?? getIcon("sparkle");
     const description = spec.description ? `\n_${spec.description}_` : "";
     return `${icon} **${spec.name}** — ${status}${description}`;
   });
 
   if (state?.active_spec_id && !specs.some((s) => s.spec_id === state.active_spec_id)) {
-    lines.unshift(`✨ **${state.active_spec_id}** — ✅ Equipped`);
+    lines.unshift(`${getIcon("sparkle")} **${state.active_spec_id}** — ${getIcon("status_complete")} Equipped`);
   }
 
   let description = lines.length
@@ -1042,7 +1060,7 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
   }
 
   const embed = buildMenuEmbed({
-    title: "✨ Specializations",
+    title: `${getIcon("sparkle")} Specializations`,
     description,
     user: ownerUser
   });
@@ -1094,7 +1112,7 @@ if (!r) return "";
     .filter(Boolean);
 
   if (!missing.length) return "";
-  return `🧾 **Ingredients Needed:** ${missing.join(" · ")}`;
+  return `${getIcon("receipt")} **Ingredients Needed:** ${missing.join(" · ")}`;
 }
 
 function sweepExpiredAcceptedOrders(p, _s, contentBundle, nowMs) {
@@ -1125,7 +1143,7 @@ const lines = snaps.slice(0, 8).map(({ id, order }) => {
 const rName = order ? (contentBundle.recipes[order.recipe_id]?.name ?? "a dish") : null;
 const npcName = order ? (contentBundle.npcs[order.npc_archetype]?.name ?? "a customer") : null;
 
-return `⚠️ Auto-canceled expired order \`${shortOrderId(id)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
+return `${getIcon("warning")} Auto-canceled expired order \`${shortOrderId(id)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
 
 });
 
@@ -1150,14 +1168,14 @@ if (interaction.isModalSubmit?.() && ephemeral === true) {
     try {
       return await interaction.followUp({ ...rest, ephemeral: true });
     } catch (e) {
-      console.log(`⚠️ Modal followUp failed:`, e?.message);
+      console.log(`${getIcon("warning")} Modal followUp failed:`, e?.message);
       return;
     }
   }
   try {
     return await interaction.reply({ ...rest, ephemeral: true });
   } catch (e) {
-    console.log(`⚠️ Modal reply failed:`, e?.message);
+    console.log(`${getIcon("warning")} Modal reply failed:`, e?.message);
     return;
   }
 }
@@ -1188,7 +1206,7 @@ if (targetMessageId && !ephemeral) {
       return target.edit(editPayload);
     }
   } catch (e) {
-    console.log(`⚠️ Failed to edit target message ${targetMessageId}:`, e?.message);
+    console.log(`${getIcon("warning")} Failed to edit target message ${targetMessageId}:`, e?.message);
     // Fall through to normal response
   }
 }
@@ -1210,7 +1228,7 @@ if (shouldBeEphemeral) {
       console.log(`⏭️  Skipping ephemeral reply - interaction invalid or already handled`);
       return;
     }
-    console.log(`⚠️ Ephemeral reply failed:`, e?.message);
+    console.log(`${getIcon("warning")} Ephemeral reply failed:`, e?.message);
     return;
   }
 }
@@ -1222,14 +1240,14 @@ if (interaction.isModalSubmit?.()) {
       try {
         return await interaction.followUp({ ...rest, ephemeral: true });
       } catch (e) {
-        console.log(`⚠️ Modal followUp failed:`, e?.message);
+        console.log(`${getIcon("warning")} Modal followUp failed:`, e?.message);
         return;
       }
     }
     try {
       return await interaction.reply({ ...rest, ephemeral: true });
     } catch (e) {
-      console.log(`⚠️ Modal reply failed:`, e?.message);
+      console.log(`${getIcon("warning")} Modal reply failed:`, e?.message);
       return;
     }
   }
@@ -1238,12 +1256,12 @@ if (interaction.isModalSubmit?.()) {
     try {
       return await interaction.editReply(rest);
     } catch (e) {
-      console.log(`⚠️ Modal editReply failed:`, e?.message);
+      console.log(`${getIcon("warning")} Modal editReply failed:`, e?.message);
       // If edit fails, try followUp as last resort
       try {
         return await interaction.followUp({ ...rest, ephemeral: true });
       } catch (e2) {
-        console.log(`⚠️ Modal followUp also failed:`, e2?.message);
+        console.log(`${getIcon("warning")} Modal followUp also failed:`, e2?.message);
         return;
       }
     }
@@ -1252,7 +1270,7 @@ if (interaction.isModalSubmit?.()) {
   try {
     return await interaction.reply(options);
   } catch (e) {
-    console.log(`⚠️ Modal reply failed:`, e?.message);
+    console.log(`${getIcon("warning")} Modal reply failed:`, e?.message);
     return;
   }
 }
@@ -1306,16 +1324,16 @@ if (finalOptions.embeds) {
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
-  console.log("🔄 Component editReply, embeds:", finalOptions.embeds?.length ?? "none");
+  console.log(`${getIcon("refresh")} Component editReply, embeds:`, finalOptions.embeds?.length ?? "none");
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
-    console.log(`⚠️ Component editReply failed:`, e?.message);
+    console.log(`${getIcon("warning")} Component editReply failed:`, e?.message);
     // Try followUp as fallback
     try {
       return await interaction.followUp({ ...finalOptions, ephemeral: true });
     } catch (e2) {
-      console.log(`⚠️ Component followUp fallback also failed:`, e2?.message);
+      console.log(`${getIcon("warning")} Component followUp fallback also failed:`, e2?.message);
       return;
     }
   }
@@ -1325,7 +1343,7 @@ if (interaction.deferred || interaction.replied) {
 try {
   return await interaction.update(finalOptions);
 } catch (e) {
-  console.log(`⚠️ Component update failed:`, e?.message);
+  console.log(`${getIcon("warning")} Component update failed:`, e?.message);
   return;
 }
 }
@@ -1388,7 +1406,7 @@ if (!allowed.has(id)) return null;
 
 if (!opts.length) {
 return componentCommit(interaction, {
-content: "🛒 No market items are available for your unlocked recipes right now.",
+content: `${getIcon("cart")} No market items are available for your unlocked recipes right now.`,
 components: [noodleMainMenuRow(userId)],
 ephemeral: true
 });
@@ -1402,7 +1420,7 @@ const menu = new StringSelectMenuBuilder()
 .addOptions(opts);
 
 const buyEmbed = buildMenuEmbed({
-  title: "🛒 Multi-buy",
+  title: `${getIcon("cart")} Multi-buy`,
   description: "Select up to **5** items.\nWhen you’re done selecting, if on Desktop, press **Esc** to continue.",
   user: interaction.member ?? interaction.user
 });
@@ -1589,7 +1607,7 @@ if (group === "dev" && sub === "reset_tutorial") {
     const mention = `<@${target.id}>`;
 
     return commit({
-      content: `🔧 Complete reset for ${mention}.${tut ? `\n\n${tut}` : ""}`,
+      content: `${getIcon("upgrades")} Complete reset for ${mention}.${tut ? `\n\n${tut}` : ""}`,
       ephemeral: true
     });
   });
@@ -1624,7 +1642,9 @@ if (sub === "start") {
     const tut = formatTutorialMessage(step);
     const tutorialDone = !p.tutorial?.active || !step;
     const tutorialEmbed = buildMenuEmbed({
-      title: tutorialDone ? "✅ Tutorial Complete" : "🧾 Tutorial",
+      title: tutorialDone
+        ? `${getIcon("status_complete")} Tutorial Complete`
+        : `${getIcon("help")} Tutorial`,
       description: tutorialDone
         ? "You’ve already completed the tutorial. Use the menu below to play."
         : (tut ?? "Welcome to your Noodle Story."),
@@ -1673,7 +1693,7 @@ if (sub === "profile") {
 /* ---------------- PROFILE EDIT ---------------- */
 if (sub === "profile_edit") {
   const embed = buildMenuEmbed({
-    title: "✏️ Customize Profile",
+    title: `${getIcon("customize")} Customize Profile`,
     description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!",
     user: interaction.member ?? interaction.user
   });
@@ -1760,8 +1780,8 @@ if (sub === "pantry") {
   const bowlCount = getBowlCount(p);
   const bowlCap = getBowlCapacity(p, combinedEffects);
   const bowlsBlock = bowlLines
-    ? `**🍲 Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
-    : `**🍲 Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
+  ? `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
+  : `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
 
   const pendingPantryMessages = p.notifications?.pending_pantry_messages ?? [];
   if (pendingPantryMessages.length > 0) {
@@ -1775,7 +1795,7 @@ if (sub === "pantry") {
   ].join("\n\n");
 
   const pantryEmbed = buildMenuEmbed({
-    title: "🧺 Pantry",
+    title: `${getIcon("basket")} Pantry`,
     description: pantryDescription,
     user: interaction.member ?? interaction.user
   });
@@ -1840,7 +1860,7 @@ if (sub === "recipes") {
   const section = `${pageTitle}\n${pageBody}\n\n*(page ${page + 1}/${totalPages})*`;
 
   const recipesEmbed = buildMenuEmbed({
-    title: "📖 **Recipes**",
+    title: `${getIcon("recipes")} **Recipes**`,
     description: section,
     user: interaction.member ?? interaction.user
   });
@@ -1891,7 +1911,7 @@ if (sub === "regulars") {
   });
 
   const regularsEmbed = buildMenuEmbed({
-    title: "🧑‍🍳 Regulars",
+    title: `${getIcon("chef")} Regulars`,
     description: lines.length
       ? `${lines.join("\n\n")}\n\n*(page ${page + 1}/${totalPages})*`
       : "No regulars found.",
@@ -1936,7 +1956,7 @@ if (sub === "season") {
     : "_No seasonal recipe found for this season._";
 
   const seasonEmbed = buildMenuEmbed({
-    title: "🍂 Season",
+    title: `${getIcon("season")} Season`,
     description: [
       `The world is currently in **${server.season}**.`,
       "",
@@ -1950,20 +1970,20 @@ if (sub === "season") {
   const seasonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel("🎁 Daily Reward")
+      .setLabel(`${getIcon("daily_reward")} Daily Reward`)
       .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel("📜 Quests")
+      .setLabel(`${getIcon("quests")} Quests`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:event:${userId}`)
-      .setLabel("🎪 Event")
+      .setLabel(`${getIcon("party")} Event`)
       .setStyle(ButtonStyle.Secondary)
   );
 
   const backRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel(`${getIcon("back")} Back`).setStyle(ButtonStyle.Secondary)
   );
 
   return commit({
@@ -1990,8 +2010,8 @@ if (sub === "status") {
   const marketStr = marketTimestamp !== "unknown" ? `<t:${Math.floor(marketTimestamp)}:f>` : "unknown";
   
   const statusInfo = [
-    `📅 Orders last reset: ${ordersStr}`,
-    `🛒 Market last rolled: ${marketStr}`
+    `${getIcon("calendar")} Orders last reset: ${ordersStr}`,
+    `${getIcon("cart")} Market last rolled: ${marketStr}`
   ].join("\n");
   
   // Defer as ephemeral, then editReply with the info
@@ -2014,15 +2034,15 @@ if (sub === "event") {
   const eventRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel("🎁 Daily Reward")
+      .setLabel(`${getIcon("daily_reward")} Daily Reward`)
       .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel("📜 Quests")
+      .setLabel(`${getIcon("quests")} Quests`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:season:${userId}`)
-      .setLabel("🍂 Season")
+      .setLabel(`${getIcon("season")} Season`)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -2031,7 +2051,7 @@ if (sub === "event") {
   );
 
   const eventEmbed = buildMenuEmbed({
-    title: "🎪 Event",
+    title: `${getIcon("party")} Event`,
     description: server.active_event_id
       ? `Event active: **${server.active_event_id}**\n\n_More event details coming soon._`
       : "No event is active right now.\n\n_More event details coming soon._",
@@ -2108,7 +2128,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const channelLine = lastChannelId ? `Last kitchen: <#${lastChannelId}>.` : null;
 
       const reminderEmbed = buildMenuEmbed({
-        title: "📬 Daily Reward Ready",
+        title: `${getIcon("mail")} Daily Reward Ready`,
         description: [
           `Your daily reward is ready in **${guildName}**.`,
           "Open /noodle quests to claim it.",
@@ -2203,14 +2223,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const rescueEmbeds = [];
     if (resilience.messages.length > 0) {
       rescueEmbeds.push(buildMenuEmbed({
-        title: "🆘 Rescue Mode",
+        title: `${getIcon("rescue")} Rescue Mode`,
         description: resilience.messages.join("\n\n"),
         user: interaction.member ?? interaction.user
       }));
     }
     if (clearedTempRecipes) {
       rescueEmbeds.push(buildMenuEmbed({
-        title: "✅ Recovery Complete",
+        title: `${getIcon("status_complete")} Recovery Complete`,
         description: "You’re back to normal play and your full recipe pool is restored.",
         user: interaction.member ?? interaction.user
       }));
@@ -2257,7 +2277,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           if (!quests.length) return [];
           const header = `**${label}**`;
           const entries = quests.map((q) => {
-            const status = q.completed_at ? "✅" : "📝";
+            const status = q.completed_at ? getIcon("status_complete") : getIcon("status_pending");
             const rewardParts = [];
             if (q.reward?.coins) rewardParts.push(`${q.reward.coins}c`);
             if (q.reward?.sxp) rewardParts.push(`${q.reward.sxp} SXP`);
@@ -2270,7 +2290,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       : ["_No quests available right now._"]; 
 
     const questsEmbed = buildMenuEmbed({
-      title: "📜 Quests",
+      title: `${getIcon("quests")} Quests`,
       description: lines.join("\n"),
       user: interaction.member ?? interaction.user
     });
@@ -2290,7 +2310,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const result = claimDailyReward(p, dailyRewards, now);
     if (!result.ok) {
       const embed = buildMenuEmbed({
-        title: "🎁 Daily Reward",
+        title: `${getIcon("daily_reward")} Daily Reward`,
         description: result.message,
         user: interaction.member ?? interaction.user
       });
@@ -2309,13 +2329,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const rewardLines = [];
-    if (result.reward.coins) rewardLines.push(`💰 **${result.reward.coins}c**`);
-    if (result.reward.sxp) rewardLines.push(`✨ **${result.reward.sxp} SXP**`);
-    if (result.reward.rep) rewardLines.push(`⭐ **${result.reward.rep} REP**`);
+    if (result.reward.coins) rewardLines.push(`${getIcon("coins")} **${result.reward.coins}c**`);
+    if (result.reward.sxp) rewardLines.push(`${getIcon("sparkle")} **${result.reward.sxp} SXP**`);
+    if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
 
-    const levelLine = result.leveledUp > 0 ? `\n🎉 Level up! **+${result.leveledUp}**` : "";
+    const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const embed = buildMenuEmbed({
-      title: "🎁 Daily Reward",
+      title: `${getIcon("daily_reward")} Daily Reward`,
       description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")}${levelLine}`,
       user: interaction.member ?? interaction.user
     });
@@ -2342,13 +2362,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           if (entry.reward?.coins) rewardParts.push(`${entry.reward.coins}c`);
           if (entry.reward?.sxp) rewardParts.push(`${entry.reward.sxp} SXP`);
           if (entry.reward?.rep) rewardParts.push(`${entry.reward.rep} REP`);
-          return `✅ **${entry.quest.name}** — ${rewardParts.join(" · ")}`;
+          return `${getIcon("status_complete")} **${entry.quest.name}** — ${rewardParts.join(" · ")}`;
         })
       : ["_No completed quests to claim._"]; 
 
-    const levelLine = result.leveledUp > 0 ? `\n🎉 Level up! **+${result.leveledUp}**` : "";
+    const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const embed = buildMenuEmbed({
-      title: "✅ Quest Rewards",
+      title: `${getIcon("status_complete")} Quest Rewards`,
       description: `${lines.join("\n")}${levelLine}`,
       user: interaction.member ?? interaction.user
     });
@@ -2411,7 +2431,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (!confirm) {
       const embed = buildMenuEmbed({
-        title: "✨ Confirm Specialization",
+        title: `${getIcon("sparkle")} Confirm Specialization`,
         description: `You're about to switch to **${spec.name}**. Re-run with confirm=true to proceed.`,
         user: interaction.member ?? interaction.user
       });
@@ -2432,7 +2452,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const embed = buildMenuEmbed({
-      title: "✨ Specialization Updated",
+      title: `${getIcon("sparkle")} Specialization Updated`,
       description: `Active specialization: **${result.specialization?.name ?? specId}**.`,
       user: interaction.member ?? interaction.user
     });
@@ -2500,13 +2520,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
             : 0));
       const completed = progress.completed_entries?.length ?? 0;
       const percent = totalEntries > 0 ? Math.floor((completed / totalEntries) * 100) : 0;
-      const status = percent >= 100 ? "✅" : "🧩";
+      const status = percent >= 100 ? getIcon("status_complete") : getIcon("status_incomplete");
       const description = collection.description ? `\n_${collection.description}_` : "";
       return `\n${status} **${collection.name}** — ${completed}/${totalEntries} (${percent}%)${description}`;
     });
 
     const embed = buildMenuEmbed({
-      title: "📚 Collections",
+      title: `${getIcon("collections")} Collections`,
       description: lines.length ? lines.join("\n") : "_No collections defined yet._",
       user: interaction.member ?? interaction.user
     });
@@ -2534,7 +2554,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const mins = Math.ceil(msLeft / 60000);
       const nextAtTs = Math.floor(chk.nextAt / 1000);
       const cooldownEmbed = buildMenuEmbed({
-        title: "🌿 Forage Cooldown",
+        title: `${getIcon("forage")} Forage Cooldown`,
         description: `You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`,
         user: interaction.member ?? interaction.user
       });
@@ -2572,7 +2592,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const unlockedForageIds = (FORAGE_ITEM_IDS ?? []).filter((id) => allowed.has(id));
       if (!unlockedForageIds.length) {
         return commitState({
-          content: "🌿 You haven’t unlocked any forageable ingredients yet. Unlock a recipe first!"
+          content: `${getIcon("forage")} You haven’t unlocked any forageable ingredients yet. Unlock a recipe first!`
         });
       }
 
@@ -2594,7 +2614,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!Object.keys(accepted).length) {
       setForageCooldown(p, now);
       return commitState({
-        content: "🧺 Your pantry is full. Upgrade storage or use ingredients to make room."
+        content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room."
       });
     }
 
@@ -2618,16 +2638,16 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const blockedLines = Object.entries(inventoryResult.blocked).map(
         ([id, q]) => `**${q}×** ${displayItemName(id)}`
       );
-      description += `\n\n⚠️ **Pantry Full!** Could not collect: ${blockedLines.join(", ")}\n_Upgrade your Pantry to increase capacity._`;
+      description += `\n\n${getIcon("warning")} **Pantry Full!** Could not collect: ${blockedLines.join(", ")}\n_Upgrade your Pantry to increase capacity._`;
     }
     
     description += tutorialSuffix(p);
 
     const forageEmbed = buildMenuEmbed({
-      title: "🌿 Forage",
+      title: `${getIcon("forage")} Forage`,
       description: `${header}${lines.join("\n")}${
         Object.keys(rejected).length
-          ? `\n\n🧺 Pantry full — left behind ${Object.values(rejected).reduce((sum, v) => sum + v, 0)} item(s).`
+          ? `\n\n${getIcon("basket")} Pantry full — left behind ${Object.values(rejected).reduce((sum, v) => sum + v, 0)} item(s).`
           : ""
       }${tutorialSuffix(p)}`,
       user: interaction.member ?? interaction.user
@@ -2669,7 +2689,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
       if (!opts.length) {
         return commitState({
-          content: "🛒 No market items are available for your unlocked recipes right now.",
+          content: `${getIcon("cart")} No market items are available for your unlocked recipes right now.`,
           ephemeral: true
         });
       }
@@ -2682,7 +2702,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         .addOptions(opts);
 
       const buyEmbed = buildMenuEmbed({
-        title: "🛒 Multi-buy",
+        title: `${getIcon("cart")} Multi-buy`,
         description:
           "Select up to **5** items\n" +
           "When you’re done selecting, if on Desktop, press **Esc** to continue\n",
@@ -2700,7 +2720,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle:nav:sell:${userId}`)
-              .setLabel("💰 Sell Items")
+              .setLabel(`${getIcon("coins")} Sell Items`)
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`noodle:nav:profile:${userId}`)
@@ -2740,7 +2760,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (remaining <= 0) {
       const label = type.charAt(0).toUpperCase() + type.slice(1);
       return commitState({
-        content: `🧺 Your ${label} storage is full. Upgrade storage or use ingredients to make room.`,
+        content: `${getIcon("basket")} Your ${label} storage is full. Upgrade storage or use ingredients to make room.`,
         ephemeral: true
       });
     }
@@ -2760,7 +2780,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (!inventoryResult.success) {
       const friendly = displayItemName(itemId);
       return commitState({ 
-        content: `⚠️ **Pantry Full!** Cannot store ${qty}× **${friendly}**.\nUpgrade your Pantry to increase capacity.`,
+        content: `${getIcon("warning")} **Pantry Full!** Cannot store ${qty}× **${friendly}**.\nUpgrade your Pantry to increase capacity.`,
         ephemeral: true
       });
     }
@@ -2774,9 +2794,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     advanceTutorial(p, "buy");
     const tutorialOnlyForage = isTutorialStep(p, "intro_forage");
 
-    const capacityNote = qtyToBuy < qty ? `\n🧺 Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
+    const capacityNote = qtyToBuy < qty ? `\n${getIcon("basket")} Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
     return commitState({
-      content: `🛒 Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${tutorialSuffix(p)}`,
+      content: `${getIcon("cart")} Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${tutorialSuffix(p)}`,
       embeds: [],
       components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : undefined
     });
@@ -2807,7 +2827,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: gain }, now);
 
-    return commitState({ content: `💰 Sold **${qty}× ${item.name}** for **${gain}c**.` });
+    return commitState({ content: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.` });
   }
 
   /* ---------------- COOK ---------------- */
@@ -2838,7 +2858,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const remainingBowls = bowlCap - bowlCount;
     if (remainingBowls <= 0) {
       return commitState({
-        content: "🧺 Your cooked bowls storage is full. Serve bowls or upgrade storage to make room.",
+        content: `${getIcon("basket")} Your cooked bowls storage is full. Serve bowls or upgrade storage to make room.`,
         ephemeral: true
       });
     }
@@ -2877,7 +2897,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         consumedByItem[ing.item_id] = (consumedByItem[ing.item_id] ?? 0) + consume;
       }
       if (saved > 0) {
-        savedLines.push(`🧺 Saved **${saved}× ${displayItemName(ing.item_id)}**`);
+        savedLines.push(`${getIcon("ingredient_save")} Saved **${saved}× ${displayItemName(ing.item_id)}**`);
       }
     }
 
@@ -2931,17 +2951,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       .join(" · ");
     const salvageLine = outcome.salvage > 0 ? ` Salvaged **${outcome.salvage}** bowl(s).` : "";
     const failInfo = outcome.failed > 0
-      ? `⚠️ **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: recipe tier risk.${salvageLine}`
+      ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: recipe tier risk.${salvageLine}`
       : null;
 
     const cookEmbed = buildMenuEmbed({
-      title: "🍲 Cooked",
+      title: `${getIcon("cook")} Cooked`,
       description: [
         `You cooked **${batchOutput}× ${r.name}**.`,
-        qtyToCook < qty ? `🧺 Bowl storage limited this cook to **${qtyToCook}**.` : null,
-        batchOutput > qtyToCook ? `🍜 Prep bonus: **+${batchOutput - qtyToCook}** bowl(s).` : null,
+        qtyToCook < qty ? `${getIcon("basket")} Bowl storage limited this cook to **${qtyToCook}**.` : null,
+        batchOutput > qtyToCook ? `${getIcon("bowl")} Prep bonus: **+${batchOutput - qtyToCook}** bowl(s).` : null,
         failInfo,
-        doubleCrafted ? `✨ Double craft! **+${extra}** extra bowl(s).` : null,
+        doubleCrafted ? `${getIcon("sparkle")} Double craft! **+${extra}** extra bowl(s).` : null,
         savedLines.length ? savedLines.join("\n") : null,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
@@ -3019,18 +3039,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const statusParts = [];
     if (readyBowls.length > 0) {
-      statusParts.push(`🍲 **Bowls Ready**\n${readyBowls.join("\n")}`);
+      statusParts.push(`${getIcon("cook")} **Bowls Ready**\n${readyBowls.join("\n")}`);
     }
 
     if (shortages.length) {
       statusParts.push(
-        `🧺 **Ingredients Needed**\n${shortages.map((s) => {
+        `${getIcon("basket")} **Ingredients Needed**\n${shortages.map((s) => {
           const iName = displayItemName(s.itemId, content);
           return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
         }).join("\n")}`
       );
     } else {
-      statusParts.push(`🧺 **Ingredients Needed**\n_All ingredients ready to cook!_`);
+      statusParts.push(`${getIcon("basket")} **Ingredients Needed**\n_All ingredients ready to cook!_`);
     }
 
     const statusMsg = statusParts.join("\n\n");
@@ -3050,13 +3070,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         (p.order_board ?? []).find((o) => o.order_id === fullId) ??
         null;
 
-      if (!order) return `✅ \`${shortOrderId(fullId)}\`${timeLeft}`;
+      if (!order) return `${getIcon("status_complete")} \`${shortOrderId(fullId)}\`${timeLeft}`;
 
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
-      const lt = order.is_limited_time ? "⏳" : "•";
+      const lt = order.is_limited_time ? getIcon("hourglass") : "•";
 
-      return `✅ \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`;
+      return `${getIcon("status_complete")} \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`;
     });
 
     const parts = [];
@@ -3069,9 +3089,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
       );
     } else if (acceptedLines.length) {
-      parts.push("📋 **Today’s Orders**", "No new orders left today. Finish your accepted ones and come back tomorrow.");
+      parts.push(`${getIcon("orders")} **Today’s Orders**`, "No new orders left today. Finish your accepted ones and come back tomorrow.");
     } else {
-      parts.push("🎉 You’ve completed all of today’s orders! Come back tomorrow for more.");
+      parts.push(`${getIcon("level_up")} You’ve completed all of today’s orders! Come back tomorrow for more.`);
     }
 
 
@@ -3093,7 +3113,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const showCancel = acceptedEntries.length > 0;
     const menuEmbed = buildMenuEmbed({
-      title: "📋 Orders",
+      title: `${getIcon("orders")} Orders`,
       description: parts.join("\n"),
       user: interaction.member ?? interaction.user
     });
@@ -3139,7 +3159,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     for (const tok of tokens) {
       if (acceptedNow >= available) {
-        results.push("⚠️ Reached active order cap.");
+        results.push(`${getIcon("warning")} Reached active order cap.`);
         break;
       }
 
@@ -3150,12 +3170,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
 
       if (!order) {
-        results.push(`❔ Order \`${tok}\` not found on today's board.`);
+        results.push(`${getIcon("question")} Order \`${tok}\` not found on today's board.`);
         continue;
       }
 
       if (p.orders.accepted[order.order_id]) {
-        results.push(`⏩ Already accepted \`${shortOrderId(order.order_id)}\`.`);
+        results.push(`${getIcon("fast_forward")} Already accepted \`${shortOrderId(order.order_id)}\`.`);
         continue;
       }
 
@@ -3184,8 +3204,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const timeNote = expiresAt
-        ? `⏳ <t:${Math.floor(expiresAt / 1000)}:R> to serve.`
-        : `🌿 No rush.`;
+        ? `${getIcon("hourglass")} <t:${Math.floor(expiresAt / 1000)}:R> to serve.`
+        : `${getIcon("forage")} No rush.`;
 
       results.push(`Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})`);
 
@@ -3313,7 +3333,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
         }
         p.coins = coinsRemaining;
-        results.push(`🧑‍🍳 Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
+        results.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
       }
     }
 
@@ -3370,18 +3390,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const statusParts = [];
     if (readyBowls.length > 0) {
-      statusParts.push(`🍲 **Bowls Ready**\n${readyBowls.join("\n")}`);
+      statusParts.push(`${getIcon("cook")} **Bowls Ready**\n${readyBowls.join("\n")}`);
     }
 
     if (shortages.length) {
       statusParts.push(
-        `\n🧺 **Ingredients Needed**\n${shortages.map((s) => {
+        `\n${getIcon("basket")} **Ingredients Needed**\n${shortages.map((s) => {
           const iName = displayItemName(s.itemId, content);
           return `• ${iName} - You have: **${s.have}**, you need **${s.needed}**`;
         }).join("\n")}`
       );
     } else {
-      statusParts.push(`\n🧺 **Ingredients Needed**\n_All ingredients ready to cook!_`);
+      statusParts.push(`\n${getIcon("basket")} **Ingredients Needed**\n_All ingredients ready to cook!_`);
     }
 
     if (statusParts.length) {
@@ -3389,7 +3409,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const acceptEmbed = buildMenuEmbed({
-      title: "✅ Orders Accepted",
+      title: `${getIcon("status_complete")} Orders Accepted`,
       description: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
       user: interaction.member ?? interaction.user
     });
@@ -3430,9 +3450,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     delete accepted[fullId];
 
-    const cancelMsg = `❌ Canceled order \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
+    const cancelMsg = `${getIcon("cancel")} Canceled order \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
     const cancelEmbed = buildMenuEmbed({
-      title: "❌ Order Canceled",
+      title: `${getIcon("cancel")} Order Canceled`,
       description: cancelMsg,
       user: interaction.member ?? interaction.user
     });
@@ -3486,7 +3506,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
 
       if (!matchEntry) {
-        results.push(`❔ Order \`${shortOrderId(tok)}\` isn't accepted.`);
+        results.push(`${getIcon("question")} Order \`${shortOrderId(tok)}\` isn't accepted.`);
         continue;
       }
 
@@ -3496,7 +3516,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         delete acceptedMap[fullOrderId];
         // Track fail streak for manually expired order (B4)
         updateFailStreak(p, false); // failure
-        results.push(`⏳ Order \`${shortOrderId(fullOrderId)}\` expired.`);
+        results.push(`${getIcon("hourglass")} Order \`${shortOrderId(fullOrderId)}\` expired.`);
         continue;
       }
 
@@ -3504,7 +3524,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const order = live ?? accepted.order;
       if (!order) {
         delete acceptedMap[fullOrderId];
-        results.push(`⚠️ Order \`${shortOrderId(fullOrderId)}\` can't be found anymore.`);
+        results.push(`${getIcon("warning")} Order \`${shortOrderId(fullOrderId)}\` can't be found anymore.`);
         continue;
       }
 
@@ -3515,11 +3535,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const bowl = selectedEntry?.bowl ?? null;
       if (!bowl || (bowl.qty ?? 0) <= 0) {
         const recipeName = content.recipes?.[order.recipe_id]?.name ?? "that recipe";
-        results.push(`🧺 You don't have a bowl ready for **${recipeName}**.`);
+        results.push(`${getIcon("basket")} You don't have a bowl ready for **${recipeName}**.`);
         continue;
       }
       if (bowl.recipe_id !== order.recipe_id) {
-        results.push(`⚠️ Bowl doesn't match recipe for order \`${shortOrderId(fullOrderId)}\`.`);
+        results.push(`${getIcon("warning")} Bowl doesn't match recipe for order \`${shortOrderId(fullOrderId)}\`.`);
         continue;
       }
 
@@ -3617,7 +3637,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           if (result.message) {
             discoveryMessages.push(result.message);
           } else if (result.isDuplicate && result.reward) {
-            discoveryMessages.push(`✨ ${result.reward}`);
+            discoveryMessages.push(`${getIcon("sparkle")} ${result.reward}`);
           }
           
           // Track if a new recipe was unlocked
@@ -3638,24 +3658,24 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       // Build the serve message with bonus on same line
       const qualityNote = bowlQuality !== "standard" ? ` (${formatQualityLabel(bowlQuality)})` : "";
       let serveMsg = `Served **${rName}**${qualityNote} to *${npcName}*.`;
-      if (rewards.npcModifier === "coins_courier") serveMsg += ` 🌧️ +25% coins`;
-      if (rewards.npcModifier === "coins_bard") serveMsg += ` 🎵 +10% coins`;
-      if (rewards.npcModifier === "coins_festival") serveMsg += ` 🎉 +25% coins`;
-      if (rewards.npcModifier === "speed") serveMsg += ` 🌙 Doubled speed bonus`;
-      if (rewards.npcModifier === "sxp_forest") serveMsg += ` 🌲 +10% SXP`;
-      if (rewards.npcModifier === "sxp_captain") serveMsg += ` ⛵ +10 SXP`;
-      if (rewards.npcModifier === "rep_inspector") serveMsg += ` 📋 +10 REP`;
-      if (rewards.npcModifier === "rep_sleepy") serveMsg += ` 😴 +5 REP`;
-      if (rewards.npcModifier === "rep_moonlit") serveMsg += ` 🌙 +15 REP`;
+      if (rewards.npcModifier === "coins_courier") serveMsg += ` ${getIcon("rain")} +25% coins`;
+      if (rewards.npcModifier === "coins_bard") serveMsg += ` ${getIcon("music")} +10% coins`;
+      if (rewards.npcModifier === "coins_festival") serveMsg += ` ${getIcon("level_up")} +25% coins`;
+      if (rewards.npcModifier === "speed") serveMsg += ` ${getIcon("moon")} Doubled speed bonus`;
+      if (rewards.npcModifier === "sxp_forest") serveMsg += ` ${getIcon("tree")} +10% SXP`;
+      if (rewards.npcModifier === "sxp_captain") serveMsg += ` ${getIcon("boat")} +10 SXP`;
+      if (rewards.npcModifier === "rep_inspector") serveMsg += ` ${getIcon("list")} +10 REP`;
+      if (rewards.npcModifier === "rep_sleepy") serveMsg += ` ${getIcon("sleepy")} +5 REP`;
+      if (rewards.npcModifier === "rep_moonlit") serveMsg += ` ${getIcon("moon")} +15 REP`;
       
       if (rewards.repAuraGranted) {
         // Check if aura already active
         const auraExpiry = p.buffs?.repAuraExpiry ?? 0;
         const now3_aura = nowTs();
         if (auraExpiry > now3_aura) {
-          serveMsg += ` ✨ Aura buff doesn't stack (active for another ${Math.ceil((auraExpiry - now3_aura) / 1000 / 60)} min)`;
+          serveMsg += ` ${getIcon("sparkle")} Aura buff doesn't stack (active for another ${Math.ceil((auraExpiry - now3_aura) / 1000 / 60)} min)`;
         } else {
-          serveMsg += ` ✨ +2 REP for 15 min`;
+          serveMsg += ` ${getIcon("sparkle")} +2 REP for 15 min`;
         }
       }
       
@@ -3665,7 +3685,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         const badgeResult = grantTemporaryBadge(p, badgesContent, HERALD_BADGE_ID, HERALD_BADGE_DURATION_MS);
         if (badgeResult.status === "granted" || badgeResult.status === "refreshed") {
           const badge = getBadgeById(badgesContent, HERALD_BADGE_ID);
-          const icon = badge?.icon ?? "✨";
+          const icon = badge?.icon ?? getIcon("sparkle");
           const name = badge?.name ?? "Herald's Sign";
           const expiry = badgeResult.expiresAt ? ` (expires <t:${Math.floor(badgeResult.expiresAt / 1000)}:R>)` : "";
           const verb = badgeResult.status === "refreshed" ? "refreshed" : "awarded";
@@ -3682,7 +3702,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (!servedCount) {
       const failEmbed = buildMenuEmbed({
-        title: "🍜 Orders Served",
+        title: `${getIcon("bowl")} Orders Served`,
         description: results.join("\n") || "Nothing served.",
         user: interaction.member ?? interaction.user
       });
@@ -3710,7 +3730,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         state.unlocked_spec_ids.push(spec.spec_id);
       }
       const unlockLines = newlyUnlockedSpecs.map((spec) => {
-        const icon = spec.icon ?? "✨";
+        const icon = spec.icon ?? getIcon("sparkle");
         return `${icon} **Specialization unlocked:** ${spec.name}`;
       });
       results.push(...unlockLines);
@@ -3728,7 +3748,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
-    const levelLine = leveledUp ? `\n✨ Level up! You're now **Level ${p.shop_level}**.` : "";
+    const levelLine = leveledUp ? `\n${getIcon("level_up")} Level up! You're now **Level ${p.shop_level}**.` : "";
     const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.join("\n")}` : "";
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
@@ -3739,7 +3759,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const embeds = [];
 
     const serveEmbed = buildMenuEmbed({
-      title: "🍜 Orders Served",
+      title: `${getIcon("bowl")} Orders Served`,
       description: `${results.join("\n")}\n\n${summary}${levelLine}${discoveryLine}${suffix}`,
       user: interaction.member ?? interaction.user
     });
@@ -3829,7 +3849,7 @@ if (kind === "dm" && action === "reminders_toggle") {
   const channelUrl = channelId ? `https://discord.com/channels/${targetServerId}/${channelId}` : null;
 
   const reminderEmbed = buildMenuEmbed({
-    title: "📬 Daily Rewards Reminder",
+    title: `${getIcon("mail")} Daily Rewards Reminder`,
     description: nextOptOut
       ? `Reminders are now **off** for **${guildName}**.`
       : `Reminders are now **on** for **${guildName}**.`,
@@ -3889,13 +3909,13 @@ if (kind === "profile" && (action === "edit_shop_name" || action === "edit_tagli
   try {
     return await interaction.showModal(modal);
   } catch (e) {
-    console.log(`⚠️ showModal failed for profile edit:`, e?.message);
+    console.log(`${getIcon("warning")} showModal failed for profile edit:`, e?.message);
     const code = e?.code ?? e?.message;
     if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
       return;
     }
     return componentCommit(interaction, {
-      content: "⚠️ Discord couldn't show the edit modal. Try again.",
+      content: `${getIcon("warning")} Discord couldn't show the edit modal. Try again.`,
       ephemeral: true
     });
   }
@@ -3927,7 +3947,7 @@ if (kind === "profile" && action === "specialize_select") {
     .addOptions(options.slice(0, 25));
 
   const embed = buildMenuEmbed({
-    title: "✨ Choose Specialization",
+    title: `${getIcon("sparkle")} Choose Specialization`,
     description: "Pick a specialization to preview and confirm.",
     user: interaction.member ?? interaction.user
   });
@@ -3995,7 +4015,7 @@ if (kind === "profile" && action === "specialize_confirm") {
   }
 
   const embed = buildMenuEmbed({
-    title: "✨ Specialization Updated",
+    title: `${getIcon("sparkle")} Specialization Updated`,
     description: `Active specialization: **${result.specialization?.name ?? specId}**.`,
     user: interaction.member ?? interaction.user
   });
@@ -4020,7 +4040,7 @@ if (kind === "nav" && action === "sell") {
 
   if (!ownedItems.length) {
     return componentCommit(interaction, {
-      content: "💰 You don't have any market items to sell.",
+      content: `${getIcon("coins")} You don't have any market items to sell.`,
       ephemeral: true
     });
   }
@@ -4038,7 +4058,7 @@ if (kind === "nav" && action === "sell") {
 
   if (!opts.length) {
     return componentCommit(interaction, {
-      content: "💰 You don't have any market items to sell.",
+      content: `${getIcon("coins")} You don't have any market items to sell.`,
       ephemeral: true
     });
   }
@@ -4056,7 +4076,7 @@ if (kind === "nav" && action === "sell") {
     .setStyle(ButtonStyle.Secondary);
 
   const sellEmbed = buildMenuEmbed({
-    title: "💰 Sell Items",
+    title: `${getIcon("coins")} Sell Items`,
     description:
       "Select up to **5** items to sell\n" +
       "When you’re done selecting, if on Desktop, press **Esc** to continue",
@@ -4151,7 +4171,7 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
   if (totalPages > 1) rows.push(navRow);
 
   const acceptEmbed = buildMenuEmbed({
-    title: "✅ Accept Orders",
+    title: `${getIcon("status_complete")} Accept Orders`,
     description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.\n\n(page ${page + 1}/${totalPages})`,
     user: interaction.member ?? interaction.user
   });
@@ -4187,7 +4207,9 @@ if (action === "cancel" || action === "serve") {
     .setMaxValues(action === "serve" ? Math.min(5, opts.length) : 1)
     .addOptions(opts);
 
-  const actionTitle = action === "serve" ? "🍜 Serve Orders" : "❌ Cancel Order";
+  const actionTitle = action === "serve"
+    ? `${getIcon("bowl")} Serve Orders`
+    : `${getIcon("cancel")} Cancel Order`;
   const actionDesc = action === "serve"
     ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
     : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
@@ -4238,7 +4260,7 @@ if (action === "cook") {
     .addOptions(opts);
 
   const cookEmbed = buildMenuEmbed({
-    title: "🍲 Cook",
+    title: `${getIcon("cook")} Cook`,
     description: "Select a recipe to cook:",
     user: interaction.member ?? interaction.user
   });
@@ -4316,13 +4338,13 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   try {
     return await interaction.showModal(modal);
   } catch (e) {
-    console.log(`⚠️ showModal failed for cook:`, e?.message);
+    console.log(`${getIcon("warning")} showModal failed for cook:`, e?.message);
     const code = e?.code ?? e?.message;
     if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
       return;
     }
     return componentCommit(interaction, {
-      content: "⚠️ Discord couldn't show the modal. Try using `/noodle cook` directly instead.",
+      content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle cook" directly instead.`,
       ephemeral: true
     });
   }
@@ -4404,7 +4426,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     }
 
     const embed = buildMenuEmbed({
-      title: "✅ Shop Name Updated",
+      title: `${getIcon("status_complete")} Shop Name Updated`,
       description: `Your shop is now **${trimmed}**.`,
       user: interaction.member ?? interaction.user
     });
@@ -4455,7 +4477,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     }
 
     const embed = buildMenuEmbed({
-      title: "✅ Tagline Updated",
+      title: `${getIcon("status_complete")} Tagline Updated`,
       description: `Your tagline is now: *${trimmed}*`,
       user: interaction.member ?? interaction.user
     });
@@ -4495,12 +4517,12 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const sellButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-        .setLabel("💰 Sell Items")
+        .setLabel(`${getIcon("coins")} Sell Items`)
         .setStyle(ButtonStyle.Secondary)
     );
 
     const selectionEmbed = buildMenuEmbed({
-      title: "🛒 Multi-buy",
+      title: `${getIcon("cart")} Multi-buy`,
       description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to buy:`,
       user: interaction.member ?? interaction.user
     });
@@ -4533,7 +4555,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     if (!check.ok) {
       const embed = buildMenuEmbed({
-        title: "✨ Specialization Locked",
+        title: `${getIcon("sparkle")} Specialization Locked`,
         description: `You can't select **${spec.name}** yet.\nReason: ${check.reason}${description}`,
         user: interaction.member ?? interaction.user
       });
@@ -4558,7 +4580,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     );
 
     const embed = buildMenuEmbed({
-      title: "✨ Confirm Specialization",
+      title: `${getIcon("sparkle")} Confirm Specialization`,
       description: `You're about to switch to **${spec.name}**.${description}\n\nPress **Confirm** to apply.`,
       user: interaction.member ?? interaction.user
     });
@@ -4601,12 +4623,12 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     }
 
     if (!cacheEntry) {
-      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
+      return componentCommit(interaction, { content: `${getIcon("warning")} Selection expired. Please try again.`, ephemeral: true });
     }
 
     if (cacheEntry.expiresAt < Date.now()) {
       multibuyCacheV2.delete(cacheKey);
-      return componentCommit(interaction, { content: "⚠️ Selection expired. Please try again.", ephemeral: true });
+      return componentCommit(interaction, { content: `${getIcon("warning")} Selection expired. Please try again.`, ephemeral: true });
     }
 
     const selectedIds = (cacheEntry.selectedIds ?? []).slice(0, 5);
@@ -4627,11 +4649,11 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       const sellButton = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-          .setLabel("💰 Sell Items")
+          .setLabel(`${getIcon("coins")} Sell Items`)
           .setStyle(ButtonStyle.Secondary)
       );
       const selectionEmbed = buildMenuEmbed({
-        title: "🛒 Multi-buy",
+        title: `${getIcon("cart")} Multi-buy`,
         description: `**Selected:** ${pickedNames.join(", ")}\nQuantity entry has been removed. Use Buy 1/5/10 each instead.`,
         user: interaction.member ?? interaction.user
       });
@@ -4734,7 +4756,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         if (!buyLines.length) {
           return componentCommit(interaction, {
-            content: "🧺 Your pantry is full. Upgrade storage or use ingredients to make room.",
+            content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.",
             ephemeral: true
           });
         }
@@ -4756,7 +4778,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
             .map(([id, qty]) => `${qty}× ${displayItemName(id)}`)
             .join(", ");
           return componentCommit(interaction, { 
-            content: `⚠️ **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
+            content: `${getIcon("warning")} **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
             ephemeral: true
           });
         }
@@ -4783,8 +4805,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         const pretty = buyLines.map((x) => `• **${x.qty}×** ${x.name} (${x.price}c ea)`).join("\n");
 
         const buyEmbed = buildMenuEmbed({
-          title: "🛒 Purchase Complete",
-          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? "\n🧺 Pantry capacity limited this purchase." : ""}${tutorialSuffix(p2)}`,
+          title: `${getIcon("cart")} Purchase Complete`,
+          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? `\n${getIcon("basket")} Pantry capacity limited this purchase.` : ""}${tutorialSuffix(p2)}`,
           user: interaction.member ?? interaction.user
         });
         buyEmbed.setFooter({
@@ -4804,7 +4826,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           const sellRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-              .setLabel("💰 Sell Items")
+              .setLabel(`${getIcon("coins")} Sell Items`)
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`noodle:nav:profile:${interaction.user.id}`)
@@ -4877,7 +4899,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     );
 
     const sellEmbed = buildMenuEmbed({
-      title: "💰 Sell Items",
+      title: `${getIcon("coins")} Sell Items`,
       description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to sell:`,
       user: interaction.member ?? interaction.user
     });
@@ -4932,7 +4954,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       );
 
       const sellEmbed = buildMenuEmbed({
-        title: "💰 Sell Items",
+        title: `${getIcon("coins")} Sell Items`,
         description: `**Selected:** ${pickedNames.join(", ")}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
         user: interaction.member ?? interaction.user
       });
@@ -4984,7 +5006,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         if (!sellLines.length) {
           return componentCommit(interaction, {
-            content: "❌ You don't have any of those items to sell.",
+            content: `${getIcon("cancel")} You don't have any of those items to sell.",
             ephemeral: true
           });
         }
@@ -4999,7 +5021,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
 
         const sellEmbed = buildMenuEmbed({
-          title: "💰 Sold Items",
+          title: `${getIcon("coins")} Sold Items`,
           description: `Sold:\n${pretty}\n\nTotal: **${totalGain}c**.`,
           user: interaction.member ?? interaction.user
         });
