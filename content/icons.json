@@ -5,18 +5,18 @@
   "icons": {
     "badges": {
       "badges": "<:badges:1469582798514950238>",
-      "seasonal_herald": "🌟",
-      "bowl_100": "🍜",
-      "bowl_250": "🥢",
-      "bowl_500": "🍲",
-      "bowl_1000": "🏮",
-      "bowl_2500": "🔥",
-      "bowl_5000": "🎏",
-      "bowl_10000": "🌙",
-      "event_spring_blossoms": "🌸",
-      "event_summer_solstice": "☀️",
-      "event_harvest_festival": "🎃",
-      "event_winter_market": "❄️"
+      "seasonal_herald": "<:seasonal_herald:1469818061854081145>",
+      "bowl_100": "<:bowl_100:1469818069135265932>",
+      "bowl_250": "<:bowl_250:1469818079033819330>",
+      "bowl_500": "<:bowl_500:1469818084268183562>",
+      "bowl_1000": "<:bowl_1000:1469818088043319369>",
+      "bowl_2500": "<:bowl_2500:1469818091436376277>",
+      "bowl_5000": "<:bowl_5000:1469818095286616347>",
+      "bowl_10000": "<:bowl_10000:1469818100055806124>",
+      "event_spring_blossoms": "<:event_spring_blossoms:1469818108221980702>",
+      "event_summer_solstice": "<:event_summer_solstice:1469818111153799342>",
+      "event_harvest_festival": "<:event_harvest_festival:1469818104518414411>",
+      "event_winter_market": "<:event_winter_market:1469818115478130710>"
     },
     "events": {
       "event": "<:event:1469614542047809657>"
