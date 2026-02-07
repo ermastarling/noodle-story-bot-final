@@ -75,6 +75,73 @@ const SHARED_ORDER_REWARD = {
   sxpPerServing: 15
 };
 
+const LEADERBOARD_TYPES = [
+  {
+    id: "coins",
+    title: () => `${getIcon("coins")} Top Coin Holders`,
+    sortValue: (player) => player.coins || 0,
+    displayValue: (player) => `${player.coins || 0}c`
+  },
+  {
+    id: "rep",
+    title: () => `${getIcon("rep")} Top Reputation`,
+    sortValue: (player) => player.rep || 0,
+    displayValue: (player) => `${player.rep || 0} REP`
+  },
+  {
+    id: "bowls",
+    title: () => `${getIcon("bowl")} Most Bowls Served`,
+    sortValue: (player) => player.lifetime?.bowls_served_total || 0,
+    displayValue: (player) => `${player.lifetime?.bowls_served_total || 0} bowls`
+  }
+];
+
+function getLeaderboardTypeIndex(typeId) {
+  const idx = LEADERBOARD_TYPES.findIndex((type) => type.id === typeId);
+  return idx >= 0 ? idx : 0;
+}
+
+function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser }) {
+  const safeIndex = Math.min(Math.max(typeIndex, 0), LEADERBOARD_TYPES.length - 1);
+  const type = LEADERBOARD_TYPES[safeIndex];
+  const sortedPlayers = [...playerData]
+    .sort((a, b) => type.sortValue(b) - type.sortValue(a))
+    .slice(0, 10);
+
+  const leaderboardText = sortedPlayers
+    .map((player, i) => {
+      const medal = i === 0 ? getIcon("medal_gold") : i === 1 ? getIcon("medal_silver") : i === 2 ? getIcon("medal_bronze") : `${i + 1}.`;
+      return `${medal} <@${player.user_id}> — ${type.displayValue(player)}`;
+    })
+    .join("\n");
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${getIcon("leaderboard")} Server Leaderboard`)
+    .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
+    .setColor(theme.colors.info)
+    .setFooter({ text: `${ownerFooterText(ownerUser)}` });
+
+  const navRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex - 1}`)
+      .setLabel("Prev")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safeIndex <= 0),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex + 1}`)
+      .setLabel("Next")
+      .setEmoji(getButtonEmoji("next"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safeIndex >= LEADERBOARD_TYPES.length - 1)
+  );
+
+  return {
+    embeds: [embed],
+    components: [navRow, socialMainMenuRow(userId)]
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  UI Button Helpers                                                  */
 /* ------------------------------------------------------------------ */
@@ -892,6 +959,7 @@ async function handleVisit(interaction) {
 async function handleLeaderboard(interaction) {
   const serverId = interaction.guildId;
   const type = interaction.options.getString("type") || "coins";
+  const typeIndex = getLeaderboardTypeIndex(type);
 
   await interaction.deferReply({ ephemeral: false });
 
@@ -914,43 +982,14 @@ async function handleLeaderboard(interaction) {
       ...JSON.parse(row.data_json)
     }));
 
-    let sortedPlayers;
-    let fieldName;
-    let fieldValue;
-
-    if (type === "coins") {
-      sortedPlayers = playerData.sort((a, b) => (b.coins || 0) - (a.coins || 0)).slice(0, 10);
-      fieldName = `${getIcon("coins")} Top Coin Holders`;
-      fieldValue = player => `${player.coins || 0}c`;
-    } else if (type === "rep") {
-      sortedPlayers = playerData.sort((a, b) => (b.rep || 0) - (a.rep || 0)).slice(0, 10);
-      fieldName = `${getIcon("rep")} Top Reputation`;
-      fieldValue = player => `${player.rep || 0} REP`;
-    } else if (type === "bowls") {
-      sortedPlayers = playerData.sort((a, b) => (b.lifetime?.bowls_served_total || 0) - (a.lifetime?.bowls_served_total || 0)).slice(0, 10);
-      fieldName = `${getIcon("bowl")} Most Bowls Served`;
-      fieldValue = player => `${player.lifetime?.bowls_served_total || 0} bowls`;
-    } else {
-      return errorReply(interaction, `${getIcon("error")} Unknown leaderboard type.`);
-    }
-
-    const leaderboardText = sortedPlayers
-      .map((p, i) => {
-        const medal = i === 0 ? getIcon("medal_gold") : i === 1 ? getIcon("medal_silver") : i === 2 ? getIcon("medal_bronze") : `${i + 1}.`;
-        return `${medal} <@${p.user_id}> — ${fieldValue(p)}`;
-      })
-      .join("\n");
-
-    const embed = new EmbedBuilder()
-      .setTitle(`${getIcon("leaderboard")} Noodle Story Leaderboard`)
-      .setDescription(`**${fieldName}**\n\n${leaderboardText}`)
-      .setColor(theme.colors.info)
-      .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)}` });
-
-    return interaction.editReply({ 
-      embeds: [embed], 
-      components: [socialMainMenuRow(interaction.user.id)] 
+    const view = buildLeaderboardView({
+      playerData,
+      typeIndex,
+      userId: interaction.user.id,
+      ownerUser: interaction.member ?? interaction.user
     });
+
+    return interaction.editReply(view);
   } catch (err) {
     console.error("Leaderboard error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading leaderboard: ${err.message}`);
@@ -1785,50 +1824,6 @@ async function handleComponent(interaction) {
       });
     }
 
-    if (action === "leaderboard") {
-      if (!db) {
-        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
-      }
-      // Show leaderboard
-      const allPlayers = db.prepare(`
-        SELECT user_id, data_json FROM players 
-        WHERE server_id = ? 
-        ORDER BY last_active_at DESC
-        LIMIT 100
-      `).all(serverId);
-
-      if (allPlayers.length === 0) {
-        return componentCommit(interaction, {
-          content: `${getIcon("error")} No players found in this server yet.`,
-          ephemeral: false
-        });
-      }
-
-      const playerData = allPlayers.map(row => ({
-        user_id: row.user_id,
-        ...JSON.parse(row.data_json)
-      }));
-
-      const sortedPlayers = playerData.sort((a, b) => (b.coins || 0) - (a.coins || 0)).slice(0, 10);
-      const leaderboardText = sortedPlayers
-        .map((p, i) => {
-          const medal = i === 0 ? getIcon("medal_gold") : i === 1 ? getIcon("medal_silver") : i === 2 ? getIcon("medal_bronze") : `${i + 1}.`;
-          return `${medal} <@${p.user_id}> — ${p.coins || 0}c`;
-        })
-        .join("\n");
-
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("leaderboard")} Noodle Story Leaderboard`)
-        .setDescription(`**${getIcon("coins")} Top Coin Holders**\n\n${leaderboardText}`)
-        .setColor(theme.colors.info)
-        .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)}` });
-
-      return componentCommit(interaction, {
-        embeds: [embed],
-        components: [socialMainMenuRow(userId)]
-      });
-    }
-
     if (action === "stats") {
       const player = ensurePlayer(serverId, userId);
       const tipStats = getUserTipStats(db, serverId, userId);
@@ -1891,6 +1886,43 @@ async function handleComponent(interaction) {
         embeds: [embed],
         components: statsViewButtons(userId)
       });
+    }
+
+    if (action === "leaderboard") {
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
+
+      const pageRaw = Number(parts[4] ?? 0);
+      const typeIndex = Number.isFinite(pageRaw) ? pageRaw : 0;
+
+      const allPlayers = db.prepare(`
+        SELECT user_id, data_json FROM players 
+        WHERE server_id = ? 
+        ORDER BY last_active_at DESC
+        LIMIT 100
+      `).all(serverId);
+
+      if (allPlayers.length === 0) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} No players found in this server yet.`,
+          ephemeral: false
+        });
+      }
+
+      const playerData = allPlayers.map(row => ({
+        user_id: row.user_id,
+        ...JSON.parse(row.data_json)
+      }));
+
+      const view = buildLeaderboardView({
+        playerData,
+        typeIndex,
+        userId,
+        ownerUser: interaction.member ?? interaction.user
+      });
+
+      return componentCommit(interaction, view);
     }
 
     if (action === "profile") {

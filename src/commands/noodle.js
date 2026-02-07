@@ -64,7 +64,7 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../g
 import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
-import { claimDailyReward } from "../game/daily.js";
+import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge } from "../game/badges.js";
 import {
   applyCollectionProgressOnServe,
@@ -519,7 +519,7 @@ new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").s
 
 function noodleTutorialServeRow(userId) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary)
 );
 }
 
@@ -548,7 +548,7 @@ new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regul
 function noodleSecondaryMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("Quests").setEmoji(getButtonEmoji("quests")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("party")).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -597,20 +597,12 @@ new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel
 function noodleQuestsSecondaryRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("Season").setEmoji(getButtonEmoji("season")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("party")).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
 );
 }
 
 function hasClaimableQuests(player) {
 return Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
-}
-
-function hasDailyRewardAvailable(player, now = nowTs()) {
-  const lastClaimedAt = player?.daily?.last_claimed_at ?? null;
-  if (!lastClaimedAt) return true;
-  const todayKey = dayKeyUTC(now);
-  const lastKey = dayKeyUTC(lastClaimedAt);
-  return lastKey !== todayKey;
 }
 
 function noodleQuestsMenuRow(userId, { showClaim, showDaily, showQuests } = {}) {
@@ -634,7 +626,7 @@ if (showClaim) {
 
 row.addComponents(
   new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("Season").setEmoji(getButtonEmoji("season")).setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("party")).setStyle(ButtonStyle.Secondary)
+  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
 );
 
 return row;
@@ -1000,10 +992,10 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
     ? (decorSetsContent?.sets ?? []).find((set) => set.set_id === decorSetId)
     : null;
   const decorSetName = decorSet?.name ?? (decorSetId ? decorSetId : null);
-  const decorSetValue = decorSetName ? `**${decorSetName}**` : "_No decor set equipped._";
+  const decorSetValue = "\u200b";
   const decorSetImageUrl = activeSpecId
     ? (decorSet?.image_url ?? getIconUrl(`decor_set_${decorSetId}`) ?? getIconUrl("decor_set_placeholder"))
-    : null;
+    : getIconUrl("decor_set_placeholder");
 
   const embed = new EmbedBuilder()
     .setTitle(`${getIcon("profile")} ${player.profile.shop_name}`)
@@ -1629,6 +1621,7 @@ if (player) {
     player.notifications = {
       pending_pantry_messages: [],
       dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
       last_noodle_channel_id: null,
       last_noodle_guild_id: null
     };
@@ -1715,106 +1708,142 @@ if (sub === "profile_edit") {
 
 /* ---------------- PANTRY ---------------- */
 if (sub === "pantry") {
-  const p = ensurePlayer(serverId, userId);
-  const grouped = new Map();
-  for (const [id, qty] of Object.entries(p.inv_ingredients ?? {})) {
-    if (!qty || qty <= 0) continue;
-    const category = normalizeIngredientType(id);
-    const name = displayItemName(id);
-    const catMap = grouped.get(category) ?? new Map();
-    const key = name.toLowerCase();
-    const cur = catMap.get(key) ?? { name, qty: 0 };
-    cur.qty += qty;
-    catMap.set(key, cur);
-    grouped.set(category, catMap);
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
   }
 
-  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-  const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
-  const countsByType = getIngredientCountsByType(p);
-  const typeOrder = ["broth", "noodles", "spice", "topping"];
-  const typeLabels = {
-    broth: "Broth",
-    noodles: "Noodles",
-    spice: "Spice",
-    topping: "Topping"
-  };
+  return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+    const p = ensurePlayer(serverId, userId);
+    const s = ensureServer(serverId);
+    const now = nowTs();
+    const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+    const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
 
-  const categoryBlocks = typeOrder
-    .map((category) => {
-      const items = grouped.get(category) ?? new Map();
-      const lines = [...items.values()]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(({ name, qty }) => `• ${name}: **${qty}**`)
-        .join("\n");
-      const have = countsByType[category] ?? 0;
-      const title = `${typeLabels[category]} (${have}/${perTypeCap})`;
-      return lines ? `**${title}**\n${lines}` : `**${title}**\n_None yet._`;
-    })
-    .filter(Boolean);
+    const set = buildSettingsMap(settingsCatalog, s.settings);
+    s.season = computeActiveSeason(set);
 
-  const bowlGroups = new Map();
-  for (const [, bowl] of Object.entries(p.inv_bowls ?? {})) {
-    if (!bowl?.qty || bowl.qty <= 0) continue;
-    const recipeId = bowl.recipe_id ?? "unknown";
-    const list = bowlGroups.get(recipeId) ?? [];
-    list.push({
-      qty: bowl.qty,
-      quality: normalizeQuality(bowl.quality)
+    const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
+    const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
+    if (spoilageMessages.length > 0) {
+      if (!p.notifications) {
+        p.notifications = {
+          pending_pantry_messages: [],
+          dm_reminders_opt_out: false,
+          last_daily_reminder_day: null,
+          last_noodle_channel_id: null,
+          last_noodle_guild_id: null
+        };
+      }
+      if (!Array.isArray(p.notifications.pending_pantry_messages)) {
+        p.notifications.pending_pantry_messages = [];
+      }
+      p.notifications.pending_pantry_messages.push(...spoilageMessages);
+    }
+
+    const grouped = new Map();
+    for (const [id, qty] of Object.entries(p.inv_ingredients ?? {})) {
+      if (!qty || qty <= 0) continue;
+      const category = normalizeIngredientType(id);
+      const name = displayItemName(id);
+      const catMap = grouped.get(category) ?? new Map();
+      const key = name.toLowerCase();
+      const cur = catMap.get(key) ?? { name, qty: 0 };
+      cur.qty += qty;
+      catMap.set(key, cur);
+      grouped.set(category, catMap);
+    }
+
+    const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
+    const countsByType = getIngredientCountsByType(p);
+    const typeOrder = ["broth", "noodles", "spice", "topping"];
+    const typeLabels = {
+      broth: "Broth",
+      noodles: "Noodles",
+      spice: "Spice",
+      topping: "Topping"
+    };
+
+    const categoryBlocks = typeOrder
+      .map((category) => {
+        const items = grouped.get(category) ?? new Map();
+        const lines = [...items.values()]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(({ name, qty }) => `• ${name}: **${qty}**`)
+          .join("\n");
+        const have = countsByType[category] ?? 0;
+        const title = `${typeLabels[category]} (${have}/${perTypeCap})`;
+        return lines ? `**${title}**\n${lines}` : `**${title}**\n_None yet._`;
+      })
+      .filter(Boolean);
+
+    const bowlGroups = new Map();
+    for (const [, bowl] of Object.entries(p.inv_bowls ?? {})) {
+      if (!bowl?.qty || bowl.qty <= 0) continue;
+      const recipeId = bowl.recipe_id ?? "unknown";
+      const list = bowlGroups.get(recipeId) ?? [];
+      list.push({
+        qty: bowl.qty,
+        quality: normalizeQuality(bowl.quality)
+      });
+      bowlGroups.set(recipeId, list);
+    }
+
+    const bowlLines = [...bowlGroups.entries()]
+      .sort(([a], [b]) => {
+        const nameA = content.recipes?.[a]?.name ?? a;
+        const nameB = content.recipes?.[b]?.name ?? b;
+        return String(nameA).localeCompare(String(nameB));
+      })
+      .map(([recipeId, entries]) => {
+        const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
+        const counts = entries.reduce((acc, entry) => {
+          const q = normalizeQuality(entry.quality);
+          acc[q] = (acc[q] ?? 0) + Number(entry.qty || 0);
+          return acc;
+        }, {});
+        const order = ["excellent", "good", "standard", "salvage"];
+        const parts = order
+          .filter((q) => counts[q])
+          .map((q) => `${formatQualityLabel(q)} (${counts[q]})`);
+        return `• ${recipeName}: **${parts.join(" · ")}**`;
+      })
+      .join("\n");
+    const bowlCount = getBowlCount(p);
+    const bowlCap = getBowlCapacity(p, combinedEffects);
+    const bowlsBlock = bowlLines
+    ? `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
+    : `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
+
+    const pendingPantryMessages = p.notifications?.pending_pantry_messages ?? [];
+    if (pendingPantryMessages.length > 0) {
+      p.notifications.pending_pantry_messages = [];
+    }
+
+    if (db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      upsertServer(db, serverId, s, null);
+    }
+
+    const pantryDescription = [
+      pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
+      categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
+      bowlsBlock
+    ].join("\n\n");
+
+    const pantryEmbed = buildMenuEmbed({
+      title: `${getIcon("basket")} Pantry`,
+      description: pantryDescription,
+      user: interaction.member ?? interaction.user
     });
-    bowlGroups.set(recipeId, list);
-  }
+    pantryEmbed.setFooter({
+      text: `S-:Salvage, S:Standard, G:Good, E:Excellent\n\nForageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
+    });
 
-  const bowlLines = [...bowlGroups.entries()]
-    .sort(([a], [b]) => {
-      const nameA = content.recipes?.[a]?.name ?? a;
-      const nameB = content.recipes?.[b]?.name ?? b;
-      return String(nameA).localeCompare(String(nameB));
-    })
-    .map(([recipeId, entries]) => {
-      const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
-      const counts = entries.reduce((acc, entry) => {
-        const q = normalizeQuality(entry.quality);
-        acc[q] = (acc[q] ?? 0) + Number(entry.qty || 0);
-        return acc;
-      }, {});
-      const order = ["excellent", "good", "standard", "salvage"];
-      const parts = order
-        .filter((q) => counts[q])
-        .map((q) => `${formatQualityLabel(q)} (${counts[q]})`);
-      return `• ${recipeName}: **${parts.join(" · ")}**`;
-    })
-    .join("\n");
-  const bowlCount = getBowlCount(p);
-  const bowlCap = getBowlCapacity(p, combinedEffects);
-  const bowlsBlock = bowlLines
-  ? `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
-  : `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
-
-  const pendingPantryMessages = p.notifications?.pending_pantry_messages ?? [];
-  if (pendingPantryMessages.length > 0) {
-    p.notifications.pending_pantry_messages = [];
-  }
-
-  const pantryDescription = [
-    pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
-    categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
-    bowlsBlock
-  ].join("\n\n");
-
-  const pantryEmbed = buildMenuEmbed({
-    title: `${getIcon("basket")} Pantry`,
-    description: pantryDescription,
-    user: interaction.member ?? interaction.user
-  });
-  pantryEmbed.setFooter({
-    text: `S-:Salvage, S:Standard, G:Good, E:Excellent\n\nForageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
-  });
-
-  return commit({
-    content: " ",
-    embeds: [pantryEmbed],
-    components: [noodleMainMenuRowNoPantry(userId), noodleRecipesMenuRow(userId)]
+    return commit({
+      content: " ",
+      embeds: [pantryEmbed],
+      components: [noodleMainMenuRowNoPantry(userId), noodleRecipesMenuRow(userId)]
+    });
   });
 }
 
@@ -1972,10 +2001,18 @@ if (sub === "season") {
         .join("\n")
     : "_No seasonal recipe found for this season._";
 
+  const seasonFlavor = {
+    spring: "Your shop smells of fresh herbs and rain-kissed broth.",
+    summer: "Your shop hums with bright, citrusy steam and lively crowds.",
+    autumn: "Your shop glows with warm spices and crackling lantern light.",
+    winter: "Your shop is a cozy haven of rich broth and drifting snow."
+  }[server.season] ?? null;
+
   const seasonEmbed = buildMenuEmbed({
     title: `${getIcon("season")} Season`,
     description: [
       `The world is currently in **${server.season}**.`,
+      seasonFlavor,
       "",
       "**Seasonal Recipe**",
       seasonalLine
@@ -1995,7 +2032,7 @@ if (sub === "season") {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:event:${userId}`)
-      .setLabel("Event").setEmoji(getButtonEmoji("party"))
+      .setLabel("Event").setEmoji(getButtonEmoji("event"))
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -2129,7 +2166,7 @@ if (sub === "event") {
     : "**Special Event Recipes**\n_No special event recipes listed._";
 
   const eventEmbed = buildMenuEmbed({
-    title: `${getIcon("party")} Event`,
+    title: `${getIcon("event")} Event`,
     description: server.active_event_id
       ? `${activeEventLines.join("\n")}\n\n${rewardsSection}\n\n${recipesSection}`
       : "No event is active right now.\n\n_More event details coming soon._",
@@ -2189,47 +2226,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
   ensureQuests(p, questsContent, userId, now);
 
-  // DM the user when a new day's orders are posted
+  // Force market stock refresh to align with daily order reset
   const dayChanged = prevOrdersDay !== p.orders_day;
   if (dayChanged) {
-    // Force market stock refresh to align with daily order reset
     p.market_stock_day = null;
     p.market_stock = null;
     rollPlayerMarketStock({ userId, serverId, content, playerState: p, eventEffects: activeEventEffects });
-    const dailyAvailable = hasDailyRewardAvailable(p, now);
-    const remindersOptOut = p.notifications?.dm_reminders_opt_out === true;
-    if (dailyAvailable && !remindersOptOut) {
-      const guildName = interaction.guild?.name ?? "this server";
-      const lastGuildId = p.notifications?.last_noodle_guild_id ?? serverId;
-      const lastChannelId = p.notifications?.last_noodle_channel_id ?? interaction.channelId ?? null;
-      const channelUrl = lastChannelId
-        ? `https://discord.com/channels/${lastGuildId}/${lastChannelId}`
-        : null;
-      const channelLine = lastChannelId ? `Last kitchen: <#${lastChannelId}>.` : null;
-
-      const reminderEmbed = buildMenuEmbed({
-        title: `${getIcon("mail")} Daily Reward Ready`,
-        description: [
-          `Your daily reward is ready in **${guildName}**.`,
-          "Open /noodle quests to claim it.",
-          channelLine,
-          "Use the button below to turn reminders on or off."
-        ].filter(Boolean).join("\n"),
-        user: interaction.user
-      });
-
-      const components = buildDmReminderComponents({
-        userId,
-        serverId: lastGuildId,
-        channelUrl,
-        optOut: remindersOptOut
-      });
-
-      interaction.user?.send?.({
-        embeds: [reminderEmbed],
-        components
-      }).catch(() => {});
-    }
   }
 
   // Apply resilience mechanics (B1-B9)
@@ -2274,6 +2276,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         p.notifications = {
           pending_pantry_messages: [],
           dm_reminders_opt_out: false,
+          last_daily_reminder_day: null,
           last_noodle_channel_id: null,
           last_noodle_guild_id: null
         };
@@ -2376,6 +2379,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       title: `${getIcon("quests")} Quests`,
       description: lines.join("\n"),
       user: interaction.member ?? interaction.user
+    });
+    const ownerText = ownerFooterText(interaction.member ?? interaction.user);
+    questsEmbed.setFooter({
+      text: `Your daily reward is available if the button below is green!\n${ownerText}`
     });
 
     return commitState({
@@ -3969,6 +3976,7 @@ if (kind === "dm" && action === "reminders_toggle") {
     p.notifications = {
       pending_pantry_messages: [],
       dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
       last_noodle_channel_id: null,
       last_noodle_guild_id: null
     };

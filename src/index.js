@@ -20,6 +20,7 @@ import { fileURLToPath } from "url";
   // Now import the rest
   const { commandMap } = await import("./commands/index.js");
   const { startDailyResetScheduler } = await import("./jobs/dailyReset.js");
+  const { startDailyRewardReminderScheduler } = await import("./jobs/dailyRewardReminders.js");
   const { startEventSyncScheduler } = await import("./jobs/eventSync.js");
   const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
   const {
@@ -135,6 +136,7 @@ import { fileURLToPath } from "url";
     }
 
     startDailyResetScheduler(getKnownServerIds);
+    startDailyRewardReminderScheduler(client, getKnownServerIds);
     startEventSyncScheduler(getKnownServerIds);
     startDbBackupScheduler(db);
 

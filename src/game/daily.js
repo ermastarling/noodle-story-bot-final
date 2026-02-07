@@ -60,3 +60,11 @@ export function claimDailyReward(player, rewardsContent, now = nowTs()) {
 
   return { ok: true, reward, streak: newStreak, leveledUp };
 }
+
+export function hasDailyRewardAvailable(player, now = nowTs()) {
+  const lastClaimedAt = player?.daily?.last_claimed_at ?? null;
+  if (!lastClaimedAt) return true;
+  const todayKey = dayKeyUTC(now);
+  const lastKey = dayKeyUTC(lastClaimedAt);
+  return lastKey !== todayKey;
+}
