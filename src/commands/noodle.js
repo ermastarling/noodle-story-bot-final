@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import {
 canForage,
 rollForageDrops,
@@ -2062,10 +2064,45 @@ if (sub === "status") {
   
   const ordersStr = ordersTimestamp !== "unknown" ? `<t:${Math.floor(ordersTimestamp)}:f>` : "unknown";
   const marketStr = marketTimestamp !== "unknown" ? `<t:${Math.floor(marketTimestamp)}:f>` : "unknown";
+
+  const guildCount = interaction.client?.guilds?.cache?.size ?? 0;
+  const shardId = interaction.guild?.shardId ?? null;
+  const shardCount = interaction.client?.shard?.count ?? null;
+  const shardText = Number.isFinite(shardId) && Number.isFinite(shardCount)
+    ? `${shardId + 1}/${shardCount}`
+    : "n/a";
+  const mem = process.memoryUsage();
+  const rssMb = (mem.rss / (1024 * 1024)).toFixed(1);
+  const heapMb = (mem.heapUsed / (1024 * 1024)).toFixed(1);
+
+  const backupDir = process.env.NOODLE_BACKUP_DIR || path.join(process.cwd(), "data", "backups");
+  let lastBackup = "unknown";
+  try {
+    const latestPath = path.join(backupDir, "latest.sqlite");
+    if (fs.existsSync(latestPath)) {
+      const stat = fs.statSync(latestPath);
+      lastBackup = `<t:${Math.floor(stat.mtimeMs / 1000)}:f>`;
+    } else if (fs.existsSync(backupDir)) {
+      const entries = fs.readdirSync(backupDir)
+        .filter((name) => name.startsWith("noodlestory-") && name.endsWith(".sqlite"));
+      if (entries.length) {
+        const newest = entries
+          .map((name) => ({ name, stat: fs.statSync(path.join(backupDir, name)) }))
+          .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs)[0];
+        lastBackup = `<t:${Math.floor(newest.stat.mtimeMs / 1000)}:f>`;
+      }
+    }
+  } catch {
+    // Ignore backup stat errors.
+  }
   
   const statusInfo = [
     `${getIcon("calendar")} Orders last reset: ${ordersStr}`,
-    `${getIcon("cart")} Market last rolled: ${marketStr}`
+    `${getIcon("cart")} Market last rolled: ${marketStr}`,
+    `${getIcon("group")} Guilds: ${guildCount}`,
+    `${getIcon("stats")} Memory: ${rssMb} MB RSS / ${heapMb} MB heap`,
+    `${getIcon("leaderboard")} Shard: ${shardText}`,
+    `${getIcon("refresh")} Last backup: ${lastBackup}`
   ].join("\n");
   
   // Defer as ephemeral, then editReply with the info
@@ -2077,8 +2114,15 @@ if (sub === "status") {
     }
   }
   
+  const statusEmbed = buildMenuEmbed({
+    title: `${getIcon("stats")} Status`,
+    description: statusInfo,
+    user: interaction.member ?? interaction.user
+  });
+
   return await interaction.editReply({
-    content: statusInfo
+    content: " ",
+    embeds: [statusEmbed]
   });
 }
 

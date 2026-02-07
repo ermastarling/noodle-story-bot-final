@@ -52,6 +52,20 @@ import { fileURLToPath } from "url";
   const LOG_PATH = path.join(CWD, "command-errors.log");
   const BOOT_PATH = path.join(CWD, "boot-ok.log");
 
+  const errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
+  const origError = console.error;
+  console.error = (...args) => {
+    origError(...args);
+    try {
+      const line = args
+        .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+        .join(" ");
+      errorLog.write(`[${new Date().toISOString()}] ${line}\n`);
+    } catch {
+      // Ignore log write failures.
+    }
+  };
+
   console.log("✅ BOOTING FILE:", __filename);
   console.log("✅ CWD:", CWD);
 
