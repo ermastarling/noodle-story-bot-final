@@ -108,22 +108,22 @@
       "bless": "✨"
     },
     "economy_progression": {
-      "coins": "💰",
-      "rep": "⭐",
-      "sxp": "✨",
-      "level_up": "🎉",
-      "leaderboard": "📊",
-      "stats": "📈",
+      "coins": "<:coins:1469535226991743111>",
+      "rep": "<:rep:1469535250429378793>",
+      "sxp": "<:sxp:1469535259543474371>",
+      "level_up": "<:level_up:1469535234306605128>",
+      "leaderboard": "<:leaderboard:1469535230284005518>",
+      "stats": "<:stats:1469535256884285738>",
       "receipt": "<:receipt:1469233549407162431>",
-      "medal_gold": "🥇",
-      "medal_silver": "🥈",
-      "medal_bronze": "🥉"
+      "medal_gold": "<:medal_gold:1469546601222766737>",
+      "medal_silver": "<:medal_silver:1469546615282073712>",
+      "medal_bronze": "<:medal_bronze:1469546589738762419>"
     },
     "gameplay": {
       "orders": "<:orders:1469233541543100506>",
-      "cook": "🍲",
-      "serve": "🍜",
-      "recipes": "📖",
+      "cook": "<:cook:1469532944564486246>",
+      "serve": "<:serve:1469532917519880284>",
+      "recipes": "<:recipes:1469532903536066690>",
       "forage": "🌿",
       "quests": "<:quests:1469233546768941153>",
       "quest_rewards": "<:quest_rewards:1469233544189579304>",
@@ -131,22 +131,22 @@
       "rescue": "🆘",
       "season": "🍂",
       "sparkle": "✨",
-      "star": "🌟",
+      "star": "<:star:1469535253445083216>",
       "idea": "💡",
       "note": "<:note:1469233538929791057>",
       "inbox": "<:inbox:1469233531883491338>",
       "mail": "<:mail:1469233529521963039>"
     },
     "items_storage": {
-      "bowl": "🍜",
-      "bowl_capacity": "🍜",
-      "bowl_storage": "🍲",
-      "ingredient_capacity": "📦",
-      "ingredient_save": "🧺",
-      "basket": "🧺"
+      "bowl": "<:bowl:1469532930304118866>",
+      "bowl_capacity": "<:bowl_capacity:1469532934007427274>",
+      "bowl_storage": "<:bowl_storage:1469532936976994405>",
+      "ingredient_capacity": "<:ingredient_capacity:1469532883222921248>",
+      "ingredient_save": "<:ingredient_save:1469532888214143088>",
+      "basket": "<:basket:1469532927376494652>"
     },
     "shop_profile": {
-      "profile": "🍜",
+      "profile": "<:profile:1469554966548189205>",
       "decor": "🪞",
       "customize": "✏️",
       "tag": "🏷️"
@@ -177,12 +177,12 @@
       "rarity_epic": "🌟"
     },
     "categories": {
-      "category_ambience": "✨",
-      "category_default": "📋",
-      "category_kitchen": "🍳",
-      "category_service": "🍜",
-      "category_storage": "📦",
-      "category_support": "🛠️"
+      "category_ambience": "<:category_ambience:1469532788641366128>",
+      "category_default": "<:category_default:1469532794811187282>",
+      "category_kitchen": "<:category_kitchen:1469532817200382208>",
+      "category_service": "<:category_service:1469532820807614475>",
+      "category_storage": "<:category_storage:1469532823160623114>",
+      "category_support": "<:category_support:1469532825567887593>"
     },
     "misc": {
       "sleepy": "😴"
