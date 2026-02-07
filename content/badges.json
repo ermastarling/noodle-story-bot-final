@@ -3,58 +3,86 @@
     {
       "badge_id": "bowl_100",
       "name": "Hundred-Bowl Simmer",
-      "icon": "🍜",
+      "icon": "bowl_100",
       "rarity": "rare",
       "condition": { "type": "serve_bowls_total", "value": 100 }
     },
     {
       "badge_id": "bowl_250",
       "name": "Quarter-Kilo Ladle",
-      "icon": "🥢",
+      "icon": "bowl_250",
       "rarity": "rare",
       "condition": { "type": "serve_bowls_total", "value": 250 }
     },
     {
       "badge_id": "bowl_500",
       "name": "Five-Hundred Bowl Steward",
-      "icon": "🍲",
+      "icon": "bowl_500",
       "rarity": "rare",
       "condition": { "type": "serve_bowls_total", "value": 500 }
     },
     {
       "badge_id": "bowl_1000",
       "name": "Thousand-Bowl Noodle Sage",
-      "icon": "🏮",
+      "icon": "bowl_1000",
       "rarity": "epic",
       "condition": { "type": "serve_bowls_total", "value": 1000 }
     },
     {
       "badge_id": "bowl_2500",
       "name": "Golden Hearth Keeper",
-      "icon": "🔥",
+      "icon": "bowl_2500",
       "rarity": "epic",
       "condition": { "type": "serve_bowls_total", "value": 2500 }
     },
     {
       "badge_id": "bowl_5000",
       "name": "Grand Pavilion Host",
-      "icon": "🎏",
+      "icon": "bowl_5000",
       "rarity": "epic",
       "condition": { "type": "serve_bowls_total", "value": 5000 }
     },
     {
       "badge_id": "bowl_10000",
       "name": "Ten-Thousand Bowl Legend",
-      "icon": "🌙",
+      "icon": "bowl_10000",
       "rarity": "seasonal",
       "condition": { "type": "serve_bowls_total", "value": 10000 }
     },
     {
-      "badge_id": "seasonal_herald_placeholder",
+      "badge_id": "seasonal_herald",
       "name": "Herald's Sign",
-      "icon": "🌟",
+      "icon": "seasonal_herald",
       "rarity": "seasonal",
-      "condition": { "type": "serve_bowls_total", "value": 100 }
+      "condition": { "type": "event_only" }
+    },
+    {
+      "badge_id": "event_spring_blossoms",
+      "name": "Spring Blossoms Emblem",
+      "icon": "event_spring_blossoms",
+      "rarity": "seasonal",
+      "condition": { "type": "event_only" }
+    },
+    {
+      "badge_id": "event_summer_solstice",
+      "name": "Summer Solstice Emblem",
+      "icon": "event_summer_solstice",
+      "rarity": "seasonal",
+      "condition": { "type": "event_only" }
+    },
+    {
+      "badge_id": "event_harvest_festival",
+      "name": "Harvest Festival Emblem",
+      "icon": "event_harvest_festival",
+      "rarity": "seasonal",
+      "condition": { "type": "event_only" }
+    },
+    {
+      "badge_id": "event_winter_market",
+      "name": "Winter Market Emblem",
+      "icon": "event_winter_market",
+      "rarity": "seasonal",
+      "condition": { "type": "event_only" }
     }
   ]
 }

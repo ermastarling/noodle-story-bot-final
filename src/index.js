@@ -20,18 +20,21 @@ import { fileURLToPath } from "url";
   // Now import the rest
   const { commandMap } = await import("./commands/index.js");
   const { startDailyResetScheduler } = await import("./jobs/dailyReset.js");
+  const { startEventSyncScheduler } = await import("./jobs/eventSync.js");
   const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
   const {
     loadContentBundle,
     loadSettingsCatalog,
     loadBadgesContent,
-    loadSpecializationsContent
+    loadSpecializationsContent,
+    loadEventsContent
   } = await import("./content/index.js");
   const { openDb, getPlayer } = await import("./db/index.js");
   const { checkRateLimit } = await import("./infra/rateLimit.js");
   const { emitTelemetry } = await import("./infra/telemetry.js");
   const { newPlayerProfile } = await import("./game/player.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
+  const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
@@ -79,7 +82,10 @@ import { fileURLToPath } from "url";
   });
 
   const db = openDb();
-  const content = loadContentBundle(1);
+  const { withEventRecipes } = await import("./game/events.js");
+  const baseContent = loadContentBundle(1);
+  const eventsContent = loadEventsContent();
+  const content = withEventRecipes(baseContent, eventsContent);
   const settingsCatalog = loadSettingsCatalog();
   const badgesContent = loadBadgesContent();
   const specializationsContent = loadSpecializationsContent();
@@ -107,6 +113,17 @@ import { fileURLToPath } from "url";
   client.once("ready", (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
+    const customEmojis = getCustomEmojiEntries();
+    const missingEmojis = customEmojis.filter((emoji) => !client.emojis.cache.has(emoji.id));
+    if (missingEmojis.length) {
+      const missingList = missingEmojis
+        .map((emoji) => `${emoji.key} -> ${emoji.name}:${emoji.id}`)
+        .join(", ");
+      console.error("❌ Missing custom emojis for this bot:");
+      console.error(missingList);
+      console.error("Ensure the bot is in the emoji host guild(s) or update content/icons.json IDs.");
+    }
+
     try {
       fs.writeFileSync(
         BOOT_PATH,
@@ -118,6 +135,7 @@ import { fileURLToPath } from "url";
     }
 
     startDailyResetScheduler(getKnownServerIds);
+    startEventSyncScheduler(getKnownServerIds);
     startDbBackupScheduler(db);
 
     const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";

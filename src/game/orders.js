@@ -8,7 +8,7 @@ import { calculateStaffEffects } from "./staff.js";
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
 
-export function generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool, player }) {
+export function generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool, player, activeEventId = null }) {
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"orders", serverId, dayKey });
   const maxOrders = 100;
   const count = Math.min(Number(settings.ORDERS_BASE_COUNT ?? maxOrders), maxOrders);
@@ -18,6 +18,7 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
 
   const eligibleRecipes = recipes.filter((r) => {
     if (!playerRecipePool.has(r.recipe_id)) return false;
+    if (r.event_id && (!activeEventId || r.event_id !== activeEventId)) return false;
     if (r.tier === "seasonal") return r.season === activeSeason;
     return true;
   });
@@ -124,17 +125,17 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
   return board.slice(0, Math.min(board.length, maxOrders));
 }
 
-export function ensureDailyOrders(serverState, settings, content, playerRecipePool, serverId) {
+export function ensureDailyOrders(serverState, settings, content, playerRecipePool, serverId, activeEventId = null) {
   const dayKey = dayKeyUTC();
   if (serverState.orders_day === dayKey && Array.isArray(serverState.order_board)) return serverState;
 
   const activeSeason = serverState.season ?? "spring";
   serverState.orders_day = dayKey;
-  serverState.order_board = generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool });
+  serverState.order_board = generateOrderBoard({ serverId, dayKey, settings, content, activeSeason, playerRecipePool, activeEventId });
   return serverState;
 }
 
-export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId) {
+export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, activeEventId = null) {
   const dayKey = dayKeyUTC();
   const orderSeedVersion = 3; // Increment when seed logic changes
   
@@ -165,7 +166,8 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
     content,
     activeSeason,
     playerRecipePool,
-    player: playerState
+    player: playerState,
+    activeEventId
   });
   return playerState;
 }

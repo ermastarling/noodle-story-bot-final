@@ -59,3 +59,8 @@ export function loadDecorSetsContent() {
   const p = path.join(__dirname, "..", "..", "content", "decor.sets.json");
   return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
+
+export function loadEventsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "events.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}

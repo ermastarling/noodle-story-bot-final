@@ -24,7 +24,8 @@ import {
   loadCollectionsContent,
   loadSpecializationsContent,
   loadDecorContent,
-  loadDecorSetsContent
+  loadDecorSetsContent,
+  loadEventsContent
 } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt } from "../db/index.js";
@@ -58,6 +59,7 @@ import {
   updateFailStreak
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
+import { getActiveEvent, getActiveEventEffects, getEventWindow, withEventRecipes } from "../game/events.js";
 import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
@@ -100,7 +102,7 @@ import {
 } from "../game/upgrades.js";
 import { calculateStaffEffects } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
-import { getIcon, getIconUrl, getButtonEmoji } from "../ui/icons.js";
+import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -137,7 +139,7 @@ const TextInputStyle = {
   Paragraph: Constants?.TextInputStyles?.PARAGRAPH ?? 2
 };
 
-const content = loadContentBundle(1);
+const baseContent = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
@@ -148,9 +150,11 @@ const collectionsContent = loadCollectionsContent();
 const specializationsContent = loadSpecializationsContent();
 const decorContent = loadDecorContent();
 const decorSetsContent = loadDecorSetsContent();
+const eventsContent = loadEventsContent();
+const content = withEventRecipes(baseContent, eventsContent);
 const db = openDb();
 
-const HERALD_BADGE_ID = "seasonal_herald_placeholder";
+const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
 
@@ -332,11 +336,13 @@ function buildHelpPage({ page, userId, user }) {
     new ButtonBuilder()
       .setCustomId(`noodle:help:page:${userId}:${safePage - 1}`)
       .setLabel("Prev")
+      .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage <= 0),
     new ButtonBuilder()
       .setCustomId(`noodle:help:page:${userId}:${safePage + 1}`)
       .setLabel("Next")
+      .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage >= pages.length - 1)
   );
@@ -970,7 +976,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
 
   const badgeLines = orderedBadges.map((id) => {
     const badge = getBadgeById(badgesContent, id);
-    const icon = badge?.icon ?? getIcon("tag");
+    const icon = resolveIcon(badge?.icon, getIcon("tag"));
     return `${icon}`;
   });
 
@@ -1004,7 +1010,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
     .setDescription(description)
     .setColor(theme.colors.primary)
     .addFields(
-      { name: `${getIcon("star")} Bowls Served`, value: String(player.lifetime.bowls_served_total || 0), inline: true },
+      { name: "Bowls Served", value: String(player.lifetime.bowls_served_total || 0), inline: true },
       { name: "Level", value: String(player.shop_level || 1), inline: true },
       { name: "REP", value: String(player.rep || 0), inline: true },
       { name: "Coins", value: `${player.coins || 0}c`, inline: true },
@@ -1579,7 +1585,8 @@ const owner = `discord:${interaction.id}`;
   const server = ensureServer(serverId);
   const settings = buildSettingsMap(settingsCatalog, server.settings);
   server.season = computeActiveSeason(settings);
-  rollMarket({ serverId, content, serverState: server });
+  const activeEventEffects = getActiveEventEffects(eventsContent, server);
+  rollMarket({ serverId, content, serverState: server, eventEffects: activeEventEffects });
 
 if (group === "dev" && sub === "reset_tutorial") {
   if (!isDevAdmin(userId)) {
@@ -1815,6 +1822,7 @@ if (sub === "pantry") {
 if (sub === "recipes") {
   const p = ensurePlayer(serverId, userId);
   const knownIds = getAvailableRecipes(p);
+  const knownSet = new Set(knownIds);
   const knownRecipes = knownIds
     .map((id) => content.recipes?.[id])
     .filter(Boolean)
@@ -1822,11 +1830,12 @@ if (sub === "recipes") {
 
   const knownLines = knownRecipes.map((r) => {
     const tier = r.tier ? ` (${r.tier})` : "";
+    const eventTag = r.event_id ? ` ${getIcon("party")} Event` : "";
     const ingredients = (r.ingredients ?? [])
       .map((ing) => displayItemName(ing.item_id))
       .join(", ");
     const ingredientLine = ingredients ? ingredients : "_No ingredients listed._";
-    return `• **${r.name}**${tier}\n  ${ingredientLine}`;
+    return `• **${r.name}**${tier}${eventTag}\n  ${ingredientLine}`;
   });
 
   const cluesMap = p.clues_owned ?? {};
@@ -1846,7 +1855,10 @@ if (sub === "recipes") {
     })
     .sort((a, b) => a.localeCompare(b));
 
-  const totalRecipes = Object.keys(content.recipes ?? {}).length;
+  const baseRecipeCount = Object.values(content.recipes ?? {})
+    .filter((recipe) => !recipe?.event_id).length;
+  const unlockedEventRecipeCount = knownRecipes.filter((recipe) => recipe?.event_id).length;
+  const totalRecipes = baseRecipeCount + unlockedEventRecipeCount;
   const totalPages = 2;
   const rawPage = opt.getInteger("page") ?? 0;
   const page = Math.min(Math.max(rawPage, 0), totalPages - 1);
@@ -1870,7 +1882,7 @@ if (sub === "recipes") {
     new ButtonBuilder()
       .setCustomId(`noodle:nav:recipes:${userId}:${page - 1}`)
       .setLabel("Prev")
-      .setEmoji(getButtonEmoji("prev"))
+      .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 0),
     new ButtonBuilder()
@@ -1925,7 +1937,7 @@ if (sub === "regulars") {
     new ButtonBuilder()
       .setCustomId(`noodle:nav:regulars:${userId}:${page - 1}`)
       .setLabel("Prev")
-      .setEmoji(getButtonEmoji("prev"))
+      .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 0),
     new ButtonBuilder()
@@ -2055,10 +2067,71 @@ if (sub === "event") {
     new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
   );
 
+  const activeEvent = getActiveEvent(eventsContent, server);
+  const activeEventName = activeEvent?.name ?? server.active_event_id;
+  const activeEventTagline = activeEvent?.tagline ? `_${activeEvent.tagline}_` : null;
+  const activeEventDetails = activeEvent?.description ?? null;
+  const eventWindow = activeEvent ? getEventWindow(activeEvent) : { start: null, end: null };
+  const startStamp = Number.isFinite(eventWindow.start) ? `<t:${Math.floor(eventWindow.start / 1000)}:f>` : null;
+  const endStamp = Number.isFinite(eventWindow.end) ? `<t:${Math.floor(eventWindow.end / 1000)}:f>` : null;
+  const activeEventWindow = startStamp && endStamp
+    ? `${startStamp} - ${endStamp}`
+    : startStamp
+      ? `${startStamp} - ?`
+      : endStamp
+        ? `? - ${endStamp}`
+        : null;
+  const activeEventLines = [
+    `Event active: **${activeEventName}**`,
+    activeEventTagline,
+    activeEventWindow,
+    activeEventDetails,
+    "Rewards apply to any order served during the event & unlocking an event scroll grants a badge!"
+  ].filter(Boolean);
+
+  const rewardEffects = activeEvent?.effects?.rewards ?? {};
+  const rewardEntries = [];
+  const rewardMultiplierLabels = [
+    { key: "coins_mult", label: "Coins" },
+    { key: "sxp_mult", label: "SXP" },
+    { key: "rep_mult", label: "REP" }
+  ];
+  for (const { key, label } of rewardMultiplierLabels) {
+    const mult = Number(rewardEffects[key]);
+    if (!Number.isFinite(mult) || mult === 1) continue;
+    const pct = Math.round((mult - 1) * 100);
+    const sign = pct >= 0 ? "+" : "";
+    rewardEntries.push(`${label}: ${sign}${pct}%`);
+  }
+  const rewardBonusLabels = [
+    { key: "coins_bonus", label: "Coins" },
+    { key: "sxp_bonus", label: "SXP" },
+    { key: "rep_bonus", label: "REP" }
+  ];
+  for (const { key, label } of rewardBonusLabels) {
+    const bonus = Number(rewardEffects[key]);
+    if (!Number.isFinite(bonus) || bonus === 0) continue;
+    const sign = bonus >= 0 ? "+" : "";
+    rewardEntries.push(`${label}: ${sign}${bonus}`);
+  }
+  const rewardsSection = rewardEntries.length
+    ? `**Rewards**\n${rewardEntries.map((entry) => `• ${entry}`).join("\n")}`
+    : "**Rewards**\n_No event rewards listed._";
+
+  const eventRecipes = activeEvent?.event_recipes ?? [];
+  const recipesSection = eventRecipes.length
+    ? `**Special Event Recipes**\n${eventRecipes
+        .map((recipe) => {
+          const tier = recipe?.tier ? ` (${recipe.tier})` : "";
+          return `• **${recipe?.name ?? recipe?.recipe_id ?? "Unknown"}**${tier}`;
+        })
+        .join("\n")}`
+    : "**Special Event Recipes**\n_No special event recipes listed._";
+
   const eventEmbed = buildMenuEmbed({
     title: `${getIcon("party")} Event`,
     description: server.active_event_id
-      ? `Event active: **${server.active_event_id}**\n\n_More event details coming soon._`
+      ? `${activeEventLines.join("\n")}\n\n${rewardsSection}\n\n${recipesSection}`
       : "No event is active right now.\n\n_More event details coming soon._",
     user: interaction.member ?? interaction.user
   });
@@ -2097,21 +2170,23 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   
   const set = buildSettingsMap(settingsCatalog, s.settings);
   s.season = computeActiveSeason(set);
+  const activeEventEffects = getActiveEventEffects(eventsContent, s);
+  const activeEventId = s.active_event_id ?? null;
   
   // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
   const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
   
   const sweep = sweepExpiredAcceptedOrders(p, s, content, now);
 
-  rollMarket({ serverId, content, serverState: s });
+  rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
   if (!s.market_prices) s.market_prices = {};
   
   // Roll per-player market stock daily
-  rollPlayerMarketStock({ userId, serverId, content, playerState: p });
+  rollPlayerMarketStock({ userId, serverId, content, playerState: p, eventEffects: activeEventEffects });
   if (!p.market_stock) p.market_stock = {};
 
   const prevOrdersDay = p.orders_day;
-  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
   ensureQuests(p, questsContent, userId, now);
 
   // DM the user when a new day's orders are posted
@@ -2120,7 +2195,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     // Force market stock refresh to align with daily order reset
     p.market_stock_day = null;
     p.market_stock = null;
-    rollPlayerMarketStock({ userId, serverId, content, playerState: p });
+    rollPlayerMarketStock({ userId, serverId, content, playerState: p, eventEffects: activeEventEffects });
     const dailyAvailable = hasDailyRewardAvailable(p, now);
     const remindersOptOut = p.notifications?.dm_reminders_opt_out === true;
     if (dailyAvailable && !remindersOptOut) {
@@ -2163,7 +2238,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   // If resilience granted temporary recipes, regenerate order board to include them
   if (resilience.applied && p.resilience?.temp_recipes?.length > 0) {
     p.orders_day = null; // Force regeneration
-    ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+    ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
   }
 
   const commitState = async (replyObj) => {
@@ -2174,7 +2249,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (clearedTempRecipes) {
       // Regenerate orders for normal play after recovery
       p.orders_day = null;
-      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
     }
     
     if (db) {
@@ -2192,6 +2267,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
     if (spoilageMessages.length > 0) {
+      const ticksApplied = timeCatchup.spoilage?.ticksApplied ?? 0;
+      console.log(`${getIcon("warning")} Spoilage applied: ${ticksApplied} tick(s), queued ${spoilageMessages.length} message(s) for pantry.`);
+      console.log(`${getIcon("warning")} Spoilage messages:`, spoilageMessages);
       if (!p.notifications) {
         p.notifications = {
           pending_pantry_messages: [],
@@ -2409,11 +2487,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           new ButtonBuilder()
             .setCustomId(`noodle:nav:specialize:${userId}:${page - 1}`)
             .setLabel("Prev")
+            .setEmoji(getButtonEmoji("back"))
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page <= 0),
           new ButtonBuilder()
             .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
             .setLabel("Next")
+            .setEmoji(getButtonEmoji("next"))
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page >= totalPages - 1)
         ));
@@ -2490,11 +2570,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         new ButtonBuilder()
           .setCustomId(`noodle:nav:decor:${userId}:${page - 1}`)
           .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(page <= 0),
         new ButtonBuilder()
           .setCustomId(`noodle:nav:decor:${userId}:${page + 1}`)
           .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(page >= totalPages - 1)
       ));
@@ -2707,11 +2789,50 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         .setMaxValues(Math.min(5, opts.length))
         .addOptions(opts);
 
+      const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+      const allNeeded = {};
+      acceptedEntries.forEach(([fullId, a]) => {
+        const snap = a?.order ?? null;
+        const order =
+          snap ??
+          (p.order_board ?? []).find((o) => o.order_id === fullId) ??
+          null;
+
+        if (order?.recipe_id) {
+          const recipe = content.recipes[order.recipe_id];
+          if (recipe?.ingredients) {
+            recipe.ingredients.forEach((ing) => {
+              allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + ing.qty;
+            });
+          }
+        }
+      });
+
+      const shortages = Object.entries(allNeeded)
+        .map(([id, needed]) => {
+          const have = p.inv_ingredients?.[id] ?? 0;
+          const short = Math.max(0, needed - have);
+          return { id, needed, have, short };
+        })
+        .filter((s) => s.short > 0);
+
+      const maxShoppingLines = 8;
+      const shoppingLines = shortages
+        .slice(0, maxShoppingLines)
+        .map((s) => `• ${displayItemName(s.id, content)} — need **${s.short}**`);
+      const shoppingSummary = shortages.length > maxShoppingLines
+        ? `\n…and **${shortages.length - maxShoppingLines}** more`
+        : "";
+      const shoppingList = shortages.length
+        ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
+        : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`;
+
       const buyEmbed = buildMenuEmbed({
         title: `${getIcon("cart")} Multi-buy`,
         description:
           "Select up to **5** items\n" +
-          "When you’re done selecting, if on Desktop, press **Esc** to continue\n",
+          "When you’re done selecting, if on Desktop, press **Esc** to continue\n\n" +
+          `${shoppingList}`,
         user: interaction.member ?? interaction.user
       });
       buyEmbed.setFooter({
@@ -3283,8 +3404,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
           if (missing > 0) {
             if (!MARKET_ITEM_IDS.includes(itemId)) {
-              orderOk = false;
-              break;
+              continue;
             }
 
             const remaining = remainingByType[type] ?? 0;
@@ -3566,7 +3686,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         player: p,
         recipe,
         content,
-        effects: combinedEffects
+        effects: combinedEffects,
+        eventEffects: activeEventEffects
       });
 
       const bowlQuality = normalizeQuality(bowl.quality);
@@ -3635,11 +3756,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           npcArchetype: order.npc_archetype,
           tier: order.tier,
           rng: discoveryRng,
-          activeSeason: s.season
+          activeSeason: s.season,
+          activeEventId: s.active_event_id ?? null
         });
         
         for (const discovery of discoveries ?? []) {
-          const result = applyDiscovery(p, discovery, content, discoveryRng);
+          const result = applyDiscovery(p, discovery, content, discoveryRng, { badgesContent });
           if (result.message) {
             discoveryMessages.push(result.message);
           } else if (result.isDuplicate && result.reward) {
@@ -3687,11 +3809,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       
       results.push(serveMsg);
 
-      if (order.npc_archetype === "seasonal_herald") {
+      const recipeTier = recipe?.tier ?? order.tier;
+      const recipeSeason = recipe?.season ?? order.season ?? null;
+      const isSeasonalHeraldServe =
+        order.npc_archetype === "seasonal_herald" &&
+        recipeTier === "seasonal" &&
+        (!recipeSeason || recipeSeason === s.season);
+
+      if (isSeasonalHeraldServe) {
         const badgeResult = grantTemporaryBadge(p, badgesContent, HERALD_BADGE_ID, HERALD_BADGE_DURATION_MS);
         if (badgeResult.status === "granted" || badgeResult.status === "refreshed") {
           const badge = getBadgeById(badgesContent, HERALD_BADGE_ID);
-          const icon = badge?.icon ?? getIcon("sparkle");
+          const icon = resolveIcon(badge?.icon, getIcon("sparkle"));
           const name = badge?.name ?? "Herald's Sign";
           const expiry = badgeResult.expiresAt ? ` (expires <t:${Math.floor(badgeResult.expiresAt / 1000)}:R>)` : "";
           const verb = badgeResult.status === "refreshed" ? "refreshed" : "awarded";
@@ -3745,7 +3874,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     // If a recipe was unlocked, force regenerate order board to include new recipe
     if (recipeUnlocked) {
       delete p.orders_day; // Force regeneration by clearing day marker
-      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+      const activeEventId = s.active_event_id ?? null;
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
     }
 
     applyQuestProgress(p, questsContent, userId, { type: "serve", amount: servedCount }, now);
@@ -3977,11 +4107,13 @@ if (kind === "profile" && action === "specialize_cancel") {
       new ButtonBuilder()
         .setCustomId(`noodle:nav:specialize:${userId}:${page - 1}`)
         .setLabel("Prev")
+        .setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page <= 0),
       new ButtonBuilder()
         .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
         .setLabel("Next")
+        .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page >= totalPages - 1)
     ));
@@ -4131,8 +4263,10 @@ const s = ensureServer(serverId);
 const p = ensurePlayer(serverId, userId);
 const set = buildSettingsMap(settingsCatalog, s.settings);
 s.season = computeActiveSeason(set);
-rollMarket({ serverId, content, serverState: s });
-ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
+const activeEventEffects = getActiveEventEffects(eventsContent, s);
+const activeEventId = s.active_event_id ?? null;
+rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
+ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
 
   const all = p.order_board ?? [];
   const rawPage = Number(parts[4] ?? 0);
@@ -4163,11 +4297,13 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
       new ButtonBuilder()
         .setCustomId(`noodle:pick:accept:${userId}:${page - 1}`)
         .setLabel("Prev")
+        .setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page <= 0),
       new ButtonBuilder()
         .setCustomId(`noodle:pick:accept:${userId}:${page + 1}`)
         .setLabel("Next")
+        .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page >= totalPages - 1)
     );
@@ -4175,6 +4311,18 @@ ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId);
 
   const rows = [new ActionRowBuilder().addComponents(menu)];
   if (totalPages > 1) rows.push(navRow);
+  const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
+  if (!tutorialOnlyAccept) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:orders:${userId}`)
+          .setLabel("Back")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
+  }
 
   const acceptEmbed = buildMenuEmbed({
     title: `${getIcon("status_complete")} Accept Orders`,
@@ -4678,7 +4826,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const serverState = ensureServer(serverId);
     const settings = buildSettingsMap(settingsCatalog, serverState.settings);
     serverState.season = computeActiveSeason(settings);
-    rollMarket({ serverId, content, serverState });
+    const activeEventEffects = getActiveEventEffects(eventsContent, serverState);
+    rollMarket({ serverId, content, serverState, eventEffects: activeEventEffects });
 
     const p = ensurePlayer(serverId, userId);
 

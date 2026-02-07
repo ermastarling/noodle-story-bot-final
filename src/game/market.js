@@ -61,7 +61,7 @@ function rngInt(rng, min, max) {
   return min + Math.floor(rng() * (max - min + 1));
 }
 
-export function rollMarket({ serverId, content, serverState }) {
+export function rollMarket({ serverId, content, serverState, eventEffects = null }) {
   const dayKey = dayKeyUTC();
   if (
   serverState.market_day === dayKey &&
@@ -72,6 +72,9 @@ export function rollMarket({ serverId, content, serverState }) {
   const prices = {};
 
   // ✅ Roll only the explicitly-allowed market items
+  const priceMultRaw = Number(eventEffects?.market?.price_mult ?? 1);
+  const priceMult = Number.isFinite(priceMultRaw) ? priceMultRaw : 1;
+
   for (const itemId of MARKET_ITEM_IDS) {
     const item = content.items?.[itemId];
     if (!item) continue; // if content missing, skip safely
@@ -81,7 +84,7 @@ export function rollMarket({ serverId, content, serverState }) {
 
     const price = Math.max(
       PRICE_MIN,
-      Math.floor(item.base_price * rngBetween(rng, MARKET_ROLL_MIN, MARKET_ROLL_MAX))
+      Math.floor(item.base_price * rngBetween(rng, MARKET_ROLL_MIN, MARKET_ROLL_MAX) * priceMult)
     );
     prices[itemId] = price;
   }
@@ -94,7 +97,7 @@ export function rollMarket({ serverId, content, serverState }) {
 }
 
 // Roll per-player market stock (called once per day per player)
-export function rollPlayerMarketStock({ userId, serverId, content, playerState }) {
+export function rollPlayerMarketStock({ userId, serverId, content, playerState, eventEffects = null }) {
   const dayKey = dayKeyUTC();
   const hasStock = playerState.market_stock && Object.values(playerState.market_stock).some((qty) => Number(qty) > 0);
   
@@ -104,6 +107,9 @@ export function rollPlayerMarketStock({ userId, serverId, content, playerState }
 
   const rng = makeStreamRng({ mode:"seeded", seed:54321, streamName:"player_market", serverId, userId, dayKey });
   const stock = {};
+
+  const stockMultRaw = Number(eventEffects?.market?.stock_mult ?? 1);
+  const stockMult = Number.isFinite(stockMultRaw) ? stockMultRaw : 1;
 
   for (const itemId of MARKET_ITEM_IDS) {
     const item = content.items?.[itemId];
@@ -115,7 +121,7 @@ export function rollPlayerMarketStock({ userId, serverId, content, playerState }
     if (max <= 0) continue;
     
     const qty = rngInt(rng, min, max);
-    stock[itemId] = qty;
+    stock[itemId] = Math.max(0, Math.floor(qty * stockMult));
   }
 
   playerState.market_stock = stock;

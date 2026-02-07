@@ -1,10 +1,10 @@
 export const theme = {
   colors: {
-    primary: 0x2f3136,
-    accent: 0xff8c00,
-    info: 0x00aeff,
-    success: 0x00ff88,
-    warning: 0xffaa00,
-    highlight: 0xffd700
+    primary: 0xE2B86B,
+    accent: 0x9C6A3A,
+    info: 0xF6EFE6,
+    success: 0xA9B8A3,
+    warning: 0xD4B483,
+    highlight: 0xF3D9A6
   }
 };

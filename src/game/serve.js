@@ -9,7 +9,7 @@ import { calculateStaffEffects } from "./staff.js";
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
 
-export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds, player, recipe, content, effects = null }) {
+export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds, player, recipe, content, effects = null, eventEffects = null }) {
   const dayKey = dayKeyUTC(servedAtMs);
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"serve", serverId, dayKey });
 
@@ -28,7 +28,20 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
     npcModifier = "speed";
   }
 
-  const mEvent = 1;
+  const rewardEffects = eventEffects?.rewards ?? {};
+  const mEventRaw = Number(rewardEffects.coins_mult ?? 1);
+  const eventSxpMultRaw = Number(rewardEffects.sxp_mult ?? 1);
+  const eventRepMultRaw = Number(rewardEffects.rep_mult ?? 1);
+  const eventCoinsBonusRaw = Number(rewardEffects.coins_bonus ?? 0);
+  const eventSxpBonusRaw = Number(rewardEffects.sxp_bonus ?? 0);
+  const eventRepBonusRaw = Number(rewardEffects.rep_bonus ?? 0);
+
+  const mEvent = Number.isFinite(mEventRaw) ? mEventRaw : 1;
+  const eventSxpMult = Number.isFinite(eventSxpMultRaw) ? eventSxpMultRaw : 1;
+  const eventRepMult = Number.isFinite(eventRepMultRaw) ? eventRepMultRaw : 1;
+  const eventCoinsBonus = Number.isFinite(eventCoinsBonusRaw) ? eventCoinsBonusRaw : 0;
+  const eventSxpBonus = Number.isFinite(eventSxpBonusRaw) ? eventSxpBonusRaw : 0;
+  const eventRepBonus = Number.isFinite(eventRepBonusRaw) ? eventRepBonusRaw : 0;
   const mCourier = (npcArchetype === "rain_soaked_courier") ? 1.25 : 1;
   if (mCourier > 1) npcModifier = "coins_courier";
   const mBard = (npcArchetype === "traveling_bard") ? 1.10 : 1;
@@ -37,7 +50,8 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   const mFestival = (npcArchetype === "festival_goer") ? 1.25 : 1;
   if (mFestival > 1) npcModifier = "coins_festival";
 
-  let coins = Math.floor(coinsBase * mSpeed * mEvent * mCourier * mBard * mFestival);
+  let coins = Math.floor(coinsBase * mSpeed * mEvent * mCourier * mBard * mFestival) + eventCoinsBonus;
+  coins = Math.floor(coins);
   
   let sxp = Math.floor(SXP_BASE[tier]);
   
@@ -83,6 +97,11 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
     rep += 15;
     npcModifier = "rep_moonlit";
   }
+
+  if (eventSxpMult !== 1) sxp = Math.floor(sxp * eventSxpMult);
+  if (eventRepMult !== 1) rep = Math.floor(rep * eventRepMult);
+  if (eventSxpBonus) sxp += eventSxpBonus;
+  if (eventRepBonus) rep += eventRepBonus;
 
   // Apply upgrade + staff effects
   const combinedEffects = effects ?? calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);

@@ -1,0 +1,349 @@
+{
+  "notes": {
+    "schema": "events[] entries define server-wide live events that can be activated by server.active_event_id.",
+    "fields": {
+      "event_id": "Unique string identifier. Must match server.active_event_id.",
+      "name": "Short display name for UI.",
+      "tagline": "Optional short tagline.",
+      "description": "Optional longer description for UI.",
+      "season": "Season this event aligns to.",
+      "start_at": "Optional ISO timestamp for scheduling.",
+      "end_at": "Optional ISO timestamp for scheduling.",
+      "badge_id": "Badge granted for discovering an event recipe.",
+      "effects": "Optional effect payload for future systems.",
+      "event_recipes": "Optional list of temporary recipes available only during the event."
+    },
+    "event_recipe_fields": {
+      "recipe_id": "Unique recipe id scoped to events.",
+      "name": "Display name for the recipe.",
+      "tier": "Recipe tier (common/rare/epic/seasonal).",
+      "season": "Optional season tag for recipe filtering.",
+      "ingredients": "List of ingredient objects using existing item ids.",
+      "base_price": "Optional base price override.",
+      "notes": "Optional dev notes."
+    }
+  },
+  "events": [
+    {
+      "event_id": "spring_blossoms",
+      "name": "Spring Blossoms",
+      "tagline": "Petals on the breeze and fresh starts in every bowl.",
+      "description": "Slight SXP uplift and extra market stock for new recipes.",
+      "season": "spring",
+      "start_at": "2025-03-01T00:00:00Z",
+      "end_at": "2025-05-31T23:59:59Z",
+      "badge_id": "event_spring_blossoms",
+      "effects": {
+        "rewards": {
+          "sxp_mult": 1.08,
+          "rep_bonus": 1
+        },
+        "market": {
+          "stock_mult": 1.15
+        }
+      },
+      "event_recipes": [
+        {
+          "recipe_id": "spring_blossoms_garden_broth",
+          "name": "Garden Broth",
+          "tier": "common",
+          "season": "spring",
+          "ingredients": [
+            { "item_id": "broth_ginger", "qty": 1 },
+            { "item_id": "noodles_wheat", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "spring_blossoms_vernal_shio",
+          "name": "Vernal Shio",
+          "tier": "uncommon",
+          "season": "spring",
+          "ingredients": [
+            { "item_id": "broth_shio", "qty": 1 },
+            { "item_id": "noodles_fine", "qty": 1 },
+            { "item_id": "topping_extra_broth", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "spring_blossoms_bloom_broth",
+          "name": "Bloom Broth",
+          "tier": "rare",
+          "season": "spring",
+          "ingredients": [
+            { "item_id": "broth_sweet_soy", "qty": 1 },
+            { "item_id": "noodles_thin", "qty": 1 },
+            { "item_id": "topping_chili_flakes", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "spring_blossoms_sakura_flare",
+          "name": "Sakura Flare",
+          "tier": "epic",
+          "season": "spring",
+          "ingredients": [
+            { "item_id": "broth_sakura", "qty": 1 },
+            { "item_id": "noodles_ramen", "qty": 1 },
+            { "item_id": "spice_sesame_oil", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "spring_blossoms_petal_miso",
+          "name": "Petal Miso",
+          "tier": "seasonal",
+          "season": "spring",
+          "ingredients": [
+            { "item_id": "broth_miso", "qty": 1 },
+            { "item_id": "noodles_thin", "qty": 1 },
+            { "item_id": "topping_chili_flakes", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        }
+      ]
+    },
+    {
+      "event_id": "summer_solstice",
+      "name": "Summer Solstice",
+      "tagline": "Long days, faster service, brighter tips.",
+      "description": "Coins boosted with a small discount at the market.",
+      "season": "summer",
+      "start_at": "2025-06-01T00:00:00Z",
+      "end_at": "2025-08-31T23:59:59Z",
+      "badge_id": "event_summer_solstice",
+      "effects": {
+        "rewards": {
+          "coins_mult": 1.12
+        },
+        "market": {
+          "price_mult": 0.92
+        }
+      },
+      "event_recipes": [
+        {
+          "recipe_id": "summer_solstice_breeze_broth",
+          "name": "Breeze Broth",
+          "tier": "common",
+          "season": "summer",
+          "ingredients": [
+            { "item_id": "broth_light", "qty": 1 },
+            { "item_id": "noodles_soft", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "summer_solstice_citrus_zen",
+          "name": "Citrus Zen",
+          "tier": "uncommon",
+          "season": "summer",
+          "ingredients": [
+            { "item_id": "broth_citrus_infused", "qty": 1 },
+            { "item_id": "noodles_thin", "qty": 1 },
+            { "item_id": "topping_extra_broth", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "summer_solstice_sunlit_udon",
+          "name": "Sunlit Udon",
+          "tier": "rare",
+          "season": "summer",
+          "ingredients": [
+            { "item_id": "broth_citrus_infused", "qty": 1 },
+            { "item_id": "noodles_udon", "qty": 1 },
+            { "item_id": "spice_sesame_oil", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "summer_solstice_firewave",
+          "name": "Firewave Ramen",
+          "tier": "epic",
+          "season": "summer",
+          "ingredients": [
+            { "item_id": "broth_fire", "qty": 1 },
+            { "item_id": "noodles_spiced", "qty": 1 },
+            { "item_id": "spice_chili_oil", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "summer_solstice_starlit_shio",
+          "name": "Starlit Shio",
+          "tier": "seasonal",
+          "season": "summer",
+          "ingredients": [
+            { "item_id": "broth_shio", "qty": 1 },
+            { "item_id": "noodles_hand_pulled", "qty": 1 },
+            { "item_id": "topping_roasted_pork", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        }
+      ]
+    },
+    {
+      "event_id": "harvest_festival",
+      "name": "Harvest Festival",
+      "tagline": "A market-wide celebration of the autumn harvest.",
+      "description": "Limited-time bonuses across the market and rewards.",
+      "season": "autumn",
+      "start_at": "2025-09-01T00:00:00Z",
+      "end_at": "2025-11-30T23:59:59Z",
+      "badge_id": "event_harvest_festival",
+      "effects": {
+        "rewards": {
+          "coins_mult": 1.1,
+          "sxp_mult": 1.05,
+          "rep_bonus": 2
+        },
+        "market": {
+          "price_mult": 0.9,
+          "stock_mult": 1.2
+        }
+      },
+      "event_recipes": [
+        {
+          "recipe_id": "harvest_festival_hearth_stock",
+          "name": "Hearth Stock",
+          "tier": "common",
+          "season": "autumn",
+          "ingredients": [
+            { "item_id": "broth_chicken", "qty": 1 },
+            { "item_id": "noodles_wheat", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "harvest_festival_herbal_wok",
+          "name": "Herbal Wok",
+          "tier": "uncommon",
+          "season": "autumn",
+          "ingredients": [
+            { "item_id": "broth_herbal", "qty": 1 },
+            { "item_id": "noodles_udon", "qty": 1 },
+            { "item_id": "topping_extra_broth", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "harvest_festival_spiced_sweet",
+          "name": "Spiced Sweet",
+          "tier": "rare",
+          "season": "autumn",
+          "ingredients": [
+            { "item_id": "broth_sweet_soy", "qty": 1 },
+            { "item_id": "noodles_thick", "qty": 1 },
+            { "item_id": "spice_sesame_oil", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "harvest_festival_pumpkin_miso",
+          "name": "Pumpkin Miso",
+          "tier": "epic",
+          "season": "autumn",
+          "ingredients": [
+            { "item_id": "broth_pumpkin", "qty": 1 },
+            { "item_id": "noodles_ramen", "qty": 1 },
+            { "item_id": "topping_roasted_pork", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "harvest_festival_black_garlic",
+          "name": "Black Garlic Hearth",
+          "tier": "seasonal",
+          "season": "autumn",
+          "ingredients": [
+            { "item_id": "broth_black_garlic", "qty": 1 },
+            { "item_id": "noodles_hand_pulled", "qty": 1 },
+            { "item_id": "topping_roasted_pork", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        }
+      ]
+    },
+    {
+      "event_id": "winter_market",
+      "name": "Winter Market",
+      "tagline": "Warm lights and hearty bowls.",
+      "description": "Reputation and SXP bonuses to reward cozy cooking.",
+      "season": "winter",
+      "start_at": "2025-12-01T00:00:00Z",
+      "end_at": "2026-02-28T23:59:59Z",
+      "badge_id": "event_winter_market",
+      "effects": {
+        "rewards": {
+          "sxp_mult": 1.06,
+          "rep_mult": 1.08
+        },
+        "market": {
+          "price_mult": 0.96
+        }
+      },
+      "event_recipes": [
+        {
+          "recipe_id": "winter_market_warm_shio",
+          "name": "Warm Shio",
+          "tier": "common",
+          "season": "winter",
+          "ingredients": [
+            { "item_id": "broth_shio", "qty": 1 },
+            { "item_id": "noodles_fine", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "winter_market_snow_miso",
+          "name": "Snow Miso",
+          "tier": "uncommon",
+          "season": "winter",
+          "ingredients": [
+            { "item_id": "broth_miso", "qty": 1 },
+            { "item_id": "noodles_soft", "qty": 1 },
+            { "item_id": "topping_extra_broth", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "winter_market_glow",
+          "name": "Glow Broth",
+          "tier": "rare",
+          "season": "winter",
+          "ingredients": [
+            { "item_id": "broth_glowing_miso", "qty": 1 },
+            { "item_id": "noodles_ramen", "qty": 1 },
+            { "item_id": "spice_sesame_oil", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "winter_market_hearth_broth",
+          "name": "Hearth Broth",
+          "tier": "epic",
+          "season": "winter",
+          "ingredients": [
+            { "item_id": "broth_creamy_hearth", "qty": 1 },
+            { "item_id": "noodles_thick", "qty": 1 },
+            { "item_id": "spice_chili_oil", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        },
+        {
+          "recipe_id": "winter_market_moonlight",
+          "name": "Moonlight Stock",
+          "tier": "seasonal",
+          "season": "winter",
+          "ingredients": [
+            { "item_id": "broth_rich_stock", "qty": 1 },
+            { "item_id": "noodles_thick", "qty": 1 },
+            { "item_id": "spice_chili_oil", "qty": 1 }
+          ],
+          "notes": "Event-only recipe; uses existing ingredients."
+        }
+      ]
+    }
+  ]
+}

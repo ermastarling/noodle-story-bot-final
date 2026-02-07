@@ -19,8 +19,28 @@ export function getBadgeById(badgesContent, badgeId) {
   return (badgesContent?.badges ?? []).find((b) => b.badge_id === badgeId) ?? null;
 }
 
-export function meetsCondition(player, condition) {
+export function grantBadge(player, badgesContent, badgeId) {
+  const profile = ensureBadgeState(player);
+  const badge = getBadgeById(badgesContent, badgeId);
+  if (!badge) return { status: "missing" };
+
+  const owned = new Set(profile.badges || []);
+  if (owned.has(badgeId)) return { status: "owned", badge };
+
+  owned.add(badgeId);
+  profile.badges = [...owned];
+  if (!profile.featured_badge_id) profile.featured_badge_id = badgeId;
+  profile.badges_unlocked_at = profile.badges_unlocked_at ?? {};
+  profile.badges_unlocked_at[badgeId] = nowTs();
+
+  return { status: "granted", badge };
+}
+
+export function meetsCondition(player, condition, { allowEventOnly = false } = {}) {
   if (!condition) return false;
+  if (condition.type === "event_only") {
+    return allowEventOnly;
+  }
   if (condition.type === "serve_bowls_total") {
     const total = player?.lifetime?.bowls_served_total ?? 0;
     return total >= Number(condition.value || 0);
@@ -76,7 +96,7 @@ export function grantTemporaryBadge(player, badgesContent, badgeId, durationMs) 
   const profile = ensureBadgeState(player);
   const badge = getBadgeById(badgesContent, badgeId);
   if (!badge) return { status: "missing" };
-  if (!meetsCondition(player, badge.condition)) return { status: "ineligible" };
+  if (!meetsCondition(player, badge.condition, { allowEventOnly: true })) return { status: "ineligible" };
 
   const now = nowTs();
   const expiresAt = now + Math.max(0, Number(durationMs || 0));

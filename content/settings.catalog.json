@@ -3,7 +3,7 @@
     "key": "SEASON_MODE",
     "type": "choice",
     "scope": "server",
-    "default": "rolling_days",
+    "default": "fixed_dates",
     "choices": [
       "rolling_days",
       "fixed_dates"

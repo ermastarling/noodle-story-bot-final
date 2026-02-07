@@ -14,6 +14,7 @@ import { nowTs } from "../util/time.js";
 import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
 import { FALLBACK_RECIPE_ID } from "./resilience.js";
 import { weightedPick } from "../util/rng.js";
+import { grantBadge } from "./badges.js";
 
 /**
  * Check if player can discover recipes of a given tier
@@ -34,7 +35,7 @@ export function canDiscoverTier(player, tier) {
 /**
  * Get list of recipes player can potentially discover
  */
-export function getDiscoverableRecipes(player, content, { excludeCompletedClues = false, activeSeason = null } = {}) {
+export function getDiscoverableRecipes(player, content, { excludeCompletedClues = false, activeSeason = null, activeEventId = null } = {}) {
   const knownRecipes = new Set([
     ...(player.known_recipes || []),
     ...(player.resilience?.temp_recipes || []),
@@ -53,6 +54,10 @@ export function getDiscoverableRecipes(player, content, { excludeCompletedClues 
       if (clueCount >= CLUES_TO_UNLOCK_RECIPE) return false;
     }
     
+    if (recipe.event_id && (!activeEventId || recipe.event_id !== activeEventId)) {
+      return false;
+    }
+
     if (recipe.tier === "seasonal") {
       if (!activeSeason || recipe.season !== activeSeason) return false;
     }
@@ -64,8 +69,8 @@ export function getDiscoverableRecipes(player, content, { excludeCompletedClues 
   });
 }
 
-function pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues = false, activeSeason = null } = {}) {
-  const discoverableRecipes = getDiscoverableRecipes(player, content, { excludeCompletedClues, activeSeason });
+function pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues = false, activeSeason = null, activeEventId = null } = {}) {
+  const discoverableRecipes = getDiscoverableRecipes(player, content, { excludeCompletedClues, activeSeason, activeEventId });
   if (discoverableRecipes.length === 0) return null;
 
   const weights = Object.fromEntries(
@@ -82,7 +87,7 @@ function pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues = 
 /**
  * Roll for recipe discovery after a serve
  */
-export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, activeSeason = null }) {
+export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, activeSeason = null, activeEventId = null }) {
   if (!DISCOVERY_HOOKS.on_serve) return [];
 
   const discoveries = [];
@@ -100,7 +105,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   }
 
   // Check discoverable recipes first
-  const discoverableRecipes = getDiscoverableRecipes(player, content, { activeSeason });
+  const discoverableRecipes = getDiscoverableRecipes(player, content, { activeSeason, activeEventId });
   console.log(`🔍 Discovery roll: ${discoverableRecipes.length} discoverable recipes available`);
 
   // Curious Apprentice: +1% discovery chance to next roll (applies to both)
@@ -115,7 +120,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
     const roll = rng();
     console.log(`🔍 Scholar roll: ${roll.toFixed(4)} vs 0.01`);
     if (roll < 0.01) {
-      const clue = rollClue(player, content, rng, activeSeason);
+      const clue = rollClue(player, content, rng, activeSeason, activeEventId);
       if (clue) discoveries.push(clue);
     }
   }
@@ -127,7 +132,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
     const roll = rng();
     console.log(`🔍 Moonlit roll: ${roll.toFixed(4)} vs 0.01`);
     if (roll < 0.01) {
-      const scroll = rollScroll(player, content, rng, activeSeason);
+      const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
       if (scroll) discoveries.push(scroll);
     }
   }
@@ -141,13 +146,13 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   if (dropRoll < totalChance) {
     const pick = rng();
     if (pick < (clueChance / totalChance)) {
-      const clue = rollClue(player, content, rng, activeSeason);
+      const clue = rollClue(player, content, rng, activeSeason, activeEventId);
       if (clue) {
         console.log(`✅ Clue rolled: ${clue.recipeName}`);
         discoveries.push(clue);
       }
     } else {
-      const scroll = rollScroll(player, content, rng, activeSeason);
+      const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
       if (scroll) {
         console.log(`✅ Scroll rolled: ${scroll.recipeName}`);
         discoveries.push(scroll);
@@ -161,8 +166,8 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
 /**
  * Roll a recipe clue
  */
-function rollClue(player, content, rng, activeSeason = null) {
-  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason });
+function rollClue(player, content, rng, activeSeason = null, activeEventId = null) {
+  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason, activeEventId });
   if (!recipe) return null;
   const clueId = `clue_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   
@@ -178,8 +183,8 @@ function rollClue(player, content, rng, activeSeason = null) {
 /**
  * Roll a recipe scroll
  */
-function rollScroll(player, content, rng, activeSeason = null) {
-  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason });
+function rollScroll(player, content, rng, activeSeason = null, activeEventId = null) {
+  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason, activeEventId });
   if (!recipe) return null;
   const scrollId = `scroll_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   
@@ -202,11 +207,20 @@ function rollScroll(player, content, rng, activeSeason = null) {
 /**
  * Apply discovery to player state
  */
-export function applyDiscovery(player, discovery, content, rng = Math.random) {
+export function applyDiscovery(player, discovery, content, rng = Math.random, options = {}) {
   const safeContent = content ?? {};
   const recipes = safeContent.recipes ?? {};
   const items = safeContent.items ?? {};
+  const badgesContent = options?.badgesContent ?? null;
   if (!discovery) return { isDuplicate: false, reward: null };
+
+  const maybeGrantEventBadge = (recipe) => {
+    if (!recipe?.event_badge_id || !badgesContent) return null;
+    const result = grantBadge(player, badgesContent, recipe.event_badge_id);
+    if (result.status !== "granted") return null;
+    const badgeName = result.badge?.name ?? "Event Badge";
+    return `🏅 Badge earned: **${badgeName}**`;
+  };
   
   if (discovery.type === "clue") {
     // Check if player already knows this recipe
@@ -349,11 +363,13 @@ export function applyDiscovery(player, discovery, content, rng = Math.random) {
       player.known_recipes.push(discovery.recipeId);
     }
     
+    const badgeLine = maybeGrantEventBadge(recipe);
+
     return { 
       isDuplicate: false,
       recipeUnlocked: true,
       reward: null,
-      message: `📜 Learned **${discovery.recipeName}** from a scroll!${ingredientsText}`
+      message: `📜 Learned **${discovery.recipeName}** from a scroll!${ingredientsText}${badgeLine ? `\n${badgeLine}` : ""}`
     };
   }
   

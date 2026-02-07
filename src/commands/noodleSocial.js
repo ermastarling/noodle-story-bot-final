@@ -945,7 +945,7 @@ async function handleLeaderboard(interaction) {
       .setTitle(`${getIcon("leaderboard")} Noodle Story Leaderboard`)
       .setDescription(`**${fieldName}**\n\n${leaderboardText}`)
       .setColor(theme.colors.info)
-      .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • Rankings are read-only and for fun!` });
+      .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)}` });
 
     return interaction.editReply({ 
       embeds: [embed], 
@@ -1560,7 +1560,7 @@ async function handleComponent(interaction) {
       const servingOptions = [
         { label: "5 servings", value: "5", description: "Minimum for shared orders" },
         { label: "10 servings", value: "10", description: "Good for medium parties" },
-        { label: "15 servings", value: "15", description: "Great for larger groups" },
+        { label: "15 servings", value: "15", description: "Great for full parties" },
         { label: "20 servings", value: "20", description: "Maximum team effort!" }
       ];
 
@@ -1821,7 +1821,7 @@ async function handleComponent(interaction) {
         .setTitle(`${getIcon("leaderboard")} Noodle Story Leaderboard`)
         .setDescription(`**${getIcon("coins")} Top Coin Holders**\n\n${leaderboardText}`)
         .setColor(theme.colors.info)
-        .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • Rankings are read-only and for fun!` });
+        .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)}` });
 
       return componentCommit(interaction, {
         embeds: [embed],

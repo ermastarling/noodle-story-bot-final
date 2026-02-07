@@ -49,3 +49,25 @@ export function getIconUrl(id) {
   if (typeof value === "string" && value.startsWith("http")) return value;
   return null;
 }
+
+export function resolveIcon(value, fallback = "?") {
+  if (!value) return fallback;
+  if (typeof value !== "string") return fallback;
+  const icons = loadIcons();
+  if (icons?.[value]) return getIcon(value, fallback);
+  return value;
+}
+
+export function getCustomEmojiEntries() {
+  const icons = loadIcons();
+  const entries = [];
+
+  for (const [key, value] of Object.entries(icons ?? {})) {
+    if (typeof value !== "string") continue;
+    const match = value.match(CUSTOM_EMOJI_RE);
+    if (!match) continue;
+    entries.push({ key, name: match[1], id: match[2], animated: value.startsWith("<a:") });
+  }
+
+  return entries;
+}

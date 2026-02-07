@@ -3,9 +3,6 @@
     "custom_emoji": "You can replace any icon value with a Discord custom emoji string like <:icon_name:123456789012345678> or <a:icon_name:123456789012345678>."
   },
   "icons": {
-    "add": "<:add:1469222437957799968>",
-    "season": "🍂",
-    "back": "<:back:1469222466743304193>",
     "badges": "🏅",
     "bowl_100": "🍜",
     "bowl_250": "🥢",
@@ -14,7 +11,14 @@
     "bowl_2500": "🔥",
     "bowl_5000": "🎏",
     "bowl_10000": "🌙",
-    "seasonal_herald_placeholder": "🌟",
+    "seasonal_herald": "🌟",
+    "event_spring_blossoms": "🌸",
+    "event_summer_solstice": "☀️",
+    "event_harvest_festival": "🎃",
+    "event_winter_market": "❄️",
+    "add": "<:add:1469222437957799968>",
+    "season": "🍂",
+    "back": "<:back:1469222466743304193>",
     "basket": "🧺",
     "bless": "✨",
     "boat": "⛵",
@@ -36,7 +40,7 @@
     "collections": "📚",
     "confetti": "🎊",
     "cook": "🍲",
-    "cooldown": "<:cooldown:1469222448354328320>",
+    "cooldown": "<:cooldown:1469222460875346065>",
     "daily_reward": "<:daily_reward:1469233536253956158>",
     "decor": "🪞",
     "decor_set_placeholder": "https://example.com/decor-placeholder.png",
@@ -64,10 +68,10 @@
     "customize": "✏️",
     "effect": "✨",
     "error": "<:error:1469222457935270040>",
-    "cancel": "<:cancel:1469222459876540160>",
+    "cancel": "<:cancel:1469222463933251604>",
     "forage": "🌿",
     "group": "👥",
-    "hourglass": "⏳",
+    "hourglass": "<:status_pending:1469233527190192251>",
     "help": "<:help:1469233534286958716>",
     "idea": "💡",
     "inbox": "<:inbox:1469233531883491338>",
@@ -118,6 +122,6 @@
     "tips": "💰",
     "tree": "🌲",
     "upgrades": "🔧",
-    "warning": "<:warning:1469222456721499650>"
+    "warning": "<:warning:1469222440390365275>"
   }
 }
