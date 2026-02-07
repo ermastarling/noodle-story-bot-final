@@ -8,6 +8,7 @@
 
 import { nowTs, dayKeyUTC } from "../util/time.js";
 import { MARKET_ITEM_IDS, sellPrice } from "./market.js";
+import { getIcon } from "../ui/icons.js";
 
 // Constants
 export const FALLBACK_RECIPE_ID = "simple_broth";
@@ -359,7 +360,7 @@ export function applyResilienceMechanics(player, serverState, content) {
     if (pity.applied) {
       const itemName = content.items?.[pity.discountedItem]?.name || pity.discountedItem;
       messages.push(
-        `🛟 **Market Help**: Today, **${itemName}** is available at a special price (${pity.discountedPrice}c).`
+        `${getIcon("rescue")} **Market Help**: Today, **${itemName}** is available at a special price (${pity.discountedPrice}c).`
       );
       applied = true;
     }

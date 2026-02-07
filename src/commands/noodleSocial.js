@@ -572,7 +572,7 @@ async function handleParty(interaction) {
         .setTitle(`${getIcon("level_up")} Party Created!`)
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
-          { name: "Party ID", value: `\`\`\`${formatPartyId(result.partyId)}\`\`\``, inline: true },
+          { name: "Party ID", value: `${formatPartyId(result.partyId)}`, inline: true },
           { name: "Leader", value: `<@${userId}>`, inline: true }
         )
         .setColor(theme.colors.success);

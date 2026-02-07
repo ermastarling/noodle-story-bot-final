@@ -15,6 +15,7 @@ import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
 import { FALLBACK_RECIPE_ID } from "./resilience.js";
 import { weightedPick } from "../util/rng.js";
 import { grantBadge } from "./badges.js";
+import { getIcon } from "../ui/icons.js";
 
 /**
  * Check if player can discover recipes of a given tier
@@ -106,7 +107,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
 
   // Check discoverable recipes first
   const discoverableRecipes = getDiscoverableRecipes(player, content, { activeSeason, activeEventId });
-  console.log(`🔍 Discovery roll: ${discoverableRecipes.length} discoverable recipes available`);
+  console.log(`${getIcon("search")} Discovery roll: ${discoverableRecipes.length} discoverable recipes available`);
 
   // Curious Apprentice: +1% discovery chance to next roll (applies to both)
   if (player.buffs?.apprentice_bonus_pending) {
@@ -118,7 +119,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   // Wandering Scholar: extra independent 1% chance to drop a clue
   if (npcArchetype === "wandering_scholar") {
     const roll = rng();
-    console.log(`🔍 Scholar roll: ${roll.toFixed(4)} vs 0.01`);
+    console.log(`${getIcon("search")} Scholar roll: ${roll.toFixed(4)} vs 0.01`);
     if (roll < 0.01) {
       const clue = rollClue(player, content, rng, activeSeason, activeEventId);
       if (clue) discoveries.push(clue);
@@ -130,7 +131,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   // Moonlit Spirit: extra independent 1% scroll chance on Epic tier
   if (npcArchetype === "moonlit_spirit" && tier === "epic") {
     const roll = rng();
-    console.log(`🔍 Moonlit roll: ${roll.toFixed(4)} vs 0.01`);
+    console.log(`${getIcon("search")} Moonlit roll: ${roll.toFixed(4)} vs 0.01`);
     if (roll < 0.01) {
       const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
       if (scroll) discoveries.push(scroll);
@@ -142,7 +143,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   // Base roll: only one drop (clue OR scroll)
   const totalChance = clueChance + scrollChance;
   const dropRoll = rng();
-  console.log(`🔍 Drop roll: ${dropRoll.toFixed(4)} vs ${totalChance.toFixed(4)}`);
+  console.log(`${getIcon("search")} Drop roll: ${dropRoll.toFixed(4)} vs ${totalChance.toFixed(4)}`);
   if (dropRoll < totalChance) {
     const pick = rng();
     if (pick < (clueChance / totalChance)) {
@@ -219,7 +220,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     const result = grantBadge(player, badgesContent, recipe.event_badge_id);
     if (result.status !== "granted") return null;
     const badgeName = result.badge?.name ?? "Event Badge";
-    return `🏅 Badge earned: **${badgeName}**`;
+    return `${getIcon("badges")} Badge earned: **${badgeName}**`;
   };
   
   if (discovery.type === "clue") {
@@ -303,7 +304,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
         isDuplicate: false,
         recipeUnlocked: true,
         reward: null,
-        message: `🔍✨ Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}`
+        message: `${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}`
       };
     }
     
@@ -313,7 +314,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
       isDuplicate: false,
       recipeUnlocked: false,
       reward: null,
-      message: `🔍 Clue ${clueCount}/${CLUES_TO_UNLOCK_RECIPE} for **${discovery.recipeName}** (${remaining} more)${ingredientMsg}`
+      message: `${getIcon("search")} Clue ${clueCount}/${CLUES_TO_UNLOCK_RECIPE} for **${discovery.recipeName}** (${remaining} more)${ingredientMsg}`
     };
   }
   
@@ -369,7 +370,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
       isDuplicate: false,
       recipeUnlocked: true,
       reward: null,
-      message: `📜 Learned **${discovery.recipeName}** from a scroll!${ingredientsText}${badgeLine ? `\n${badgeLine}` : ""}`
+      message: `${getIcon("scroll")} Learned **${discovery.recipeName}** from a scroll!${ingredientsText}${badgeLine ? `\n${badgeLine}` : ""}`
     };
   }
   

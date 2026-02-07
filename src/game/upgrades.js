@@ -177,7 +177,7 @@ export function getUpgradesByCategory(player, upgradesContent) {
       result[category].upgrades.push(upgradeInfo);
     } else {
       if (!result.other) {
-        result.other = { display_name: "Other", icon: "📋", upgrades: [] };
+        result.other = { display_name: "Other", icon: "list", upgrades: [] };
       }
       result.other.upgrades.push(upgradeInfo);
     }

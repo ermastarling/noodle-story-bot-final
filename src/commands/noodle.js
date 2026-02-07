@@ -662,7 +662,7 @@ function noodleOrdersActionRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary)
 );
 }
 
@@ -670,7 +670,7 @@ function noodleOrdersActionRowWithBack(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
 }
@@ -679,7 +679,7 @@ function noodleOrdersMenuActionRow(userId, { showCancel = false } = {}) {
 const row = new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("bowl")).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary)
 );
 
 if (showCancel) {
@@ -2693,7 +2693,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const mins = Math.ceil(msLeft / 60000);
       const nextAtTs = Math.floor(chk.nextAt / 1000);
       const cooldownEmbed = buildMenuEmbed({
-        title: `${getIcon("forage")} Forage Cooldown`,
+        title: `${getIcon("cooldown")} Forage Cooldown`,
         description: `You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`,
         user: interaction.member ?? interaction.user
       });
@@ -3839,7 +3839,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       let serveMsg = `Served **${rName}**${qualityNote} to *${npcName}*.`;
       if (rewards.npcModifier === "coins_courier") serveMsg += ` ${getIcon("rain")} +25% coins`;
       if (rewards.npcModifier === "coins_bard") serveMsg += ` ${getIcon("music")} +10% coins`;
-      if (rewards.npcModifier === "coins_festival") serveMsg += ` ${getIcon("level_up")} +25% coins`;
+      if (rewards.npcModifier === "coins_festival") serveMsg += ` ${getIcon("confetti")} +25% coins`;
       if (rewards.npcModifier === "speed") serveMsg += ` ${getIcon("moon")} Doubled speed bonus`;
       if (rewards.npcModifier === "sxp_forest") serveMsg += ` ${getIcon("tree")} +10% SXP`;
       if (rewards.npcModifier === "sxp_captain") serveMsg += ` ${getIcon("boat")} +10 SXP`;

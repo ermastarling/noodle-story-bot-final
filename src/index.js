@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getIcon } from "./ui/icons.js";
 
 (async () => {
   // Import discord.js
@@ -478,7 +479,7 @@ import { fileURLToPath } from "url";
 
       try {
         fs.appendFileSync(LOG_PATH, `\n[${new Date().toISOString()}]\n${detail}\n`);
-        console.log("🧾 Error written to:", LOG_PATH);
+        console.log(`${getIcon("list")} Error written to:`, LOG_PATH);
       } catch (err) {
         console.error("❌ Failed to write error log:", err?.stack ?? err);
       }

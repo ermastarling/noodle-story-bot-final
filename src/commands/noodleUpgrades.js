@@ -98,11 +98,11 @@ function staffSortKey(player, staff) {
 
 function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
   const categories = [
-    { id: "staff", label: `${getIcon("staff_management")} Staff` },
-    { id: "kitchen", label: `${getIcon("category_kitchen")} Kitchen` },
-    { id: "storage", label: `${getIcon("category_storage")} Storage` },
-    { id: "service", label: `${getIcon("category_service")} Service` },
-    { id: "ambience", label: `${getIcon("category_ambience")} Ambiance` }
+    { id: "staff", label: "Staff", icon: "staff_management" },
+    { id: "kitchen", label: "Kitchen", icon: "category_kitchen" },
+    { id: "storage", label: "Storage", icon: "category_storage" },
+    { id: "service", label: "Service", icon: "category_service" },
+    { id: "ambience", label: "Ambiance", icon: "category_ambience" }
   ];
 
   const buttons = categories.map((cat) =>
@@ -111,8 +111,9 @@ function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
         source
           ? `noodle-upgrades:category:${userId}:${cat.id}:${source}`
           : `noodle-upgrades:category:${userId}:${cat.id}`
-      )
-      .setLabel(cat.label)
+        )
+        .setLabel(cat.label)
+        .setEmoji(getButtonEmoji(cat.icon))
       .setStyle(cat.id === activeCategory ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 
@@ -121,11 +122,11 @@ function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
 
 function buildStaffRarityRow(userId, activeRarity = "common", source = null) {
   const rarities = [
-    { id: "overview", label: `${getIcon("staff_management")} Staff` },
-    { id: "common", label: `${getIcon("rarity_common")} Common` },
-    { id: "rare", label: `${getIcon("rarity_rare")} Rare` },
-    { id: "epic", label: `${getIcon("rarity_epic")} Epic` },
-    { id: "upgrades", label: `${getIcon("staff_upgrades")} Upgrades` }
+    { id: "overview", label: "Staff", icon: "staff_management" },
+    { id: "common", label: "Common", icon: "rarity_common" },
+    { id: "rare", label: "Rare", icon: "rarity_rare" },
+    { id: "epic", label: "Epic", icon: "rarity_epic" },
+    { id: "upgrades", label: "Upgrades", icon: "staff_upgrades" }
   ];
 
   const buttons = rarities.map((rar) =>
@@ -134,8 +135,9 @@ function buildStaffRarityRow(userId, activeRarity = "common", source = null) {
         source
           ? `noodle-upgrades:staffpage:${userId}:${rar.id}:${source}`
           : `noodle-upgrades:staffpage:${userId}:${rar.id}`
-      )
-      .setLabel(rar.label)
+        )
+        .setLabel(rar.label)
+        .setEmoji(getButtonEmoji(rar.icon))
       .setStyle(rar.id === activeRarity ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 

@@ -4,7 +4,7 @@
   },
   "icons": {
     "badges": {
-      "badges": "🏅",
+      "badges": "<:badges:1469582798514950238>",
       "seasonal_herald": "🌟",
       "bowl_100": "🍜",
       "bowl_250": "🥢",
@@ -74,14 +74,14 @@
       "back": "<:back:1469222466743304193>",
       "next": "<:next:1469222452998705303>",
       "help": "<:help:1469233534286958716>",
-      "list": "📋",
+      "list": "<:list:1469585866404921397>",
       "search": "<:search:1469222445259952250>",
       "question": "<:question:1469222450226270240>"
     },
     "actions": {
       "add": "<:add:1469222437957799968>",
       "cancel": "<:cancel:1469222463933251604>",
-      "contribute": "🥕",
+      "contribute": "<:contribute:1469577573032919112>",
       "refresh": "<:refresh:1469222447432728710>",
       "skip": "<:skip:1469222443276046500>"
     },
@@ -96,16 +96,16 @@
       "hourglass": "<:status_pending:1469233527190192251>"
     },
     "time_weather": {
-      "calendar": "📅",
-      "time": "⏰",
-      "moon": "🌙",
-      "rain": "🌧️"
+      "calendar": "<:calendar:1469606720417300583>",
+      "time": "<:time:1469606749265727562>",
+      "moon": "<:moon:1469606722388623410>",
+      "rain": "<:rain:1469606726545440842>"
     },
     "social": {
-      "party": "🎪",
-      "group": "👥",
-      "tips": "💰",
-      "bless": "✨"
+      "party": "<:party:1469554963150667797>",
+      "group": "<:group:1469554960168390659>",
+      "tips": "<:tips:1469535262261514405>",
+      "bless": "<:bless:1469590679544926392>"
     },
     "economy_progression": {
       "coins": "<:coins:1469535226991743111>",
@@ -124,15 +124,16 @@
       "cook": "<:cook:1469532944564486246>",
       "serve": "<:serve:1469532917519880284>",
       "recipes": "<:recipes:1469532903536066690>",
-      "forage": "🌿",
+      "forage": "<:forage:1469614545046601808>",
       "quests": "<:quests:1469233546768941153>",
       "quest_rewards": "<:quest_rewards:1469233544189579304>",
       "daily_reward": "<:daily_reward:1469233536253956158>",
-      "rescue": "🆘",
-      "season": "🍂",
-      "sparkle": "✨",
+      "rescue": "<:rescue:1469615042239529011>",
+      "season": "<:season:1469606737165418497>",
+      "sparkle": "<:sparkle:1469606742416429136>",
+      "scroll": "<:scroll:1469582804433240101>",
       "star": "<:star:1469535253445083216>",
-      "idea": "💡",
+      "idea": "<:idea:1469587136046170112>",
       "note": "<:note:1469233538929791057>",
       "inbox": "<:inbox:1469233531883491338>",
       "mail": "<:mail:1469233529521963039>"
@@ -147,34 +148,34 @@
     },
     "shop_profile": {
       "profile": "<:profile:1469554966548189205>",
-      "decor": "🪞",
-      "customize": "✏️",
-      "tag": "🏷️"
+      "decor": "<:decor:1469590682011435061>",
+      "customize": "<:customize:1469593440533876852>",
+      "tag": "<:tag:1469585868527501444>"
     },
     "staff_upgrades": {
-      "staff_management": "👥",
-      "staff_slots": "👥",
-      "staff_upgrades": "🧰",
-      "upgrades": "🔧"
+      "staff_management": "<:staff_management:1469593443679338517>",
+      "staff_slots": "<:staff_slots:1469593446590316690>",
+      "staff_upgrades": "<:staff_upgrades:1469600776404992147>",
+      "upgrades": "<:upgrades:1469593449303900233>"
     },
     "collections": {
-      "collections": "📚"
+      "collections": "<:collections:1469582802298343505>"
     },
     "environment": {
-      "tree": "🌲",
-      "boat": "⛵",
-      "broom": "🧹",
-      "door": "🚪",
-      "music": "🎵",
-      "confetti": "🎊",
-      "effect": "✨",
-      "chef": "🧑‍🍳",
-      "cart": "🛒"
+      "tree": "<:tree:1469606757071323262>",
+      "boat": "<:boat:1469614525043966197>",
+      "broom": "<:broom:1469614527925452801>",
+      "door": "<:door:1469614534787334287>",
+      "music": "<:music:1469614547286360074>",
+      "confetti": "<:confetti:1469614531524165663>",
+      "effect": "<:effect:1469614538809671798>",
+      "chef": "<:chef:1469532942140178474>",
+      "cart": "<:cart:1469532939586113660>"
     },
     "rarity": {
-      "rarity_common": "⚪",
-      "rarity_rare": "⭐",
-      "rarity_epic": "🌟"
+      "rarity_common": "<:rarity_common:1469600766174957712>",
+      "rarity_rare": "<:rarity_rare:1469600772890169385>",
+      "rarity_epic": "<:rarity_epic:1469600769035468832>"
     },
     "categories": {
       "category_ambience": "<:category_ambience:1469532788641366128>",
@@ -185,7 +186,7 @@
       "category_support": "<:category_support:1469532825567887593>"
     },
     "misc": {
-      "sleepy": "😴"
+      "sleepy": "<:sleepy:1469615605052080222>"
     }
   }
 }

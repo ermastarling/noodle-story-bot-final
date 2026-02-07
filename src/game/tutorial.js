@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getIcon } from "../ui/icons.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,7 +74,7 @@ export function formatTutorialMessage(step) {
 
   // ✅ blank line spacer between step text and step tip
   if (tipText) {
-    lines.push("", `💡 ${tipText}`);
+    lines.push("", `${getIcon("idea")} ${tipText}`);
   }
 
   return lines.join("\n");
@@ -87,6 +88,6 @@ export function formatTutorialCompletionMessage() {
     "• Start each day with `/noodle orders` to accept, cook and serve customers.",
     "• Use `/noodle help` for command help.",
     "",
-    "Your story begins here, etch your noodle shop into legend, one bowl at a time 🍜"
+    `Your story begins here, etch your noodle shop into legend, one bowl at a time ${getIcon("serve")}`
   ].join("\n");
 }

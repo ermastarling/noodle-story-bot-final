@@ -8,6 +8,7 @@
 
 import { nowTs, dayKeyUTC } from "../util/time.js";
 import { makeStreamRng } from "../util/rng.js";
+import { getIcon } from "../ui/icons.js";
 
 // Inactivity thresholds (in milliseconds)
 const INACTIVE_7D_MS = 7 * 24 * 60 * 60 * 1000;
@@ -117,7 +118,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       .join(", ");
 
     messages.push(
-      `🕐 *While you were away, some ingredients spoiled:* ${itemsList}`
+      `${getIcon("time")} *While you were away, some ingredients spoiled:* ${itemsList}`
     );
   }
 
@@ -219,14 +220,14 @@ export function generateWelcomeBackMessage(inactivityStatus, serverState, conten
   const messages = [];
 
   if (inactivityStatus.is_inactive_30d) {
-    messages.push(`🎉 Welcome back after **${days} days**! We've missed you.`);
+    messages.push(`${getIcon("confetti")} Welcome back after **${days} days**! We've missed you.`);
   } else {
-    messages.push(`👋 Welcome back! It's been **${days} days**.`);
+    messages.push(`${getIcon("sparkle")} Welcome back! It's been **${days} days**.`);
   }
 
   // Highlight season if available
   if (serverState.season) {
-    messages.push(`🍂 The world is currently in **${serverState.season}**.`);
+    messages.push(`${getIcon("season")} The world is currently in **${serverState.season}**.`);
   }
 
   return messages.join(" ");
