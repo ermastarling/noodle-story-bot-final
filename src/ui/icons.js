@@ -7,11 +7,32 @@ const __dirname = path.dirname(__filename);
 
 let cachedIcons = null;
 
+function flattenIcons(rawIcons) {
+  const out = {};
+  if (!rawIcons || typeof rawIcons !== "object") return out;
+
+  for (const [key, value] of Object.entries(rawIcons)) {
+    if (typeof value === "string") {
+      out[key] = value;
+      continue;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const [childKey, childValue] of Object.entries(value)) {
+        if (typeof childValue === "string") {
+          out[childKey] = childValue;
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
 function loadIcons() {
   if (cachedIcons) return cachedIcons;
   const p = path.join(__dirname, "..", "..", "content", "icons.json");
   const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
-  cachedIcons = raw?.icons ?? {};
+  cachedIcons = flattenIcons(raw?.icons ?? {});
   return cachedIcons;
 }
 

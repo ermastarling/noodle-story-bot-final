@@ -14,16 +14,16 @@ const FORAGE_TABLE = [
   { item_id: "citrus_slices",    weight: 35, min: 1, max: 2 },
   { item_id: "wild_greens",      weight: 50, min: 1, max: 2 },
   { item_id: "forest_mushrooms", weight: 45, min: 1, max: 2 },
-  { item_id: "night_herbs",      weight: 12, min: 1, max: 1 },
-  { item_id: "ember_peppers",     weight: 16, min: 1, max: 1 },
+  { item_id: "night_herbs",      weight: 20, min: 1, max: 1 },
+  { item_id: "ember_peppers",     weight: 30, min: 1, max: 1 },
   { item_id: "dew_greens",       weight: 30, min: 1, max: 2 },
   { item_id: "petal_garnish",    weight: 20, min: 1, max: 1 },
-  { item_id: "roasted_roots",    weight: 18, min: 1, max: 1 },
+  { item_id: "roasted_roots",    weight: 20, min: 1, max: 1 },
 
   // Spices/Aromatics
-  { item_id: "black_garlic",     weight: 8,  min: 1, max: 1 },
+  { item_id: "black_garlic",     weight: 10,  min: 1, max: 1 },
   { item_id: "star_anise",       weight: 10, min: 1, max: 1 },
-  { item_id: "night_spices",     weight: 9,  min: 1, max: 1 }
+  { item_id: "night_spices",     weight: 10,  min: 1, max: 1 }
 ];
 
 export const FORAGE_ITEM_IDS = FORAGE_TABLE.map(e => e.item_id);

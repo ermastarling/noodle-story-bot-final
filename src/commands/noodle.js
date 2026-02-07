@@ -948,7 +948,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   const activeSpec = getActiveSpecialization(player, specializationsContent);
   const specState = ensureSpecializationState(player);
   if (activeSpec) {
-    const specIcon = activeSpec.icon ?? getIcon("sparkle");
+    const specIcon = resolveIcon(activeSpec.icon, getIcon("sparkle"));
     description += `\n${specIcon} **${activeSpec.name}**`;
   } else if (specState?.active_spec_id) {
     description += `\n${getIcon("sparkle")} **${specState.active_spec_id}**`;
@@ -1041,7 +1041,7 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
       : check.ok
         ? "Available"
         : `${getIcon("lock")} ${check.reason}`;
-    const icon = spec.icon ?? getIcon("sparkle");
+    const icon = resolveIcon(spec.icon, getIcon("sparkle"));
     const description = spec.description ? `\n_${spec.description}_` : "";
     return `${icon} **${spec.name}** — ${status}${description}`;
   });
