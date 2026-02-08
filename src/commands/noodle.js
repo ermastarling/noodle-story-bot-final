@@ -50,7 +50,7 @@ import {
 import { nowTs } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
-import { getUserActiveParty, getActiveBlessing, BLESSING_EFFECTS } from "../game/social.js";
+import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
 import {
   applyResilienceMechanics,
   getAvailableRecipes,
@@ -918,6 +918,7 @@ function ensurePlayer(serverId, userId) {
       specialization: { active_spec_id: null, chosen_at: null, change_cooldown_expires_at: null }
     };
   }
+  clearExpiredBlessings(p);
   ensureBadgeState(p);
   ensureCollectionsState(p);
   ensureSpecializationState(p);
@@ -1007,10 +1008,26 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
     .setDescription(description)
     .setColor(theme.colors.primary)
     .addFields(
-      { name: "Bowls Served", value: String(player.lifetime.bowls_served_total || 0), inline: true },
-      { name: "Level", value: String(player.shop_level || 1), inline: true },
-      { name: "REP", value: String(player.rep || 0), inline: true },
-      { name: "Coins", value: `${player.coins || 0}c`, inline: true },
+      {
+        name: `${getIcon("serve")} Bowls Served`,
+        value: String(player.lifetime.bowls_served_total || 0),
+        inline: true
+      },
+      {
+        name: `${getIcon("sxp")} Level`,
+        value: String(player.shop_level || 1),
+        inline: true
+      },
+      {
+        name: `${getIcon("rep")} REP`,
+        value: String(player.rep || 0),
+        inline: true
+      },
+      {
+        name: `${getIcon("coins")} Coins`,
+        value: `${player.coins || 0}c`,
+        inline: true
+      },
       { name: `${getIcon("badges")} Badges`, value: badgesText, inline: false },
       { name: `${getIcon("collections")} Collections`, value: collectionsText, inline: false },
       { name: `${getIcon("decor")} Decor Set`, value: decorSetValue, inline: false }
@@ -2466,7 +2483,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const rewardLines = [];
     if (result.reward.coins) rewardLines.push(`${getIcon("coins")} **${result.reward.coins}c**`);
-    if (result.reward.sxp) rewardLines.push(`${getIcon("sparkle")} **${result.reward.sxp} SXP**`);
+    if (result.reward.sxp) rewardLines.push(`${getIcon("sxp")} **${result.reward.sxp} SXP**`);
     if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
@@ -3387,7 +3404,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         ? `${getIcon("hourglass")} <t:${Math.floor(expiresAt / 1000)}:R> to serve.`
         : `${getIcon("forage")} No rush.`;
 
-      results.push(`Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})`);
+      const extendedNote = order.is_limited_time && speedWindowSeconds !== baseSpeedWindowSeconds
+        ? ` ${getIcon("sparkle")} Extended to ${Math.ceil(speedWindowSeconds / 60)} min.`
+        : "";
+
+      results.push(`Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})${extendedNote}`);
 
       const bowl = p.inv_bowls?.[order.recipe_id];
       const total = getTotalBowlsForRecipe(p, order.recipe_id);
@@ -3871,7 +3892,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           const minsLeft = Math.ceil((auraExpiry - now3_aura) / 1000 / 60);
           const ts = Math.floor(auraExpiry / 1000);
           if (rewards.repAuraAlreadyActive) {
-            serveMsg += ` ${getIcon("sparkle")} Aura buff already active (${minsLeft} min, <t:${ts}:R>)`;
+            serveMsg += ` ${getIcon("sparkle")} Aura buff already active (<t:${ts}:R>)`;
           } else {
             serveMsg += ` ${getIcon("sparkle")} +2 REP for 15 min (<t:${ts}:R>)`;
           }
@@ -3910,7 +3931,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (!servedCount) {
       const failEmbed = buildMenuEmbed({
-        title: `${getIcon("bowl")} Orders Served`,
+        title: `${getIcon("serve")} Orders Served`,
         description: results.join("\n") || "Nothing served.",
         user: interaction.member ?? interaction.user
       });
@@ -3968,7 +3989,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const embeds = [];
 
     const serveEmbed = buildMenuEmbed({
-      title: `${getIcon("bowl")} Orders Served`,
+      title: `${getIcon("serve")} Orders Served`,
       description: `${results.join("\n")}\n\n${summary}${levelLine}${discoveryLine}${suffix}`,
       user: interaction.member ?? interaction.user
     });

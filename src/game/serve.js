@@ -5,6 +5,7 @@ import { getFailStreakBonuses, applyRepFloorBonus } from "./resilience.js";
 import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import { calculateCombinedEffects, applyReputationBonus } from "./upgrades.js";
 import { calculateStaffEffects } from "./staff.js";
+import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
 
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
@@ -116,6 +117,14 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   }
   if (combinedEffects) {
     rep = applyReputationBonus(rep, combinedEffects, tier);
+  }
+
+  const blessing = player ? getActiveBlessing(player) : null;
+  if (blessing?.type === "coin_bonus") {
+    coins += Number(BLESSING_EFFECTS.coin_bonus?.coinsFlat ?? 0);
+  }
+  if (blessing?.type === "rep_bonus") {
+    rep += Number(BLESSING_EFFECTS.rep_bonus?.repFlat ?? 0);
   }
 
   // B7: Apply reputation floor bonus if eligible

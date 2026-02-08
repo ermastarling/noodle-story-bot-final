@@ -15,7 +15,9 @@ export const BLESSING_TYPES = [
   "limited_time_window_add",
   "discovery_chance_add",
   "quality_shift",
-  "npc_weight_mult"
+  "npc_weight_mult",
+  "coin_bonus",
+  "rep_bonus"
 ];
 
 export const BLESSING_EFFECTS = {
@@ -29,7 +31,9 @@ export const BLESSING_EFFECTS = {
       epic: 2.0,
       seasonal: 1.3
     }
-  }
+  },
+  coin_bonus: { coinsFlat: 10 },
+  rep_bonus: { repFlat: 5 }
 };
 
 /* ------------------------------------------------------------------ */

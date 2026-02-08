@@ -32,7 +32,8 @@ import {
   getActiveSharedOrderByParty,
   BLESSING_DURATION_HOURS,
   BLESSING_COOLDOWN_HOURS,
-  BLESSING_TYPES
+  BLESSING_TYPES,
+  clearExpiredBlessings
 } from "../game/social.js";
 import { nowTs } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
@@ -511,6 +512,7 @@ function ensurePlayer(serverId, userId) {
     upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     p = getPlayer(db, serverId, userId);
   }
+  clearExpiredBlessings(p);
   return p;
 }
 
@@ -2400,8 +2402,20 @@ async function handleComponent(interaction) {
       }
 
       // Confirm completion
+      const promptEmbed = new EmbedBuilder()
+        .setTitle(`${getIcon("warning")} Complete Shared Order?`)
+        .setDescription(
+          `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
+          "Mark this shared order as complete? This will distribute rewards to all contributors."
+        )
+        .setColor(theme.colors.warning);
+
+      applyOwnerFooter(promptEmbed, interaction.member ?? interaction.user);
+
+      const targetMessageId = interaction.message?.id ?? null;
+
       return componentCommit(interaction, {
-        content: `${getIcon("warning")} Mark this shared order as complete? This will distribute rewards to all contributors.`,
+        embeds: [promptEmbed],
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -2413,7 +2427,8 @@ async function handleComponent(interaction) {
               .setLabel("Cancel").setEmoji(getButtonEmoji("cancel"))
               .setStyle(ButtonStyle.Secondary)
           )
-        ]
+        ],
+        targetMessageId
       });
     }
 
@@ -2554,6 +2569,9 @@ async function handleComponent(interaction) {
           contributorLocks.push(
             withLock(db, `lock:user:${contributorId}`, ownerLock, 8000, async () => {
               let player = ensurePlayer(serverId, contributorId);
+              if (!player.lifetime) player.lifetime = {};
+              player.lifetime.orders_served = (player.lifetime.orders_served || 0) + servings;
+              player.lifetime.bowls_served_total = (player.lifetime.bowls_served_total || 0) + servings;
               player.coins = (player.coins || 0) + coinsReward;
               player.rep = (player.rep || 0) + repReward;
               player.sxp_progress = (player.sxp_progress || 0) + sxpReward;
@@ -2577,14 +2595,14 @@ async function handleComponent(interaction) {
         // Build reward message with individual scaled amounts
         const rewardLines = Object.entries(contributorRewards).map(([cId, rewards]) => {
           const contributionQty = contributorQuantities[cId];
-          return `<@${cId}>: ${getIcon("coins")} ${rewards.coinsReward}c | ${getIcon("rep")} ${rewards.repReward} REP | ${getIcon("sparkle")} ${rewards.sxpReward} SXP (contributed ${contributionQty} ingredient${contributionQty !== 1 ? 's' : ''})`;
+          return `<@${cId}>: ${getIcon("coins")} ${rewards.coinsReward}c | ${getIcon("rep")} ${rewards.repReward} REP | ${getIcon("sxp")} ${rewards.sxpReward} SXP (contributed ${contributionQty} ingredient${contributionQty !== 1 ? 's' : ''})`;
         });
         const rewardText = rewardLines.length > 0
           ? rewardLines.join("\n")
           : "No contributions recorded.";
 
         const embed = new EmbedBuilder()
-          .setTitle(`${getIcon("level_up")} Shared Order Complete!`)
+          .setTitle(`${getIcon("serve")} Shared Order Complete!`)
           .setDescription(
             `**${recipe.name}** (${servings} servings)\n\n` +
             `${getIcon("group")} **Contributors**: ${Object.keys(contributorQuantities).length}\n` +
