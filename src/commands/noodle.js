@@ -316,7 +316,12 @@ function buildHelpPage({ page, userId, user }) {
         "",
         "**Noodle**",
         "• `/noodle start` — Start the tutorial.",
-        "• `/noodle help` — Show this help menu."
+        "• `/noodle help` — Show this help menu.",
+        "",
+        "**Party**",
+        "• `/noodle-social party action:rename name:<new>` — Change party name.",
+        "• `/noodle-social party action:transfer_leader user:<member>` — Transfer leadership.",
+        "• `/noodle-social party action:kick user:<member>` — Kick a party member."
       ].join("\n")
     }
   ];
@@ -777,13 +782,11 @@ function qualityRank(quality) {
 
 function formatQualityLabel(quality) {
   const q = normalizeQuality(quality);
-  const labels = {
-    salvage: "S-",
-    standard: "S",
-    good: "G",
-    excellent: "E"
-  };
-  return labels[q] ?? "S";
+  if (q === "salvage") return "S-";
+  if (q === "standard") return getIcon("rarity_uncommon", "S");
+  if (q === "good") return getIcon("rarity_rare", "G");
+  if (q === "excellent") return getIcon("rarity_epic", "E");
+  return "S";
 }
 
 function getBowlEntriesByRecipe(player, recipeId) {
@@ -1838,7 +1841,7 @@ if (sub === "pantry") {
       user: interaction.member ?? interaction.user
     });
     pantryEmbed.setFooter({
-      text: `S-:Salvage, S:Standard, G:Good, E:Excellent\n\nForageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
+      text: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent\n\nForageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
     });
 
     return commit({

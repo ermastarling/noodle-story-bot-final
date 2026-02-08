@@ -130,9 +130,9 @@ function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
 function buildStaffRarityRow(userId, activeRarity = "common", source = null) {
   const rarities = [
     { id: "overview", label: "Staff", icon: "staff_management" },
-    { id: "common", label: "Common", icon: "rarity_common" },
-    { id: "rare", label: "Rare", icon: "rarity_rare" },
-    { id: "epic", label: "Epic", icon: "rarity_epic" },
+    { id: "common", label: "Common", icon: "staff_rarity_common" },
+    { id: "rare", label: "Rare", icon: "staff_rarity_rare" },
+    { id: "epic", label: "Epic", icon: "staff_rarity_epic" },
     { id: "upgrades", label: "Upgrades", icon: "staff_upgrades" }
   ];
 

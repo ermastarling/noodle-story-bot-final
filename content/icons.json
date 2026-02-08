@@ -173,9 +173,12 @@
       "cart": "<:cart:1469532939586113660>"
     },
     "rarity": {
-      "rarity_common": "<:rarity_common:1469600766174957712>",
-      "rarity_rare": "<:rarity_rare:1469600772890169385>",
-      "rarity_epic": "<:rarity_epic:1469600769035468832>"
+      "rarity_uncommon": "<:rarity_uncommon:1469868332051202240>",
+      "rarity_rare": "<:rarity_rare:1469868335683473449>",
+      "rarity_epic": "<:rarity_epic:1469868328762871931>",
+      "staff_rarity_common": "<:staff_rarity_common:1469600766174957712>",
+      "staff_rarity_rare": "<:staff_rarity_rare:1469600772890169385>",
+      "staff_rarity_epic": "<:staff_rarity_epic:1469600769035468832>"
     },
     "categories": {
       "category_ambience": "<:category_ambience:1469532788641366128>",
