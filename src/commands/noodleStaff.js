@@ -162,7 +162,9 @@ export function buildStaffOverviewEmbed(player, server, user) {
     const staffLines = leveledStaff.map(s => {
       const maxed = s.level >= s.maxLevel;
       const status = maxed ? "MAX" : `Lv${s.level}/${s.maxLevel}`;
-      return `${rarityEmoji(s.rarity)} **${s.name}** ${categoryEmoji(s.category)} — ${status}`;
+      const emojiPrefix = [rarityEmoji(s.rarity), categoryEmoji(s.category)].filter(Boolean).join(" ");
+      const prefix = emojiPrefix ? `${emojiPrefix} ` : "";
+      return `${prefix}**${s.name}** — ${status}`;
     });
     embed.addFields({
       name: `Your Staff (${hiredCount}/${staffCap} slots)`,

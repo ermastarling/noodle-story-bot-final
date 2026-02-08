@@ -1161,7 +1161,7 @@
       "rarity": "uncommon",
       "flavor": "Peeks over the counter, eyes sparkling, half-hidden behind wool and curiosity. Treasure hunts begin with noodles!",
       "bonuses": {
-        "cosmetic_token_daily_chance": 0.05
+        "clue_drop_chance": 0.01
       }
     },
     "traveling_bard": {
@@ -1208,7 +1208,7 @@
       "rarity": "seasonal",
       "flavor": "Arrives with the season's first breeze and leaves a shimmering blessing behind. They embody the turning of the year, carrying news of what’s to come. Their visit feels ceremonial.",
       "bonuses": {
-        "unlocks_cosmetic_aura_today": true
+        "temporary_badge": "Herald's Sign (24h)"
       }
     }
   }

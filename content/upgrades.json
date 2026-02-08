@@ -148,27 +148,27 @@
   "upgrade_categories": {
     "kitchen": {
       "display_name": "Kitchen",
-      "icon": "🍳",
+      "icon": "category_kitchen",
       "description": "Upgrades that improve cooking operations"
     },
     "storage": {
       "display_name": "Storage",
-      "icon": "📦",
+      "icon": "category_storage",
       "description": "Upgrades that increase capacity"
     },
     "service": {
       "display_name": "Service",
-      "icon": "🍜",
+      "icon": "category_service",
       "description": "Upgrades that enhance customer experience"
     },
     "ambience": {
       "display_name": "Ambience",
-      "icon": "✨",
+      "icon": "category_ambience",
       "description": "Upgrades that improve shop atmosphere"
     },
     "staff": {
       "display_name": "Staff",
-      "icon": "👥",
+      "icon": "staff_management",
       "description": "Upgrades that enhance staff performance"
     }
   }

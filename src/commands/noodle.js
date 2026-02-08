@@ -556,8 +556,8 @@ new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").
 
 function noodleProfileEditRow(userId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel("Decor").setEmoji(getButtonEmoji("decor")).setStyle(ButtonStyle.Secondary)
   );
@@ -975,8 +975,8 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   });
 
   const badgeRows = [];
-  for (let i = 0; i < badgeLines.length; i += 4) {
-    badgeRows.push(badgeLines.slice(i, i + 4).join(" "));
+  for (let i = 0; i < badgeLines.length; i += 6) {
+    badgeRows.push(badgeLines.slice(i, i + 6).join(" "));
   }
   const badgesText = badgeRows.length ? badgeRows.join("\n") : "_No badges yet._";
 
@@ -2298,19 +2298,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
     }
     
-    if (db) {
-      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
-      upsertServer(db, serverId, s, null);
-    }
-    if (db) {
-      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
-      upsertServer(db, serverId, s, null);
-    }
-
-    // Prepend time catch-up and resilience messages
-    let finalContent = replyObj.content || "";
-    let finalEmbeds = replyObj.embeds ? [...replyObj.embeds] : undefined;
-
     const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
     if (spoilageMessages.length > 0) {
       const ticksApplied = timeCatchup.spoilage?.ticksApplied ?? 0;
@@ -2330,6 +2317,15 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }
       p.notifications.pending_pantry_messages.push(...spoilageMessages);
     }
+
+    if (db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      upsertServer(db, serverId, s, null);
+    }
+
+    // Prepend time catch-up and resilience messages
+    let finalContent = replyObj.content || "";
+    let finalEmbeds = replyObj.embeds ? [...replyObj.embeds] : undefined;
 
     const spoilageSet = new Set(spoilageMessages);
     const catchupMsgs = timeCatchup.messages.filter((msg) => !spoilageSet.has(msg));
@@ -3846,14 +3842,34 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       if (rewards.npcModifier === "rep_inspector") serveMsg += ` ${getIcon("list")} +10 REP`;
       if (rewards.npcModifier === "rep_sleepy") serveMsg += ` ${getIcon("sleepy")} +5 REP`;
       if (rewards.npcModifier === "rep_moonlit") serveMsg += ` ${getIcon("moon")} +15 REP`;
+
+      if (allowDiscovery) {
+        if (order.npc_archetype === "wandering_scholar") {
+          serveMsg += ` ${getIcon("search")} +1% clue chance`;
+        }
+        if (order.npc_archetype === "moonlit_spirit" && order.tier === "epic") {
+          serveMsg += ` ${getIcon("scroll")} +1% scroll chance`;
+        }
+        if (order.npc_archetype === "curious_apprentice") {
+          serveMsg += ` ${getIcon("idea")} +1% discovery chance next serve`;
+        }
+        if (order.npc_archetype === "child_big_scarf") {
+          serveMsg += ` ${getIcon("search")} +1% clue chance`;
+        }
+      }
       
-      if (rewards.repAuraGranted) {
-        // Check if aura already active
-        const auraExpiry = p.buffs?.repAuraExpiry ?? 0;
+      if (rewards.repAuraGranted || rewards.repAuraAlreadyActive) {
+        const auraExpiry = rewards.repAuraExpiresAt ?? p.buffs?.rep_aura_expires_at ?? 0;
         const now3_aura = nowTs();
         if (auraExpiry > now3_aura) {
-          serveMsg += ` ${getIcon("sparkle")} Aura buff doesn't stack (active for another ${Math.ceil((auraExpiry - now3_aura) / 1000 / 60)} min)`;
-        } else {
+          const minsLeft = Math.ceil((auraExpiry - now3_aura) / 1000 / 60);
+          const ts = Math.floor(auraExpiry / 1000);
+          if (rewards.repAuraAlreadyActive) {
+            serveMsg += ` ${getIcon("sparkle")} Aura buff already active (${minsLeft} min, <t:${ts}:R>)`;
+          } else {
+            serveMsg += ` ${getIcon("sparkle")} +2 REP for 15 min (<t:${ts}:R>)`;
+          }
+        } else if (rewards.repAuraGranted) {
           serveMsg += ` ${getIcon("sparkle")} +2 REP for 15 min`;
         }
       }

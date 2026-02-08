@@ -83,7 +83,9 @@ export function generateOrderBoard({ serverId, dayKey, settings, content, active
     const recipePool = recipePoolsByTier[npcRarity] || [];
     const r = pickWeightedRecipeFrom(recipePool);
     if (!r) continue;
-    const isLimited = rng() < Number(settings.LIMITED_TIME_CHANCE ?? 0.20);
+    const isLimited = npc === "rain_soaked_courier"
+      ? true
+      : rng() < Number(settings.LIMITED_TIME_CHANCE ?? 0.20);
     const createdAt = nowTs();
     const expiresAt = isLimited ? createdAt + 30*60*1000 : null;
 

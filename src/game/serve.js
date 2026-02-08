@@ -12,6 +12,7 @@ const staffContent = loadStaffContent();
 export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTime, servedAtMs, acceptedAtMs, speedWindowSeconds, player, recipe, content, effects = null, eventEffects = null }) {
   const dayKey = dayKeyUTC(servedAtMs);
   const rng = makeStreamRng({ mode:"seeded", seed: 12345, streamName:"serve", serverId, dayKey });
+  const now = nowTs();
 
   // Ensure player.buffs exists
   if (!player.buffs) player.buffs = {};
@@ -125,18 +126,25 @@ export function computeServeRewards({ serverId, tier, npcArchetype, isLimitedTim
   
   // Hearth Grandparent: +2 REP aura for 15 minutes after serve
   let repAuraGranted = false;
+  let repAuraAlreadyActive = false;
+  let repAuraExpiresAt = player?.buffs?.rep_aura_expires_at ?? 0;
   if (npcArchetype === "hearth_grandparent") {
-    player.buffs.rep_aura_expires_at = nowTs() + 15 * 60 * 1000;
-    repAuraGranted = true;
+    if (repAuraExpiresAt > now) {
+      repAuraAlreadyActive = true;
+    } else {
+      repAuraExpiresAt = now + 15 * 60 * 1000;
+      player.buffs.rep_aura_expires_at = repAuraExpiresAt;
+      repAuraGranted = true;
+    }
     npcModifier = "rep_aura";
   }
   
   // Apply active REP aura if present
-  if (player?.buffs?.rep_aura_expires_at && nowTs() < player.buffs.rep_aura_expires_at) {
+  if (player?.buffs?.rep_aura_expires_at && now < player.buffs.rep_aura_expires_at) {
     rep += 2;
   }
 
-  return { coins, sxp, rep, mSpeed, repAuraGranted, npcModifier };
+  return { coins, sxp, rep, mSpeed, repAuraGranted, repAuraAlreadyActive, repAuraExpiresAt, npcModifier };
 }
 
 export function applySxpLevelUp(player) {

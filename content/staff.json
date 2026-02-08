@@ -14,14 +14,14 @@
     "sous_chef": {
       "staff_id": "sous_chef",
       "name": "Sous Chef",
-      "description": "Expert technique reduces ingredient waste.",
+      "description": "Expert technique reduces ingredient waste, +1% ingredient save per level.",
       "category": "kitchen",
       "rarity": "rare",
       "max_level": 20,
       "base_cost": 800,
       "cost_scaling": 1.40,
       "effects_per_level": {
-        "ingredient_save_chance": 0.10
+        "ingredient_save_chance": 0.01
       }
     },
     "master_chef": {

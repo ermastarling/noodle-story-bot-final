@@ -21,9 +21,9 @@ const FORAGE_TABLE = [
   { item_id: "roasted_roots",    weight: 20, min: 1, max: 1 },
 
   // Spices/Aromatics
-  { item_id: "black_garlic",     weight: 10,  min: 1, max: 1 },
-  { item_id: "star_anise",       weight: 10, min: 1, max: 1 },
-  { item_id: "night_spices",     weight: 10,  min: 1, max: 1 }
+  { item_id: "black_garlic",     weight: 20,  min: 1, max: 1 },
+  { item_id: "star_anise",       weight: 20, min: 1, max: 1 },
+  { item_id: "night_spices",     weight: 20,  min: 1, max: 1 }
 ];
 
 export const FORAGE_ITEM_IDS = FORAGE_TABLE.map(e => e.item_id);

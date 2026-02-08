@@ -116,6 +116,11 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
     player.buffs.apprentice_bonus_pending = false;
   }
 
+  // Child with Big Scarf: +1% clue chance on serve
+  if (npcArchetype === "child_big_scarf") {
+    clueChance += 0.01;
+  }
+
   // Wandering Scholar: extra independent 1% chance to drop a clue
   if (npcArchetype === "wandering_scholar") {
     const roll = rng();

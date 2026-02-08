@@ -15,7 +15,7 @@ import {
 } from "../game/upgrades.js";
 import { calculateStaffCost, levelUpStaff } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
-import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 
 const {
   MessageActionRow,
@@ -94,6 +94,13 @@ function staffSortKey(player, staff) {
   const isMaxed = currentLevel >= staff.max_level;
   const cost = isMaxed ? Number.POSITIVE_INFINITY : calculateStaffCost(staff, currentLevel);
   return { cost, isMaxed };
+}
+
+function staffCategoryIconId(category) {
+  if (category === "kitchen") return "category_kitchen";
+  if (category === "service") return "category_service";
+  if (category === "support") return "category_support";
+  return "category_default";
 }
 
 function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
@@ -210,7 +217,7 @@ function buildUpgradesOverviewEmbed(player, user) {
     });
 
     embed.addFields({
-      name: `${categoryData.icon || ""} ${categoryData.display_name || categoryId}`,
+      name: `${resolveIcon(categoryData.icon, "")} ${categoryData.display_name || categoryId}`.trim(),
       value: lines.join("\n"),
       inline: true
     });
@@ -260,9 +267,9 @@ function buildUpgradesManagementEmbed(player, user) {
   if (leveledEntries.length > 0) {
     const upgradeLines = leveledEntries.map(({ upgrade, level }) => {
       const category = upgradesContent.upgrade_categories?.[upgrade.category] ?? {};
-      const iconKey = category?.icon_key ?? null;
-      const icon = iconKey ? `${getIcon(iconKey)} ` : (category.icon ? `${category.icon} ` : "");
-      return `${icon}**${upgrade.name}** — Lv${level}/${upgrade.max_level}`;
+      const icon = resolveIcon(category.icon, "");
+      const iconPrefix = icon ? `${icon} ` : "";
+      return `${iconPrefix}**${upgrade.name}** — Lv${level}/${upgrade.max_level}`;
     });
     embed.addFields({
       name: "Your Upgrades",
@@ -397,7 +404,8 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
     return embed;
   }
 
-  const title = `${categoryData?.icon || getIcon("upgrades")} ${categoryData?.display_name || categoryId}`;
+  const categoryIcon = resolveIcon(categoryData?.icon, getIcon("upgrades"));
+  const title = `${categoryIcon} ${categoryData?.display_name || categoryId}`.trim();
   const descLines = [
     `${getIcon("coins")} Coins: **${player.coins}**`,
     categoryData?.description ? `\n${categoryData.description}` : ""
@@ -452,11 +460,17 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
           const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
           if (currentLevel >= staff.max_level) return null;
           const cost = calculateStaffCost(staff, currentLevel);
+          let effectStr = formatEffects(staff.effects_per_level);
+          if (!effectStr && staff.staff_id === "prep_chef") {
+            effectStr = "auto-buy missing ingredients (+1 order per level)";
+          }
+          if (!effectStr) effectStr = staff.description || "No effect listed";
+          const description = `Lv${currentLevel}->${currentLevel + 1}: ${effectStr}`.slice(0, 100);
           return {
             label: `${staff.name} — ${cost}c`,
-            description: `Lv${currentLevel}->${currentLevel + 1}`.slice(0, 100),
+            description,
             value: staff.staff_id,
-            emoji: rarityEmoji(staff.rarity)
+            emoji: getButtonEmoji(staffCategoryIconId(staff.category))
           };
         })
         .filter(Boolean);
@@ -489,12 +503,14 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
       const effectStr = formatEffects(upgrade.effects);
       const description = `Lv${upgrade.currentLevel}->${upgrade.currentLevel + 1}: ${effectStr}`.substring(0, 100);
       
-      allOptions.push({
+      const optionEmoji = getButtonEmoji(categoryData?.icon);
+      const option = {
         label: `${upgrade.name} — ${upgrade.nextCost}c`,
         description,
-        value: upgrade.upgradeId,
-        emoji: categoryData.icon || getIcon("upgrades")
-      });
+        value: upgrade.upgradeId
+      };
+      if (optionEmoji) option.emoji = optionEmoji;
+      allOptions.push(option);
     }
   }
 
