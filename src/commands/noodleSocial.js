@@ -267,7 +267,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
     components.push(
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:shared_order:${userId}`)
-        .setLabel("Shared Order").setEmoji(getButtonEmoji("bowl"))
+        .setLabel("Shared Order").setEmoji(getButtonEmoji("serve"))
         .setStyle(ButtonStyle.Primary)
     );
   }
@@ -328,7 +328,7 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
       components.push(
         new ButtonBuilder()
           .setCustomId(`noodle-social:action:shared_order_create:${userId}`)
-          .setLabel("Create Shared Order").setEmoji(getButtonEmoji("bowl"))
+          .setLabel("Create Shared Order").setEmoji(getButtonEmoji("serve"))
           .setStyle(ButtonStyle.Primary)
       );
     }
@@ -1617,7 +1617,7 @@ async function handleComponent(interaction) {
       );
 
       const servingsEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("bowl")} Create Shared Order`)
+        .setTitle(`${getIcon("serve")} Create Shared Order`)
         .setDescription(`**Recipe**: ${recipe.name}\n\nStep 2: How many servings should your party make?`)
         .setColor(theme.colors.info);
 
@@ -1673,7 +1673,7 @@ async function handleComponent(interaction) {
 
             const totalReward = servings * SHARED_ORDER_REWARD.coinsPerServing;
           const embed = new EmbedBuilder()
-            .setTitle(`${getIcon("bowl")} Shared Order Created!`)
+            .setTitle(`${getIcon("serve")} Shared Order Created!`)
             .setDescription(
               `**${recipe.name}**\n\n` +
               `${getIcon("ingredient_capacity")} **Servings**: ${servings}\n` +
@@ -1807,13 +1807,13 @@ async function handleComponent(interaction) {
         const recipeName = recipe?.name ?? existingOrder.order_id;
         const servings = existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS;
         embed.addFields({
-          name: `\n${getIcon("bowl")} Shared Order`,
+          name: `\n${getIcon("serve")} Shared Order`,
           value: `Active — **${recipeName}** (${servings} servings)`,
           inline: false
         });
       } else {
         embed.addFields({
-          name: `\n${getIcon("bowl")} Shared Order`,
+          name: `\n${getIcon("serve")} Shared Order`,
           value: "None active.",
           inline: false
         });
@@ -2065,17 +2065,22 @@ async function handleComponent(interaction) {
           }).join('\n');
 
           embed = new EmbedBuilder()
-            .setTitle(`${getIcon("bowl")} ${recipe.name}`)
+            .setTitle(`${getIcon("serve")} ${recipe.name}`)
             .setDescription(`**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
             .addFields(
               {
                 name: `${getIcon("ingredient_capacity")} Ingredients`,
                 value: ingredientLines || "No ingredients",
                 inline: false
+              },
+              {
+                name: "Status",
+                value: canComplete ? `${getIcon("status_complete")} Ready to complete!` : `${getIcon("hourglass")} In progress...`,
+                inline: false
               }
             )
             .setColor(canComplete ? theme.colors.success : theme.colors.warning)
-            .setFooter({ text: `${ownerFooterText(interaction.member ?? interaction.user)} • ${canComplete ? `${getIcon("status_complete")} Ready to complete!` : `${getIcon("hourglass")} In progress...`}` });
+            .setFooter({ text: ownerFooterText(interaction.member ?? interaction.user) });
         }
       }
 
@@ -2087,7 +2092,7 @@ async function handleComponent(interaction) {
         replyObj.embeds = [embed];
       } else {
         const emptyEmbed = new EmbedBuilder()
-          .setTitle(`${getIcon("bowl")} Shared Order`)
+          .setTitle(`${getIcon("serve")} Shared Order`)
           .setDescription(
             isLeader
               ? "No active order. Click **Create Shared Order** to start one."
@@ -2168,7 +2173,7 @@ async function handleComponent(interaction) {
       );
 
       const createEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("bowl")} Create Shared Order`)
+        .setTitle(`${getIcon("serve")} Create Shared Order`)
         .setDescription("Step 1: Pick a recipe that your party members know.")
         .setColor(theme.colors.info);
 

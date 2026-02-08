@@ -1831,6 +1831,7 @@ if (sub === "pantry") {
 
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
+      "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage.",
       categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
       bowlsBlock
     ].join("\n\n");
@@ -1840,8 +1841,10 @@ if (sub === "pantry") {
       description: pantryDescription,
       user: interaction.member ?? interaction.user
     });
-    pantryEmbed.setFooter({
-      text: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent\n\nForageable items spoil over time. \nTip: Cold Cellar upgrades reduce spoilage.\n\n${ownerFooterText(interaction.member ?? interaction.user)}`
+    pantryEmbed.addFields({
+      name: "Bowl Quality",
+      value: `${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
+      inline: false
     });
 
     return commit({
