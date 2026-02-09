@@ -48,8 +48,7 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function buildReminderEmbed({ guildName, channelId }) {
-  const channelLine = channelId ? `Last kitchen: <#${channelId}>.` : null;
+function buildReminderEmbed({ guildName, channelLine }) {
   return new EmbedBuilder()
     .setTitle(`${getIcon("mail")} Daily Reward Ready`)
     .setDescription([
@@ -95,7 +94,6 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
   try {
     const serverIds = await getKnownServerIds();
     for (const serverId of serverIds) {
-      const guildName = client.guilds.cache.get(serverId)?.name ?? "this server";
       const rows = db.prepare(`
         SELECT user_id, data_json, schema_version, last_active_at
         FROM players
@@ -115,9 +113,20 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
         const user = await client.users.fetch(row.user_id).catch(() => null);
         if (!user) continue;
 
+        const lastGuildId = player.notifications.last_noodle_guild_id ?? serverId;
+        const lastGuildName = client.guilds.cache.get(lastGuildId)?.name ?? "this server";
         const channelId = player.notifications.last_noodle_channel_id ?? null;
-        const channelUrl = channelId ? `https://discord.com/channels/${serverId}/${channelId}` : null;
-        const embed = buildReminderEmbed({ guildName, channelId });
+        const channel = channelId ? client.channels.cache.get(channelId) : null;
+        const isChannelAccessible = Boolean(channel && channel.guild?.id === lastGuildId);
+        const channelUrl = isChannelAccessible
+          ? `https://discord.com/channels/${lastGuildId}/${channelId}`
+          : null;
+        const channelLine = channelId
+          ? (isChannelAccessible
+            ? `Last kitchen: <#${channelId}>.`
+            : "Last kitchen: unavailable. Use `/noodle orders` to continue.")
+          : null;
+        const embed = buildReminderEmbed({ guildName: lastGuildName, channelLine });
         const components = buildDmReminderComponents({
           userId: row.user_id,
           serverId,

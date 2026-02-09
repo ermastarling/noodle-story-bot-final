@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "title": "Welcome to Noodle Story",
+  "subtitle": "A cozy noodle shop tale",
+  "lore": [
+    "You are the new chef of a small noodle shop on a busy street where travelers, locals, and seasonal visitors pass through every day.",
+    "Your goal is to build a warm reputation, learn new recipes, and turn a humble counter into a beloved neighborhood spot."
+  ],
+  "how_to_play": [
+    "Check the order board, accept an order, and gather ingredients.",
+    "Buy staples at the market and forage for fresh items.",
+    "Cook the recipe the customer asked for, then serve it to earn coins and reputation.",
+    "Repeat to unlock new recipes, upgrades, staff, decor, and specializations."
+  ],
+  "core_mechanics": [
+    {
+      "title": "Orders",
+      "text": "Orders have rarities and sometimes time limits. Higher tiers pay more but can be harder to fulfill."
+    },
+    {
+      "title": "Ingredients",
+      "text": "Ingredients come from the market and forage. Some can spoil over time, so keep an eye on your pantry."
+    },
+    {
+      "title": "Cooking",
+      "text": "Recipes reward skillful cooking with better quality and bigger rewards."
+    },
+    {
+      "title": "Progression",
+      "text": "Serving customers unlocks recipes and content, while upgrades and staff make the shop run smoother."
+    },
+    {
+      "title": "Seasons",
+      "text": "Seasonal content rotates in and out, bringing limited recipes, events, and visitors."
+    }
+  ],
+  "next_steps": [
+    "Start the tutorial and complete your first order.",
+    "Stock up on noodles and broth, then try cooking a classic recipe.",
+    "Claim your daily reward when it appears to keep progress steady."
+  ]
+}
