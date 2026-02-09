@@ -36,6 +36,7 @@ import {
   clearExpiredBlessings
 } from "../game/social.js";
 import { nowTs } from "../util/time.js";
+import { hasDailyRewardAvailable } from "../game/daily.js";
 import { containsProfanity } from "../util/profanity.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
@@ -187,7 +188,7 @@ function socialMainMenuRow(userId) {
   );
 }
 
-function socialMainMenuRowNoProfile(userId) {
+function socialMainMenuRowNoProfile(userId, { questsAvailable = false } = {}) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
@@ -204,7 +205,7 @@ function socialMainMenuRowNoProfile(userId) {
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
       .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(questsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:profile_edit:${userId}`)
       .setLabel("Customize").setEmoji(getButtonEmoji("customize"))
@@ -1930,6 +1931,8 @@ async function handleComponent(interaction) {
     if (action === "profile") {
       const player = ensurePlayer(serverId, userId);
       const party = getUserActiveParty(db, userId);
+      const questsAvailable = hasDailyRewardAvailable(player, nowTs())
+        || Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
 
       const embed = renderProfileEmbed(
         player,
@@ -1940,7 +1943,7 @@ async function handleComponent(interaction) {
 
       return componentCommit(interaction, {
         embeds: [embed],
-        components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId)]
+        components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable })]
       });
     }
   }

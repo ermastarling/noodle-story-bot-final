@@ -551,9 +551,9 @@ new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regul
 );
 }
 
-function noodleSecondaryMenuRow(userId) {
+function noodleSecondaryMenuRow(userId, { questsAvailable = false } = {}) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("Quests").setEmoji(getButtonEmoji("quests")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("Quests").setEmoji(getButtonEmoji("quests")).setStyle(questsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
 );
 }
@@ -592,9 +592,9 @@ function noodleDecorBackRow(userId) {
 }
 
 
-function noodleQuestsActionRow(userId) {
+function noodleQuestsActionRow(userId, { dailyAvailable = true } = {}) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward")).setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!dailyAvailable),
 new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Primary)
 );
 }
@@ -620,7 +620,8 @@ const primaryButton = showQuests
   : new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
       .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
-      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary);
+    .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
+    .setDisabled(!dailyAvailable);
 const row = new ActionRowBuilder().addComponents(primaryButton);
 
 if (showClaim) {
@@ -1677,11 +1678,12 @@ if (sub === "start") {
       user: interaction.member ?? interaction.user
     });
 
+    const questsAvailable = hasDailyRewardAvailable(p, nowTs()) || hasClaimableQuests(p);
     return commit({
       content: " ",
       embeds: [tutorialEmbed],
       components: tutorialDone
-        ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)]
+        ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })]
         : [noodleTutorialMenuRow(userId)]
     });
   });
@@ -1706,13 +1708,15 @@ if (sub === "help") {
 if (sub === "profile") {
   const u = opt.getUser("user") ?? interaction.user;
   const p = ensurePlayer(serverId, u.id);
+  const selfPlayer = ensurePlayer(serverId, userId);
+  const questsAvailable = hasDailyRewardAvailable(selfPlayer, nowTs()) || hasClaimableQuests(selfPlayer);
   const party = getUserActiveParty(db, u.id);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
   
   return commit({
     embeds: [embed],
-    components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId)]
+    components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable })]
   });
 }
 
@@ -2053,7 +2057,8 @@ if (sub === "season") {
     new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
       .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
-      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
+      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
+      .setDisabled(!dailyAvailable),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
       .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
@@ -2159,7 +2164,8 @@ if (sub === "event") {
     new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
       .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
-      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
+      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
+      .setDisabled(!dailyAvailable),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:quests:${userId}`)
       .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
@@ -2448,7 +2454,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     });
     const ownerText = ownerFooterText(interaction.member ?? interaction.user);
     questsEmbed.setFooter({
-      text: `Your daily reward is available if the button below is green!\n${ownerText}`
+      text: `${ownerText}`
     });
 
     return commitState({
@@ -5101,9 +5107,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         let components;
         if (tutorialActive) {
+          const questsAvailable = hasDailyRewardAvailable(p2, nowTs()) || hasClaimableQuests(p2);
           components = tutorialOnlyForage
             ? [noodleTutorialForageRow(userId)]
-            : [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId)];
+            : [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })];
         } else {
           const { btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceMessageId, { limitToBuy1: false });
           const sellRow = new ActionRowBuilder().addComponents(
