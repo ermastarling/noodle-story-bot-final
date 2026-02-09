@@ -4,7 +4,7 @@
       "spec_id": "festival_noodle_house",
       "name": "Festival Noodle House",
       "icon": "spec_festival_noodle_house",
-      "description": "Boosts event visitors, festive décor vibes.",
+      "description": "You're the festival crowd's favorite spot.",
       "summary": "More event visitors and festive décor vibes.",
       "requirements": { "min_level": 10 },
       "is_permanent": false
@@ -13,7 +13,7 @@
       "spec_id": "forest_kitchen",
       "name": "Forest Kitchen",
       "icon": "spec_forest_kitchen",
-      "description": "Favors forage-driven recipes and nature décor.",
+      "description": "Favors forage-driven recipes and vibes.",
       "summary": "More forage-friendly vibes and nature décor.",
       "requirements": { "min_level": 20 },
       "is_permanent": false
@@ -40,7 +40,7 @@
       "spec_id": "moonlit_atelier",
       "name": "Moonlit Atelier",
       "icon": "spec_moonlit_atelier",
-      "description": "Epic/seasonal flair and rare NPC affinity.",
+      "description": "Elegant moonlit flair and a rare affinity to the moon.",
       "summary": "Elegant moonlit flair and rare NPC affinity.",
       "requirements": { "min_level": 50 },
       "is_permanent": false

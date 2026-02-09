@@ -9,6 +9,7 @@
 import { nowTs, dayKeyUTC } from "../util/time.js";
 import { makeStreamRng } from "../util/rng.js";
 import { getIcon } from "../ui/icons.js";
+import { getForageMaxForItem } from "./forage.js";
 
 // Inactivity thresholds (in milliseconds)
 const INACTIVE_7D_MS = 7 * 24 * 60 * 60 * 1000;
@@ -97,8 +98,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       const roll = deterministicRandom(seed);
 
       if (roll < spoilChance) {
-        // Spoil one unit
-        const amountToSpoil = 1;
+        const amountToSpoil = getSpoilageAmount(itemId, qty, effects, tierMultiplier);
         inventory[itemId] = Math.max(0, (inventory[itemId] || 0) - amountToSpoil);
         spoiled[itemId] = (spoiled[itemId] || 0) + amountToSpoil;
       }
@@ -118,7 +118,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       .join(", ");
 
     messages.push(
-      `${getIcon("time")} *While you were away, some ingredients spoiled:* ${itemsList}`
+      `${getIcon("cooldown")} *While you were away, some ingredients spoiled:* ${itemsList}`
     );
   }
 
@@ -145,9 +145,16 @@ function getSpoilageReduction(item, effects) {
   const tierMultipliers = {
     common: 1.0,
     rare: 0.8,
-    epic: 0.6,
-    seasonal: 0.5
+    epic: 0.4,
+    seasonal: 0.3
   };
+    function getSpoilageAmount(itemId, qty, effects, tierMultiplier) {
+      const bonusItems = Math.max(0, Math.floor(effects?.forage_bonus_items || 0));
+      const baseMax = Math.max(5, getForageMaxForItem(itemId));
+      const forageMax = baseMax + bonusItems;
+      const scaled = Math.max(1, Math.ceil(forageMax * 0.4 * tierMultiplier));
+      return Math.min(qty, scaled);
+    }
   
   const tierMultiplier = tierMultipliers[item.tier] || 1.0;
   

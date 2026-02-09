@@ -28,6 +28,15 @@ const FORAGE_TABLE = [
 
 export const FORAGE_ITEM_IDS = FORAGE_TABLE.map(e => e.item_id);
 
+export function getForageEntry(itemId) {
+  return FORAGE_TABLE.find((entry) => entry.item_id === itemId) ?? null;
+}
+
+export function getForageMaxForItem(itemId) {
+  const entry = getForageEntry(itemId);
+  return entry?.max ?? 1;
+}
+
 function rngInt(rng, min, max) {
   if (max <= min) return min;
   return min + Math.floor(rng() * (max - min + 1));

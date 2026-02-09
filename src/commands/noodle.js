@@ -286,7 +286,6 @@ function buildHelpPage({ page, userId, user }) {
         "",
         "**Profile / Customize**",
         "• `/noodle specialize` — Choose a shop specialization.",
-        "• `/noodle decor` — View your decor sets.",
         "• `/noodle recipes` — View your recipes and clues.",
         "• `/noodle regulars` — View your shop regulars.",
         "• `/noodle season` — View the current season.",
@@ -563,8 +562,7 @@ function noodleProfileEditRow(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:nav:decor:${userId}`).setLabel("Decor").setEmoji(getButtonEmoji("decor")).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -1000,7 +998,12 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   const decorSetName = decorSet?.name ?? (decorSetId ? decorSetId : null);
   const decorSetValue = "\u200b";
   const decorSetImageUrl = activeSpecId
-    ? (decorSet?.image_url ?? getIconUrl(`decor_set_${decorSetId}`) ?? getIconUrl("decor_set_placeholder"))
+    ? (
+      decorSet?.image_url
+        ?? getIconUrl(`decor_set_${activeSpecId}`)
+        ?? (decorSetId ? getIconUrl(`decor_set_${decorSetId}`) : null)
+        ?? getIconUrl("decor_set_placeholder")
+    )
     : getIconUrl("decor_set_placeholder");
 
   const embed = new EmbedBuilder()
@@ -3445,6 +3448,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const purchasedByItem = {};
       let totalAutoCost = 0;
       let ordersCovered = 0;
+      let needsForageOnlyItems = false;
+      let blockedByCapacity = false;
+      let blockedByStock = false;
+      let blockedByCoins = false;
+      let missingMarketItems = false;
+      let allOrdersAlreadyReady = true;
 
       for (const order of acceptedOrdersNow.slice(0, autoOrderCap)) {
         const recipe = content.recipes?.[order.recipe_id];
@@ -3455,6 +3464,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           ordersCovered += 1;
           continue;
         }
+
+        allOrdersAlreadyReady = false;
 
         const allItems = [];
         const neededItems = [];
@@ -3478,17 +3489,22 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
           if (missing > 0) {
             if (!MARKET_ITEM_IDS.includes(itemId)) {
+              needsForageOnlyItems = true;
               continue;
             }
 
+            missingMarketItems = true;
+
             const remaining = remainingByType[type] ?? 0;
             if (remaining < missing) {
+              blockedByCapacity = true;
               orderOk = false;
               break;
             }
 
             const stock = stockRemaining[itemId] ?? 0;
             if (stock < missing) {
+              blockedByStock = true;
               orderOk = false;
               break;
             }
@@ -3501,6 +3517,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         }
 
         if (!orderOk || coinsRemaining < orderCost) {
+          if (coinsRemaining < orderCost) {
+            blockedByCoins = true;
+          }
           continue;
         }
 
@@ -3534,6 +3553,20 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         }
         p.coins = coinsRemaining;
         results.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
+      } else {
+        let reason = "no market ingredients needed";
+        if (allOrdersAlreadyReady) {
+          reason = "orders already have bowls ready";
+        } else if (needsForageOnlyItems && !missingMarketItems) {
+          reason = "missing forage-only ingredients";
+        } else if (blockedByCapacity) {
+          reason = "pantry capacity is full";
+        } else if (blockedByStock) {
+          reason = "market stock is empty";
+        } else if (blockedByCoins) {
+          reason = "not enough coins";
+        }
+        results.push(`${getIcon("chef")} Prep Chef could not auto-buy: ${reason}.`);
       }
     }
 
@@ -5310,45 +5343,99 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 /*  Slash command export                                               */
 /* ------------------------------------------------------------------ */
 
-export const noodleCommand = {
-  data: new SlashCommandBuilder()
-    .setName("noodle")
-    .setDescription("Run your cozy noodle shop.")
-    .addSubcommand((sc) => sc.setName("start").setDescription("Tutorial: Start your noodle story."))
-    .addSubcommand((sc) =>
-      sc
-        .setName("help")
-        .setDescription("Help topics")
-        .addStringOption((o) => o.setName("topic").setDescription("Topic").setRequired(false))
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("profile")
-        .setDescription("View a shop profile")
-        .addUserOption((o) => o.setName("user").setDescription("User").setRequired(false))
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("specialize")
-        .setDescription("Choose a shop specialization")
-        .addStringOption((o) =>
-          o
-            .setName("spec")
-            .setDescription("Specialization id")
-            .setRequired(false)
-            .setAutocomplete(true)
-        )
-        .addBooleanOption((o) => o.setName("confirm").setDescription("Confirm specialization change").setRequired(false))
-    )
-    .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
-    .addSubcommand((sc) => sc.setName("pantry").setDescription("View your ingredient pantry."))
-    .addSubcommand((sc) => sc.setName("recipes").setDescription("View your unlocked recipes and clues."))
-    .addSubcommand((sc) => sc.setName("regulars").setDescription("View regular NPCs and their bonuses."))
+const includeDevCommands = process.env.NODE_ENV === "development" && Boolean(process.env.DISCORD_GUILD_ID);
+
+const noodleCommandData = new SlashCommandBuilder()
+  .setName("noodle")
+  .setDescription("Run your cozy noodle shop.")
+  .addSubcommand((sc) => sc.setName("start").setDescription("Tutorial: Start your noodle story."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("help")
+      .setDescription("Help topics")
+      .addStringOption((o) => o.setName("topic").setDescription("Topic").setRequired(false))
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("profile")
+      .setDescription("View a shop profile")
+      .addUserOption((o) => o.setName("user").setDescription("User").setRequired(false))
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("specialize")
+      .setDescription("Choose a shop specialization")
+      .addStringOption((o) =>
+        o
+          .setName("spec")
+          .setDescription("Specialization id")
+          .setRequired(false)
+          .setAutocomplete(true)
+      )
+      .addBooleanOption((o) => o.setName("confirm").setDescription("Confirm specialization change").setRequired(false))
+  )
+  .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
+  .addSubcommand((sc) => sc.setName("pantry").setDescription("View your ingredient pantry."))
+  .addSubcommand((sc) => sc.setName("recipes").setDescription("View your unlocked recipes and clues."))
+  .addSubcommand((sc) => sc.setName("regulars").setDescription("View regular NPCs and their bonuses."))
+  .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
+  .addSubcommand((sc) => sc.setName("quests").setDescription("View active quests."))
+  .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
+  .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("buy")
+      .setDescription("Buy an item from the market (leave blank for multi-buy).")
+      .addStringOption((o) =>
+        o.setName("item").setDescription("Market item (type to search)").setRequired(false).setAutocomplete(true)
+      )
+      .addIntegerOption((o) => o.setName("quantity").setDescription("Qty (used for single buy)").setRequired(false).setMinValue(1))
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("sell")
+      .setDescription("Sell an item to the market.")
+      .addStringOption((o) => o.setName("item").setDescription("Market item (type to search)").setRequired(true).setAutocomplete(true))
+      .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(true).setMinValue(1))
+  )
+  .addSubcommand((sc) => sc.setName("orders").setDescription("View today’s orders."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("accept")
+      .setDescription("Accept an order.")
+      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("cancel")
+      .setDescription("Cancel an accepted order.")
+      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("cook")
+      .setDescription("Cook a noodle recipe.")
+      .addStringOption((o) => o.setName("recipe").setDescription("Recipe (type to search)").setRequired(true).setAutocomplete(true))
+      .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(true).setMinValue(1))
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("serve")
+      .setDescription("Serve your accepted order.")
+      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
+      .addStringOption((o) => o.setName("bowl_key").setDescription("Bowl key (optional; defaults to recipe)").setRequired(false))
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("forage")
+      .setDescription("Forage for fresh ingredients.")
+      .addStringOption((o) => o.setName("item").setDescription("What to forage for (type to search)").setRequired(false).setAutocomplete(true))
+      .addIntegerOption((o) => o.setName("quantity").setDescription("Quantity (1-5)").setRequired(false).setMinValue(1).setMaxValue(5))
+  );
+
+if (includeDevCommands) {
+  noodleCommandData
     .addSubcommand((sc) => sc.setName("status").setDescription("Show reset timestamps (debug info)."))
-    .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
-    .addSubcommand((sc) => sc.setName("quests").setDescription("View active quests."))
-    .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
-    .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
     .addSubcommandGroup((group) =>
       group
         .setName("dev")
@@ -5359,57 +5446,11 @@ export const noodleCommand = {
             .setDescription("Reset a user’s tutorial progress.")
             .addUserOption((o) => o.setName("user").setDescription("User to reset").setRequired(true))
         )
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("buy")
-        .setDescription("Buy an item from the market (leave blank for multi-buy).")
-        .addStringOption((o) =>
-          o.setName("item").setDescription("Market item (type to search)").setRequired(false).setAutocomplete(true)
-        )
-        .addIntegerOption((o) => o.setName("quantity").setDescription("Qty (used for single buy)").setRequired(false).setMinValue(1))
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("sell")
-        .setDescription("Sell an item to the market.")
-        .addStringOption((o) => o.setName("item").setDescription("Market item (type to search)").setRequired(true).setAutocomplete(true))
-        .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(true).setMinValue(1))
-    )
-    .addSubcommand((sc) => sc.setName("orders").setDescription("View today’s orders."))
-    .addSubcommand((sc) =>
-      sc
-        .setName("accept")
-        .setDescription("Accept an order.")
-        .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("cancel")
-        .setDescription("Cancel an accepted order.")
-        .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("cook")
-        .setDescription("Cook a noodle recipe.")
-        .addStringOption((o) => o.setName("recipe").setDescription("Recipe (type to search)").setRequired(true).setAutocomplete(true))
-        .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(true).setMinValue(1))
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("serve")
-        .setDescription("Serve your accepted order.")
-        .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
-        .addStringOption((o) => o.setName("bowl_key").setDescription("Bowl key (optional; defaults to recipe)").setRequired(false))
-    )
-    .addSubcommand((sc) =>
-      sc
-        .setName("forage")
-        .setDescription("Forage for fresh ingredients.")
-        .addStringOption((o) => o.setName("item").setDescription("What to forage for (type to search)").setRequired(false).setAutocomplete(true))
-        .addIntegerOption((o) => o.setName("quantity").setDescription("Quantity (1-5)").setRequired(false).setMinValue(1).setMaxValue(5))
-    ),
+    );
+}
+
+export const noodleCommand = {
+  data: noodleCommandData,
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
