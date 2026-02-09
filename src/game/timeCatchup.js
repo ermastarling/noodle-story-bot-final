@@ -134,6 +134,14 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
  * Check if an item is protected by storage upgrades
  * Returns reduction factor (0.0 = no protection, 1.0 = full protection)
  */
+export function getSpoilageAmount(itemId, qty, effects, tierMultiplier) {
+  const bonusItems = Math.max(0, Math.floor(effects?.forage_bonus_items || 0));
+  const baseMax = Math.max(5, getForageMaxForItem(itemId));
+  const forageMax = baseMax + bonusItems;
+  const scaled = Math.max(1, Math.ceil(forageMax * 0.4 * tierMultiplier));
+  return Math.min(qty, scaled);
+}
+
 function getSpoilageReduction(item, effects) {
   let reduction = 0;
   const effectReduction = Math.max(0, Math.min(0.95, effects?.spoilage_reduction || 0));
@@ -148,14 +156,7 @@ function getSpoilageReduction(item, effects) {
     epic: 0.4,
     seasonal: 0.3
   };
-    function getSpoilageAmount(itemId, qty, effects, tierMultiplier) {
-      const bonusItems = Math.max(0, Math.floor(effects?.forage_bonus_items || 0));
-      const baseMax = Math.max(5, getForageMaxForItem(itemId));
-      const forageMax = baseMax + bonusItems;
-      const scaled = Math.max(1, Math.ceil(forageMax * 0.4 * tierMultiplier));
-      return Math.min(qty, scaled);
-    }
-  
+
   const tierMultiplier = tierMultipliers[item.tier] || 1.0;
   
   // Combine reductions: base rate * tier modifier * (1 - cold storage reduction)

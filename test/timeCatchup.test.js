@@ -5,7 +5,8 @@ import {
   getInactivityStatus,
   checkCooldownCatchup,
   generateWelcomeBackMessage,
-  applyTimeCatchup
+  applyTimeCatchup,
+  getSpoilageAmount
 } from "../src/game/timeCatchup.js";
 
 // Time constants for tests
