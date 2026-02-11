@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import discordPkg from "discord.js";
+import crypto from "node:crypto";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
@@ -76,6 +77,10 @@ const SHARED_ORDER_REWARD = {
   repPerServing: 6,
   sxpPerServing: 15
 };
+
+const SHARED_ORDER_MODAL_PREFIX = "noodle-social:modal:shared_order:";
+const SHARED_ORDER_MODAL_TTL_MS = 5 * 60 * 1000;
+const sharedOrderModalState = new Map();
 
 const LEADERBOARD_TYPES = [
   {
@@ -1471,13 +1476,29 @@ async function handleComponent(interaction) {
 
     // Removed old modal handler - now using select menus for shared orders
 
-    if (customId.startsWith("noodle-social:modal:contribute_shared_order_qty:")) {
+    if (customId.startsWith(SHARED_ORDER_MODAL_PREFIX)) {
+      const modalId = customId.slice(SHARED_ORDER_MODAL_PREFIX.length);
+      const modalState = sharedOrderModalState.get(modalId);
 
+      if (!modalState) {
+        return componentCommit(interaction, {
+          content: `${getIcon("warning")} That contribution prompt expired. Please try again.`,
+          ephemeral: true
+        });
+      }
 
-      const parts2 = customId.split(":");
-      const ownerId = parts2[3];
-      const sourceMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
-      const ingredientId = parts2.slice(5).join(":");
+      sharedOrderModalState.delete(modalId);
+
+      const ownerId = modalState.ownerId;
+      const sourceMessageId = modalState.sourceMessageId ?? null;
+      const ingredientId = modalState.ingredientId;
+
+      if (!ingredientId) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} Ingredient not found.`,
+          ephemeral: true
+        });
+      }
 
       if (ownerId && ownerId !== userId) {
         return componentCommit(interaction, { content: "That contribution prompt isn’t for you.", ephemeral: true });
@@ -1746,9 +1767,18 @@ async function handleComponent(interaction) {
         return componentCommit(interaction, { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true });
       }
 
-      const sourceMessageId = interaction.message?.id ?? "none";
+      const sourceMessageId = interaction.message?.id ?? null;
+      const modalToken = crypto.randomBytes(6).toString("hex");
+      sharedOrderModalState.set(modalToken, {
+        ownerId: userId,
+        sourceMessageId,
+        ingredientId
+      });
+      const cleanupTimer = setTimeout(() => sharedOrderModalState.delete(modalToken), SHARED_ORDER_MODAL_TTL_MS);
+      cleanupTimer.unref?.();
+
       const modal = new ModalBuilder()
-        .setCustomId(`noodle-social:modal:contribute_shared_order_qty:${userId}:${sourceMessageId}:${ingredientId}`)
+        .setCustomId(`${SHARED_ORDER_MODAL_PREFIX}${modalToken}`)
         .setTitle("Contribute Ingredient");
 
       const input = new TextInputBuilder()
@@ -1763,6 +1793,7 @@ async function handleComponent(interaction) {
       try {
         return await interaction.showModal(modal);
       } catch (e) {
+        sharedOrderModalState.delete(modalToken);
         console.log(`${getIcon("warning")} showModal failed for shared_order_contribute:`, e?.message);
         return componentCommit(interaction, {
           content: `${getIcon("warning")} Discord couldn't show the modal.`,
