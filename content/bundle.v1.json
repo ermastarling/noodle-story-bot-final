@@ -854,7 +854,8 @@
         },
         {
           "item_id": "black_garlic",
-          "qty": 1
+          "qty": 1,
+          "optional": true
         }
       ]
     },

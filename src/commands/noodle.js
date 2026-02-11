@@ -938,6 +938,11 @@ function displayItemName(id) {
     .replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown item";
 }
 
+function formatIngredientLabel(ing) {
+  const name = displayItemName(ing.item_id);
+  return ing?.optional ? `${name} (optional)` : name;
+}
+
 function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   if (!player.profile) {
     player.profile = {
@@ -1127,6 +1132,7 @@ const r = contentBundle.recipes?.[recipeId];
 if (!r) return "";
 
   const missing = (r.ingredients ?? [])
+    .filter((ing) => !ing?.optional)
     .map((ing) => {
       const need = ing.qty ?? 0;
       const have = player.inv_ingredients?.[ing.item_id] ?? 0;
@@ -1893,7 +1899,7 @@ if (sub === "recipes") {
     const tier = r.tier ? ` (${r.tier})` : "";
     const eventTag = r.event_id ? ` ${getIcon("event")} Event` : "";
     const ingredients = (r.ingredients ?? [])
-      .map((ing) => displayItemName(ing.item_id))
+      .map((ing) => formatIngredientLabel(ing))
       .join(", ");
     const ingredientLine = ingredients ? ingredients : "_No ingredients listed._";
     return `• **${r.name}**${tier}${eventTag}\n  ${ingredientLine}`;
@@ -3074,9 +3080,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const qtyToCook = Math.min(qty, remainingBowls);
     const batchOutput = Math.min(getCookBatchOutput(qtyToCook, p, combinedEffects), remainingBowls);
 
+    const ingredientsToUse = [];
     for (const ing of r.ingredients) {
+      const need = (ing.qty ?? 0) * qtyToCook;
+      if (need <= 0) continue;
       const haveIng = p.inv_ingredients?.[ing.item_id] ?? 0;
-      const need = ing.qty * qtyToCook;
+      if (ing.optional) {
+        if (haveIng >= need) {
+          ingredientsToUse.push({ ...ing, need });
+        }
+        continue;
+      }
       if (haveIng < need) {
         const missing = need - haveIng;
         return commitState({
@@ -3084,13 +3098,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           ephemeral: true
         });
       }
+      ingredientsToUse.push({ ...ing, need });
     }
 
     const cookRng = makeStreamRng({ mode: "secure", streamName: "cook", serverId, userId });
     const savedLines = [];
     const consumedByItem = {};
-    for (const ing of r.ingredients) {
-      const need = ing.qty * qtyToCook;
+    for (const ing of ingredientsToUse) {
+      const need = ing.need;
       let saved = 0;
       if (combinedEffects.ingredient_save_chance > 0) {
         for (let i = 0; i < need; i += 1) {
@@ -3148,7 +3163,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     applyQuestProgress(p, questsContent, userId, { type: "cook", amount: batchOutput }, now);
     applyCollectionProgressOnCook(p, collectionsContent, content, { recipeId, bowlsCooked: batchOutput });
 
-    const lostLine = (r.ingredients ?? [])
+    const lostLine = ingredientsToUse
       .map((ing) => {
         const lostQty = (ing.qty ?? 0) * outcome.failed;
         return lostQty > 0 ? `**${lostQty}× ${displayItemName(ing.item_id)}**` : null;
