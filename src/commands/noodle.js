@@ -1891,7 +1891,7 @@ if (sub === "recipes") {
 
   const knownLines = knownRecipes.map((r) => {
     const tier = r.tier ? ` (${r.tier})` : "";
-    const eventTag = r.event_id ? ` ${getIcon("party")} Event` : "";
+    const eventTag = r.event_id ? ` ${getIcon("event")} Event` : "";
     const ingredients = (r.ingredients ?? [])
       .map((ing) => displayItemName(ing.item_id))
       .join(", ");
