@@ -4,48 +4,48 @@
   },
   "icons": {
     "badges": {
-      "badges": "<:badges:1469582798514950238>",
-      "seasonal_herald": "<:seasonal_herald:1469818061854081145>",
-      "bowl_100": "<:bowl_100:1469818069135265932>",
-      "bowl_250": "<:bowl_250:1469818079033819330>",
-      "bowl_500": "<:bowl_500:1469818084268183562>",
-      "bowl_1000": "<:bowl_1000:1469818088043319369>",
-      "bowl_2500": "<:bowl_2500:1469818091436376277>",
-      "bowl_5000": "<:bowl_5000:1469818095286616347>",
-      "bowl_10000": "<:bowl_10000:1469818100055806124>",
-      "event_spring_blossoms": "<:event_spring_blossoms:1469818108221980702>",
-      "event_summer_solstice": "<:event_summer_solstice:1469818111153799342>",
-      "event_harvest_festival": "<:event_harvest_festival:1469818104518414411>",
-      "event_winter_market": "<:event_winter_market:1469818115478130710>"
+      "badges": "<:badges:1470315753545924721>",
+      "seasonal_herald": "<:seasonal_herald:1470315820600131675>",
+      "bowl_100": "<:bowl_100:1470315806138171432>",
+      "bowl_250": "<:bowl_250:1470315807719428116>",
+      "bowl_500": "<:bowl_500:1470315808772325439>",
+      "bowl_1000": "<:bowl_1000:1470315810101792768>",
+      "bowl_2500": "<:bowl_2500:1470315811301494794>",
+      "bowl_5000": "<:bowl_5000:1470315812295282709>",
+      "bowl_10000": "<:bowl_10000:1470315814098964491>",
+      "event_spring_blossoms": "<:event_spring_blossoms:1470315816603095162>",
+      "event_summer_solstice": "<:event_summer_solstice:1470315818473619571>",
+      "event_harvest_festival": "<:event_harvest_festival:1470315815323828370>",
+      "event_winter_market": "<:event_winter_market:1470315819492835451>"
     },
     "events": {
-      "event": "<:event:1469614542047809657>"
+      "event": "<:event:1470315958538338355>"
       
     },
     "specializations": {
-      "spec_festival_noodle_house": "<:spec_festival_noodle_house:1469993735340163307>",
-      "spec_forest_kitchen": "<:spec_forest_kitchen:1469993737760411854>",
-      "spec_comfort_food_inn": "<:spec_comfort_food_inn:1469993740314738772>",
-      "spec_riverstone_kitchen": "<:spec_riverstone_kitchen:1469993742390919188>",
-      "spec_moonlit_atelier": "<:spec_moonlit_atelier:1469993744995581952>",
-      "spec_starlight_caravan": "<:spec_starlight_caravan:1469993747885326376>",
-      "spec_comet_kitchen": "<:spec_comet_kitchen:1469993750842573035>",
-      "spec_aurora_bistro": "<:spec_aurora_bistro:1469993752780083311>",
-      "spec_lotus_teahouse": "<:spec_lotus_teahouse:1469993755854508073>",
-      "spec_stormforged_wok": "<:spec_stormforged_wok:1469993761701498910>",
-      "spec_coral_cove_canteen": "<:spec_coral_cove_canteen:1469993764473798699>",
-      "spec_spice_route_caravan": "<:spec_spice_route_caravan:1469993766789316700>",
-      "spec_sunlit_veranda": "<:spec_sunlit_veranda:1469993768592871588>",
-      "spec_frostpeak_izakaya": "<:spec_frostpeak_izakaya:1469993770744287343>",
-      "spec_gilded_pavilion": "<:spec_gilded_pavilion:1469993772770136146>",
-      "spec_misty_grove_stall": "<:spec_misty_grove_stall:1469993775014084774>",
-      "spec_emberglass_kitchen": "<:spec_emberglass_kitchen:1469993777493180612>",
-      "spec_celestial_observatory": "<:spec_celestial_observatory:1469993780441776159>",
-      "spec_velvet_night_noodle": "<:spec_velvet_night_noodle:1469993785277677670>",
-      "spec_mythic_dragon_hall": "<:spec_mythic_dragon_hall:1469993788335460393>",
-      "spec_golden_hearth": "<:spec_golden_hearth:1469993791187587195>",
-      "spec_lucky_ladle_pavilion": "<:spec_lucky_ladle_pavilion:1469993793532199034>",
-      "spec_legendary_noodle_hall": "<:spec_legendary_noodle_hall:1469993799278395507>"
+      "spec_festival_noodle_house": "<:spec_festival_noodle_house:1470315899314503916>",
+      "spec_forest_kitchen": "<:spec_forest_kitchen:1470315900707274888>",
+      "spec_comfort_food_inn": "<:spec_comfort_food_inn:1470315895590228080>",
+      "spec_riverstone_kitchen": "<:spec_riverstone_kitchen:1470315913743040533>",
+      "spec_moonlit_atelier": "<:spec_moonlit_atelier:1470315911121469581>",
+      "spec_starlight_caravan": "<:spec_starlight_caravan:1470315916536451112>",
+      "spec_comet_kitchen": "<:spec_comet_kitchen:1470315894197452842>",
+      "spec_aurora_bistro": "<:spec_aurora_bistro:1470315891928465564>",
+      "spec_lotus_teahouse": "<:spec_lotus_teahouse:1470315907271102697>",
+      "spec_stormforged_wok": "<:spec_stormforged_wok:1470315918545522937>",
+      "spec_coral_cove_canteen": "<:spec_coral_cove_canteen:1470315897183797270>",
+      "spec_spice_route_caravan": "<:spec_spice_route_caravan:1470315915194138686>",
+      "spec_sunlit_veranda": "<:spec_sunlit_veranda:1470315919468396639>",
+      "spec_frostpeak_izakaya": "<:spec_frostpeak_izakaya:1470315902187737308>",
+      "spec_gilded_pavilion": "<:spec_gilded_pavilion:1470315903840157809>",
+      "spec_misty_grove_stall": "<:spec_misty_grove_stall:1470315909561188550>",
+      "spec_emberglass_kitchen": "<:spec_emberglass_kitchen:1470315898534629530>",
+      "spec_celestial_observatory": "<:spec_celestial_observatory:1470315893002207368>",
+      "spec_velvet_night_noodle": "<:spec_velvet_night_noodle:1470315920919629928>",
+      "spec_mythic_dragon_hall": "<:spec_mythic_dragon_hall:1470315912614904001>",
+      "spec_golden_hearth": "<:spec_golden_hearth:1470315904825950291>",
+      "spec_lucky_ladle_pavilion": "<:spec_lucky_ladle_pavilion:1470315908055695373>",
+      "spec_legendary_noodle_hall": "<:spec_legendary_noodle_hall:1470315905819869245>"
     },
     "decor_sets": {
       "decor_set_placeholder": "https://media.discordapp.net/attachments/1469954324753809599/1470232819253907660/1decor_set_placeholder.png?ex=698a8c83&is=69893b03&hm=971e1d90675ef9d8a82db64727ecaaafbcb787934f4a47d5df3a07ccc89d92d3&=&format=webp&quality=lossless&width=1141&height=612",
@@ -74,125 +74,125 @@
       "decor_set_legendary_noodle_hall": "https://media.discordapp.net/attachments/1469954324753809599/1470232942361051352/24decor_set_legendary_noodle_hall.png?ex=698a8ca1&is=69893b21&hm=2cdcfa85a742d59f85cf1f13012cca6f7d827a9e46190b2917534a78fe8a5c4c&=&format=webp&quality=lossless&width=1141&height=612"
     },
     "menus_navigation": {
-      "back": "<:back:1469222466743304193>",
-      "next": "<:next:1469222452998705303>",
-      "help": "<:help:1469233534286958716>",
-      "list": "<:list:1469585866404921397>",
-      "search": "<:search:1469222445259952250>",
-      "question": "<:question:1469222450226270240>"
+      "back": "<:back:1470315380731019388>",
+      "next": "<:next:1470315387056029757>",
+      "help": "<:help:1470315423114330217>",
+      "list": "<:list:1470315764379553812>",
+      "search": "<:search:1470315392911151257>",
+      "question": "<:question:1470315388469252210>"
     },
     "actions": {
-      "add": "<:add:1469222437957799968>",
-      "cancel": "<:cancel:1469222463933251604>",
-      "contribute": "<:contribute:1469577573032919112>",
-      "refresh": "<:refresh:1469222447432728710>",
-      "skip": "<:skip:1469222443276046500>"
+      "add": "<:add:1470315379682316342>",
+      "cancel": "<:cancel:1470315381619953675>",
+      "contribute": "<:contribute:1470315758025445531>",
+      "refresh": "<:refresh:1470315389522018375>",
+      "skip": "<:skip:1470315397374021857>"
     },
     "status": {
-      "cooldown": "<:cooldown:1469222460875346065>",
-      "error": "<:error:1469222457935270040>",
-      "lock": "<:lock:1469222454885875785>",
-      "status_complete": "<:status_complete:1469233551953100915>",
-      "status_incomplete": "<:status_incomplete:1469233524581072967>",
-      "status_pending": "<:status_pending:1469233527190192251>",
-      "warning": "<:warning:1469222440390365275>",
-      "hourglass": "<:status_pending:1469233527190192251>"
+      "cooldown": "<:cooldown:1470315383088218216>",
+      "error": "<:error:1470315384430395454>",
+      "lock": "<:lock:1470315385642287218>",
+      "status_complete": "<:status_complete:1470315431687491700>",
+      "status_incomplete": "<:status_incomplete:1470315432828207167>",
+      "status_pending": "<:status_pending:1470315433805742164>",
+      "warning": "<:warning:1470315398741229743>",
+      "hourglass": "<:status_pending:1470315433805742164>"
     },
     "time_weather": {
-      "calendar": "<:calendar:1470246577187590327>",
-      "time": "<:time:1470246569776382064>",
-      "moon": "<:moon:1470246579691585761>",
-      "rain": "<:rain:1470246582548037795>"
+      "calendar": "<:calendar:1470315951382728827>",
+      "time": "<:time:1470315972186607718>",
+      "moon": "<:moon:1470315962120146997>",
+      "rain": "<:rain:1470315965131653194>"
     },
     "social": {
-      "party": "<:party:1469554963150667797>",
-      "group": "<:group:1469554960168390659>",
-      "tips": "<:tips:1469535262261514405>",
-      "bless": "<:bless:1469590679544926392>"
+      "party": "<:party:1470315765373866065>",
+      "group": "<:group:1470315761674354822>",
+      "tips": "<:tips:1470315557113823406>",
+      "bless": "<:bless:1470315754883780691>"
     },
     "economy_progression": {
-      "coins": "<:coins:1469535226991743111>",
-      "rep": "<:rep:1469535250429378793>",
-      "sxp": "<:sxp:1469535259543474371>",
-      "level_up": "<:level_up:1469535234306605128>",
-      "leaderboard": "<:leaderboard:1469535230284005518>",
-      "stats": "<:stats:1469535256884285738>",
-      "receipt": "<:receipt:1469233549407162431>",
-      "medal_gold": "<:medal_gold:1469546601222766737>",
-      "medal_silver": "<:medal_silver:1469546615282073712>",
-      "medal_bronze": "<:medal_bronze:1469546589738762419>"
+      "coins": "<:coins:1470315544027856977>",
+      "rep": "<:rep:1470315552001101895>",
+      "sxp": "<:sxp:1470315555813589002>",
+      "level_up": "<:level_up:1470315546699370616>",
+      "leaderboard": "<:leaderboard:1470315545277632576>",
+      "stats": "<:stats:1470315554551365632>",
+      "receipt": "<:receipt:1470315430638911520>",
+      "medal_gold": "<:medal_gold:1470315548985397414>",
+      "medal_silver": "<:medal_silver:1470315550323511409>",
+      "medal_bronze": "<:medal_bronze:1470315547932754031>"
     },
     "gameplay": {
-      "orders": "<:orders:1469233541543100506>",
-      "cook": "<:cook:1469532944564486246>",
-      "serve": "<:serve:1469532917519880284>",
-      "recipes": "<:recipes:1469532903536066690>",
-      "forage": "<:forage:1469614545046601808>",
-      "quests": "<:quests:1469233546768941153>",
-      "quest_rewards": "<:quest_rewards:1469233544189579304>",
-      "daily_reward": "<:daily_reward:1469233536253956158>",
-      "rescue": "<:rescue:1469615042239529011>",
-      "season": "<:season:1469606737165418497>",
-      "sparkle": "<:sparkle:1470246567415119971>",
-      "scroll": "<:scroll:1469582804433240101>",
-      "star": "<:star:1469535253445083216>",
-      "idea": "<:idea:1469587136046170112>",
-      "note": "<:note:1469233538929791057>",
-      "inbox": "<:inbox:1469233531883491338>",
-      "mail": "<:mail:1469233529521963039>"
+      "orders": "<:orders:1470315427841179841>",
+      "cook": "<:cook:1470315514026004520>",
+      "serve": "<:serve:1470315518450733221>",
+      "recipes": "<:recipes:1470315517364539521>",
+      "forage": "<:forage:1470315960018800732>",
+      "quests": "<:quests:1470315429758111816>",
+      "quest_rewards": "<:quest_rewards:1470315428734828686>",
+      "daily_reward": "<:daily_reward:1470315422359355620>",
+      "rescue": "<:rescue:1470315966436216989>",
+      "season": "<:season:1470315967983648931>",
+      "sparkle": "<:sparkle:1470315971456667659>",
+      "scroll": "<:scroll:1470315768473194496>",
+      "star": "<:star:1470315553175638038>",
+      "idea": "<:idea:1470315763226116229>",
+      "note": "<:note:1470315426662715548>",
+      "inbox": "<:inbox:1470315424439603250>",
+      "mail": "<:mail:1470315425375064120>"
     },
     "items_storage": {
-      "bowl": "<:bowl:1469532930304118866>",
-      "bowl_capacity": "<:bowl_capacity:1469532934007427274>",
-      "bowl_storage": "<:bowl_storage:1469532936976994405>",
-      "ingredient_capacity": "<:ingredient_capacity:1469532883222921248>",
-      "ingredient_save": "<:ingredient_save:1469532888214143088>",
-      "basket": "<:basket:1469532927376494652>"
+      "bowl": "<:bowl:1470315508661227530>",
+      "bowl_capacity": "<:bowl_capacity:1470315509701546232>",
+      "bowl_storage": "<:bowl_storage:1470315510867693653>",
+      "ingredient_capacity": "<:ingredient_capacity:1470315514994626611>",
+      "ingredient_save": "<:ingredient_save:1470315516253048944>",
+      "basket": "<:basket:1470315507205804165>"
     },
     "shop_profile": {
-      "profile": "<:profile:1469554966548189205>",
-      "decor": "<:decor:1469590682011435061>",
-      "customize": "<:customize:1469593440533876852>",
-      "tag": "<:tag:1469585868527501444>"
+      "profile": "<:profile:1470315766652866591>",
+      "decor": "<:decor:1470315760990814259>",
+      "customize": "<:customize:1470315759124217907>",
+      "tag": "<:tag:1470315777084358760>"
     },
     "staff_upgrades": {
-      "staff_management": "<:staff_management:1469593443679338517>",
-      "staff_slots": "<:staff_slots:1469593446590316690>",
-      "staff_upgrades": "<:staff_upgrades:1469600776404992147>",
-      "upgrades": "<:upgrades:1469593449303900233>"
+      "staff_management": "<:staff_management:1470315769735676057>",
+      "staff_slots": "<:staff_slots:1470315775154851850>",
+      "staff_upgrades": "<:staff_upgrades:1470315775708368917>",
+      "upgrades": "<:upgrades:1470315778065698978>"
     },
     "collections": {
-      "collections": "<:collections:1469582802298343505>"
+      "collections": "<:collections:1470315756754571305>"
     },
     "environment": {
-      "tree": "<:tree:1470246572393762816>",
-      "boat": "<:boat:1470246574935507138>",
-      "broom": "<:broom:1469614527925452801>",
-      "door": "<:door:1469614534787334287>",
-      "music": "<:music:1469614547286360074>",
-      "confetti": "<:confetti:1469614531524165663>",
-      "effect": "<:effect:1469614538809671798>",
-      "chef": "<:chef:1469532942140178474>",
-      "cart": "<:cart:1469532939586113660>"
+      "tree": "<:tree:1470315974027640924>",
+      "boat": "<:boat:1470315949105217683>",
+      "broom": "<:broom:1470315950351057051>",
+      "door": "<:door:1470315954008490004>",
+      "music": "<:music:1470315963651194921>",
+      "confetti": "<:confetti:1470315952456597627>",
+      "effect": "<:effect:1470315956348911646>",
+      "chef": "<:chef:1470315512968904906>",
+      "cart": "<:cart:1470315512067129366>"
     },
     "rarity": {
-      "rarity_uncommon": "<:rarity_uncommon:1469868332051202240>",
-      "rarity_rare": "<:rarity_rare:1469868335683473449>",
-      "rarity_epic": "<:rarity_epic:1469868328762871931>",
-      "staff_rarity_common": "<:staff_rarity_common:1469600766174957712>",
-      "staff_rarity_rare": "<:staff_rarity_rare:1469600772890169385>",
-      "staff_rarity_epic": "<:staff_rarity_epic:1469600769035468832>"
+      "rarity_uncommon": "<:rarity_uncommon:1470315847099744348>",
+      "rarity_rare": "<:rarity_rare:1470315845187014688>",
+      "rarity_epic": "<:rarity_epic:1470315843911942175>",
+      "staff_rarity_common": "<:staff_rarity_common:1470315771438829578>",
+      "staff_rarity_rare": "<:staff_rarity_rare:1470315773716205731>",
+      "staff_rarity_epic": "<:staff_rarity_epic:1470315772369965147>"
     },
     "categories": {
-      "category_ambience": "<:category_ambience:1469532788641366128>",
-      "category_default": "<:category_default:1469532794811187282>",
-      "category_kitchen": "<:category_kitchen:1469532817200382208>",
-      "category_service": "<:category_service:1469532820807614475>",
-      "category_storage": "<:category_storage:1469532823160623114>",
-      "category_support": "<:category_support:1469532825567887593>"
+      "category_ambience": "<:category_ambience:1470315458648604724>",
+      "category_default": "<:category_default:1470315459592327243>",
+      "category_kitchen": "<:category_kitchen:1470315460942626901>",
+      "category_service": "<:category_service:1470315462263963701>",
+      "category_storage": "<:category_storage:1470315463459209216>",
+      "category_support": "<:category_support:1470315465162096845>"
     },
     "misc": {
-      "sleepy": "<:sleepy:1470246564109877501>"
+      "sleepy": "<:sleepy:1470315970005438546>"
     }
   }
 }

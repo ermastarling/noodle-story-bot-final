@@ -3559,20 +3559,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         }
         p.coins = coinsRemaining;
         results.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
-      } else {
-        let reason = "no market ingredients needed";
-        if (allOrdersAlreadyReady) {
-          reason = "orders already have bowls ready";
-        } else if (needsForageOnlyItems && !missingMarketItems) {
-          reason = "missing forage-only ingredients";
-        } else if (blockedByCapacity) {
-          reason = "pantry capacity is full";
-        } else if (blockedByStock) {
-          reason = "market stock is empty";
-        } else if (blockedByCoins) {
-          reason = "not enough coins";
-        }
-        results.push(`${getIcon("chef")} Prep Chef could not auto-buy: ${reason}.`);
+      } else if (blockedByCoins) {
+        results.push(`${getIcon("chef")} Prep Chef could not auto-buy: not enough coins.`);
       }
     }
 

@@ -261,7 +261,6 @@ function buildUpgradesManagementEmbed(player, user) {
       return { upgrade, level };
     })
     .filter(Boolean);
-
   embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("upgrades")} Upgrades: **${leveledEntries.length}/${totalUpgrades}**`);
 
   if (leveledEntries.length > 0) {

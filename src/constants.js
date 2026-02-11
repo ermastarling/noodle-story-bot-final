@@ -36,8 +36,8 @@ export const DISCOVERY_CHANCE_BASE = {
 
 // Scroll discovery has its own base chance (independent from clues)
 export const DISCOVERY_SCROLL_CHANCE_BASE = {
-  serve: 0.007,
-  quest_complete: 0.00
+  serve: 0.01,
+  quest_complete: 0.01
 };
 
 export const CLUES_TO_UNLOCK_RECIPE = 3;

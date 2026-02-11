@@ -101,11 +101,11 @@ export function levelUpStaff(player, staffId, staffContent) {
  * @returns {number} Maximum staff capacity
  */
 export function getMaxStaffCapacity(player, staffContent = null) {
-  const totalStaff = Object.keys(staffContent?.staff_members || {}).length || 12;
+  void staffContent; // presently unused but kept for future roster-aware logic
   const baseCap = Math.max(5, Math.floor(player.shop_level || 1));
   const effects = calculateUpgradeEffects(player, upgradesContent);
   const bonus = Math.floor(effects.staff_capacity || 0);
-  return Math.min(totalStaff, baseCap + bonus);
+  return baseCap + bonus;
 }
 
 /**

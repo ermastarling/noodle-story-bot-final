@@ -436,13 +436,16 @@ function statsViewButtons(userId) {
  */
 async function componentCommit(interaction, opts) {
   const { ephemeral, targetMessageId, ...rest } = opts ?? {};
+  const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
 
   if (ephemeral) {
     if (interaction.deferred || interaction.replied) {
-      try {
-        await interaction.deleteReply();
-      } catch (e) {
-        // ignore if already deleted or not present
+      if (!isMessageComponent) {
+        try {
+          await interaction.deleteReply();
+        } catch (e) {
+          // ignore if already deleted or not present
+        }
       }
       return interaction.followUp({ ...rest, ephemeral: true });
     }
@@ -455,10 +458,12 @@ async function componentCommit(interaction, opts) {
       if (target) {
         const result = await target.edit(rest);
         if (interaction.deferred || interaction.replied) {
-          try {
-            await interaction.deleteReply();
-          } catch (e) {
-            // ignore if already deleted
+          if (!isMessageComponent) {
+            try {
+              await interaction.deleteReply();
+            } catch (e) {
+              // ignore if already deleted
+            }
           }
         }
         return result;
@@ -476,11 +481,14 @@ async function componentCommit(interaction, opts) {
 
 async function errorReply(interaction, content) {
   const payload = { content, ephemeral: true };
+  const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
   if (interaction.deferred || interaction.replied) {
-    try {
-      await interaction.deleteReply();
-    } catch (e) {
-      // ignore if already deleted or not present
+    if (!isMessageComponent) {
+      try {
+        await interaction.deleteReply();
+      } catch (e) {
+        // ignore if already deleted or not present
+      }
     }
     return interaction.followUp(payload);
   }
@@ -1116,6 +1124,7 @@ async function handleComponent(interaction) {
       }
 
       const ownerLock = `discord:${interaction.id}`;
+      const targetMessageId = interaction.message?.id ?? null;
       if (!db) {
         return errorReply(interaction, "Database unavailable in this environment.");
       }
@@ -2406,12 +2415,12 @@ async function handleComponent(interaction) {
 
       // Confirm completion
       const promptEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("warning")} Complete Shared Order?`)
+        .setTitle(`${getIcon("serve")} Complete Shared Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Mark this shared order as complete? This will distribute rewards to all contributors."
         )
-        .setColor(theme.colors.warning);
+        .setColor(theme.colors.success);
 
       applyOwnerFooter(promptEmbed, interaction.member ?? interaction.user);
 
@@ -2499,6 +2508,7 @@ async function handleComponent(interaction) {
         return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
       }
 
+      const targetMessageId = interaction.message?.id ?? null;
       const party = getUserActiveParty(db, userId);
       if (!party) {
         return componentCommit(interaction, {
@@ -2617,10 +2627,16 @@ async function handleComponent(interaction) {
 
         const isLeader = party.leader_user_id === userId;
         const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
-        return componentCommit(interaction, {
+        const commitPayload = {
           embeds: [embed],
           components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
-        });
+        };
+
+        if (targetMessageId) {
+          commitPayload.targetMessageId = targetMessageId;
+        }
+
+        return componentCommit(interaction, commitPayload);
       } catch (err) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} ${err.message}`,

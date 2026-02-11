@@ -82,6 +82,14 @@ test("Staff: getMaxStaffCapacity uses level gating and quarters", () => {
   assert.strictEqual(getMaxStaffCapacity(player, staffContent), 10);
 });
 
+test("Staff: getMaxStaffCapacity can exceed roster size", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 25;
+  player.upgrades.u_staff_quarters = 6; // +3 capacity
+
+  assert.strictEqual(getMaxStaffCapacity(player, staffContent), 28);
+});
+
 test("Staff: calculateStaffEffects aggregates bonuses", () => {
   const player = makeTestPlayer();
   player.staff_levels = {

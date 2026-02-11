@@ -94,7 +94,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   const discoveries = [];
   let clueChance = DISCOVERY_CHANCE_BASE.serve;
   let scrollChance = DISCOVERY_SCROLL_CHANCE_BASE.serve;
-  const dropRateMult = 0.5;
+  const dropRateMult = 1;
   clueChance *= dropRateMult;
   scrollChance *= dropRateMult;
 

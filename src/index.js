@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { REST } from "@discordjs/rest";
 import { getIcon } from "./ui/icons.js";
 
 (async () => {
@@ -126,18 +127,60 @@ import { getIcon } from "./ui/icons.js";
     return [...client.guilds.cache.keys()];
   }
 
-  client.once("ready", (c) => {
+  async function resolveAccessibleEmojiIds(client, token) {
+    const ids = new Set();
+    let applicationEmojiCount = 0;
+
+    if (!token) return { ids, applicationEmojiCount };
+
+    const applicationId = client.application?.id ?? client.user?.id;
+    if (!applicationId) return { ids, applicationEmojiCount };
+
+    if (client.application) {
+      try {
+        await client.application.fetch();
+      } catch (error) {
+        console.error("⚠️ Unable to refresh application metadata:", error?.message ?? error);
+      }
+    }
+
+    try {
+      const rest = new REST({ version: "10" }).setToken(token);
+      const response = await rest.get(`/applications/${applicationId}/emojis`);
+      const emojiItems = Array.isArray(response?.items)
+        ? response.items
+        : Array.isArray(response)
+          ? response
+          : [];
+      applicationEmojiCount = emojiItems.length;
+      for (const emoji of emojiItems) {
+        if (emoji?.id) ids.add(emoji.id);
+      }
+    } catch (error) {
+      console.error("⚠️ Unable to fetch application emojis:", error?.message ?? error);
+    }
+
+    return { ids, applicationEmojiCount };
+  }
+
+  client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
     const customEmojis = getCustomEmojiEntries();
-    const missingEmojis = customEmojis.filter((emoji) => !client.emojis.cache.has(emoji.id));
+    const { ids: accessibleEmojiIds, applicationEmojiCount } = await resolveAccessibleEmojiIds(client, token);
+    const missingEmojis = customEmojis.filter((emoji) => !accessibleEmojiIds.has(emoji.id));
     if (missingEmojis.length) {
       const missingList = missingEmojis
         .map((emoji) => `${emoji.key} -> ${emoji.name}:${emoji.id}`)
         .join(", ");
       console.error("❌ Missing custom emojis for this bot:");
       console.error(missingList);
-      console.error("Ensure the bot is in the emoji host guild(s) or update content/icons.json IDs.");
+      console.error("Ensure the bot is authorized for the emoji host application or update content/icons.json IDs.");
+      console.error(`(Application emojis available: ${applicationEmojiCount})`);
+    } else {
+      console.log(
+        `✅ Custom emoji check passed (${customEmojis.length} entries, application emojis available: ${applicationEmojiCount}).`
+      );
     }
 
     try {
@@ -397,7 +440,7 @@ import { getIcon } from "./ui/icons.js";
         if (interaction.replied || interaction.deferred) {
           return interaction.followUp({ content: slowDownMsg, ephemeral: true });
         }
-        return interaction.reply({ content: slowDownMsg, flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: slowDownMsg, ephemeral: true });
       } catch (e) {
         console.error("RATE LIMIT REPLY ERROR:", e?.message ?? e);
         return;

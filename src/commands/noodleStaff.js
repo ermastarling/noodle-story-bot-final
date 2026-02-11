@@ -167,13 +167,13 @@ export function buildStaffOverviewEmbed(player, server, user) {
       return `${prefix}**${s.name}** — ${status}`;
     });
     embed.addFields({
-      name: `Your Staff (${hiredCount}/${staffCap} slots)`,
+      name: `Your Staff`,
       value: staffLines.join("\n"),
       inline: false
     });
   } else {
     embed.addFields({
-      name: `Your Staff (${hiredCount}/${staffCap} slots)`,
+      name: `Your Staff`,
       value: "_No staff leveled yet._",
       inline: false
     });
