@@ -522,7 +522,7 @@ import { getIcon } from "./ui/icons.js";
 
       try {
         fs.appendFileSync(LOG_PATH, `\n[${new Date().toISOString()}]\n${detail}\n`);
-        console.log(`${getIcon("list")} Error written to:`, LOG_PATH);
+        console.log(`📋 Error written to:`, LOG_PATH);
       } catch (err) {
         console.error("❌ Failed to write error log:", err?.stack ?? err);
       }

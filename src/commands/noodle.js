@@ -1193,14 +1193,14 @@ if (interaction.isModalSubmit?.() && ephemeral === true) {
     try {
       return await interaction.followUp({ ...rest, ephemeral: true });
     } catch (e) {
-      console.log(`${getIcon("warning")} Modal followUp failed:`, e?.message);
+      console.log(`⚠️ Modal followUp failed:`, e?.message);
       return;
     }
   }
   try {
     return await interaction.reply({ ...rest, ephemeral: true });
   } catch (e) {
-    console.log(`${getIcon("warning")} Modal reply failed:`, e?.message);
+    console.log(`⚠️ Modal reply failed:`, e?.message);
     return;
   }
 }
@@ -1231,7 +1231,7 @@ if (targetMessageId && !ephemeral) {
       return target.edit(editPayload);
     }
   } catch (e) {
-    console.log(`${getIcon("warning")} Failed to edit target message ${targetMessageId}:`, e?.message);
+    console.log(`⚠️ Failed to edit target message ${targetMessageId}:`, e?.message);
     // Fall through to normal response
   }
 }
@@ -1253,7 +1253,7 @@ if (shouldBeEphemeral) {
       console.log(`⏭️  Skipping ephemeral reply - interaction invalid or already handled`);
       return;
     }
-    console.log(`${getIcon("warning")} Ephemeral reply failed:`, e?.message);
+    console.log(`⚠️ Ephemeral reply failed:`, e?.message);
     return;
   }
 }
@@ -1265,14 +1265,14 @@ if (interaction.isModalSubmit?.()) {
       try {
         return await interaction.followUp({ ...rest, ephemeral: true });
       } catch (e) {
-        console.log(`${getIcon("warning")} Modal followUp failed:`, e?.message);
+        console.log(`⚠️ Modal followUp failed:`, e?.message);
         return;
       }
     }
     try {
       return await interaction.reply({ ...rest, ephemeral: true });
     } catch (e) {
-      console.log(`${getIcon("warning")} Modal reply failed:`, e?.message);
+      console.log(`⚠️ Modal reply failed:`, e?.message);
       return;
     }
   }
@@ -1281,12 +1281,12 @@ if (interaction.isModalSubmit?.()) {
     try {
       return await interaction.editReply(rest);
     } catch (e) {
-      console.log(`${getIcon("warning")} Modal editReply failed:`, e?.message);
+      console.log(`⚠️ Modal editReply failed:`, e?.message);
       // If edit fails, try followUp as last resort
       try {
         return await interaction.followUp({ ...rest, ephemeral: true });
       } catch (e2) {
-        console.log(`${getIcon("warning")} Modal followUp also failed:`, e2?.message);
+        console.log(`⚠️ Modal followUp also failed:`, e2?.message);
         return;
       }
     }
@@ -1295,7 +1295,7 @@ if (interaction.isModalSubmit?.()) {
   try {
     return await interaction.reply(options);
   } catch (e) {
-    console.log(`${getIcon("warning")} Modal reply failed:`, e?.message);
+    console.log(`⚠️ Modal reply failed:`, e?.message);
     return;
   }
 }
@@ -1349,16 +1349,16 @@ if (finalOptions.embeds) {
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
-  console.log(`${getIcon("refresh")} Component editReply, embeds:`, finalOptions.embeds?.length ?? "none");
+  console.log(`🔄 Component editReply, embeds:`, finalOptions.embeds?.length ?? "none");
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
-    console.log(`${getIcon("warning")} Component editReply failed:`, e?.message);
+    console.log(`⚠️ Component editReply failed:`, e?.message);
     // Try followUp as fallback
     try {
       return await interaction.followUp({ ...finalOptions, ephemeral: true });
     } catch (e2) {
-      console.log(`${getIcon("warning")} Component followUp fallback also failed:`, e2?.message);
+      console.log(`⚠️ Component followUp fallback also failed:`, e2?.message);
       return;
     }
   }
@@ -1368,7 +1368,7 @@ if (interaction.deferred || interaction.replied) {
 try {
   return await interaction.update(finalOptions);
 } catch (e) {
-  console.log(`${getIcon("warning")} Component update failed:`, e?.message);
+  console.log(`⚠️ Component update failed:`, e?.message);
   return;
 }
 }
@@ -2333,8 +2333,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
     if (spoilageMessages.length > 0) {
       const ticksApplied = timeCatchup.spoilage?.ticksApplied ?? 0;
-      console.log(`${getIcon("warning")} Spoilage applied: ${ticksApplied} tick(s), queued ${spoilageMessages.length} message(s) for pantry.`);
-      console.log(`${getIcon("warning")} Spoilage messages:`, spoilageMessages);
+      console.log(`⚠️ Spoilage applied: ${ticksApplied} tick(s), queued ${spoilageMessages.length} message(s) for pantry.`);
+      console.log(`⚠️ Spoilage messages:`, spoilageMessages);
       if (!p.notifications) {
         p.notifications = {
           pending_pantry_messages: [],
@@ -4167,7 +4167,7 @@ if (kind === "profile" && (action === "edit_shop_name" || action === "edit_tagli
   try {
     return await interaction.showModal(modal);
   } catch (e) {
-    console.log(`${getIcon("warning")} showModal failed for profile edit:`, e?.message);
+    console.log(`⚠️ showModal failed for profile edit:`, e?.message);
     const code = e?.code ?? e?.message;
     if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
       return;
@@ -4614,7 +4614,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   try {
     return await interaction.showModal(modal);
   } catch (e) {
-    console.log(`${getIcon("warning")} showModal failed for cook:`, e?.message);
+    console.log(`⚠️ showModal failed for cook:`, e?.message);
     const code = e?.code ?? e?.message;
     if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
       return;

@@ -1256,7 +1256,7 @@ async function handleComponent(interaction) {
               const globalName = member.user.globalName?.toLowerCase();
               
               if (nickname === searchName || username === searchName || displayName === searchName || globalName === searchName) {
-                  console.log(`${getIcon("status_complete")} Found user in cache: ${member.displayName}`);
+                  console.log(`✅ Found user in cache: ${member.displayName}`);
                 targetMember = member;
                 break;
               }
@@ -1265,15 +1265,15 @@ async function handleComponent(interaction) {
             // If not in cache, try to search with a query (limited fetch)
             if (!targetMember) {
               try {
-                console.log(`${getIcon("search")} Searching for user: ${searchName}`);
+                console.log(`🔍 Searching for user: ${searchName}`);
                 const searchResults = await guild.members.search({ query: searchName, limit: 10 });
-                console.log(`${getIcon("list")} Found ${searchResults.size} search results`);
+                console.log(`📋 Found ${searchResults.size} search results`);
                 if (searchResults.size > 0) {
                   targetMember = searchResults.first();
-                  console.log(`${getIcon("status_complete")} Found via search: ${targetMember.displayName}`);
+                  console.log(`✅ Found via search: ${targetMember.displayName}`);
                 }
               } catch (e) {
-                console.log(`${getIcon("warning")} Member search failed:`, e?.message);
+                console.log(`⚠️ Member search failed:`, e?.message);
               }
             }
 
@@ -1286,9 +1286,9 @@ async function handleComponent(interaction) {
               return errorReply(interaction, `${getIcon("error")} You're not in a party anymore.`);
             }
 
-            console.log(`${getIcon("party")} Inviting to party: ${currentParty.party_name}`);
+            console.log(`🎉 Inviting to party: ${currentParty.party_name}`);
             const result = inviteUserToParty(db, serverId, currentParty.party_id, inviteTargetId);
-            console.log(`${getIcon("status_complete")} Invite successful, sending response`);
+            console.log(`$✅ Invite successful, sending response`);
             
             const embed = new EmbedBuilder()
               .setTitle(`${getIcon("status_complete")} User Invited!`)
@@ -1312,7 +1312,7 @@ async function handleComponent(interaction) {
         try {
           return errorReply(interaction, `${getIcon("error")} ${err.message}`);
         } catch (e) {
-          console.log(`${getIcon("warning")} editReply also failed:`, e?.message);
+          console.log(`⚠️ editReply also failed:`, e?.message);
         }
       }
     }
@@ -1794,7 +1794,7 @@ async function handleComponent(interaction) {
         return await interaction.showModal(modal);
       } catch (e) {
         sharedOrderModalState.delete(modalToken);
-        console.log(`${getIcon("warning")} showModal failed for shared_order_contribute:`, e?.message);
+        console.log(`⚠️ showModal failed for shared_order_contribute:`, e?.message);
         return componentCommit(interaction, {
           content: `${getIcon("warning")} Discord couldn't show the modal.`,
           ephemeral: true
@@ -2030,7 +2030,7 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`${getIcon("warning")} showModal failed for tip:`, e?.message);
+        console.log(`⚠️ showModal failed for tip:`, e?.message);
         return componentCommit(interaction, { 
           content: `${getIcon("warning")} Discord couldn't show the modal.`, 
           ephemeral: true 
@@ -2065,7 +2065,7 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`${getIcon("warning")} showModal failed for bless:`, e?.message);
+        console.log(`⚠️ showModal failed for bless:`, e?.message);
         return componentCommit(interaction, { 
           content: `${getIcon("warning")} Discord couldn't show the modal.`, 
           ephemeral: true 
@@ -2321,7 +2321,7 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`${getIcon("warning")} showModal failed for party_invite:`, e?.message);
+        console.log(`⚠️ showModal failed for party_invite:`, e?.message);
         return componentCommit(interaction, { 
           content: `${getIcon("warning")} Discord couldn't show the modal.`, 
           ephemeral: true 
@@ -2849,7 +2849,7 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`${getIcon("warning")} showModal failed for party_create:`, e?.message);
+        console.log(`⚠️ showModal failed for party_create:`, e?.message);
         return componentCommit(interaction, { 
           content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.`, 
           ephemeral: true 
@@ -2892,7 +2892,7 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`${getIcon("warning")} showModal failed for party_join:`, e?.message);
+        console.log(`⚠️ showModal failed for party_join:`, e?.message);
         return componentCommit(interaction, { 
           content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle-social party" command instead.`, 
           ephemeral: true 
