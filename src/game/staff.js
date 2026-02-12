@@ -46,18 +46,15 @@ export function levelUpStaff(player, staffId, staffContent) {
   
   const currentLevel = player.staff_levels[staffId] || 0;
 
-  // Enforce staff capacity on first hire
-  if (currentLevel <= 0) {
-    const hiredCount = Object.values(player.staff_levels || {}).filter((lvl) => Number(lvl) > 0).length;
-    const maxCap = getMaxStaffCapacity(player, staffContent);
-    if (hiredCount >= maxCap) {
-      return {
-        success: false,
-        message: `Staff capacity reached (${maxCap}). Upgrade Staff Quarters or level up your shop to hire more staff.`,
-        cost: 0,
-        newLevel: currentLevel
-      };
-    }
+  const usedSlots = getStaffSlotsUsed(player);
+  const maxCap = getMaxStaffCapacity(player, staffContent);
+  if (usedSlots >= maxCap) {
+    return {
+      success: false,
+      message: `Staff slot capacity reached (${maxCap}). Upgrade Staff Quarters or level up your shop to gain more slots.`,
+      cost: 0,
+      newLevel: currentLevel
+    };
   }
   
   // Check if at max level
@@ -106,6 +103,13 @@ export function getMaxStaffCapacity(player, staffContent = null) {
   const effects = calculateUpgradeEffects(player, upgradesContent);
   const bonus = Math.floor(effects.staff_capacity || 0);
   return baseCap + bonus;
+}
+
+export function getStaffSlotsUsed(player) {
+  if (!player.staff_levels) return 0;
+  return Object.values(player.staff_levels)
+    .map((lvl) => Math.max(0, Number(lvl) || 0))
+    .reduce((sum, lvl) => sum + lvl, 0);
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   levelUpStaff,
   getStaffLevels,
   getMaxStaffCapacity,
+  getStaffSlotsUsed,
   calculateStaffCost
 } from "../game/staff.js";
 import { calculateUpgradeEffects } from "../game/upgrades.js";
@@ -151,7 +152,7 @@ export async function noodleStaffHandler(interaction) {
 export function buildStaffOverviewEmbed(player, server, user) {
   const leveledStaff = getStaffLevels(player, staffContent);
   const staffCap = getMaxStaffCapacity(player, staffContent);
-  const hiredCount = Object.values(player.staff_levels || {}).filter((lvl) => Number(lvl) > 0).length;
+  const usedSlots = getStaffSlotsUsed(player);
   
   const embed = new EmbedBuilder()
     .setTitle(`${getIcon("staff_management")} Staff Management`)
@@ -230,7 +231,7 @@ export function buildStaffOverviewEmbed(player, server, user) {
     });
   }
 
-  embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${hiredCount}/${staffCap}**`);
+  embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${usedSlots}/${staffCap}**`);
   applyOwnerFooter(embed, user);
 
   return embed;
