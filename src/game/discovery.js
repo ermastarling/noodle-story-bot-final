@@ -368,6 +368,10 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     if (!player.known_recipes.includes(discovery.recipeId)) {
       player.known_recipes.push(discovery.recipeId);
     }
+
+    if (player.clues_owned?.[discovery.recipeId]) {
+      delete player.clues_owned[discovery.recipeId];
+    }
     
     const badgeLine = maybeGrantEventBadge(recipe);
 

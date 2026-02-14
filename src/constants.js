@@ -11,6 +11,7 @@ export const STARTER_PROFILE = {
 };
 
 export const INGREDIENT_CAPACITY_BASE = 50;
+export const BOWL_STORAGE_CAPACITY_BASE = 50;
 
 export const TUTORIAL_QUESTS = ["intro_order", "intro_market", "intro_forage", "intro_cook", "intro_serve"];
 

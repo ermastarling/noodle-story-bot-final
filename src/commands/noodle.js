@@ -43,6 +43,7 @@ import {
   STARTER_PROFILE,
   CLUES_TO_UNLOCK_RECIPE,
   INGREDIENT_CAPACITY_BASE,
+  BOWL_STORAGE_CAPACITY_BASE,
   PROFILE_DEFAULT_TAGLINE,
   PROFILE_BADGES_SHOWN,
   PROFILE_COLLECTIONS_SHOWN
@@ -762,7 +763,7 @@ function getBowlCount(player) {
 }
 
 function getBowlCapacity(player, effects) {
-  const base = getIngredientCapacityPerType(player, effects);
+  const base = BOWL_STORAGE_CAPACITY_BASE;
   const bonus = Math.floor(effects?.bowl_storage_capacity || 0);
   const ladleBonus = Math.floor(effects?.bowl_capacity_bonus || 0);
   return Math.max(0, base + bonus + ladleBonus);
@@ -1427,7 +1428,8 @@ if (!allowed.has(id)) return null;
   const stock = p.market_stock?.[id] ?? 0;
   if (stock <= 0) return null;
 
-  const labelRaw = `${it.name} — ${price}c (stock ${stock})`;
+  const ownedQty = p.inv_ingredients?.[id] ?? 0;
+  const labelRaw = `${it.name} — ${price}c (stock ${stock}, you have ${ownedQty})`;
   const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
 
   return { label, value: id };
