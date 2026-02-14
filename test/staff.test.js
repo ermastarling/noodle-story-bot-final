@@ -48,7 +48,7 @@ test("Staff: levelUpStaff fails when insufficient coins", () => {
 test("Staff: levelUpStaff fails at max level", () => {
   const player = makeTestPlayer();
   player.coins = 999999;
-  player.staff_levels["prep_chef"] = 20; // Max level
+  player.staff_levels["prep_chef"] = staffContent.staff_members.prep_chef.max_level; // Max level
   
   const result = levelUpStaff(player, "prep_chef", staffContent);
   
