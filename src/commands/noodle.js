@@ -1411,69 +1411,353 @@ if (idMatches.length === 1) return idMatches[0];
 return null;
 }
 
-async function renderMultiBuyPicker({ interaction, userId, s, p }) {
-if (!s.market_prices) s.market_prices = {};
-if (!p.market_stock) p.market_stock = {};
+function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
+  if (!s.market_prices) s.market_prices = {};
+  if (!p.market_stock) p.market_stock = {};
 
-const allowed = getUnlockedIngredientIds(p, content);
+  const allowed = getUnlockedIngredientIds(p, content);
 
-const opts = (MARKET_ITEM_IDS ?? [])
-.map((id) => {
-if (!allowed.has(id)) return null;
+  const opts = (MARKET_ITEM_IDS ?? [])
+    .map((id) => {
+      if (!allowed.has(id)) return null;
 
-  const it = content.items?.[id];
-  if (!it) return null;
+      const it = content.items?.[id];
+      if (!it) return null;
 
-  const price = s.market_prices?.[id] ?? it.base_price ?? 0;
-  const stock = p.market_stock?.[id] ?? 0;
-  if (stock <= 0) return null;
+      const price = s.market_prices?.[id] ?? it.base_price ?? 0;
+      const stock = p.market_stock?.[id] ?? 0;
+      if (stock <= 0) return null;
 
-  const ownedQty = p.inv_ingredients?.[id] ?? 0;
-  const labelRaw = `${it.name} — ${price}c (stock ${stock}, you have ${ownedQty})`;
-  const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
+      const ownedQty = p.inv_ingredients?.[id] ?? 0;
+      const labelRaw = `${it.name} — ${price}c (stock ${stock}, you have ${ownedQty})`;
+      const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
 
-  return { label, value: id };
-})
-.filter(Boolean)
-.slice(0, 25);
+      return { label, value: id };
+    })
+    .filter(Boolean)
+    .slice(0, 25);
 
-if (!opts.length) {
-return componentCommit(interaction, {
-content: `${getIcon("cart")} No market items are available for your unlocked recipes right now.`,
-components: [noodleMainMenuRow(userId)],
-ephemeral: true
-});
+  if (!opts.length) {
+    return {
+      content: `${getIcon("cart")} No market items are available for your unlocked recipes right now.`,
+      components: [noodleMainMenuRow(userId)],
+      ephemeral: true
+    };
+  }
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:multibuy:select:${userId}`)
+    .setPlaceholder("Select up to 5 items to buy.")
+    .setMinValues(1)
+    .setMaxValues(Math.min(5, opts.length))
+    .addOptions(opts);
+
+  const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+  const allNeeded = {};
+  acceptedEntries.forEach(([fullId, a]) => {
+    const snap = a?.order ?? null;
+    const order =
+      snap ??
+      (p.order_board ?? []).find((o) => o.order_id === fullId) ??
+      null;
+
+    if (order?.recipe_id) {
+      const recipe = content.recipes[order.recipe_id];
+      if (recipe?.ingredients) {
+        recipe.ingredients.forEach((ing) => {
+          allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + ing.qty;
+        });
+      }
+    }
+  });
+
+  const shortages = Object.entries(allNeeded)
+    .map(([id, needed]) => {
+      const have = p.inv_ingredients?.[id] ?? 0;
+      const short = Math.max(0, needed - have);
+      return { id, needed, have, short };
+    })
+    .filter((s) => s.short > 0);
+
+  const maxShoppingLines = 8;
+  const shoppingLines = shortages
+    .slice(0, maxShoppingLines)
+    .map((s) => `• ${displayItemName(s.id, content)} — need **${s.short}**`);
+  const shoppingSummary = shortages.length > maxShoppingLines
+    ? `\n…and **${shortages.length - maxShoppingLines}** more`
+    : "";
+  const shoppingList = shortages.length
+    ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
+    : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`;
+
+  const buyEmbed = buildMenuEmbed({
+    title: `${getIcon("cart")} Multi-buy`,
+    description:
+      "Select up to **5** items\n" +
+      "When you’re done selecting, if on Desktop, press **Esc** to continue\n\n" +
+      `${shoppingList}`,
+    user: ownerUser
+  });
+  buyEmbed.setFooter({
+    text: `Coins: ${p.coins || 0}c\n${ownerFooterText(ownerUser)}`
+  });
+
+  return {
+    content: " ",
+    embeds: [buyEmbed],
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:sell:${userId}`)
+          .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:profile:${userId}`)
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Secondary)
+      )
+    ]
+  };
 }
 
-const menu = new StringSelectMenuBuilder()
-.setCustomId(`noodle:multibuy:select:${userId}`)
-.setPlaceholder("Select up to 5 items")
-.setMinValues(1)
-.setMaxValues(Math.min(5, opts.length))
-.addOptions(opts);
+function buildSellPickerPayload({ userId, p, s, ownerUser }) {
+  const ownedItems = Object.entries(p.inv_ingredients ?? {})
+    .filter(([id, q]) => q > 0 && MARKET_ITEM_IDS.includes(id))
+    .slice(0, 25);
 
-const buyEmbed = buildMenuEmbed({
-  title: `${getIcon("cart")} Multi-buy`,
-  description: "Select up to **5** items.\nWhen you’re done selecting, if on Desktop, press **Esc** to continue.",
-  user: interaction.member ?? interaction.user
-});
-buyEmbed.setFooter({
-  text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
-});
+  if (!ownedItems.length) {
+    return {
+      content: `${getIcon("coins")} You don't have any market items to sell.`,
+      ephemeral: true
+    };
+  }
 
-return componentCommit(interaction, {
-  content: " ",
-  embeds: [buyEmbed],
-  components: [
-    new ActionRowBuilder().addComponents(menu),
-    new ActionRowBuilder().addComponents(
+  const opts = ownedItems.map(([id, ownedQty]) => {
+    const it = content.items?.[id];
+    if (!it) return null;
+
+    const price = sellPrice(s, id);
+    const labelRaw = `${it.name} — ${price}c each (you have ${ownedQty})`;
+    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
+
+    return { label, value: id };
+  }).filter(Boolean);
+
+  if (!opts.length) {
+    return {
+      content: `${getIcon("coins")} You don't have any market items to sell.`,
+      ephemeral: true
+    };
+  }
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:sell:select:${userId}`)
+    .setPlaceholder("Select items to sell")
+    .setMinValues(1)
+    .setMaxValues(Math.min(5, opts.length))
+    .addOptions(opts);
+
+  const cancelButton = new ButtonBuilder()
+    .setCustomId(`noodle:nav:profile:${userId}`)
+    .setLabel("Cancel")
+    .setStyle(ButtonStyle.Secondary);
+
+  const sellEmbed = buildMenuEmbed({
+    title: `${getIcon("coins")} Sell Items`,
+    description:
+      "Select up to **5** items to sell\n" +
+      "When you’re done selecting, if on Desktop, press **Esc** to continue",
+    user: ownerUser
+  });
+
+  return {
+    content: " ",
+    embeds: [sellEmbed],
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      new ActionRowBuilder().addComponents(cancelButton)
+    ]
+  };
+}
+
+function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 }) {
+  const set = buildSettingsMap(settingsCatalog, s.settings);
+  s.season = computeActiveSeason(set);
+  const activeEventEffects = getActiveEventEffects(eventsContent, s);
+  const activeEventId = s.active_event_id ?? null;
+  rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
+  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+
+  const all = p.order_board ?? [];
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+
+  const opts = all.slice(safePage * pageSize, (safePage + 1) * pageSize).map((o) => {
+    const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
+    const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
+    const labelRaw = `${shortOrderId(o.order_id)} — ${rName} (${npcName})`;
+    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
+    return { label, value: String(o.order_id) };
+  });
+
+  if (!opts.length) {
+    return { content: "No orders available to accept.", ephemeral: true };
+  }
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:pick:accept_select:${userId}`)
+    .setPlaceholder("Select orders to accept (up to 5)")
+    .setMinValues(1)
+    .setMaxValues(Math.min(5, opts.length))
+    .addOptions(opts);
+
+  const navRow = new ActionRowBuilder();
+  if (totalPages > 1) {
+    navRow.addComponents(
       new ButtonBuilder()
-        .setCustomId(`noodle:nav:profile:${userId}`)
-        .setLabel("Cancel")
+        .setCustomId(`noodle:pick:accept:${userId}:${safePage - 1}`)
+        .setLabel("Prev")
+        .setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary)
-    )
-  ]
-});
+        .setDisabled(safePage <= 0),
+      new ButtonBuilder()
+        .setCustomId(`noodle:pick:accept:${userId}:${safePage + 1}`)
+        .setLabel("Next")
+        .setEmoji(getButtonEmoji("next"))
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage >= totalPages - 1)
+    );
+  }
+
+  const rows = [new ActionRowBuilder().addComponents(menu)];
+  if (totalPages > 1) rows.push(navRow);
+  const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
+  if (!tutorialOnlyAccept) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:orders:${userId}`)
+          .setLabel("Back")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
+  }
+
+  const acceptEmbed = buildMenuEmbed({
+    title: `${getIcon("status_complete")} Accept Orders`,
+    description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.\n\n(page ${safePage + 1}/${totalPages})`,
+    user: ownerUser
+  });
+
+  return {
+    content: " ",
+    embeds: [acceptEmbed],
+    components: rows
+  };
+}
+
+function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
+  const accepted = Object.entries(p.orders?.accepted ?? {});
+
+  const opts = accepted.slice(0, 25).map(([oid, entry]) => {
+    const snap = entry?.order ?? null;
+    const rName = snap ? (content.recipes[snap.recipe_id]?.name ?? snap.recipe_id) : "Unknown Recipe";
+    const npcName = snap ? (content.npcs[snap.npc_archetype]?.name ?? snap.npc_archetype) : "Unknown NPC";
+    const labelRaw = `${shortOrderId(oid)} — ${rName} (${npcName})`;
+    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
+    return { label, value: oid };
+  });
+
+  if (!opts.length) {
+    return { content: "You don’t have any accepted orders.", ephemeral: true };
+  }
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:pick:${action}_select:${userId}`)
+    .setPlaceholder(action === "serve" ? "Select orders to serve" : "Select an order to cancel")
+    .setMinValues(1)
+    .setMaxValues(action === "serve" ? Math.min(5, opts.length) : 1)
+    .addOptions(opts);
+
+  const actionTitle = action === "serve"
+    ? `${getIcon("bowl")} Serve Orders`
+    : `${getIcon("cancel")} Cancel Order`;
+  const actionDesc = action === "serve"
+    ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
+    : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
+  const actionEmbed = buildMenuEmbed({ title: actionTitle, description: actionDesc, user: ownerUser });
+  const tutorialOnlyServeMenu = action === "serve" && isTutorialStep(p, "intro_serve");
+
+  return {
+    content: " ",
+    embeds: [actionEmbed],
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      ...(tutorialOnlyServeMenu ? [] : [action === "serve" ? noodleOrdersActionRowWithBack(userId) : noodleOrdersActionRow(userId)])
+    ]
+  };
+}
+
+function buildCookPickerPayload({ userId, p, s, ownerUser }) {
+  const available = getAvailableRecipes(p);
+  const activeSeason = s?.season ?? null;
+  const seasonFiltered = available.filter((rid) => {
+    const r = content.recipes?.[rid];
+    if (!r) return true;
+    if (r.tier !== "seasonal") return true;
+    return !!activeSeason && r.season === activeSeason;
+  });
+  const opts = seasonFiltered.slice(0, 25).map((rid) => {
+    const r = content.recipes?.[rid];
+    const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
+    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
+    return { label, value: rid };
+  });
+
+  if (!opts.length) {
+    const msg = available.length > 0
+      ? "You don’t have any recipes available to cook this season."
+      : "You don’t know any recipes yet.";
+    return { content: msg, ephemeral: true };
+  }
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:pick:cook_select:${userId}`)
+    .setPlaceholder("Select a recipe to cook")
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(opts);
+
+  const cookEmbed = buildMenuEmbed({
+    title: `${getIcon("cook")} Cook`,
+    description: "Select a recipe to cook:",
+    user: ownerUser
+  });
+
+  const tutorialOnlyMenu = isTutorialStep(p, "intro_cook");
+  const components = tutorialOnlyMenu
+    ? [new ActionRowBuilder().addComponents(menu)]
+    : [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)];
+
+  return {
+    content: " ",
+    embeds: [cookEmbed],
+    components
+  };
+}
+
+async function renderMultiBuyPicker({ interaction, userId, s, p }) {
+  const payload = buildMultiBuyPickerPayload({
+    userId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user
+  });
+
+  return componentCommit(interaction, payload);
 }
 
 function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId, { limitToBuy1 = false } = {}) {
@@ -2841,109 +3125,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     // Multi-buy entry
     if (!itemId) {
-      const allowed = getUnlockedIngredientIds(p, content);
-
-      const opts = (MARKET_ITEM_IDS ?? [])
-        .map((id) => {
-          if (!allowed.has(id)) return null;
-
-          const it = content.items?.[id];
-          if (!it) return null;
-
-          const price = s.market_prices?.[id] ?? it.base_price ?? 0;
-          const stock = p.market_stock?.[id] ?? 0;
-          if (stock <= 0) return null;
-
-          const ownedQty = p.inv_ingredients?.[id] ?? 0;
-          const labelRaw = `${it.name} — ${price}c (stock ${stock}, you have ${ownedQty})`;
-          const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-
-          return { label, value: id };
-        })
-        .filter(Boolean)
-        .slice(0, 25);
-
-      if (!opts.length) {
-        return commitState({
-          content: `${getIcon("cart")} No market items are available for your unlocked recipes right now.`,
-          ephemeral: true
-        });
-      }
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`noodle:multibuy:select:${userId}`)
-        .setPlaceholder("Select up to 5 items to buy.")
-        .setMinValues(1)
-        .setMaxValues(Math.min(5, opts.length))
-        .addOptions(opts);
-
-      const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
-      const allNeeded = {};
-      acceptedEntries.forEach(([fullId, a]) => {
-        const snap = a?.order ?? null;
-        const order =
-          snap ??
-          (p.order_board ?? []).find((o) => o.order_id === fullId) ??
-          null;
-
-        if (order?.recipe_id) {
-          const recipe = content.recipes[order.recipe_id];
-          if (recipe?.ingredients) {
-            recipe.ingredients.forEach((ing) => {
-              allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + ing.qty;
-            });
-          }
-        }
+      const payload = buildMultiBuyPickerPayload({
+        userId,
+        p,
+        s,
+        ownerUser: interaction.member ?? interaction.user
       });
 
-      const shortages = Object.entries(allNeeded)
-        .map(([id, needed]) => {
-          const have = p.inv_ingredients?.[id] ?? 0;
-          const short = Math.max(0, needed - have);
-          return { id, needed, have, short };
-        })
-        .filter((s) => s.short > 0);
-
-      const maxShoppingLines = 8;
-      const shoppingLines = shortages
-        .slice(0, maxShoppingLines)
-        .map((s) => `• ${displayItemName(s.id, content)} — need **${s.short}**`);
-      const shoppingSummary = shortages.length > maxShoppingLines
-        ? `\n…and **${shortages.length - maxShoppingLines}** more`
-        : "";
-      const shoppingList = shortages.length
-        ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
-        : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`;
-
-      const buyEmbed = buildMenuEmbed({
-        title: `${getIcon("cart")} Multi-buy`,
-        description:
-          "Select up to **5** items\n" +
-          "When you’re done selecting, if on Desktop, press **Esc** to continue\n\n" +
-          `${shoppingList}`,
-        user: interaction.member ?? interaction.user
-      });
-      buyEmbed.setFooter({
-        text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
-      });
-
-      return commit({
-        content: " ",
-        embeds: [buyEmbed],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`noodle:nav:sell:${userId}`)
-              .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
-              .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-              .setCustomId(`noodle:nav:profile:${userId}`)
-              .setLabel("Cancel")
-              .setStyle(ButtonStyle.Secondary)
-          )
-        ]
-      });
+      return commit(payload);
     }
 
     // Single buy
@@ -3022,6 +3211,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const itemId = opt.getString("item");
     const qty = opt.getInteger("quantity");
 
+    if (!itemId) {
+      const payload = buildSellPickerPayload({
+        userId,
+        p,
+        s,
+        ownerUser: interaction.member ?? interaction.user
+      });
+
+      return commit(payload);
+    }
+
     if (!MARKET_ITEM_IDS.includes(itemId)) {
       return commitState({ content: "That item isn’t available in the market.", ephemeral: true });
     }
@@ -3049,6 +3249,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "cook") {
     const recipeId = opt.getString("recipe");
     const qty = opt.getInteger("quantity");
+
+    if (!recipeId) {
+      const payload = buildCookPickerPayload({
+        userId,
+        p,
+        s,
+        ownerUser: interaction.member ?? interaction.user
+      });
+
+      return commit(payload);
+    }
 
     const r = content.recipes[recipeId];
     if (!r) return commitState({ content: "That recipe doesn’t exist.", ephemeral: true });
@@ -3354,6 +3565,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   /* ---------------- ACCEPT -------- */
   if (sub === "accept") {
     const rawInput = String(opt.getString("order_id") ?? "").trim();
+    if (!rawInput) {
+      const payload = buildAcceptPickerPayload({
+        userId,
+        serverId,
+        p,
+        s,
+        ownerUser: interaction.member ?? interaction.user
+      });
+
+      return commit(payload);
+    }
     const tokens = rawInput
       .split(/[\s,]+/)
       .map((t) => t.trim().toUpperCase())
@@ -3671,6 +3893,16 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   /* ---------------- CANCEL ---------------- */
   if (sub === "cancel") {
     const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
+    if (!input) {
+      const payload = buildCancelServePickerPayload({
+        action: "cancel",
+        userId,
+        p,
+        ownerUser: interaction.member ?? interaction.user
+      });
+
+      return commit(payload);
+    }
 
     // Ensure orders is a valid object (handle case where it might be an array or null)
     if (!p.orders || typeof p.orders !== 'object' || Array.isArray(p.orders)) {
@@ -3716,7 +3948,16 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       .map((t) => t.trim().toUpperCase())
       .filter(Boolean);
 
-    if (!tokens.length) return commitState({ content: "Pick at least one accepted order to serve." });
+    if (!tokens.length) {
+      const payload = buildCancelServePickerPayload({
+        action: "serve",
+        userId,
+        p,
+        ownerUser: interaction.member ?? interaction.user
+      });
+
+      return commit(payload);
+    }
 
     const acceptedMap = p.orders?.accepted ?? {};
     // Ensure core stats and lifetime tracking exist
@@ -4311,63 +4552,16 @@ if (kind === "nav" && action === "sell") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
   const targetMessageId = interaction.message?.id ?? null;
-  
-  const ownedItems = Object.entries(p.inv_ingredients ?? {})
-    .filter(([id, q]) => q > 0 && MARKET_ITEM_IDS.includes(id))
-    .slice(0, 25);
 
-  if (!ownedItems.length) {
-    return componentCommit(interaction, {
-      content: `${getIcon("coins")} You don't have any market items to sell.`,
-      ephemeral: true
-    });
-  }
-
-  const opts = ownedItems.map(([id, ownedQty]) => {
-    const it = content.items?.[id];
-    if (!it) return null;
-
-    const price = sellPrice(s, id);
-    const labelRaw = `${it.name} — ${price}c each (you have ${ownedQty})`;
-    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-
-    return { label, value: id };
-  }).filter(Boolean);
-
-  if (!opts.length) {
-    return componentCommit(interaction, {
-      content: `${getIcon("coins")} You don't have any market items to sell.`,
-      ephemeral: true
-    });
-  }
-
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:sell:select:${userId}`)
-    .setPlaceholder("Select items to sell")
-    .setMinValues(1)
-    .setMaxValues(Math.min(5, opts.length))
-    .addOptions(opts);
-
-  const cancelButton = new ButtonBuilder()
-    .setCustomId(`noodle:nav:profile:${userId}`)
-    .setLabel("Cancel")
-    .setStyle(ButtonStyle.Secondary);
-
-  const sellEmbed = buildMenuEmbed({
-    title: `${getIcon("coins")} Sell Items`,
-    description:
-      "Select up to **5** items to sell\n" +
-      "When you’re done selecting, if on Desktop, press **Esc** to continue",
-    user: interaction.member ?? interaction.user
+  const payload = buildSellPickerPayload({
+    userId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user
   });
 
   return componentCommit(interaction, {
-    content: " ",
-    embeds: [sellEmbed],
-    components: [
-      new ActionRowBuilder().addComponents(menu),
-      new ActionRowBuilder().addComponents(cancelButton)
-    ],
+    ...payload,
     targetMessageId
   });
 }
@@ -4399,176 +4593,45 @@ if (kind === "action") {
 if (kind === "pick" && !action.endsWith("_select") && !interaction.isModalSubmit?.()) {
 // noodle:pick:<what>:<ownerId>
 if (action === "accept") {
-const s = ensureServer(serverId);
-const p = ensurePlayer(serverId, userId);
-const set = buildSettingsMap(settingsCatalog, s.settings);
-s.season = computeActiveSeason(set);
-const activeEventEffects = getActiveEventEffects(eventsContent, s);
-const activeEventId = s.active_event_id ?? null;
-rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
-ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
-
-  const all = p.order_board ?? [];
+  const s = ensureServer(serverId);
+  const p = ensurePlayer(serverId, userId);
   const rawPage = Number(parts[4] ?? 0);
-  const pageSize = 25;
-  const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
-  const page = Math.min(Math.max(rawPage, 0), totalPages - 1);
-
-  const opts = all.slice(page * pageSize, (page + 1) * pageSize).map((o) => {
-    const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
-    const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
-    const labelRaw = `${shortOrderId(o.order_id)} — ${rName} (${npcName})`;
-    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    return { label, value: String(o.order_id) };
+  const payload = buildAcceptPickerPayload({
+    userId,
+    serverId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user,
+    page: rawPage
   });
 
-  if (!opts.length) return componentCommit(interaction, { content: "No orders available to accept.", ephemeral: true });
-
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:accept_select:${userId}`)
-    .setPlaceholder("Select orders to accept (up to 5)")
-    .setMinValues(1)
-    .setMaxValues(Math.min(5, opts.length))
-    .addOptions(opts);
-
-  const navRow = new ActionRowBuilder();
-  if (totalPages > 1) {
-    navRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`noodle:pick:accept:${userId}:${page - 1}`)
-        .setLabel("Prev")
-        .setEmoji(getButtonEmoji("back"))
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page <= 0),
-      new ButtonBuilder()
-        .setCustomId(`noodle:pick:accept:${userId}:${page + 1}`)
-        .setLabel("Next")
-        .setEmoji(getButtonEmoji("next"))
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page >= totalPages - 1)
-    );
-  }
-
-  const rows = [new ActionRowBuilder().addComponents(menu)];
-  if (totalPages > 1) rows.push(navRow);
-  const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
-  if (!tutorialOnlyAccept) {
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`noodle:nav:orders:${userId}`)
-          .setLabel("Back")
-          .setEmoji(getButtonEmoji("back"))
-          .setStyle(ButtonStyle.Secondary)
-      )
-    );
-  }
-
-  const acceptEmbed = buildMenuEmbed({
-    title: `${getIcon("status_complete")} Accept Orders`,
-    description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.\n\n(page ${page + 1}/${totalPages})`,
-    user: interaction.member ?? interaction.user
-  });
-
-  return componentCommit(interaction, {
-    content: " ",
-    embeds: [acceptEmbed],
-    components: rows
-  });
+  return componentCommit(interaction, payload);
 }
 
 if (action === "cancel" || action === "serve") {
   const p = ensurePlayer(serverId, userId);
-  const accepted = Object.entries(p.orders?.accepted ?? {});
-
-  const opts = accepted.slice(0, 25).map(([oid, entry]) => {
-    const snap = entry?.order ?? null;
-    const rName = snap ? (content.recipes[snap.recipe_id]?.name ?? snap.recipe_id) : "Unknown Recipe";
-    const npcName = snap ? (content.npcs[snap.npc_archetype]?.name ?? snap.npc_archetype) : "Unknown NPC";
-    const labelRaw = `${shortOrderId(oid)} — ${rName} (${npcName})`;
-    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    return { label, value: oid };
+  const payload = buildCancelServePickerPayload({
+    action,
+    userId,
+    p,
+    ownerUser: interaction.member ?? interaction.user
   });
 
-  if (!opts.length) {
-    return componentCommit(interaction, { content: "You don’t have any accepted orders.", ephemeral: true });
-  }
-
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:${action}_select:${userId}`)
-    .setPlaceholder(action === "serve" ? "Select orders to serve" : "Select an order to cancel")
-    .setMinValues(1)
-    .setMaxValues(action === "serve" ? Math.min(5, opts.length) : 1)
-    .addOptions(opts);
-
-  const actionTitle = action === "serve"
-    ? `${getIcon("bowl")} Serve Orders`
-    : `${getIcon("cancel")} Cancel Order`;
-  const actionDesc = action === "serve"
-    ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
-    : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
-  const actionEmbed = buildMenuEmbed({ title: actionTitle, description: actionDesc, user: interaction.member ?? interaction.user });
-  const tutorialOnlyServeMenu = action === "serve" && isTutorialStep(p, "intro_serve");
-
-  return componentCommit(interaction, {
-    content: " ",
-    embeds: [actionEmbed],
-    components: [
-      new ActionRowBuilder().addComponents(menu),
-      ...(tutorialOnlyServeMenu ? [] : [action === "serve" ? noodleOrdersActionRowWithBack(userId) : noodleOrdersActionRow(userId)])
-    ]
-  });
+  return componentCommit(interaction, payload);
 }
 
 if (action === "cook") {
   // select a recipe from known_recipes, then modal for qty
   const p = ensurePlayer(serverId, userId);
   const s = ensureServer(serverId);
-  const available = getAvailableRecipes(p);
-  const activeSeason = s?.season ?? null;
-  const seasonFiltered = available.filter((rid) => {
-    const r = content.recipes?.[rid];
-    if (!r) return true;
-    if (r.tier !== "seasonal") return true;
-    return !!activeSeason && r.season === activeSeason;
-  });
-  const opts = seasonFiltered.slice(0, 25).map((rid) => {
-    const r = content.recipes?.[rid];
-    const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
-    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    return { label, value: rid };
+  const payload = buildCookPickerPayload({
+    userId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user
   });
 
-  if (!opts.length) {
-    const msg = available.length > 0
-      ? "You don’t have any recipes available to cook this season."
-      : "You don’t know any recipes yet.";
-    return componentCommit(interaction, { content: msg, ephemeral: true });
-  }
-
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:cook_select:${userId}`)
-    .setPlaceholder("Select a recipe to cook")
-    .setMinValues(1)
-    .setMaxValues(1)
-    .addOptions(opts);
-
-  const cookEmbed = buildMenuEmbed({
-    title: `${getIcon("cook")} Cook`,
-    description: "Select a recipe to cook:",
-    user: interaction.member ?? interaction.user
-  });
-
-  const tutorialOnlyMenu = isTutorialStep(p, "intro_cook");
-  const components = tutorialOnlyMenu
-    ? [new ActionRowBuilder().addComponents(menu)]
-    : [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)];
-
-  return componentCommit(interaction, {
-    content: " ",
-    embeds: [cookEmbed],
-    components
-  });
+  return componentCommit(interaction, payload);
 }
 
 return componentCommit(interaction, { content: "Unknown picker action.", ephemeral: true });
@@ -5408,34 +5471,34 @@ const noodleCommandData = new SlashCommandBuilder()
     sc
       .setName("sell")
       .setDescription("Sell an item to the market.")
-      .addStringOption((o) => o.setName("item").setDescription("Market item (type to search)").setRequired(true).setAutocomplete(true))
-      .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(true).setMinValue(1))
+      .addStringOption((o) => o.setName("item").setDescription("Market item (type to search)").setRequired(false).setAutocomplete(true))
+      .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(false).setMinValue(1))
   )
   .addSubcommand((sc) => sc.setName("orders").setDescription("View today’s orders."))
   .addSubcommand((sc) =>
     sc
       .setName("accept")
       .setDescription("Accept an order.")
-      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
+      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(false))
   )
   .addSubcommand((sc) =>
     sc
       .setName("cancel")
       .setDescription("Cancel an accepted order.")
-      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
+      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(false))
   )
   .addSubcommand((sc) =>
     sc
       .setName("cook")
       .setDescription("Cook a noodle recipe.")
-      .addStringOption((o) => o.setName("recipe").setDescription("Recipe (type to search)").setRequired(true).setAutocomplete(true))
-      .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(true).setMinValue(1))
+      .addStringOption((o) => o.setName("recipe").setDescription("Recipe (type to search)").setRequired(false).setAutocomplete(true))
+      .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(false).setMinValue(1))
   )
   .addSubcommand((sc) =>
     sc
       .setName("serve")
       .setDescription("Serve your accepted order.")
-      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(true))
+      .addStringOption((o) => o.setName("order_id").setDescription("Order ID").setRequired(false))
       .addStringOption((o) => o.setName("bowl_key").setDescription("Bowl key (optional; defaults to recipe)").setRequired(false))
   )
   .addSubcommand((sc) =>
