@@ -70,7 +70,7 @@ function formatEffects(effects) {
     else if (key === "rep_bonus_flat") lines.push(`+${value.toFixed(1)} rep`);
     else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(1)}% rep`);
     else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(1)}% order quality`);
-    else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(1)}% NPC variety`);
+    else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(1)}% regulars variety`);
     else if (key === "staff_capacity") lines.push(`+${value.toFixed(1)} staff capacity`);
     else if (key === "staff_effect_multiplier") lines.push(`+${(value * 100).toFixed(1)}% staff effects`);
     else if (key === "prep_batch_bonus") {
@@ -293,7 +293,7 @@ function buildUpgradesManagementEmbed(player, user) {
     if (effectKey === "rep_bonus_flat") return `+${total.toFixed(1)} rep per serve`;
     if (effectKey === "rep_bonus_percent") return `+${(total * 100).toFixed(1)}% rep`;
     if (effectKey === "order_quality_bonus") return `+${(total * 100).toFixed(1)}% order quality`;
-    if (effectKey === "npc_variety_bonus") return `+${(total * 100).toFixed(1)}% NPC variety`;
+    if (effectKey === "npc_variety_bonus") return `+${(total * 100).toFixed(1)}% regulars variety`;
     if (effectKey === "staff_capacity") return `+${total.toFixed(1)} staff capacity`;
     if (effectKey === "staff_effect_multiplier") return `+${(total * 100).toFixed(1)}% staff effects`;
     if (effectKey === "prep_batch_bonus") {

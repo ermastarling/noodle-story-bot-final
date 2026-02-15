@@ -2854,7 +2854,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
           const stock = p.market_stock?.[id] ?? 0;
           if (stock <= 0) return null;
 
-          const labelRaw = `${it.name} — ${price}c (stock ${stock})`;
+          const ownedQty = p.inv_ingredients?.[id] ?? 0;
+          const labelRaw = `${it.name} — ${price}c (stock ${stock}, you have ${ownedQty})`;
           const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
 
           return { label, value: id };
