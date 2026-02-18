@@ -782,10 +782,10 @@ function qualityRank(quality) {
 
 function formatQualityLabel(quality) {
   const q = normalizeQuality(quality);
-  if (q === "salvage") return "S-";
-  if (q === "standard") return getIcon("rarity_uncommon", "S");
-  if (q === "good") return getIcon("rarity_rare", "G");
-  if (q === "excellent") return getIcon("rarity_epic", "E");
+  if (q === "salvage") return getIcon("rarity_salvage", "S-");
+  if (q === "standard") return getIcon("rarity_standard", "S");
+  if (q === "good") return getIcon("rarity_good", "G");
+  if (q === "excellent") return getIcon("rarity_excellent", "E");
   return "S";
 }
 
@@ -2159,7 +2159,7 @@ if (sub === "pantry") {
     });
     pantryEmbed.addFields({
       name: "Bowl Quality",
-      value: `${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
+      value: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
       inline: false
     });
 
@@ -3352,7 +3352,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const remainingAfter = Math.max(0, bowlCap - (bowlCount + batchOutput));
       extra = Math.min(batchOutput, remainingAfter);
       for (let i = 0; i < extra; i += 1) {
-        const quality = rollCookQuality(cookRng, p, combinedEffects, blessing);
+        const quality = rollCookQuality(cookRng, p, combinedEffects, blessing, r.tier);
         outcome.qualityCounts[quality] = (outcome.qualityCounts[quality] ?? 0) + 1;
       }
     }
@@ -4258,11 +4258,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
     }
 
-    applyQuestProgress(p, questsContent, userId, { type: "serve", amount: servedCount }, now);
-    if (totalCoins > 0) {
-      applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: totalCoins }, now);
-    }
-
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
     const levelLine = leveledUp ? `\n${getIcon("level_up")} Level up! You're now **Level ${p.shop_level}**.` : "";
     const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.join("\n")}` : "";
@@ -5146,6 +5141,11 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         for (const x of buyLines) {
           p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
+        }
+
+        const totalBought = buyLines.reduce((sum, entry) => sum + entry.qty, 0);
+        if (totalBought > 0) {
+          applyQuestProgress(p2, questsContent, userId, { type: "buy", amount: totalBought }, nowTs());
         }
 
         advanceTutorial(p2, "buy");

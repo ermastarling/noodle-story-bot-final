@@ -130,7 +130,9 @@ export function calculateStaffEffects(player, staffContent) {
     forage_bonus_items: 0,
     market_discount: 0,
     sxp_bonus_percent: 0,
-    rare_epic_rep_bonus: 0
+    rare_epic_rep_bonus: 0,
+    rare_epic_quality_bonus: 0,
+    rare_epic_fail_reduction: 0
   };
   
   if (!player.staff_levels) return effects;

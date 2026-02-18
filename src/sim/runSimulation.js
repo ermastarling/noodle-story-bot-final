@@ -101,7 +101,7 @@ function serveOrder({ order, player, content, combinedEffects, dayTs, rng, onTim
     effects: combinedEffects
   });
 
-  const quality = rollCookQuality(rng, player, combinedEffects, null);
+  const quality = rollCookQuality(rng, player, combinedEffects, null, tier);
   const qualityMult = getQualityMultiplier(quality);
   rewards.coins = Math.floor(rewards.coins * qualityMult);
   rewards.rep = Math.floor(rewards.rep * qualityMult);

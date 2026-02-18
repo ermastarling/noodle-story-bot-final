@@ -91,6 +91,8 @@ function formatEffects(effects) {
     else if (key === "market_discount") lines.push(`${(value * 100).toFixed(0)}% market discount`);
     else if (key === "sxp_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% SXP`);
     else if (key === "rare_epic_rep_bonus") lines.push(`+${value} rep on rare/epic`);
+    else if (key === "rare_epic_quality_bonus") lines.push(`+${(value * 100).toFixed(0)}% rare/epic cook quality`);
+    else if (key === "rare_epic_fail_reduction") lines.push(`-${(value * 100).toFixed(0)}% rare/epic cook fail`);
   }
   return lines.join(", ");
 }
@@ -197,6 +199,8 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (key === "sxp_bonus_percent") return `+${(value * 100).toFixed(0)}% SXP`;
     if (key === "rare_epic_rep_bonus") return `+${value} rep on rare/epic`;
     if (key === "order_quality_bonus") return `+${(value * 100).toFixed(1)}% order quality`;
+    if (key === "rare_epic_quality_bonus") return `+${(value * 100).toFixed(0)}% rare/epic cook quality`;
+    if (key === "rare_epic_fail_reduction") return `-${(value * 100).toFixed(0)}% rare/epic cook fail`;
     return null;
   };
 

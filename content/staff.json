@@ -144,14 +144,15 @@
     "sommelier": {
       "staff_id": "sommelier",
       "name": "Sommelier",
-      "description": "Expertise in pairings enhances rare and epic dishes.",
+      "description": "Expertise in pairings improves rare and epic dishes, reducing failures and boosting quality.",
       "category": "service",
       "rarity": "epic",
       "max_level": 10,
       "base_cost": 2500,
       "cost_scaling": 1.52,
       "effects_per_level": {
-        "rare_epic_rep_bonus": 3
+        "rare_epic_fail_reduction": 0.05,
+        "rare_epic_quality_bonus": 0.05
       }
     }
   },

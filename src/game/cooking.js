@@ -33,19 +33,25 @@ export function getCookFailChance(tier, player, effects) {
   const rules = loadCookingRules();
   const base = Number(rules.failure?.fail_chance_by_tier?.[tier]) ?? 0.06;
   const bonuses = getFailStreakBonuses(player);
-  const reduction = bonuses?.cook_fail_reduction ?? 0;
+  const rareEpicReduction = (tier === "rare" || tier === "epic")
+    ? Math.max(0, Number(effects?.rare_epic_fail_reduction) || 0)
+    : 0;
+  const reduction = (bonuses?.cook_fail_reduction ?? 0) + rareEpicReduction;
   const min = 0.01;
   const max = 0.25;
   return Math.min(max, Math.max(min, base - reduction));
 }
 
-export function rollCookQuality(rng, player, effects, blessing) {
+export function rollCookQuality(rng, player, effects, blessing, tier = null) {
   const rules = loadCookingRules();
   const weights = { ...(rules.quality?.weights || {}) };
 
   const qualityBonus = Math.max(0, Number(effects?.order_quality_bonus) || 0);
+  const rareEpicBonus = (tier === "rare" || tier === "epic")
+    ? Math.max(0, Number(effects?.rare_epic_quality_bonus) || 0)
+    : 0;
   const blessingBonus = blessing?.type === "quality_shift" ? 0.08 : 0;
-  const boost = qualityBonus + blessingBonus;
+  const boost = qualityBonus + rareEpicBonus + blessingBonus;
 
   weights.good = Math.max(0, (weights.good ?? 0) + boost * 0.4);
   weights.excellent = Math.max(0, (weights.excellent ?? 0) + boost * 0.2);
@@ -88,7 +94,7 @@ export function rollCookBatchOutcome({ quantity, tier, player, effects, rng, ble
   const qualityCounts = {};
 
   for (let i = 0; i < success; i += 1) {
-    const q = rollCookQuality(rng, player, effects, blessing);
+    const q = rollCookQuality(rng, player, effects, blessing, tier);
     qualityCounts[q] = (qualityCounts[q] ?? 0) + 1;
   }
 
