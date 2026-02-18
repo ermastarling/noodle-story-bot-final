@@ -218,6 +218,18 @@ export function buildStaffOverviewEmbed(player, server, user) {
       continue;
     }
 
+    if (staffId === "sommelier") {
+      const effectsPerLevel = staff.effects_per_level ?? {};
+      const failPerLevel = Number(effectsPerLevel.rare_epic_fail_reduction ?? 0);
+      const qualityPerLevel = Number(effectsPerLevel.rare_epic_quality_bonus ?? 0);
+      const failTotal = failPerLevel * level * staffMultiplier;
+      const qualityTotal = qualityPerLevel * level * staffMultiplier;
+      effectLines.push(
+        `**${staff.name}** — -${(failTotal * 100).toFixed(0)}% rare/epic cook fail, +${(qualityTotal * 100).toFixed(0)}% rare/epic cook quality`
+      );
+      continue;
+    }
+
     const effectsPerLevel = staff.effects_per_level ?? {};
     for (const [effectKey, perLevel] of Object.entries(effectsPerLevel)) {
       const total = perLevel * level * staffMultiplier;
