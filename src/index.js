@@ -212,16 +212,14 @@ import { getIcon } from "./ui/icons.js";
 
   client.on("interactionCreate", async (interaction) => {
     const startTime = Date.now();
-    console.log(`[${new Date().toISOString()}] Interaction received:`, interaction.type, interaction.customId || interaction.commandName);
     
     // Check interaction age - Discord invalidates after 3 seconds
     const createdAt = interaction.createdTimestamp;
     const age = Date.now() - createdAt;
     if (age > 2800) {
-      console.log(`⚠️ Interaction is ${age}ms old, likely to expire. Skipping.`);
+      console.error(`Interaction is ${age}ms old, likely to expire. Skipping.`);
       return;
     }
-    console.log(`📍 Processing interaction (age: ${age}ms)`);
     
     // IMMEDIATELY defer buttons/selects/modals FIRST, before ANY other logic
     // Note: Discord.js v13 uses isSelectMenu(), not isStringSelectMenu()
@@ -257,22 +255,15 @@ import { getIcon } from "./ui/icons.js";
                 cid?.includes("action:shared_order_abort_cancel") ||
                 cid?.includes("action:shared_order_cancel_complete");
         
-        if (willShowModal) {
-          console.log(`⏭️  Skipping defer for modal-showing button/select: ${cid}`);
-        }
-        if (skipDeferButtons) {
-          console.log(`⏭️  Skipping defer for immediate-response button: ${cid}`);
-        }
         if (!willShowModal && !skipDeferButtons && !isNoodleStaff) {
           const deferStart = Date.now();
           try {
             await interaction.deferUpdate();
-            console.log(`✅ Deferred button/select in ${Date.now() - deferStart}ms`);
           } catch (e) {
-            console.log(`⚠️ Button/select defer failed (age was ${age}ms):`, e?.message);
+            console.error(`Button/select defer failed (age was ${age}ms):`, e?.message);
             // If defer failed due to unknown interaction, skip processing
             if (e?.message?.includes("Unknown interaction") || e?.code === 10062) {
-              console.log(`⏭️  Skipping handler - interaction expired`);
+              console.error("Skipping handler - interaction expired");
               return;
             }
             // Continue processing - handler may be able to respond directly

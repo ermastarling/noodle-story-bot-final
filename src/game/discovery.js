@@ -107,7 +107,6 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
 
   // Check discoverable recipes first
   const discoverableRecipes = getDiscoverableRecipes(player, content, { activeSeason, activeEventId });
-  console.log(`🔍 Discovery roll: ${discoverableRecipes.length} discoverable recipes available`);
 
   // Curious Apprentice: +1% discovery chance to next roll (applies to both)
   if (player.buffs?.apprentice_bonus_pending) {
@@ -124,7 +123,6 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   // Wandering Scholar: extra independent 1% chance to drop a clue
   if (npcArchetype === "wandering_scholar") {
     const roll = rng();
-    console.log(`🔍 Scholar roll: ${roll.toFixed(4)} vs 0.01`);
     if (roll < 0.01) {
       const clue = rollClue(player, content, rng, activeSeason, activeEventId);
       if (clue) discoveries.push(clue);
@@ -136,7 +134,6 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   // Moonlit Spirit: extra independent 1% scroll chance on Epic tier
   if (npcArchetype === "moonlit_spirit" && tier === "epic") {
     const roll = rng();
-    console.log(`🔍 Moonlit roll: ${roll.toFixed(4)} vs 0.01`);
     if (roll < 0.01) {
       const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
       if (scroll) discoveries.push(scroll);
@@ -148,19 +145,16 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   // Base roll: only one drop (clue OR scroll)
   const totalChance = clueChance + scrollChance;
   const dropRoll = rng();
-  console.log(`🔍 Drop roll: ${dropRoll.toFixed(4)} vs ${totalChance.toFixed(4)}`);
   if (dropRoll < totalChance) {
     const pick = rng();
     if (pick < (clueChance / totalChance)) {
       const clue = rollClue(player, content, rng, activeSeason, activeEventId);
       if (clue) {
-        console.log(`✅ Clue rolled: ${clue.recipeName}`);
         discoveries.push(clue);
       }
     } else {
       const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
       if (scroll) {
-        console.log(`✅ Scroll rolled: ${scroll.recipeName}`);
         discoveries.push(scroll);
       }
     }

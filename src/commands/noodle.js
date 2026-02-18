@@ -1356,16 +1356,15 @@ if (finalOptions.embeds) {
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
-  console.log(`🔄 Component editReply, embeds:`, finalOptions.embeds?.length ?? "none");
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
-    console.log(`⚠️ Component editReply failed:`, e?.message);
+    console.error(`Component editReply failed:`, e?.message);
     // Try followUp as fallback
     try {
       return await interaction.followUp({ ...finalOptions, ephemeral: true });
     } catch (e2) {
-      console.log(`⚠️ Component followUp fallback also failed:`, e2?.message);
+      console.error(`Component followUp fallback also failed:`, e2?.message);
       return;
     }
   }
@@ -1375,7 +1374,7 @@ if (interaction.deferred || interaction.replied) {
 try {
   return await interaction.update(finalOptions);
 } catch (e) {
-  console.log(`⚠️ Component update failed:`, e?.message);
+  console.error(`Component update failed:`, e?.message);
   return;
 }
 }
