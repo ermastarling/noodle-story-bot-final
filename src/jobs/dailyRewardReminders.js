@@ -116,15 +116,11 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
         const lastGuildId = player.notifications.last_noodle_guild_id ?? serverId;
         const lastGuildName = client.guilds.cache.get(lastGuildId)?.name ?? "this server";
         const channelId = player.notifications.last_noodle_channel_id ?? null;
-        const channel = channelId ? client.channels.cache.get(channelId) : null;
-        const isChannelAccessible = Boolean(channel && channel.guild?.id === lastGuildId);
-        const channelUrl = isChannelAccessible
+        const channelUrl = channelId
           ? `https://discord.com/channels/${lastGuildId}/${channelId}`
           : null;
         const channelLine = channelId
-          ? (isChannelAccessible
-            ? `Last kitchen: <#${channelId}>.`
-            : "Last kitchen: unavailable. Use `/noodle orders` to continue.")
+          ? `Last kitchen: [Open channel](${channelUrl}).`
           : null;
         const embed = buildReminderEmbed({ guildName: lastGuildName, channelLine });
         const components = buildDmReminderComponents({
