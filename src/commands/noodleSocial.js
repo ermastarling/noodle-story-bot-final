@@ -7,7 +7,7 @@ import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "..
 import { newPlayerProfile } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
-import { loadContentBundle } from "../content/index.js";
+import { loadContentBundle, loadSpecializationsContent } from "../content/index.js";
 import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed } from "./noodle.js";
 import {
   grantBlessing,
@@ -36,6 +36,7 @@ import {
   BLESSING_TYPES,
   clearExpiredBlessings
 } from "../game/social.js";
+import { hasNewShopLevelSpecialization } from "../game/specialization.js";
 import { nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { containsProfanity } from "../util/profanity.js";
@@ -70,6 +71,7 @@ const ButtonStyle = {
 
 const db = openDb();
 const content = loadContentBundle(1);
+const specializationsContent = loadSpecializationsContent();
 
 const SHARED_ORDER_MIN_SERVINGS = 5;
 const SHARED_ORDER_REWARD = {
@@ -172,12 +174,21 @@ function applyOwnerFooter(embed, user) {
 /**
  * Main social menu navigation buttons
  */
-function socialMainMenuRow(userId) {
+function socialMainMenuRow(userId, { partyHasActiveOrder = null } = {}) {
+  const resolvedPartyHasActiveOrder = typeof partyHasActiveOrder === "boolean"
+    ? partyHasActiveOrder
+    : (() => {
+        if (!db) return false;
+        const party = getUserActiveParty(db, userId);
+        if (!party) return false;
+        return !!getActiveSharedOrderByParty(db, party.party_id);
+      })();
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
       .setLabel("Party").setEmoji(getButtonEmoji("party"))
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(resolvedPartyHasActiveOrder ? ButtonStyle.Success : ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
       .setLabel("Upgrades").setEmoji(getButtonEmoji("upgrades"))
@@ -193,12 +204,21 @@ function socialMainMenuRow(userId) {
   );
 }
 
-function socialMainMenuRowNoProfile(userId, { questsAvailable = false } = {}) {
+function socialMainMenuRowNoProfile(userId, { questsAvailable = false, specializationsAvailable = false, partyHasActiveOrder = null } = {}) {
+  const resolvedPartyHasActiveOrder = typeof partyHasActiveOrder === "boolean"
+    ? partyHasActiveOrder
+    : (() => {
+        if (!db) return false;
+        const party = getUserActiveParty(db, userId);
+        if (!party) return false;
+        return !!getActiveSharedOrderByParty(db, party.party_id);
+      })();
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
       .setLabel("Party").setEmoji(getButtonEmoji("party"))
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(resolvedPartyHasActiveOrder ? ButtonStyle.Success : ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle-upgrades:category:${userId}:all:profile`)
       .setLabel("Upgrades").setEmoji(getButtonEmoji("upgrades"))
@@ -214,7 +234,7 @@ function socialMainMenuRowNoProfile(userId, { questsAvailable = false } = {}) {
     new ButtonBuilder()
       .setCustomId(`noodle:nav:profile_edit:${userId}`)
       .setLabel("Customize").setEmoji(getButtonEmoji("customize"))
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
   );
 }
 
@@ -1569,7 +1589,7 @@ async function handleComponent(interaction) {
           const embed = new EmbedBuilder()
             .setTitle(`${getIcon("status_complete")} Contribution Recorded!`)
             .setDescription(
-              `You contributed **${quantity}x ${ingredient.name}** to the shared order.\n\n` +
+              `You contributed **${quantity}× ${ingredient.name}** to the shared order.\n\n` +
               `Thank you for helping the party! ${getIcon("party")}`
             )
             .setColor(theme.colors.success);
@@ -1973,6 +1993,7 @@ async function handleComponent(interaction) {
       const party = getUserActiveParty(db, userId);
       const questsAvailable = hasDailyRewardAvailable(player, nowTs())
         || Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
+      const specializationsAvailable = hasNewShopLevelSpecialization(player, specializationsContent);
 
       const embed = renderProfileEmbed(
         player,
@@ -1983,7 +2004,7 @@ async function handleComponent(interaction) {
 
       return componentCommit(interaction, {
         embeds: [embed],
-        components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable })]
+        components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
       });
     }
   }

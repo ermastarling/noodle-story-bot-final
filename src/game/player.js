@@ -45,7 +45,13 @@ export function newPlayerProfile(userId) {
       featured_badge_id: null,
       badges: [],
       decor_slots: { front:null,counter:null,wall:null,sign:null,frame:null },
-      specialization: { active_spec_id: null, chosen_at: null, change_cooldown_expires_at: null, unlocked_spec_ids: [] }
+      specialization: {
+        active_spec_id: null,
+        chosen_at: null,
+        change_cooldown_expires_at: null,
+        unlocked_spec_ids: [],
+        last_seen_shop_level: STARTER_PROFILE.shop_level
+      }
     },
 
     collections: { completed: [], progress: {} },

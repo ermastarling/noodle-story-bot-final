@@ -7,11 +7,15 @@ export function ensureSpecializationState(player) {
       active_spec_id: null,
       chosen_at: null,
       change_cooldown_expires_at: null,
-      unlocked_spec_ids: []
+      unlocked_spec_ids: [],
+      last_seen_shop_level: 0
     };
   }
   const state = player.profile.specialization;
   if (!Array.isArray(state.unlocked_spec_ids)) state.unlocked_spec_ids = [];
+  if (!Number.isFinite(state.last_seen_shop_level) || state.last_seen_shop_level <= 0) {
+    state.last_seen_shop_level = Number(player.shop_level || 1);
+  }
   return state;
 }
 
@@ -72,4 +76,23 @@ export function selectSpecialization(player, specializationsContent, specId, now
   state.change_cooldown_expires_at = null;
 
   return { ok: true, specialization: getSpecializationById(specializationsContent, specId) };
+}
+
+export function hasNewShopLevelSpecialization(player, specializationsContent) {
+  const state = ensureSpecializationState(player);
+  const lastSeenLevel = Number(state.last_seen_shop_level || 0);
+  const currentLevel = Number(player.shop_level || 1);
+  if (currentLevel <= lastSeenLevel) return false;
+
+  return (specializationsContent?.specializations ?? []).some((spec) => {
+    const minLevel = Number(spec?.requirements?.min_level || 0);
+    return minLevel > lastSeenLevel && minLevel <= currentLevel;
+  });
+}
+
+export function markSpecializationShopLevelSeen(player) {
+  const state = ensureSpecializationState(player);
+  const currentLevel = Number(player.shop_level || 1);
+  state.last_seen_shop_level = Math.max(state.last_seen_shop_level || 0, currentLevel);
+  return state;
 }

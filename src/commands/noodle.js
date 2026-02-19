@@ -80,6 +80,8 @@ import {
   ensureSpecializationState,
   getActiveSpecialization,
   getSpecializationById,
+  hasNewShopLevelSpecialization,
+  markSpecializationShopLevelSeen,
   meetsSpecializationRequirements,
   selectSpecialization
 } from "../game/specialization.js";
@@ -240,6 +242,10 @@ function ownerFooterText(userOrMember) {
   const tag = fallbackUser?.tag ?? fallbackUser?.username ?? "Unknown";
   const name = displayName ?? fallbackUser?.globalName ?? tag;
   return `Owner: ${name}`;
+}
+
+function getSpecializationAlert(player) {
+  return hasNewShopLevelSpecialization(player, specializationsContent);
 }
 
 function applyOwnerFooter(embed, user) {
@@ -559,11 +565,11 @@ new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").
 );
 }
 
-function noodleProfileEditRow(userId) {
+function noodleProfileEditRow(userId, { specializationsAvailable = false } = {}) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
   );
 }
 
@@ -2001,18 +2007,21 @@ if (sub === "profile") {
   const p = ensurePlayer(serverId, u.id);
   const selfPlayer = ensurePlayer(serverId, userId);
   const questsAvailable = hasDailyRewardAvailable(selfPlayer, nowTs()) || hasClaimableQuests(selfPlayer);
+  const specializationsAvailable = getSpecializationAlert(selfPlayer);
   const party = getUserActiveParty(db, u.id);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
   
   return commit({
     embeds: [embed],
-    components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable })]
+    components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
   });
 }
 
 /* ---------------- PROFILE EDIT ---------------- */
 if (sub === "profile_edit") {
+  const p = ensurePlayer(serverId, userId);
+  const specializationsAvailable = getSpecializationAlert(p);
   const embed = buildMenuEmbed({
     title: `${getIcon("customize")} Customize Profile`,
     description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!",
@@ -2022,7 +2031,7 @@ if (sub === "profile_edit") {
   return commit({
     content: " ",
     embeds: [embed],
-    components: [noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)]
+    components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
 
@@ -2623,9 +2632,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     
     const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
     if (spoilageMessages.length > 0) {
-      const ticksApplied = timeCatchup.spoilage?.ticksApplied ?? 0;
-      console.log(`⚠️ Spoilage applied: ${ticksApplied} tick(s), queued ${spoilageMessages.length} message(s) for pantry.`);
-      console.log(`⚠️ Spoilage messages:`, spoilageMessages);
       if (!p.notifications) {
         p.notifications = {
           pending_pantry_messages: [],
@@ -2840,7 +2846,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "specialize") {
     const specId = opt.getString("spec");
     const confirm = opt.getBoolean("confirm");
-    const state = ensureSpecializationState(p);
+    markSpecializationShopLevelSeen(p);
+    const specializationsAvailable = getSpecializationAlert(p);
 
     if (!specId) {
       const rawPage = opt.getInteger("page") ?? 0;
@@ -2868,7 +2875,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
             .setDisabled(page >= totalPages - 1)
         ));
       }
-      components.push(noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId));
+      components.push(
+        noodleSpecializeSelectRow(userId),
+        noodleProfileEditRow(userId, { specializationsAvailable }),
+        noodleProfileEditBackRow(userId)
+      );
       return commitState({
         content: " ",
         embeds: [embed],
@@ -2893,7 +2904,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({
         content: " ",
         embeds: [embed],
-        components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)]
+        components: [
+          noodleSpecializeSelectRow(userId),
+          noodleProfileEditRow(userId, { specializationsAvailable }),
+          noodleProfileEditBackRow(userId)
+        ]
       });
     }
 
@@ -2914,7 +2929,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: " ",
       embeds: [embed],
-      components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)]
+      components: [
+        noodleSpecializeSelectRow(userId),
+        noodleProfileEditRow(userId, { specializationsAvailable }),
+        noodleProfileEditBackRow(userId)
+      ]
     });
   }
 
@@ -3078,6 +3097,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const inventoryResult = applyDropsToInventory(p, accepted);
     setForageCooldown(p, now);
+    if (!Object.keys(inventoryResult.added).length) {
+      const blockedLines = Object.entries(inventoryResult.blocked ?? {}).map(
+        ([id, q]) => `**${q}×** ${displayItemName(id)}`
+      );
+      const blockedText = blockedLines.length
+        ? ` Could not collect: ${blockedLines.join(", ")}.`
+        : "";
+      return commitState({
+        content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`
+      });
+    }
     advanceTutorial(p, "forage");
     applyQuestProgress(p, questsContent, userId, { type: "forage", amount: 1 }, now);
 
@@ -3101,13 +3131,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     
     description += tutorialSuffix(p);
 
+    const rejectedText = Object.keys(rejected).length
+      ? `\n\n${getIcon("basket")} Pantry full — left behind ${Object.entries(rejected)
+        .map(([id, q]) => `**${q}×** ${displayItemName(id)}`)
+        .join(", ")}.`
+      : "";
     const forageEmbed = buildMenuEmbed({
       title: `${getIcon("forage")} Forage`,
-      description: `${header}${lines.join("\n")}${
-        Object.keys(rejected).length
-          ? `\n\n${getIcon("basket")} Pantry full — left behind ${Object.values(rejected).reduce((sum, v) => sum + v, 0)} item(s).`
-          : ""
-      }${tutorialSuffix(p)}`,
+      description: `${header}${lines.join("\n")}${rejectedText}${tutorialSuffix(p)}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -4435,6 +4466,7 @@ if (kind === "profile" && (action === "edit_shop_name" || action === "edit_tagli
 if (kind === "profile" && action === "specialize_select") {
   const p = ensurePlayer(serverId, userId);
   const now = nowTs();
+  const specializationsAvailable = getSpecializationAlert(p);
   const specs = (specializationsContent?.specializations ?? []).filter((spec) => {
     if (!isSpecializationVisible(p, spec)) return false;
     const check = canSelectSpecialization(p, specializationsContent, spec.spec_id, now);
@@ -4466,7 +4498,11 @@ if (kind === "profile" && action === "specialize_select") {
   return componentCommit(interaction, {
     content: " ",
     embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(menu), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      noodleProfileEditRow(userId, { specializationsAvailable }),
+      noodleProfileEditBackRow(userId)
+    ],
     targetMessageId: interaction.message?.id
   });
 }
@@ -4475,6 +4511,7 @@ if (kind === "profile" && action === "specialize_select") {
 
 if (kind === "profile" && action === "specialize_cancel") {
   const p = ensurePlayer(serverId, userId);
+  const specializationsAvailable = getSpecializationAlert(p);
   const { embed, page, totalPages } = buildSpecializationListEmbed(p, interaction.member ?? interaction.user, nowTs(), 0, 5);
   const components = [];
   if (totalPages > 1) {
@@ -4493,7 +4530,11 @@ if (kind === "profile" && action === "specialize_cancel") {
         .setDisabled(page >= totalPages - 1)
     ));
   }
-  components.push(noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId));
+  components.push(
+    noodleSpecializeSelectRow(userId),
+    noodleProfileEditRow(userId, { specializationsAvailable }),
+    noodleProfileEditBackRow(userId)
+  );
   return componentCommit(interaction, {
     content: " ",
     embeds: [embed],
@@ -4506,6 +4547,7 @@ if (kind === "profile" && action === "specialize_confirm") {
   const specId = parts[4] ?? "";
   const p = ensurePlayer(serverId, userId);
   const now = nowTs();
+  const specializationsAvailable = getSpecializationAlert(p);
   const spec = getSpecializationById(specializationsContent, specId);
   if (!spec) {
     return componentCommit(interaction, { content: "Specialization not found.", ephemeral: true });
@@ -4536,7 +4578,11 @@ if (kind === "profile" && action === "specialize_confirm") {
   return componentCommit(interaction, {
     content: " ",
     embeds: [embed],
-    components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+    components: [
+      noodleSpecializeSelectRow(userId),
+      noodleProfileEditRow(userId, { specializationsAvailable }),
+      noodleProfileEditBackRow(userId)
+    ],
     targetMessageId: interaction.message?.id
   });
 }
@@ -4769,6 +4815,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     }
 
     const p = ensurePlayer(serverId, userId);
+    const specializationsAvailable = getSpecializationAlert(p);
     if (!p.profile) p.profile = { shop_name: "My Noodle Shop", tagline: PROFILE_DEFAULT_TAGLINE };
     p.profile.shop_name = trimmed;
 
@@ -4785,7 +4832,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     return componentCommit(interaction, {
       content: " ",
       embeds: [embed],
-      components: [noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+      components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
   }
@@ -4820,6 +4867,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     }
 
     const p = ensurePlayer(serverId, userId);
+    const specializationsAvailable = getSpecializationAlert(p);
     if (!p.profile) p.profile = { shop_name: "My Noodle Shop", tagline: PROFILE_DEFAULT_TAGLINE };
     p.profile.tagline = trimmed;
 
@@ -4836,7 +4884,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     return componentCommit(interaction, {
       content: " ",
       embeds: [embed],
-      components: [noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+      components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
   }
@@ -4898,6 +4946,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const specId = interaction.values?.[0];
     const p = ensurePlayer(serverId, userId);
     const now = nowTs();
+    const specializationsAvailable = getSpecializationAlert(p);
     const spec = getSpecializationById(specializationsContent, specId);
     if (!spec) return componentCommit(interaction, { content: "Specialization not found.", ephemeral: true });
 
@@ -4914,7 +4963,11 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       return componentCommit(interaction, {
         content: " ",
         embeds: [embed],
-        components: [noodleSpecializeSelectRow(userId), noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+        components: [
+          noodleSpecializeSelectRow(userId),
+          noodleProfileEditRow(userId, { specializationsAvailable }),
+          noodleProfileEditBackRow(userId)
+        ],
         targetMessageId: interaction.message?.id
       });
     }
@@ -4939,7 +4992,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     return componentCommit(interaction, {
       content: " ",
       embeds: [embed],
-      components: [confirmRow, noodleProfileEditRow(userId), noodleProfileEditBackRow(userId)],
+      components: [confirmRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: interaction.message?.id
     });
   }
