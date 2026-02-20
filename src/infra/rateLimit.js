@@ -31,8 +31,8 @@ function wouldExceed(buckets, key, limit, now) {
 export function checkRateLimit({
   userId,
   serverId,
-  userLimit = 5,
-  serverLimit = 40,
+  userLimit = 50,
+  serverLimit = 400,
   now = nowTs()
 } = {}) {
   if (!userId) return { allowed: true };

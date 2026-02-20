@@ -3,7 +3,7 @@ import discordPkg from "discord.js";
 import { openDb, getPlayer, upsertPlayer } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
-import { newPlayerProfile } from "../game/player.js";
+import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
 import { noodleMainMenuRow } from "./noodle.js";
 import { buildStaffOverviewEmbed } from "./noodleStaff.js";
@@ -182,6 +182,11 @@ export async function noodleUpgradesHandler(interaction) {
       p = newPlayerProfile(userId);
       upsertPlayer(db, serverId, userId, p, null);
       p = getPlayer(db, serverId, userId);
+    }
+
+    const touched = trackLastKitchen(p, serverId, interaction.channelId);
+    if (touched && db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     }
 
     const embed = buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user);
@@ -591,6 +596,11 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         p = newPlayerProfile(userId);
         upsertPlayer(db, serverId, userId, p, null);
         p = getPlayer(db, serverId, userId);
+      }
+
+      const touched = trackLastKitchen(p, serverId, interaction.channelId);
+      if (touched && db) {
+        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
       }
 
     const resolveCategory = () => {

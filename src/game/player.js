@@ -84,3 +84,22 @@ export function newPlayerProfile(userId) {
     }
   };
 }
+
+export function trackLastKitchen(player, serverId, channelId) {
+  if (!player || !serverId || !channelId || serverId === "DM") return false;
+
+  if (!player.notifications) {
+    player.notifications = {
+      pending_pantry_messages: [],
+      dm_reminders_opt_out: false,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
+    };
+  }
+
+  const prevChannelId = player.notifications.last_noodle_channel_id ?? null;
+  const prevGuildId = player.notifications.last_noodle_guild_id ?? null;
+  player.notifications.last_noodle_channel_id = channelId;
+  player.notifications.last_noodle_guild_id = serverId;
+  return prevChannelId !== channelId || prevGuildId !== serverId;
+}

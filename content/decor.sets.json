@@ -298,6 +298,97 @@
         { "slot": "frame", "item_id": "decor_legend_frame" }
       ],
       "completion_rewards": []
+    },
+    {
+      "set_id": "tideglass_pavilion",
+      "name": "Tideglass Pavilion",
+      "description": "Open-air coastal pavilion with ocean-inspired decor.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_tideglass_driftwood_railing" },
+        { "slot": "counter", "item_id": "decor_tideglass_sand_counter" },
+        { "slot": "wall", "item_id": "decor_tideglass_open_arch" },
+        { "slot": "sign", "item_id": "decor_tideglass_shell_sign" },
+        { "slot": "frame", "item_id": "decor_tideglass_rope_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "bloomwarden_garden_hall",
+      "name": "Bloomwarden Garden Hall",
+      "description": "Botanical conservatory filled with trellis and greenery.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_bloomwarden_vine_arch" },
+        { "slot": "counter", "item_id": "decor_bloomwarden_carved_counter" },
+        { "slot": "wall", "item_id": "decor_bloomwarden_green_panel" },
+        { "slot": "sign", "item_id": "decor_bloomwarden_wood_sign" },
+        { "slot": "frame", "item_id": "decor_bloomwarden_vine_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "astral_caravan",
+      "name": "Astral Caravan",
+      "description": "Traveling star-market wagon with celestial accents.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_astral_wagon_step" },
+        { "slot": "counter", "item_id": "decor_astral_foldout_counter" },
+        { "slot": "wall", "item_id": "decor_astral_wagon_body" },
+        { "slot": "sign", "item_id": "decor_astral_star_sign" },
+        { "slot": "frame", "item_id": "decor_astral_brass_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "imperial_silk_noodle_court",
+      "name": "Imperial Silk Noodle Court",
+      "description": "Grand ceremonial hall with silk and gilded trim.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_imperial_ceremonial_steps" },
+        { "slot": "counter", "item_id": "decor_imperial_lacquer_counter" },
+        { "slot": "wall", "item_id": "decor_imperial_silk_backdrop" },
+        { "slot": "sign", "item_id": "decor_imperial_gold_medallion_sign" },
+        { "slot": "frame", "item_id": "decor_imperial_ornamental_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "elderwood_hearth",
+      "name": "Elderwood Hearth",
+      "description": "Rustic timber lodge with stone hearth warmth.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_elderwood_timber_supports" },
+        { "slot": "counter", "item_id": "decor_elderwood_timber_counter" },
+        { "slot": "wall", "item_id": "decor_elderwood_stone_hearth" },
+        { "slot": "sign", "item_id": "decor_elderwood_burned_plank_sign" },
+        { "slot": "frame", "item_id": "decor_elderwood_bark_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "celestial_archive_kitchen",
+      "name": "Celestial Archive Kitchen",
+      "description": "Scholarly indoor chamber inspired by manuscripts and study.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_archive_scroll_pedestal" },
+        { "slot": "counter", "item_id": "decor_archive_writing_desk_counter" },
+        { "slot": "wall", "item_id": "decor_archive_bookcase_wall" },
+        { "slot": "sign", "item_id": "decor_archive_parchment_sign" },
+        { "slot": "frame", "item_id": "decor_archive_manuscript_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "sakura_sweetheart_noodle_atelier",
+      "name": "Sakura Sweetheart Noodle Atelier",
+      "description": "Kawaii pink boutique with scalloped charm and heart motifs.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_sakura_heart_arch" },
+        { "slot": "counter", "item_id": "decor_sakura_strawberry_counter" },
+        { "slot": "wall", "item_id": "decor_sakura_blush_backdrop" },
+        { "slot": "sign", "item_id": "decor_sakura_heart_plaque_sign" },
+        { "slot": "frame", "item_id": "decor_sakura_scalloped_frame" }
+      ],
+      "completion_rewards": []
     }
   ]
 }

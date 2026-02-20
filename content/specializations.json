@@ -209,6 +209,69 @@
       "requirements": { "bowls_served_total": 10000 },
       "hidden_until_unlocked": true,
       "is_permanent": true
+    },
+    {
+      "spec_id": "tideglass_pavilion",
+      "name": "Tideglass Pavilion",
+      "icon": "spec_tideglass_pavilion",
+      "description": "An open-air coastal pavilion where waves and noodles flow in harmony.",
+      "summary": "Ocean-inspired pavilion décor with breezy coastal elegance. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "bloomwarden_garden_hall",
+      "name": "Bloomwarden Garden Hall",
+      "icon": "spec_bloomwarden_garden_hall",
+      "description": "A lush botanical conservatory devoted to fresh, garden-grown mastery.",
+      "summary": "Trellis arches and living greenery create a serene garden sanctuary. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "astral_caravan",
+      "name": "Astral Caravan",
+      "icon": "spec_astral_caravan",
+      "description": "A traveling star-market wagon guided by celestial craft.",
+      "summary": "Midnight blues and antique brass shape this roaming starlit wagon design. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "imperial_silk_noodle_court",
+      "name": "Imperial Silk Noodle Court",
+      "icon": "spec_imperial_silk_court",
+      "description": "An elevated ceremonial hall of regal culinary prestige.",
+      "summary": "Lacquered wood, silk backdrops, and gilded trim define this imperial design. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "elderwood_hearth",
+      "name": "Elderwood Hearth",
+      "icon": "spec_elderwood_hearth",
+      "description": "A rustic lodge hearth rooted in ancient forest tradition.",
+      "summary": "Timber beams and stone hearth warmth create an enduring woodland atmosphere. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "celestial_archive_kitchen",
+      "name": "Celestial Archive Kitchen",
+      "icon": "spec_celestial_archive_kitchen",
+      "description": "A scholarly noodle chamber where knowledge shapes every bowl.",
+      "summary": "Ink-blue tones and manuscript elegance define this refined culinary study. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "sakura_sweetheart_noodle_atelier",
+      "name": "Sakura Sweetheart Noodle Atelier",
+      "icon": "spec_sakura_sweetheart_noodle_atelier",
+      "description": "A kawaii pink boutique filled with hearts, charm, and sweet noodle delight.",
+      "summary": "Blush tones, scalloped rooflines, and heart motifs create a charming boutique aesthetic. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
     }
   ]
 }

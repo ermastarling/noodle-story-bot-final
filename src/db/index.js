@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,6 +8,15 @@ import { nowTs } from "../util/time.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
+const playerCacheStorage = new AsyncLocalStorage();
+
+export function withPlayerCache(fn) {
+  return playerCacheStorage.run(new Map(), fn);
+}
+
+function getPlayerCache() {
+  return playerCacheStorage.getStore() ?? null;
+}
 export function openDb() {
   if (process.env.NOODLE_SKIP_DB === "1") {
     return null;
@@ -50,6 +60,11 @@ export function upsertServer(db, serverId, serverData, expectedRev=null) {
 }
 
 export function getPlayer(db, serverId, userId) {
+  const cache = getPlayerCache();
+  const cacheKey = cache ? `${serverId}:${userId}` : null;
+  if (cache && cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
   const row = db.prepare("SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
     .get(serverId, userId);
   if (!row) return null;
@@ -58,6 +73,9 @@ export function getPlayer(db, serverId, userId) {
   if (migrated) {
     upsertPlayer(db, serverId, userId, player, player.state_rev, player.schema_version ?? row.schema_version ?? 1);
     return getPlayer(db, serverId, userId);
+  }
+  if (cache) {
+    cache.set(cacheKey, player);
   }
   return player;
 }
@@ -111,4 +129,11 @@ export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null,
 export function getLastActiveAt(db, serverId, userId) {
   const row = db.prepare("SELECT last_active_at FROM players WHERE server_id=? AND user_id=?").get(serverId, userId);
   return row?.last_active_at || null;
+}
+
+export function getLatestServerIdForUser(db, userId) {
+  const row = db
+    .prepare("SELECT server_id FROM players WHERE user_id=? ORDER BY last_active_at DESC LIMIT 1")
+    .get(userId);
+  return row?.server_id || null;
 }

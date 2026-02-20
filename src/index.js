@@ -1,5 +1,7 @@
 import "dotenv/config";
+import crypto from "crypto";
 import fs from "fs";
+import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { REST } from "@discordjs/rest";
@@ -30,14 +32,17 @@ import { getIcon } from "./ui/icons.js";
     loadSettingsCatalog,
     loadBadgesContent,
     loadSpecializationsContent,
+    loadDecorSetsContent,
     loadEventsContent
   } = await import("./content/index.js");
-  const { openDb, getPlayer } = await import("./db/index.js");
+  const { openDb, getPlayer, withPlayerCache, upsertPlayer, getLatestServerIdForUser } = await import("./db/index.js");
   const { checkRateLimit } = await import("./infra/rateLimit.js");
   const { emitTelemetry } = await import("./infra/telemetry.js");
+  const { getIdempotentResult, putIdempotentResult } = await import("./infra/idempotency.js");
   const { newPlayerProfile } = await import("./game/player.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
+  const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
@@ -106,6 +111,7 @@ import { getIcon } from "./ui/icons.js";
   const settingsCatalog = loadSettingsCatalog();
   const badgesContent = loadBadgesContent();
   const specializationsContent = loadSpecializationsContent();
+  const decorSetsContent = loadDecorSetsContent();
 
   function getUnlockedIngredientIds(player, content) {
     const out = new Set();
@@ -163,6 +169,188 @@ import { getIcon } from "./ui/icons.js";
     return { ids, applicationEmojiCount };
   }
 
+  function getWebhookRawBody(req, { limitBytes = 1_000_000 } = {}) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      let total = 0;
+      req.on("data", (chunk) => {
+        total += chunk.length;
+        if (total > limitBytes) {
+          reject(new Error("Payload too large"));
+          req.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
+      req.on("end", () => resolve(Buffer.concat(chunks)));
+      req.on("error", reject);
+    });
+  }
+
+  function buildDiscordPublicKey(publicKeyHex) {
+    const keyBytes = Buffer.from(publicKeyHex, "hex");
+    const prefix = Buffer.from("302a300506032b6570032100", "hex");
+    return crypto.createPublicKey({ key: Buffer.concat([prefix, keyBytes]), format: "der", type: "spki" });
+  }
+
+  function verifyDiscordSignature({ publicKeyHex, signature, timestamp, rawBody }) {
+    if (!publicKeyHex || !signature || !timestamp || !rawBody) return false;
+    try {
+      const publicKey = buildDiscordPublicKey(publicKeyHex);
+      const signatureBytes = Buffer.from(signature, "hex");
+      const message = Buffer.concat([Buffer.from(String(timestamp)), rawBody]);
+      return crypto.verify(null, message, publicKey, signatureBytes);
+    } catch (error) {
+      console.error("⚠️ Discord webhook signature verify failed:", error?.message ?? error);
+      return false;
+    }
+  }
+
+  function extractEntitlementPayload(payload) {
+    const data = payload?.data ?? payload?.d ?? payload?.entitlement ?? payload?.event?.data ?? payload?.event ?? payload;
+    const eventType = String(
+      payload?.type ?? payload?.event_type ?? payload?.t ?? data?.type ?? payload?.event?.type ?? ""
+    ).toUpperCase();
+    return {
+      eventType,
+      skuId: data?.sku_id ?? data?.skuId ?? payload?.sku_id ?? payload?.skuId ?? null,
+      userId: data?.user_id ?? data?.userId ?? payload?.user_id ?? payload?.userId ?? null,
+      guildId: data?.guild_id ?? data?.guildId ?? payload?.guild_id ?? payload?.guildId ?? null,
+      entitlementId: data?.id ?? data?.entitlement_id ?? payload?.entitlement_id ?? payload?.id ?? null
+    };
+  }
+
+  function startEntitlementWebhookServer() {
+    const port = Number(process.env.NOODLE_WEBHOOK_PORT || 0);
+    const webhookPath = process.env.NOODLE_WEBHOOK_PATH || "/discord/entitlements";
+    const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
+
+    if (!port) {
+        console.log("INFO: Discord store webhook disabled (NOODLE_WEBHOOK_PORT not set).");
+      return;
+    }
+    if (!publicKeyHex) {
+      console.error("❌ Missing DISCORD_PUBLIC_KEY; webhook server not started.");
+      return;
+    }
+
+    const server = http.createServer(async (req, res) => {
+      const urlPath = (req.url || "").split("?")[0];
+      if (req.method !== "POST" || urlPath !== webhookPath) {
+        res.writeHead(404, { "content-type": "text/plain" });
+        res.end("not found");
+        return;
+      }
+
+      let rawBody;
+      try {
+        rawBody = await getWebhookRawBody(req);
+      } catch (error) {
+        res.writeHead(413, { "content-type": "text/plain" });
+        res.end("payload too large");
+        return;
+      }
+
+      const signature = req.headers["x-signature-ed25519"];
+      const timestamp = req.headers["x-signature-timestamp"];
+      const signatureOk = verifyDiscordSignature({
+        publicKeyHex,
+        signature,
+        timestamp,
+        rawBody
+      });
+      if (!signatureOk) {
+        res.writeHead(401, { "content-type": "text/plain" });
+        res.end("invalid signature");
+        return;
+      }
+
+      let payload;
+      try {
+        payload = JSON.parse(rawBody.toString("utf8") || "{}");
+      } catch {
+        res.writeHead(400, { "content-type": "text/plain" });
+        res.end("invalid json");
+        return;
+      }
+
+      const { eventType, skuId, userId, guildId, entitlementId } = extractEntitlementPayload(payload);
+      const normalizedEvent = eventType || "UNKNOWN";
+      if (normalizedEvent && !["ENTITLEMENT_CREATE", "ENTITLEMENT_UPDATE", "UNKNOWN"].includes(normalizedEvent)) {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("ignored");
+        return;
+      }
+
+      if (!skuId || !userId) {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("ignored");
+        return;
+      }
+
+      const specId = resolveStoreBundleSpecId(skuId);
+      if (!specId) {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("unknown sku");
+        return;
+      }
+
+      if (!db) {
+        res.writeHead(503, { "content-type": "text/plain" });
+        res.end("db unavailable");
+        return;
+      }
+
+      const idempotencyKey = entitlementId ? `entitlement:${entitlementId}` : null;
+      if (idempotencyKey) {
+        const cached = getIdempotentResult(db, idempotencyKey);
+        if (cached) {
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("ok");
+          return;
+        }
+      }
+
+      const serverId = guildId || getLatestServerIdForUser(db, userId);
+      if (!serverId) {
+        res.writeHead(202, { "content-type": "text/plain" });
+        res.end("missing server");
+        return;
+      }
+
+      let player = getPlayer(db, serverId, userId);
+      if (!player) player = newPlayerProfile(userId);
+
+      const result = grantStoreBundle({
+        player,
+        specId,
+        specializationsContent,
+        decorSetsContent,
+        coins: 10000
+      });
+
+      if (result.ok) {
+        upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+        if (idempotencyKey) {
+          putIdempotentResult(db, {
+            key: idempotencyKey,
+            userId,
+            action: "entitlement_grant",
+            ttlSeconds: 60 * 60 * 24 * 30,
+            result: { ok: true, specId }
+          });
+        }
+      }
+
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end(result.ok || result.reason === "Already unlocked." ? "ok" : "ignored");
+    });
+
+    server.listen(port, () => {
+      console.log(`OK: Discord store webhook listening on ${port}${webhookPath}`);
+    });
+  }
+
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
@@ -211,6 +399,7 @@ import { getIcon } from "./ui/icons.js";
   /* ------------------------------------------------------------------ */
 
   client.on("interactionCreate", async (interaction) => {
+    return withPlayerCache(async () => {
     const startTime = Date.now();
     
     // Check interaction age - Discord invalidates after 3 seconds
@@ -413,8 +602,8 @@ import { getIcon } from "./ui/icons.js";
     const rateLimit = checkRateLimit({
       userId,
       serverId,
-      userLimit: 5,
-      serverLimit: 40
+      userLimit: 50,
+      serverLimit: 400
     });
 
     if (!rateLimit.allowed) {
@@ -529,7 +718,10 @@ import { getIcon } from "./ui/icons.js";
         console.error("❌ Failed to send error reply:", replyErr?.message ?? replyErr);
       }
     }
+    });
   });
+
+  startEntitlementWebhookServer();
 
   client.login(token);
 })();

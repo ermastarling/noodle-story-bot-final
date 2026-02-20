@@ -3,7 +3,7 @@ import discordPkg from "discord.js";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
-import { newPlayerProfile } from "../game/player.js";
+import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import {
@@ -135,6 +135,11 @@ export async function noodleStaffHandler(interaction) {
       s = newServerState(serverId);
       upsertServer(db, serverId, s, null);
       s = getServer(db, serverId);
+    }
+
+    const touched = trackLastKitchen(p, serverId, interaction.channelId);
+    if (touched && db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     }
 
     const embed = buildStaffOverviewEmbed(p, s, interaction.user);
@@ -333,6 +338,11 @@ export async function noodleStaffInteractionHandler(interaction) {
       s = newServerState(serverId);
       upsertServer(db, serverId, s, null);
       s = getServer(db, serverId);
+    }
+
+    const touched = trackLastKitchen(p, serverId, interaction.channelId);
+    if (touched && db) {
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
     }
 
     // Handle level up

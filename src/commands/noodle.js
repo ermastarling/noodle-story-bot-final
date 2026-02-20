@@ -33,7 +33,7 @@ import { buildSettingsMap } from "../settings/resolve.js";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
-import { newPlayerProfile } from "../game/player.js";
+import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, rollPlayerMarketStock, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
@@ -162,6 +162,7 @@ const db = openDb();
 const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
+const DISCORD_STORE_URL = "https://discord.com/discovery/applications/1460058511802105976/store";
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -186,7 +187,14 @@ const DECOR_SET_SPECIALIZATION_MAP = {
   mythic_dragon_hall: "mythic_dragon_hall",
   hearth_classic: "golden_hearth",
   lucky_pavilion: "lucky_ladle_pavilion",
-  legend_hall: "legendary_noodle_hall"
+  legend_hall: "legendary_noodle_hall",
+  tideglass_pavilion: "tideglass_pavilion",
+  bloomwarden_garden_hall: "bloomwarden_garden_hall",
+  astral_caravan: "astral_caravan",
+  imperial_silk_noodle_court: "imperial_silk_noodle_court",
+  elderwood_hearth: "elderwood_hearth",
+  celestial_archive_kitchen: "celestial_archive_kitchen",
+  sakura_sweetheart_noodle_atelier: "sakura_sweetheart_noodle_atelier"
 };
 
 function getDecorSetSpecId(setId) {
@@ -402,7 +410,7 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
     const specId = getDecorSetSpecId(set.set_id);
     const spec = specId ? getSpecializationById(specializationsContent, specId) : null;
     const requirements = spec?.requirements ?? null;
-    const reqCheck = spec ? meetsSpecializationRequirements(player, requirements) : { ok: false, reason: "Unavailable." };
+    const reqCheck = spec ? meetsSpecializationRequirements(player, requirements, specId) : { ok: false, reason: "Unavailable." };
     const status = showSpecialization
       ? (equippedSetId === set.set_id
         ? `${getIcon("status_complete")} Equipped`
@@ -569,7 +577,8 @@ function noodleProfileEditRow(userId, { specializationsAvailable = false } = {})
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Link).setURL(DISCORD_STORE_URL)
   );
 }
 
@@ -1060,7 +1069,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
 function isSpecializationVisible(player, spec) {
   if (!spec) return false;
   if (!spec.hidden_until_unlocked) return true;
-  const reqCheck = meetsSpecializationRequirements(player, spec.requirements);
+  const reqCheck = meetsSpecializationRequirements(player, spec.requirements, spec.spec_id);
   return reqCheck.ok || player?.profile?.specialization?.active_spec_id === spec.spec_id;
 }
 
@@ -1940,18 +1949,9 @@ const needsPlayer = group !== "dev" && !["help", "season", "event"].includes(sub
 const player = needsPlayer ? ensurePlayer(serverId, userId) : null;
 
 if (player) {
-  if (!player.notifications) {
-    player.notifications = {
-      pending_pantry_messages: [],
-      dm_reminders_opt_out: false,
-      last_daily_reminder_day: null,
-      last_noodle_channel_id: null,
-      last_noodle_guild_id: null
-    };
-  }
-  if (interaction.channelId) {
-    player.notifications.last_noodle_channel_id = interaction.channelId;
-    player.notifications.last_noodle_guild_id = serverId;
+  const touched = trackLastKitchen(player, serverId, interaction.channelId);
+  if (touched && db) {
+    upsertPlayer(db, serverId, userId, player, null, player.schema_version);
   }
 }
 
@@ -4415,6 +4415,12 @@ if (kind === "dm" && action === "reminders_toggle") {
 const serverId = interaction.guildId;
 if (!serverId) {
   return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
+}
+
+const componentPlayer = ensurePlayer(serverId, userId);
+const componentTouched = trackLastKitchen(componentPlayer, serverId, interaction.channelId);
+if (componentTouched && db) {
+  upsertPlayer(db, serverId, userId, componentPlayer, null, componentPlayer.schema_version);
 }
 
 // lock UI to owner when ownerId is present

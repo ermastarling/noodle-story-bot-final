@@ -29,8 +29,19 @@ export function getActiveSpecialization(player, specializationsContent) {
   return getSpecializationById(specializationsContent, state.active_spec_id);
 }
 
-function meetsRequirements(player, requirements) {
+function isPurchaseUnlocked(player, specId) {
+  if (!specId) return false;
+  const state = ensureSpecializationState(player);
+  return Array.isArray(state.unlocked_spec_ids) && state.unlocked_spec_ids.includes(specId);
+}
+
+function meetsRequirements(player, requirements, specId) {
   if (!requirements) return { ok: true };
+  if (requirements.purchase_required) {
+    if (!isPurchaseUnlocked(player, specId)) {
+      return { ok: false, reason: "Requires purchase." };
+    }
+  }
   if (requirements.min_level && (player.shop_level || 1) < requirements.min_level) {
     return { ok: false, reason: `Requires shop level ${requirements.min_level}.` };
   }
@@ -50,8 +61,8 @@ function meetsRequirements(player, requirements) {
   return { ok: true };
 }
 
-export function meetsSpecializationRequirements(player, requirements) {
-  return meetsRequirements(player, requirements);
+export function meetsSpecializationRequirements(player, requirements, specId) {
+  return meetsRequirements(player, requirements, specId);
 }
 
 export function canSelectSpecialization(player, specializationsContent, specId, now = nowTs()) {
@@ -63,7 +74,7 @@ export function canSelectSpecialization(player, specializationsContent, specId, 
     return { ok: false, reason: "Already active." };
   }
 
-  return meetsRequirements(player, spec.requirements);
+  return meetsRequirements(player, spec.requirements, specId);
 }
 
 export function selectSpecialization(player, specializationsContent, specId, now = nowTs()) {

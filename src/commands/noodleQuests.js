@@ -3,7 +3,7 @@ import discordPkg from "discord.js";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
-import { newPlayerProfile } from "../game/player.js";
+import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { loadQuestsContent, loadDailyRewards } from "../content/index.js";
 import { claimDailyReward } from "../game/daily.js";
@@ -84,6 +84,8 @@ export async function noodleQuestsHandler(interaction) {
     let server = getServer(db, serverId);
     if (!player) player = newPlayerProfile(userId);
     if (!server) server = newServerState(serverId);
+
+    trackLastKitchen(player, serverId, interaction.channelId);
 
     const sub = interaction.options.getSubcommand();
     let reply;

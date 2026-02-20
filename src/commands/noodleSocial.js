@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
-import { newPlayerProfile } from "../game/player.js";
+import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
 import { loadContentBundle, loadSpecializationsContent } from "../content/index.js";
@@ -550,6 +550,13 @@ function ensurePlayer(serverId, userId) {
   return p;
 }
 
+function touchLastKitchen(player, serverId, channelId, userId) {
+  const touched = trackLastKitchen(player, serverId, channelId);
+  if (touched && db) {
+    upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+  }
+}
+
 function cozyError(errOrCode) {
   const code = typeof errOrCode === "string" ? errOrCode : errOrCode?.code;
   const map = {
@@ -567,6 +574,7 @@ function cozyError(errOrCode) {
 async function handleParty(interaction) {
   const serverId = interaction.guildId;
   const userId = interaction.user.id;
+  const channelId = interaction.channelId ?? interaction.channel?.id;
   const action = interaction.options.getString("action");
   const partyName = interaction.options.getString("name");
   const partyId = interaction.options.getString("party_id");
@@ -583,6 +591,7 @@ async function handleParty(interaction) {
   }
   return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     const player = ensurePlayer(serverId, userId);
+    touchLastKitchen(player, serverId, channelId, userId);
 
     if (action === "create") {
       if (!partyName) {
@@ -823,6 +832,7 @@ async function handleParty(interaction) {
 async function handleTip(interaction) {
   const serverId = interaction.guildId;
   const userId = interaction.user.id;
+  const channelId = interaction.channelId ?? interaction.channel?.id;
   const targetUser = interaction.options.getUser("user");
   const amount = interaction.options.getInteger("amount");
   const message = interaction.options.getString("message");
@@ -851,6 +861,7 @@ async function handleTip(interaction) {
     return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
       let sender = ensurePlayer(serverId, userId);
       let receiver = ensurePlayer(serverId, targetUser.id);
+      touchLastKitchen(sender, serverId, channelId, userId);
 
       try {
         const result = transferTip(db, serverId, sender, receiver, amount, message);
@@ -895,6 +906,7 @@ async function handleTip(interaction) {
 async function handleVisit(interaction) {
   const serverId = interaction.guildId;
   const userId = interaction.user.id;
+  const channelId = interaction.channelId ?? interaction.channel?.id;
   const targetUser = interaction.options.getUser("user");
 
   if (!targetUser) {
@@ -922,6 +934,7 @@ async function handleVisit(interaction) {
        let serverState = ensureServer(serverId);
        let visitor = ensurePlayer(serverId, userId);
        let targetPlayer = ensurePlayer(serverId, targetUser.id);
+       touchLastKitchen(visitor, serverId, channelId, userId);
 
       try {
         // Grant a random blessing
@@ -994,8 +1007,13 @@ async function handleVisit(interaction) {
 
 async function handleLeaderboard(interaction) {
   const serverId = interaction.guildId;
+  const userId = interaction.user.id;
+  const channelId = interaction.channelId ?? interaction.channel?.id;
   const type = interaction.options.getString("type") || "coins";
   const typeIndex = getLeaderboardTypeIndex(type);
+
+  const player = ensurePlayer(serverId, userId);
+  touchLastKitchen(player, serverId, channelId, userId);
 
   await interaction.deferReply({ ephemeral: false });
 
@@ -1035,11 +1053,13 @@ async function handleLeaderboard(interaction) {
 async function handleStats(interaction) {
   const serverId = interaction.guildId;
   const userId = interaction.user.id;
+  const channelId = interaction.channelId ?? interaction.channel?.id;
 
   await interaction.deferReply({ ephemeral: false });
 
   try {
     const player = ensurePlayer(serverId, userId);
+    touchLastKitchen(player, serverId, channelId, userId);
     const tipStats = getUserTipStats(db, serverId, userId);
     const party = getUserActiveParty(db, userId);
     const blessing = getActiveBlessing(player);
