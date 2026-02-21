@@ -365,6 +365,83 @@ import { getIcon } from "./ui/icons.js";
     });
   }
 
+  async function backfillEntitlementsForUser(userId, rest, applicationId) {
+    if (!db) {
+      console.error("WEBHOOK: DB unavailable for entitlement backfill.");
+      return;
+    }
+    if (!userId) return;
+    if (!applicationId) {
+      console.error("WEBHOOK: Missing application id for entitlement backfill.");
+      return;
+    }
+
+    let entitlements = [];
+    try {
+      const response = await rest.get(`/applications/${applicationId}/entitlements?user_id=${userId}`);
+      entitlements = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+    } catch (error) {
+      console.error("WEBHOOK: Failed to fetch entitlements:", error?.message ?? error);
+      return;
+    }
+
+    if (!entitlements.length) {
+      console.log("WEBHOOK: No entitlements found for backfill.");
+      return;
+    }
+
+    for (const entitlement of entitlements) {
+      const skuId = entitlement?.sku_id ?? entitlement?.skuId ?? null;
+      const entitlementId = entitlement?.id ?? entitlement?.entitlement_id ?? null;
+      const specId = resolveStoreBundleSpecId(skuId);
+      if (!specId) {
+        console.log("WEBHOOK: Backfill skipped unknown SKU", skuId);
+        continue;
+      }
+
+      const idempotencyKey = entitlementId ? `entitlement:${entitlementId}` : null;
+      if (idempotencyKey) {
+        const cached = getIdempotentResult(db, idempotencyKey);
+        if (cached) continue;
+      }
+
+      const serverId = getLatestServerIdForUser(db, userId);
+      if (!serverId) {
+        console.log("WEBHOOK: Backfill missing server for user", userId);
+        continue;
+      }
+
+      let player = getPlayer(db, serverId, userId);
+      if (!player) player = newPlayerProfile(userId);
+
+      const result = grantStoreBundle({
+        player,
+        specId,
+        specializationsContent,
+        decorSetsContent,
+        coins: 10000
+      });
+
+      console.log(
+        "WEBHOOK: Backfill grant result",
+        JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
+      );
+
+      if (result.ok) {
+        upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+        if (idempotencyKey) {
+          putIdempotentResult(db, {
+            key: idempotencyKey,
+            userId,
+            action: "entitlement_grant",
+            ttlSeconds: 60 * 60 * 24 * 30,
+            result: { ok: true, specId }
+          });
+        }
+      }
+    }
+  }
+
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
@@ -399,6 +476,18 @@ import { getIcon } from "./ui/icons.js";
     startDailyRewardReminderScheduler(client, getKnownServerIds);
     startEventSyncScheduler(getKnownServerIds);
     startDbBackupScheduler(db);
+
+    const backfillUsers = String(process.env.NOODLE_ENTITLEMENT_SYNC_USERS || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (backfillUsers.length) {
+      const rest = new REST({ version: "10" }).setToken(token);
+      const applicationId = client.application?.id ?? client.user?.id ?? process.env.DISCORD_CLIENT_ID ?? null;
+      for (const syncUserId of backfillUsers) {
+        await backfillEntitlementsForUser(syncUserId, rest, applicationId);
+      }
+    }
 
     const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";
     if (backupOnStart) {
