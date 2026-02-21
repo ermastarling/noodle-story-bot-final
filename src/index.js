@@ -275,6 +275,10 @@ import { getIcon } from "./ui/icons.js";
       }
 
       const { eventType, skuId, userId, guildId, entitlementId } = extractEntitlementPayload(payload);
+      console.log(
+        "WEBHOOK: Entitlement event",
+        JSON.stringify({ eventType, skuId, userId, guildId, entitlementId })
+      );
       const normalizedEvent = eventType || "UNKNOWN";
       if (normalizedEvent && !["ENTITLEMENT_CREATE", "ENTITLEMENT_UPDATE", "UNKNOWN"].includes(normalizedEvent)) {
         res.writeHead(200, { "content-type": "text/plain" });
@@ -290,6 +294,7 @@ import { getIcon } from "./ui/icons.js";
 
       const specId = resolveStoreBundleSpecId(skuId);
       if (!specId) {
+        console.log("WEBHOOK: Unknown SKU", skuId);
         res.writeHead(200, { "content-type": "text/plain" });
         res.end("unknown sku");
         return;
@@ -313,6 +318,7 @@ import { getIcon } from "./ui/icons.js";
 
       const serverId = guildId || getLatestServerIdForUser(db, userId);
       if (!serverId) {
+        console.log("WEBHOOK: Missing server for user", userId);
         res.writeHead(202, { "content-type": "text/plain" });
         res.end("missing server");
         return;
@@ -328,6 +334,10 @@ import { getIcon } from "./ui/icons.js";
         decorSetsContent,
         coins: 10000
       });
+      console.log(
+        "WEBHOOK: Grant result",
+        JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
+      );
 
       if (result.ok) {
         upsertPlayer(db, serverId, userId, player, null, player.schema_version);
