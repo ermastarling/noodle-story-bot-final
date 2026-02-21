@@ -208,9 +208,13 @@ import { getIcon } from "./ui/icons.js";
 
   function extractEntitlementPayload(payload) {
     const data = payload?.data ?? payload?.d ?? payload?.entitlement ?? payload?.event?.data ?? payload?.event ?? payload;
-    const eventType = String(
+    const rawEventType = String(
       payload?.type ?? payload?.event_type ?? payload?.t ?? data?.type ?? payload?.event?.type ?? ""
     ).toUpperCase();
+    const numericType = Number(rawEventType);
+    const eventType = Number.isFinite(numericType)
+      ? (numericType === 1 ? "ENTITLEMENT_CREATE" : numericType === 2 ? "ENTITLEMENT_UPDATE" : numericType === 3 ? "ENTITLEMENT_DELETE" : rawEventType)
+      : rawEventType;
     return {
       eventType,
       skuId: data?.sku_id ?? data?.skuId ?? payload?.sku_id ?? payload?.skuId ?? null,
