@@ -3,6 +3,7 @@ import crypto from "crypto";
 import fs from "fs";
 import http from "http";
 import path from "path";
+import zlib from "zlib";
 import { fileURLToPath } from "url";
 import { REST } from "@discordjs/rest";
 import { getIcon } from "./ui/icons.js";
@@ -236,6 +237,27 @@ import { getIcon } from "./ui/icons.js";
     });
   }
 
+  async function decodeWebhookBody(rawBody, encoding) {
+    if (!rawBody || !rawBody.length) return rawBody;
+    const enc = String(encoding || "").toLowerCase();
+    if (enc.includes("gzip")) {
+      return await new Promise((resolve, reject) =>
+        zlib.gunzip(rawBody, (err, out) => (err ? reject(err) : resolve(out)))
+      );
+    }
+    if (enc.includes("deflate")) {
+      return await new Promise((resolve, reject) =>
+        zlib.inflate(rawBody, (err, out) => (err ? reject(err) : resolve(out)))
+      );
+    }
+    if (enc.includes("br")) {
+      return await new Promise((resolve, reject) =>
+        zlib.brotliDecompress(rawBody, (err, out) => (err ? reject(err) : resolve(out)))
+      );
+    }
+    return rawBody;
+  }
+
   function buildDiscordPublicKey(publicKeyHex) {
     const keyBytes = Buffer.from(publicKeyHex, "hex");
     const prefix = Buffer.from("302a300506032b6570032100", "hex");
@@ -338,8 +360,11 @@ import { getIcon } from "./ui/icons.js";
 
       let payload;
       try {
-        payload = JSON.parse(rawBody.toString("utf8") || "{}");
-      } catch {
+        const encoding = req.headers["content-encoding"];
+        const decodedBody = await decodeWebhookBody(rawBody, encoding);
+        payload = JSON.parse(decodedBody.toString("utf8") || "{}");
+      } catch (error) {
+        console.error("WEBHOOK: Invalid JSON body:", error?.message ?? error);
         res.writeHead(400, { "content-type": "text/plain" });
         res.end("invalid json");
         return;
@@ -466,6 +491,13 @@ import { getIcon } from "./ui/icons.js";
 
         const order = payload;
         const orderId = order?.id ?? null;
+        const status = String(order?.status || "").toLowerCase();
+        if (status !== "completed") {
+          console.log("WC: Ignored order with status", status, orderId);
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("ignored");
+          return;
+        }
         const discordId = extractWooDiscordId(order, wcDiscordIdKey);
         const lineItems = Array.isArray(order?.line_items) ? order.line_items : [];
         console.log(
