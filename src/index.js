@@ -494,6 +494,10 @@ import { getIcon } from "./ui/icons.js";
         }
 
         const signature = req.headers["x-wc-webhook-signature"];
+        if (!signature) {
+          const headerKeys = Object.keys(req.headers || {}).sort();
+          console.log("WC: Missing signature header", JSON.stringify({ headers: headerKeys }));
+        }
         const signatureOk = verifyWooSignature({ secret: wcSecret, signature, rawBody });
         if (!signatureOk) {
           console.log("WC: Invalid signature", {
