@@ -307,7 +307,8 @@ import { getIcon } from "./ui/icons.js";
     if (!secret || !signature || !rawBody) return false;
     try {
       const digest = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
-      return timingSafeEqual(digest, signature);
+      const normalized = String(signature || "").trim();
+      return timingSafeEqual(digest, normalized);
     } catch (error) {
       console.error("WC: Signature verify failed:", error?.message ?? error);
       return false;
@@ -495,6 +496,11 @@ import { getIcon } from "./ui/icons.js";
         const signature = req.headers["x-wc-webhook-signature"];
         const signatureOk = verifyWooSignature({ secret: wcSecret, signature, rawBody });
         if (!signatureOk) {
+          console.log("WC: Invalid signature", {
+            signature: signature ? String(signature).slice(0, 8) : null,
+            topic: req.headers["x-wc-webhook-topic"] || null,
+            deliveryId: req.headers["x-wc-webhook-delivery-id"] || null
+          });
           res.writeHead(401, { "content-type": "text/plain" });
           res.end("invalid signature");
           return;
