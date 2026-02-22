@@ -361,7 +361,8 @@ import { getIcon } from "./ui/icons.js";
     }
 
     const server = http.createServer(async (req, res) => {
-      const urlPath = (req.url || "").split("?")[0];
+      const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const urlPath = requestUrl.pathname;
       if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== wcWebhookPath)) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
@@ -494,12 +495,15 @@ import { getIcon } from "./ui/icons.js";
         }
 
         const signature = req.headers["x-wc-webhook-signature"];
-        if (!signature) {
-          const headerKeys = Object.keys(req.headers || {}).sort();
-          console.log("WC: Missing signature header", JSON.stringify({ headers: headerKeys }));
-        }
-        const signatureOk = verifyWooSignature({ secret: wcSecret, signature, rawBody });
+        const providedSecret = requestUrl.searchParams.get("secret") || req.headers["x-noodle-secret"];
+        const signatureOk = signature
+          ? verifyWooSignature({ secret: wcSecret, signature, rawBody })
+          : (providedSecret ? timingSafeEqual(providedSecret, wcSecret) : false);
         if (!signatureOk) {
+          if (!signature) {
+            const headerKeys = Object.keys(req.headers || {}).sort();
+            console.log("WC: Missing signature header", JSON.stringify({ headers: headerKeys }));
+          }
           console.log("WC: Invalid signature", {
             signature: signature ? String(signature).slice(0, 8) : null,
             topic: req.headers["x-wc-webhook-topic"] || null,
