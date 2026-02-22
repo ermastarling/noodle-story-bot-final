@@ -258,6 +258,24 @@ import { getIcon } from "./ui/icons.js";
     return rawBody;
   }
 
+  function parseWebhookPayload(decodedBody, contentType) {
+    const bodyText = decodedBody?.toString("utf8") || "";
+    const ct = String(contentType || "").toLowerCase();
+
+    if (ct.includes("application/x-www-form-urlencoded") || ct.includes("text/plain")) {
+      const params = new URLSearchParams(bodyText);
+      const obj = {};
+      for (const [key, value] of params.entries()) obj[key] = value;
+      return { ok: true, value: obj };
+    }
+
+    try {
+      return { ok: true, value: JSON.parse(bodyText || "{}") };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }
+
   function buildDiscordPublicKey(publicKeyHex) {
     const keyBytes = Buffer.from(publicKeyHex, "hex");
     const prefix = Buffer.from("302a300506032b6570032100", "hex");
@@ -358,17 +376,16 @@ import { getIcon } from "./ui/icons.js";
         return;
       }
 
-      let payload;
-      try {
-        const encoding = req.headers["content-encoding"];
-        const decodedBody = await decodeWebhookBody(rawBody, encoding);
-        payload = JSON.parse(decodedBody.toString("utf8") || "{}");
-      } catch (error) {
-        console.error("WEBHOOK: Invalid JSON body:", error?.message ?? error);
+      const encoding = req.headers["content-encoding"];
+      const decodedBody = await decodeWebhookBody(rawBody, encoding);
+      const parsed = parseWebhookPayload(decodedBody, req.headers["content-type"]);
+      if (!parsed.ok) {
+        console.error("WEBHOOK: Invalid JSON body:", parsed.error?.message ?? parsed.error);
         res.writeHead(400, { "content-type": "text/plain" });
         res.end("invalid json");
         return;
       }
+      const payload = parsed.value ?? {};
 
       if (urlPath === webhookPath) {
         const signature = req.headers["x-signature-ed25519"];
@@ -492,6 +509,11 @@ import { getIcon } from "./ui/icons.js";
         const order = payload;
         const orderId = order?.id ?? null;
         const status = String(order?.status || "").toLowerCase();
+        if (!orderId && order?.webhook_id) {
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("ok");
+          return;
+        }
         if (status !== "completed") {
           console.log("WC: Ignored order with status", status, orderId);
           res.writeHead(200, { "content-type": "text/plain" });
