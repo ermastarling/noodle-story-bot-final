@@ -58,6 +58,10 @@ import { getIcon } from "./ui/icons.js";
 
   const LOG_PATH = path.join(CWD, "command-errors.log");
   const BOOT_PATH = path.join(CWD, "boot-ok.log");
+  const USER_ERROR_DIR = path.join(CWD, "user-error-logs");
+  const USER_ERROR_RETENTION_DAYS = 14;
+  const USER_ERROR_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  let lastUserErrorCleanup = 0;
 
   const errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
   const origError = console.error;
@@ -75,6 +79,51 @@ import { getIcon } from "./ui/icons.js";
 
   console.log("✅ BOOTING FILE:", __filename);
   console.log("✅ CWD:", CWD);
+
+  function getDateKey(date = new Date()) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  function cleanupUserErrorLogs(now = new Date()) {
+    const nowMs = now.getTime();
+    if (nowMs - lastUserErrorCleanup < USER_ERROR_CLEANUP_INTERVAL_MS) return;
+    lastUserErrorCleanup = nowMs;
+
+    try {
+      fs.mkdirSync(USER_ERROR_DIR, { recursive: true });
+      const cutoff = new Date(now);
+      cutoff.setUTCDate(cutoff.getUTCDate() - USER_ERROR_RETENTION_DAYS);
+      const entries = fs.readdirSync(USER_ERROR_DIR, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.name)) continue;
+        const dirDate = new Date(`${entry.name}T00:00:00Z`);
+        if (Number.isNaN(dirDate.getTime())) continue;
+        if (dirDate < cutoff) {
+          fs.rmSync(path.join(USER_ERROR_DIR, entry.name), { recursive: true, force: true });
+        }
+      }
+    } catch (err) {
+      console.error("❌ Failed to cleanup user error logs:", err?.stack ?? err);
+    }
+  }
+
+  function logUserError(interaction, label, detail) {
+    const userId = interaction?.user?.id ?? interaction?.member?.user?.id ?? "unknown";
+    const guildId = interaction?.guildId ?? "dm";
+    const commandName = interaction?.commandName ?? interaction?.customId ?? "unknown";
+
+    try {
+      cleanupUserErrorLogs();
+      const dateDir = path.join(USER_ERROR_DIR, getDateKey());
+      fs.mkdirSync(dateDir, { recursive: true });
+      const filePath = path.join(dateDir, `${userId}.log`);
+      const line = `[${new Date().toISOString()}] ${label} guild=${guildId} cmd=${commandName}\n${detail}\n`;
+      fs.appendFileSync(filePath, `${line}\n`);
+    } catch (err) {
+      console.error("❌ Failed to write user error log:", err?.stack ?? err);
+    }
+  }
 
   process.on("unhandledRejection", (reason) => {
     console.error("UNHANDLED REJECTION:", reason?.stack ?? reason);
@@ -193,6 +242,14 @@ import { getIcon } from "./ui/icons.js";
     return crypto.createPublicKey({ key: Buffer.concat([prefix, keyBytes]), format: "der", type: "spki" });
   }
 
+  function timingSafeEqual(a, b) {
+    if (!a || !b) return false;
+    const aBuf = Buffer.isBuffer(a) ? a : Buffer.from(String(a));
+    const bBuf = Buffer.isBuffer(b) ? b : Buffer.from(String(b));
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto.timingSafeEqual(aBuf, bBuf);
+  }
+
   function verifyDiscordSignature({ publicKeyHex, signature, timestamp, rawBody }) {
     if (!publicKeyHex || !signature || !timestamp || !rawBody) return false;
     try {
@@ -202,6 +259,17 @@ import { getIcon } from "./ui/icons.js";
       return crypto.verify(null, message, publicKey, signatureBytes);
     } catch (error) {
       console.error("⚠️ Discord webhook signature verify failed:", error?.message ?? error);
+      return false;
+    }
+  }
+
+  function verifyWooSignature({ secret, signature, rawBody }) {
+    if (!secret || !signature || !rawBody) return false;
+    try {
+      const digest = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
+      return timingSafeEqual(digest, signature);
+    } catch (error) {
+      console.error("WC: Signature verify failed:", error?.message ?? error);
       return false;
     }
   }
@@ -224,10 +292,23 @@ import { getIcon } from "./ui/icons.js";
     };
   }
 
+  function extractWooDiscordId(order, explicitKey) {
+    const keys = [explicitKey, "discord_id", "discord_user_id", "discordId", "discord_user"].filter(Boolean);
+    const meta = Array.isArray(order?.meta_data) ? order.meta_data : [];
+    for (const key of keys) {
+      const found = meta.find((entry) => String(entry?.key || "") === key);
+      if (found?.value) return String(found.value).trim();
+    }
+    return null;
+  }
+
   function startEntitlementWebhookServer() {
     const port = Number(process.env.NOODLE_WEBHOOK_PORT || 0);
     const webhookPath = process.env.NOODLE_WEBHOOK_PATH || "/discord/entitlements";
+    const wcWebhookPath = process.env.NOODLE_WC_WEBHOOK_PATH || "/store/woocommerce";
     const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
+    const wcSecret = process.env.NOODLE_WC_WEBHOOK_SECRET || "";
+    const wcDiscordIdKey = process.env.NOODLE_WC_DISCORD_ID_FIELD || "discord_id";
 
     if (!port) {
         console.log("INFO: Discord store webhook disabled (NOODLE_WEBHOOK_PORT not set).");
@@ -240,7 +321,7 @@ import { getIcon } from "./ui/icons.js";
 
     const server = http.createServer(async (req, res) => {
       const urlPath = (req.url || "").split("?")[0];
-      if (req.method !== "POST" || urlPath !== webhookPath) {
+      if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== wcWebhookPath)) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
         return;
@@ -255,20 +336,6 @@ import { getIcon } from "./ui/icons.js";
         return;
       }
 
-      const signature = req.headers["x-signature-ed25519"];
-      const timestamp = req.headers["x-signature-timestamp"];
-      const signatureOk = verifyDiscordSignature({
-        publicKeyHex,
-        signature,
-        timestamp,
-        rawBody
-      });
-      if (!signatureOk) {
-        res.writeHead(401, { "content-type": "text/plain" });
-        res.end("invalid signature");
-        return;
-      }
-
       let payload;
       try {
         payload = JSON.parse(rawBody.toString("utf8") || "{}");
@@ -278,169 +345,199 @@ import { getIcon } from "./ui/icons.js";
         return;
       }
 
-      const { eventType, skuId, userId, guildId, entitlementId } = extractEntitlementPayload(payload);
-      console.log(
-        "WEBHOOK: Entitlement event",
-        JSON.stringify({ eventType, skuId, userId, guildId, entitlementId })
-      );
-      const normalizedEvent = eventType || "UNKNOWN";
-      if (normalizedEvent && !["ENTITLEMENT_CREATE", "ENTITLEMENT_UPDATE", "UNKNOWN"].includes(normalizedEvent)) {
-        res.writeHead(200, { "content-type": "text/plain" });
-        res.end("ignored");
-        return;
-      }
-
-      if (!skuId || !userId) {
-        res.writeHead(200, { "content-type": "text/plain" });
-        res.end("ignored");
-        return;
-      }
-
-      const specId = resolveStoreBundleSpecId(skuId);
-      if (!specId) {
-        console.log("WEBHOOK: Unknown SKU", skuId);
-        res.writeHead(200, { "content-type": "text/plain" });
-        res.end("unknown sku");
-        return;
-      }
-
-      if (!db) {
-        res.writeHead(503, { "content-type": "text/plain" });
-        res.end("db unavailable");
-        return;
-      }
-
-      const idempotencyKey = entitlementId ? `entitlement:${entitlementId}` : null;
-      if (idempotencyKey) {
-        const cached = getIdempotentResult(db, idempotencyKey);
-        if (cached) {
-          res.writeHead(200, { "content-type": "text/plain" });
-          res.end("ok");
+      if (urlPath === webhookPath) {
+        const signature = req.headers["x-signature-ed25519"];
+        const timestamp = req.headers["x-signature-timestamp"];
+        const signatureOk = verifyDiscordSignature({
+          publicKeyHex,
+          signature,
+          timestamp,
+          rawBody
+        });
+        if (!signatureOk) {
+          res.writeHead(401, { "content-type": "text/plain" });
+          res.end("invalid signature");
           return;
         }
-      }
 
-      const serverId = guildId || getLatestServerIdForUser(db, userId);
-      if (!serverId) {
-        console.log("WEBHOOK: Missing server for user", userId);
-        res.writeHead(202, { "content-type": "text/plain" });
-        res.end("missing server");
+        const { eventType, skuId, userId, guildId, entitlementId } = extractEntitlementPayload(payload);
+        console.log(
+          "WEBHOOK: Entitlement event",
+          JSON.stringify({ eventType, skuId, userId, guildId, entitlementId })
+        );
+        const normalizedEvent = eventType || "UNKNOWN";
+        if (normalizedEvent && !["ENTITLEMENT_CREATE", "ENTITLEMENT_UPDATE", "UNKNOWN"].includes(normalizedEvent)) {
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("ignored");
+          return;
+        }
+
+        if (!skuId || !userId) {
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("ignored");
+          return;
+        }
+
+        const specId = resolveStoreBundleSpecId(skuId);
+        if (!specId) {
+          console.log("WEBHOOK: Unknown SKU", skuId);
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("unknown sku");
+          return;
+        }
+
+        if (!db) {
+          res.writeHead(503, { "content-type": "text/plain" });
+          res.end("db unavailable");
+          return;
+        }
+
+        const idempotencyKey = entitlementId ? `entitlement:${entitlementId}` : null;
+        if (idempotencyKey) {
+          const cached = getIdempotentResult(db, idempotencyKey);
+          if (cached) {
+            res.writeHead(200, { "content-type": "text/plain" });
+            res.end("ok");
+            return;
+          }
+        }
+
+        const serverId = guildId || getLatestServerIdForUser(db, userId);
+        if (!serverId) {
+          console.log("WEBHOOK: Missing server for user", userId);
+          res.writeHead(202, { "content-type": "text/plain" });
+          res.end("missing server");
+          return;
+        }
+
+        let player = getPlayer(db, serverId, userId);
+        if (!player) player = newPlayerProfile(userId);
+
+        const result = grantStoreBundle({
+          player,
+          specId,
+          specializationsContent,
+          decorSetsContent,
+          coins: 10000
+        });
+        console.log(
+          "WEBHOOK: Grant result",
+          JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
+        );
+
+        if (result.ok) {
+          upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+          if (idempotencyKey) {
+            putIdempotentResult(db, {
+              key: idempotencyKey,
+              userId,
+              action: "entitlement_grant",
+              ttlSeconds: 60 * 60 * 24 * 30,
+              result: { ok: true, specId }
+            });
+          }
+        }
+
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end(result.ok || result.reason === "Already unlocked." ? "ok" : "ignored");
         return;
       }
 
-      let player = getPlayer(db, serverId, userId);
-      if (!player) player = newPlayerProfile(userId);
+      if (urlPath === wcWebhookPath) {
+        if (!wcSecret) {
+          res.writeHead(500, { "content-type": "text/plain" });
+          res.end("missing wc secret");
+          return;
+        }
 
-      const result = grantStoreBundle({
-        player,
-        specId,
-        specializationsContent,
-        decorSetsContent,
-        coins: 10000
-      });
-      console.log(
-        "WEBHOOK: Grant result",
-        JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
-      );
+        const signature = req.headers["x-wc-webhook-signature"];
+        const signatureOk = verifyWooSignature({ secret: wcSecret, signature, rawBody });
+        if (!signatureOk) {
+          res.writeHead(401, { "content-type": "text/plain" });
+          res.end("invalid signature");
+          return;
+        }
 
-      if (result.ok) {
-        upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+        if (!db) {
+          res.writeHead(503, { "content-type": "text/plain" });
+          res.end("db unavailable");
+          return;
+        }
+
+        const order = payload;
+        const orderId = order?.id ?? null;
+        const discordId = extractWooDiscordId(order, wcDiscordIdKey);
+        const lineItems = Array.isArray(order?.line_items) ? order.line_items : [];
+        console.log(
+          "WC: Order event",
+          JSON.stringify({ orderId, discordId, lineItems: lineItems.length })
+        );
+
+        if (!discordId || !lineItems.length) {
+          res.writeHead(202, { "content-type": "text/plain" });
+          res.end("missing discord id or items");
+          return;
+        }
+
+        const idempotencyKey = orderId ? `wc_order:${orderId}` : null;
+        if (idempotencyKey) {
+          const cached = getIdempotentResult(db, idempotencyKey);
+          if (cached) {
+            res.writeHead(200, { "content-type": "text/plain" });
+            res.end("ok");
+            return;
+          }
+        }
+
+        const serverId = getLatestServerIdForUser(db, discordId);
+        if (!serverId) {
+          console.log("WC: Missing server for user", discordId);
+          res.writeHead(202, { "content-type": "text/plain" });
+          res.end("missing server");
+          return;
+        }
+
+        let player = getPlayer(db, serverId, discordId);
+        if (!player) player = newPlayerProfile(discordId);
+
+        const grants = [];
+        for (const item of lineItems) {
+          const specId = String(item?.sku || "").trim();
+          if (!specId) continue;
+          const result = grantStoreBundle({
+            player,
+            specId,
+            specializationsContent,
+            decorSetsContent,
+            coins: 10000
+          });
+          grants.push({ specId, ok: result.ok, reason: result.reason });
+        }
+
+        upsertPlayer(db, serverId, discordId, player, null, player.schema_version);
         if (idempotencyKey) {
           putIdempotentResult(db, {
             key: idempotencyKey,
-            userId,
-            action: "entitlement_grant",
+            userId: discordId,
+            action: "wc_order",
             ttlSeconds: 60 * 60 * 24 * 30,
-            result: { ok: true, specId }
+            result: { ok: true, grants }
           });
         }
-      }
 
-      res.writeHead(200, { "content-type": "text/plain" });
-      res.end(result.ok || result.reason === "Already unlocked." ? "ok" : "ignored");
+        console.log("WC: Grant result", JSON.stringify(grants));
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("ok");
+        return;
+      }
     });
 
     server.listen(port, () => {
       console.log(`OK: Discord store webhook listening on ${port}${webhookPath}`);
+      console.log(`OK: WooCommerce webhook listening on ${port}${wcWebhookPath}`);
     });
   }
 
-  async function backfillEntitlementsForUser(userId, rest, applicationId) {
-    if (!db) {
-      console.error("WEBHOOK: DB unavailable for entitlement backfill.");
-      return;
-    }
-    if (!userId) return;
-    if (!applicationId) {
-      console.error("WEBHOOK: Missing application id for entitlement backfill.");
-      return;
-    }
-
-    let entitlements = [];
-    try {
-      const response = await rest.get(`/applications/${applicationId}/entitlements?user_id=${userId}`);
-      entitlements = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
-    } catch (error) {
-      console.error("WEBHOOK: Failed to fetch entitlements:", error?.message ?? error);
-      return;
-    }
-
-    if (!entitlements.length) {
-      console.log("WEBHOOK: No entitlements found for backfill.");
-      return;
-    }
-
-    for (const entitlement of entitlements) {
-      const skuId = entitlement?.sku_id ?? entitlement?.skuId ?? null;
-      const entitlementId = entitlement?.id ?? entitlement?.entitlement_id ?? null;
-      const specId = resolveStoreBundleSpecId(skuId);
-      if (!specId) {
-        console.log("WEBHOOK: Backfill skipped unknown SKU", skuId);
-        continue;
-      }
-
-      const idempotencyKey = entitlementId ? `entitlement:${entitlementId}` : null;
-      if (idempotencyKey) {
-        const cached = getIdempotentResult(db, idempotencyKey);
-        if (cached) continue;
-      }
-
-      const serverId = getLatestServerIdForUser(db, userId);
-      if (!serverId) {
-        console.log("WEBHOOK: Backfill missing server for user", userId);
-        continue;
-      }
-
-      let player = getPlayer(db, serverId, userId);
-      if (!player) player = newPlayerProfile(userId);
-
-      const result = grantStoreBundle({
-        player,
-        specId,
-        specializationsContent,
-        decorSetsContent,
-        coins: 10000
-      });
-
-      console.log(
-        "WEBHOOK: Backfill grant result",
-        JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
-      );
-
-      if (result.ok) {
-        upsertPlayer(db, serverId, userId, player, null, player.schema_version);
-        if (idempotencyKey) {
-          putIdempotentResult(db, {
-            key: idempotencyKey,
-            userId,
-            action: "entitlement_grant",
-            ttlSeconds: 60 * 60 * 24 * 30,
-            result: { ok: true, specId }
-          });
-        }
-      }
-    }
-  }
 
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
@@ -476,18 +573,6 @@ import { getIcon } from "./ui/icons.js";
     startDailyRewardReminderScheduler(client, getKnownServerIds);
     startEventSyncScheduler(getKnownServerIds);
     startDbBackupScheduler(db);
-
-    const backfillUsers = String(process.env.NOODLE_ENTITLEMENT_SYNC_USERS || "")
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-    if (backfillUsers.length) {
-      const rest = new REST({ version: "10" }).setToken(token);
-      const applicationId = client.application?.id ?? client.user?.id ?? process.env.DISCORD_CLIENT_ID ?? null;
-      for (const syncUserId of backfillUsers) {
-        await backfillEntitlementsForUser(syncUserId, rest, applicationId);
-      }
-    }
 
     const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";
     if (backupOnStart) {
@@ -773,7 +858,9 @@ import { getIcon } from "./ui/icons.js";
           }
         }
       } catch (e) {
-        console.error("NOODLE COMPONENT ERROR:", e?.stack ?? e);
+        const detail = e?.stack ?? String(e);
+        console.error("NOODLE COMPONENT ERROR:", detail);
+        logUserError(interaction, "component_error", detail);
         // Don't try to respond if interaction is already acknowledged or unknown
         if (e?.code === 10062 || e?.message?.includes("Unknown interaction") || 
             e?.message?.includes("already been acknowledged")) {
@@ -802,6 +889,7 @@ import { getIcon } from "./ui/icons.js";
     } catch (e) {
       const detail = e?.stack ?? String(e);
       console.error("COMMAND ERROR:", detail);
+      logUserError(interaction, "command_error", detail);
 
       try {
         fs.appendFileSync(LOG_PATH, `\n[${new Date().toISOString()}]\n${detail}\n`);
