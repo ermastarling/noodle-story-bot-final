@@ -298,12 +298,13 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     if (clueCount >= CLUES_TO_UNLOCK_RECIPE) {
       player.known_recipes.push(discovery.recipeId);
       delete player.clues_owned[clueKey]; // Remove clues once recipe learned
+      const badgeLine = maybeGrantEventBadge(recipe);
       
       return { 
         isDuplicate: false,
         recipeUnlocked: true,
         reward: null,
-        message: `${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}`
+        message: `${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}${badgeLine ? `\n${badgeLine}` : ""}`
       };
     }
     

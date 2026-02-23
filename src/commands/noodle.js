@@ -1948,6 +1948,10 @@ const commit = async (payload) => {
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
+const base = { ...rest };
+if (base.embeds) {
+  base.embeds = applyGreenButtonFooter(base.embeds, base.components);
+}
 // For ephemeral messages after a non-ephemeral defer, delete original and send ephemeral followUp
 if (ephemeral && (interaction.deferred || interaction.replied)) {
   try {
@@ -1955,9 +1959,9 @@ if (ephemeral && (interaction.deferred || interaction.replied)) {
   } catch (e) {
     // Ignore errors if already deleted
   }
-  return interaction.followUp({ ...rest, ephemeral: true });
+  return interaction.followUp({ ...base, ephemeral: true });
 }
-const options = ephemeral ? { ...rest, ephemeral: true } : { ...rest };
+const options = ephemeral ? { ...base, ephemeral: true } : { ...base };
 // If deferred, use editReply. Otherwise use reply (shouldn't happen but safety)
 if (interaction.deferred || interaction.replied) return interaction.editReply(options);
 return interaction.reply(options);
@@ -3187,8 +3191,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (!Object.keys(accepted).length) {
       setForageCooldown(p, now);
+      const forageFullEmbed = buildMenuEmbed({
+        title: `${getIcon("forage")} Forage`,
+        description: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
+        user: interaction.member ?? interaction.user
+      });
       return commitState({
-        content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.`
+        content: " ",
+        embeds: [forageFullEmbed]
       });
     }
 
@@ -3201,8 +3211,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const blockedText = blockedLines.length
         ? ` Could not collect: ${blockedLines.join(", ")}.`
         : "";
+      const forageFullEmbed = buildMenuEmbed({
+        title: `${getIcon("forage")} Forage`,
+        description: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`,
+        user: interaction.member ?? interaction.user
+      });
       return commitState({
-        content: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`
+        content: " ",
+        embeds: [forageFullEmbed]
       });
     }
     advanceTutorial(p, "forage");
