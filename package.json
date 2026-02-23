@@ -12,6 +12,7 @@
     "register:dev": "NODE_ENV=development node src/register-commands.js",
     "register:prod": "NODE_ENV=production node src/register-commands.js",
     "test": "node --test",
+    "test:no-sqlite": "node --test $(ls test/*.test.js | grep -v social.test.js)",
     "sim": "node src/sim/runSimulation.js"
   },
   "dependencies": {

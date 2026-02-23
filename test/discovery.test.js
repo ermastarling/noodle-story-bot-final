@@ -6,6 +6,10 @@ import {
   applyDiscovery,
   applyNpcDiscoveryBuff
 } from "../src/game/discovery.js";
+import {
+  DISCOVERY_TIER_UNLOCK_LEVEL,
+  DISCOVERY_TIER_UNLOCK_REP
+} from "../src/constants.js";
 
 // Mock content bundle
 const mockContent = {
@@ -60,25 +64,34 @@ test("Discovery: canDiscoverTier - level 1 cannot discover rare", () => {
   assert.strictEqual(canDiscoverTier(player, "rare"), false);
 });
 
-test("Discovery: canDiscoverTier - level 5 with rep 25 can discover rare", () => {
-  const player = { shop_level: 5, rep: 25 };
+test("Discovery: canDiscoverTier - meets rare requirements", () => {
+  const player = {
+    shop_level: DISCOVERY_TIER_UNLOCK_LEVEL.rare,
+    rep: DISCOVERY_TIER_UNLOCK_REP.rare
+  };
   assert.strictEqual(canDiscoverTier(player, "rare"), true);
 });
 
-test("Discovery: canDiscoverTier - level 10 with rep 100 can discover epic", () => {
-  const player = { shop_level: 10, rep: 100 };
+test("Discovery: canDiscoverTier - meets epic requirements", () => {
+  const player = {
+    shop_level: DISCOVERY_TIER_UNLOCK_LEVEL.epic,
+    rep: DISCOVERY_TIER_UNLOCK_REP.epic
+  };
   assert.strictEqual(canDiscoverTier(player, "epic"), true);
 });
 
-test("Discovery: canDiscoverTier - level 12 with rep 150 can discover seasonal", () => {
-  const player = { shop_level: 12, rep: 150 };
+test("Discovery: canDiscoverTier - meets seasonal requirements", () => {
+  const player = {
+    shop_level: DISCOVERY_TIER_UNLOCK_LEVEL.seasonal,
+    rep: DISCOVERY_TIER_UNLOCK_REP.seasonal
+  };
   assert.strictEqual(canDiscoverTier(player, "seasonal"), true);
 });
 
 test("Discovery: getDiscoverableRecipes - filters known recipes", () => {
   const player = {
-    shop_level: 10,
-    rep: 100,
+    shop_level: DISCOVERY_TIER_UNLOCK_LEVEL.epic,
+    rep: DISCOVERY_TIER_UNLOCK_REP.epic,
     known_recipes: ["classic_soy_ramen"]
   };
   const discoverableRecipes = getDiscoverableRecipes(player, mockContent);
@@ -91,8 +104,8 @@ test("Discovery: getDiscoverableRecipes - filters known recipes", () => {
 
 test("Discovery: getDiscoverableRecipes - respects tier gating", () => {
   const player = {
-    shop_level: 5,
-    rep: 25,
+    shop_level: DISCOVERY_TIER_UNLOCK_LEVEL.rare,
+    rep: DISCOVERY_TIER_UNLOCK_REP.rare,
     known_recipes: []
   };
   const discoverableRecipes = getDiscoverableRecipes(player, mockContent);
