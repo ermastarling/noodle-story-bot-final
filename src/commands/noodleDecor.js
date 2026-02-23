@@ -25,7 +25,6 @@ function ownerFooterText(userOrMember) {
 function applyOwnerFooter(embed, user) {
   if (embed && user) {
     embed.setFooter({ text: ownerFooterText(user) });
-    embed.setTimestamp();
   }
   return embed;
 }

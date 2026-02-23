@@ -64,8 +64,7 @@ function buildReminderEmbed({ guildName, channelLine, user }) {
       "\nDisable reminders below."
     ].filter(Boolean).join("\n"))
     .setColor(theme.colors.primary)
-    .setFooter({ text: ownerFooterText(user) })
-    .setTimestamp();
+    .setFooter({ text: ownerFooterText(user) });
 }
 
 function normalizeNotifications(player) {

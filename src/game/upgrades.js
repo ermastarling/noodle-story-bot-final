@@ -246,7 +246,8 @@ export function applyReputationBonus(baseRep, effects, tier = null) {
  */
 export function applyCooldownReduction(baseCooldown, effects) {
   const reduction = effects.cooldown_reduction || 0;
-  return Math.floor(baseCooldown * (1 - reduction));
+  const cappedReduction = Math.min(0.8, Math.max(0, reduction));
+  return Math.floor(baseCooldown * (1 - cappedReduction));
 }
 
 /**

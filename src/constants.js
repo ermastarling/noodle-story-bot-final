@@ -47,18 +47,18 @@ export const SCROLL_DUPLICATE_TOKEN_CHANCE = 0.50;
 export const SCROLL_DUPLICATE_COINS = 80;
 
 export const PROFILE_DEFAULT_TAGLINE = "A tiny shop with a big simmer.";
-export const PROFILE_BADGES_SHOWN = 3;
+export const PROFILE_BADGES_SHOWN = 12;
 export const PROFILE_COLLECTIONS_SHOWN = 3;
 
 export const DISCOVERY_TIER_UNLOCK_LEVEL = { 
   rare: 5, 
-  epic: 10, 
-  seasonal: 12 
+  epic: 15, 
+  seasonal: 25 
 };
 
 export const DISCOVERY_TIER_UNLOCK_REP = { 
   rare: 25, 
-  epic: 100, 
+  epic: 75, 
   seasonal: 150 
 };
 

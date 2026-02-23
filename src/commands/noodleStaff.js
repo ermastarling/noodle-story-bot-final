@@ -55,9 +55,41 @@ function ownerFooterText(userOrMember) {
 function applyOwnerFooter(embed, user) {
   if (embed && user) {
     embed.setFooter({ text: ownerFooterText(user) });
-    embed.setTimestamp();
   }
   return embed;
+}
+
+function hasGreenButton(components) {
+  const rows = Array.isArray(components) ? components : (components ? [components] : []);
+  for (const row of rows) {
+    const rowJson = row?.toJSON ? row.toJSON() : row;
+    const comps = row?.components ?? rowJson?.components ?? [];
+    for (const comp of comps) {
+      const style = comp?.style ?? comp?.data?.style;
+      if (style === ButtonStyle.Success) return true;
+    }
+  }
+  return false;
+}
+
+function applyGreenButtonFooter(embeds, components) {
+  if (!Array.isArray(embeds) || embeds.length === 0) return embeds;
+  if (!hasGreenButton(components)) return embeds;
+
+  const note = "Tip: Tap the green button(s) to continue.";
+  return embeds.map((embed) => {
+    const footerText = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
+    if (footerText.includes("green button")) return embed;
+    const nextText = footerText ? `${footerText} • ${note}` : note;
+    if (typeof embed?.setFooter === "function") {
+      embed.setFooter({ text: nextText });
+    } else if (embed?.data) {
+      embed.data.footer = { ...(embed.data.footer ?? {}), text: nextText };
+    } else if (embed) {
+      embed.footer = { ...(embed.footer ?? {}), text: nextText };
+    }
+    return embed;
+  });
 }
 
 function rarityEmoji(rarity) {
@@ -151,6 +183,7 @@ export async function noodleStaffHandler(interaction) {
       components,
       ephemeral: false
     };
+    response.embeds = applyGreenButtonFooter(response.embeds, response.components);
 
     putIdempotentResult(db, { key: idempKey, userId, action: "noodle-staff", ttlSeconds: 900, result: response });
     return response;

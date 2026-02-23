@@ -258,7 +258,6 @@ function getSpecializationAlert(player) {
 function applyOwnerFooter(embed, user) {
   if (embed && user) {
     embed.setFooter({ text: ownerFooterText(user) });
-    embed.setTimestamp();
   }
   return embed;
 }
@@ -266,6 +265,39 @@ function applyOwnerFooter(embed, user) {
 function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
   const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
   return applyOwnerFooter(embed, user);
+}
+
+function hasGreenButton(components) {
+  const rows = Array.isArray(components) ? components : (components ? [components] : []);
+  for (const row of rows) {
+    const rowJson = row?.toJSON ? row.toJSON() : row;
+    const comps = row?.components ?? rowJson?.components ?? [];
+    for (const comp of comps) {
+      const style = comp?.style ?? comp?.data?.style;
+      if (style === ButtonStyle.Success) return true;
+    }
+  }
+  return false;
+}
+
+function applyGreenButtonFooter(embeds, components) {
+  if (!Array.isArray(embeds) || embeds.length === 0) return embeds;
+  if (!hasGreenButton(components)) return embeds;
+
+  const note = "Tip: Tap the green button(s) to continue.";
+  return embeds.map((embed) => {
+    const footerText = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
+    if (footerText.includes("green button")) return embed;
+    const nextText = footerText ? `${footerText} • ${note}` : note;
+    if (typeof embed?.setFooter === "function") {
+      embed.setFooter({ text: nextText });
+    } else if (embed?.data) {
+      embed.data.footer = { ...(embed.data.footer ?? {}), text: nextText };
+    } else if (embed) {
+      embed.footer = { ...(embed.footer ?? {}), text: nextText };
+    }
+    return embed;
+  });
 }
 
 function isDevAdmin(userId) {
@@ -352,7 +384,6 @@ function buildHelpPage({ page, userId, user }) {
     ? `Page ${safePage + 1}/${pages.length} • ${ownerText}`
     : `Page ${safePage + 1}/${pages.length}`;
   embed.setFooter({ text: footerText });
-  embed.setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -867,19 +898,56 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
   const accepted = {};
   const rejected = {};
 
+  const rarityRank = {
+    seasonal: 5,
+    epic: 4,
+    rare: 3,
+    uncommon: 2,
+    common: 1
+  };
+
+  const getRarityScore = (itemId) => {
+    const rarity = String(content.items?.[itemId]?.rarity ?? "common").toLowerCase();
+    return rarityRank[rarity] ?? 0;
+  };
+
+  const entriesByType = new Map();
   for (const [id, qtyRaw] of Object.entries(drops ?? {})) {
     const qty = Math.max(0, Number(qtyRaw) || 0);
     if (qty <= 0) continue;
     const type = normalizeIngredientType(id);
+    const list = entriesByType.get(type) ?? [];
+    list.push({ id, qty, rarityScore: getRarityScore(id) });
+    entriesByType.set(type, list);
+  }
+
+  for (const [type, entries] of entriesByType.entries()) {
     const remaining = remainingByType[type] ?? 0;
     if (remaining <= 0) {
-      rejected[id] = (rejected[id] ?? 0) + qty;
+      for (const entry of entries) {
+        rejected[entry.id] = (rejected[entry.id] ?? 0) + entry.qty;
+      }
       continue;
     }
-    const take = Math.min(qty, remaining);
-    if (take > 0) accepted[id] = (accepted[id] ?? 0) + take;
-    if (take < qty) rejected[id] = (rejected[id] ?? 0) + (qty - take);
-    remainingByType[type] = remaining - take;
+
+    const sorted = [...entries].sort((a, b) => {
+      if (b.rarityScore !== a.rarityScore) return b.rarityScore - a.rarityScore;
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    let remainingSlots = remaining;
+    for (const entry of sorted) {
+      if (remainingSlots <= 0) {
+        rejected[entry.id] = (rejected[entry.id] ?? 0) + entry.qty;
+        continue;
+      }
+      const take = Math.min(entry.qty, remainingSlots);
+      if (take > 0) accepted[entry.id] = (accepted[entry.id] ?? 0) + take;
+      if (take < entry.qty) rejected[entry.id] = (rejected[entry.id] ?? 0) + (entry.qty - take);
+      remainingSlots -= take;
+    }
+
+    remainingByType[type] = remainingSlots;
   }
 
   return { accepted, rejected, current, capacity, remainingByType };
@@ -1365,6 +1433,9 @@ if (finalOptions.components) {
 if (!finalOptions.embeds && rest.embeds) {
   finalOptions.embeds = rest.embeds;
 }
+if (finalOptions.embeds) {
+  finalOptions.embeds = applyGreenButtonFooter(finalOptions.embeds, finalOptions.components);
+}
 // Convert EmbedBuilder objects to JSON
 if (finalOptions.embeds) {
   finalOptions.embeds = finalOptions.embeds.map(embed => embed.toJSON?.() ?? embed);
@@ -1452,9 +1523,21 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
     .filter(Boolean)
     .slice(0, 25);
 
+  const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
+  const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
+  const marketRestockTs = Math.floor(marketRestockMs / 1000);
+  const marketRestockLine = `${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
+
   if (!opts.length) {
+    const emptyEmbed = buildMenuEmbed({
+      title: `${getIcon("cart")} Multi-buy`,
+      description: `${getIcon("cart")} No market items are available for your unlocked recipes right now.\n\n${marketRestockLine}`,
+      user: ownerUser
+    });
+    emptyEmbed.setTimestamp(new Date(marketRestockMs));
     return {
-      content: `${getIcon("cart")} No market items are available for your unlocked recipes right now.`,
+      content: " ",
+      embeds: [emptyEmbed],
       components: [noodleMainMenuRow(userId)],
       ephemeral: true
     };
@@ -1494,6 +1577,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
     })
     .filter((s) => s.short > 0);
 
+  const showShoppingList = acceptedEntries.length > 0;
   const maxShoppingLines = 8;
   const shoppingLines = shortages
     .slice(0, maxShoppingLines)
@@ -1501,27 +1585,29 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
   const shoppingSummary = shortages.length > maxShoppingLines
     ? `\n…and **${shortages.length - maxShoppingLines}** more`
     : "";
-  const shoppingList = shortages.length
-    ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
-    : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`;
+  const shoppingList = showShoppingList
+    ? (shortages.length
+      ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
+      : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`)
+    : null;
 
-  const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
-  const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
-  const marketRestockTs = Math.floor(marketRestockMs / 1000);
-  const marketRestockLine = `${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
+  const descriptionLines = [
+    "Select up to **5** items",
+    "When you’re done selecting, if on Desktop, press **Esc** to continue",
+    shoppingList ? "" : null,
+    shoppingList,
+    "",
+    marketRestockLine
+  ].filter(Boolean);
 
   const buyEmbed = buildMenuEmbed({
     title: `${getIcon("cart")} Multi-buy`,
-    description:
-      "Select up to **5** items\n" +
-      "When you’re done selecting, if on Desktop, press **Esc** to continue\n\n" +
-      `${shoppingList}\n\n${marketRestockLine}`,
+    description: descriptionLines.join("\n"),
     user: ownerUser
   });
   buyEmbed.setFooter({
     text: `Coins: ${p.coins || 0}c\n${ownerFooterText(ownerUser)}`
   });
-  buyEmbed.setTimestamp();
 
   return {
     content: " ",
@@ -1618,7 +1704,8 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   const opts = all.slice(safePage * pageSize, (safePage + 1) * pageSize).map((o) => {
     const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
     const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
-    const labelRaw = `${shortOrderId(o.order_id)} — ${rName} (${npcName})`;
+    const readyBowls = getTotalBowlsForRecipe(p, o.recipe_id);
+    const labelRaw = `${shortOrderId(o.order_id)} — ${rName} (${npcName}) (${readyBowls} ready)`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     return { label, value: String(o.order_id) };
   });
@@ -2710,6 +2797,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         ? (replyObj.components ?? [])
         : (replyObj.components ?? [noodleMainMenuRow(userId)])
     };
+    if (out.embeds) {
+      out.embeds = applyGreenButtonFooter(out.embeds, out.components);
+    }
 
     if (db) {
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
@@ -2760,7 +2850,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     questsEmbed.setFooter({
       text: `${ownerText}`
     });
-    questsEmbed.setTimestamp();
 
     return commitState({
       content: " ",
@@ -3556,6 +3645,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (sweep2.warning) parts.push(sweep2.warning, "");
 
     const remaining = (p.order_board ?? []).length;
+    const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC(now2);
+    const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
+    const hasMarketStock = Object.values(p.market_stock ?? {}).some((qty) => Number(qty) > 0);
     const ordersDayKey = p.orders_day ?? dayKeyUTC(now2);
     const nextOrdersResetMs = parseYYYYMMDD(ordersDayKey) + (24 * 60 * 60 * 1000);
     const nextOrdersResetTs = Math.floor(nextOrdersResetMs / 1000);
@@ -3597,6 +3689,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       description: parts.join("\n"),
       user: interaction.member ?? interaction.user
     });
+    if (remaining === 0 || !hasMarketStock) {
+      menuEmbed.setTimestamp(new Date(marketRestockMs));
+    }
     const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
     return commitState({
       content: " ",
@@ -4954,7 +5049,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     selectionEmbed.setFooter({
       text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
     });
-    selectionEmbed.setTimestamp();
 
     return componentCommit(interaction, {
       content: " ",
@@ -5091,7 +5185,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       selectionEmbed.setFooter({
         text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
       });
-      selectionEmbed.setTimestamp();
       return componentCommit(interaction, {
         content: " ",
         embeds: [selectionEmbed],
@@ -5250,7 +5343,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         buyEmbed.setFooter({
           text: `Coins: ${p2.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
         });
-        buyEmbed.setTimestamp();
 
         const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
         const tutorialActive = Boolean(p2.tutorial?.active && getCurrentTutorialStep(p2));

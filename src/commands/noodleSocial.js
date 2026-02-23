@@ -128,8 +128,7 @@ function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser }) {
     .setTitle(`${getIcon("leaderboard")} Server Leaderboard`)
     .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
     .setColor(theme.colors.info)
-    .setFooter({ text: `${ownerFooterText(ownerUser)}` })
-    .setTimestamp();
+    .setFooter({ text: `${ownerFooterText(ownerUser)}` });
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -168,10 +167,41 @@ function ownerFooterText(userOrMember) {
 function applyOwnerFooter(embed, user) {
   if (embed && user) {
     embed.setFooter({ text: ownerFooterText(user) });
-    embed.setTimestamp();
-    embed.setTimestamp();
   }
   return embed;
+}
+
+function hasGreenButton(components) {
+  const rows = Array.isArray(components) ? components : (components ? [components] : []);
+  for (const row of rows) {
+    const rowJson = row?.toJSON ? row.toJSON() : row;
+    const comps = row?.components ?? rowJson?.components ?? [];
+    for (const comp of comps) {
+      const style = comp?.style ?? comp?.data?.style;
+      if (style === ButtonStyle.Success) return true;
+    }
+  }
+  return false;
+}
+
+function applyGreenButtonFooter(embeds, components) {
+  if (!Array.isArray(embeds) || embeds.length === 0) return embeds;
+  if (!hasGreenButton(components)) return embeds;
+
+  const note = "Tip: Tap the green button(s) to continue.";
+  return embeds.map((embed) => {
+    const footerText = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
+    if (footerText.includes("green button")) return embed;
+    const nextText = footerText ? `${footerText} • ${note}` : note;
+    if (typeof embed?.setFooter === "function") {
+      embed.setFooter({ text: nextText });
+    } else if (embed?.data) {
+      embed.data.footer = { ...(embed.data.footer ?? {}), text: nextText };
+    } else if (embed) {
+      embed.footer = { ...(embed.footer ?? {}), text: nextText };
+    }
+    return embed;
+  });
 }
 
 /**
@@ -298,7 +328,7 @@ function partyActionRow(userId, inParty, isPartyLeader, hasActiveSharedOrder = f
       new ButtonBuilder()
         .setCustomId(`noodle-social:action:shared_order:${userId}`)
         .setLabel("Shared Order").setEmoji(getButtonEmoji("serve"))
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(hasActiveSharedOrder ? ButtonStyle.Success : ButtonStyle.Primary)
     );
   }
   
@@ -465,6 +495,9 @@ function statsViewButtons(userId) {
 async function componentCommit(interaction, opts) {
   const { ephemeral, targetMessageId, ...rest } = opts ?? {};
   const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
+  if (rest.embeds) {
+    rest.embeds = applyGreenButtonFooter(rest.embeds, rest.components);
+  }
 
   if (ephemeral) {
     if (interaction.deferred || interaction.replied) {
@@ -2170,7 +2203,6 @@ async function handleComponent(interaction) {
             )
             .setColor(canComplete ? theme.colors.success : theme.colors.warning)
             .setFooter({ text: ownerFooterText(interaction.member ?? interaction.user) });
-          embed.setTimestamp();
         }
       }
 
