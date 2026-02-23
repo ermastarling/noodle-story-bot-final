@@ -107,3 +107,22 @@ export function grantTemporaryBadge(player, badgesContent, badgeId, durationMs) 
 
   return { status: wasActive ? "refreshed" : "granted", expiresAt };
 }
+
+export function grantEventBadgesForKnownRecipes(player, content, badgesContent) {
+  if (!player || !content || !badgesContent) return [];
+  const recipes = content.recipes ?? {};
+  const known = new Set([
+    ...(player.known_recipes ?? []),
+    ...Object.keys(player.scrolls_owned ?? {})
+  ]);
+  const granted = [];
+
+  for (const recipeId of known) {
+    const recipe = recipes[recipeId];
+    if (!recipe?.event_badge_id) continue;
+    const result = grantBadge(player, badgesContent, recipe.event_badge_id);
+    if (result.status === "granted") granted.push(recipe.event_badge_id);
+  }
+
+  return granted;
+}

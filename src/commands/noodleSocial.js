@@ -7,7 +7,7 @@ import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "..
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
-import { loadContentBundle, loadSpecializationsContent } from "../content/index.js";
+import { loadBadgesContent, loadContentBundle, loadEventsContent, loadSpecializationsContent } from "../content/index.js";
 import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed } from "./noodle.js";
 import {
   grantBlessing,
@@ -36,6 +36,8 @@ import {
   BLESSING_TYPES,
   clearExpiredBlessings
 } from "../game/social.js";
+import { withEventRecipes } from "../game/events.js";
+import { grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import { hasNewShopLevelSpecialization } from "../game/specialization.js";
 import { nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
@@ -70,8 +72,11 @@ const ButtonStyle = {
 };
 
 const db = openDb();
-const content = loadContentBundle(1);
+const baseContent = loadContentBundle(1);
+const eventsContent = loadEventsContent();
+const content = withEventRecipes(baseContent, eventsContent);
 const specializationsContent = loadSpecializationsContent();
+const badgesContent = loadBadgesContent();
 
 const SHARED_ORDER_MIN_SERVINGS = 5;
 const SHARED_ORDER_REWARD = {
@@ -178,7 +183,8 @@ function hasGreenButton(components) {
     const comps = row?.components ?? rowJson?.components ?? [];
     for (const comp of comps) {
       const style = comp?.style ?? comp?.data?.style;
-      if (style === ButtonStyle.Success) return true;
+      if (style === ButtonStyle.Success || style === 3) return true;
+      if (typeof style === "string" && style.toLowerCase() === "success") return true;
     }
   }
   return false;
@@ -583,6 +589,7 @@ function ensurePlayer(serverId, userId) {
     p = getPlayer(db, serverId, userId);
   }
   clearExpiredBlessings(p);
+  grantEventBadgesForKnownRecipes(p, content, badgesContent);
   return p;
 }
 

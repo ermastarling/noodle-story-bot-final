@@ -150,7 +150,10 @@ export async function noodleStaffHandler(interaction) {
   });
   const existing = getIdempotentResult(db, idempKey);
   if (existing) {
-    return existing;
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(existing);
+    }
+    return interaction.reply(existing);
   }
 
   const lockKey = `user:${userId}`;
@@ -186,7 +189,10 @@ export async function noodleStaffHandler(interaction) {
     response.embeds = applyGreenButtonFooter(response.embeds, response.components);
 
     putIdempotentResult(db, { key: idempKey, userId, action: "noodle-staff", ttlSeconds: 900, result: response });
-    return response;
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(response);
+    }
+    return interaction.reply(response);
   });
 }
 

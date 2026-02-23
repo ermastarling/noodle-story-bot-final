@@ -67,7 +67,7 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../g
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
-import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge } from "../game/badges.js";
+import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge, grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import {
   applyCollectionProgressOnServe,
   applyCollectionProgressOnCook,
@@ -274,7 +274,8 @@ function hasGreenButton(components) {
     const comps = row?.components ?? rowJson?.components ?? [];
     for (const comp of comps) {
       const style = comp?.style ?? comp?.data?.style;
-      if (style === ButtonStyle.Success) return true;
+      if (style === ButtonStyle.Success || style === 3) return true;
+      if (typeof style === "string" && style.toLowerCase() === "success") return true;
     }
   }
   return false;
@@ -1004,6 +1005,7 @@ function ensurePlayer(serverId, userId) {
   }
   clearExpiredBlessings(p);
   ensureBadgeState(p);
+  grantEventBadgesForKnownRecipes(p, content, badgesContent);
   ensureCollectionsState(p);
   ensureSpecializationState(p);
   return p;
@@ -1705,7 +1707,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
     const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
     const readyBowls = getTotalBowlsForRecipe(p, o.recipe_id);
-    const labelRaw = `${shortOrderId(o.order_id)} — ${rName} (${npcName}) (${readyBowls} ready)`;
+    const labelRaw = `${shortOrderId(o.order_id)} — ${readyBowls} ready — ${rName} (${npcName})`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     return { label, value: String(o.order_id) };
   });
@@ -3342,9 +3344,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const tutorialOnlyForage = isTutorialStep(p, "intro_forage");
 
     const capacityNote = qtyToBuy < qty ? `\n${getIcon("basket")} Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
+    const buyEmbed = buildMenuEmbed({
+      title: `${getIcon("cart")} Purchase Complete`,
+      description: `${getIcon("cart")} Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${tutorialSuffix(p)}`,
+      user: interaction.member ?? interaction.user
+    });
     return commitState({
-      content: `${getIcon("cart")} Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${tutorialSuffix(p)}`,
-      embeds: [],
+      content: " ",
+      embeds: [buyEmbed],
       components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : undefined
     });
   }
@@ -3385,7 +3392,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: gain }, now);
 
-    return commitState({ content: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.` });
+    const sellEmbed = buildMenuEmbed({
+      title: `${getIcon("coins")} Sale Complete`,
+      description: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.`,
+      user: interaction.member ?? interaction.user
+    });
+    return commitState({ content: " ", embeds: [sellEmbed] });
   }
 
   /* ---------------- COOK ---------------- */
