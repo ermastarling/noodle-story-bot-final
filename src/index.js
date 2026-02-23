@@ -44,6 +44,7 @@ import { getIcon } from "./ui/icons.js";
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
+  const { ensureSpecializationState, getSpecializationById } = await import("./game/specialization.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
@@ -303,14 +304,18 @@ import { getIcon } from "./ui/icons.js";
     }
   }
 
-  function verifyWooSignature({ secret, signature, rawBody }) {
-    if (!secret || !signature || !rawBody) return false;
+  function verifyStripeSignature({ secret, signatureHeader, rawBody }) {
+    if (!secret || !signatureHeader || !rawBody) return false;
     try {
-      const digest = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
-      const normalized = String(signature || "").trim();
-      return timingSafeEqual(digest, normalized);
+      const parts = String(signatureHeader).split(",").map((p) => p.trim());
+      const timestamp = parts.find((p) => p.startsWith("t="))?.slice(2);
+      const signatures = parts.filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
+      if (!timestamp || !signatures.length) return false;
+      const payload = Buffer.concat([Buffer.from(String(timestamp) + "."), rawBody]);
+      const digest = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+      return signatures.some((sig) => timingSafeEqual(digest, sig));
     } catch (error) {
-      console.error("WC: Signature verify failed:", error?.message ?? error);
+      console.error("Stripe: Signature verify failed:", error?.message ?? error);
       return false;
     }
   }
@@ -333,26 +338,17 @@ import { getIcon } from "./ui/icons.js";
     };
   }
 
-  function extractWooDiscordId(order, explicitKey) {
-    const keys = [explicitKey, "discord_id", "discord_user_id", "discordId", "discord_user"].filter(Boolean);
-    const meta = Array.isArray(order?.meta_data) ? order.meta_data : [];
-    for (const key of keys) {
-      const found = meta.find((entry) => String(entry?.key || "") === key);
-      if (found?.value) return String(found.value).trim();
-    }
-    return null;
-  }
-
   function startEntitlementWebhookServer() {
     const port = Number(process.env.NOODLE_WEBHOOK_PORT || 0);
     const webhookPath = process.env.NOODLE_WEBHOOK_PATH || "/discord/entitlements";
-    const wcWebhookPath = process.env.NOODLE_WC_WEBHOOK_PATH || "/store/woocommerce";
+    const stripeWebhookPath = process.env.NOODLE_STRIPE_WEBHOOK_PATH || "/store/stripe";
+    const stripePrecheckPath = process.env.NOODLE_STRIPE_PRECHECK_PATH || "/store/stripe-precheck";
     const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
-    const wcSecret = process.env.NOODLE_WC_WEBHOOK_SECRET || "";
-    const wcDiscordIdKey = process.env.NOODLE_WC_DISCORD_ID_FIELD || "discord_id";
+    const stripeSecret = process.env.NOODLE_STRIPE_WEBHOOK_SECRET || "";
+    const stripePrecheckSecret = process.env.NOODLE_STRIPE_PRECHECK_SECRET || "";
 
     if (!port) {
-        console.log("INFO: Discord store webhook disabled (NOODLE_WEBHOOK_PORT not set).");
+      console.log("INFO: Discord store webhook disabled (NOODLE_WEBHOOK_PORT not set).");
       return;
     }
     if (!publicKeyHex) {
@@ -363,7 +359,55 @@ import { getIcon } from "./ui/icons.js";
     const server = http.createServer(async (req, res) => {
       const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
       const urlPath = requestUrl.pathname;
-      if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== wcWebhookPath)) {
+      if (req.method === "GET" && urlPath === stripePrecheckPath) {
+        if (!stripePrecheckSecret) {
+          res.writeHead(500, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "missing precheck secret" }));
+          return;
+        }
+
+        const providedSecret = requestUrl.searchParams.get("secret") || req.headers["x-noodle-secret"];
+        if (!timingSafeEqual(providedSecret, stripePrecheckSecret)) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "invalid secret" }));
+          return;
+        }
+
+        if (!db) {
+          res.writeHead(503, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "db unavailable" }));
+          return;
+        }
+
+        const discordId = requestUrl.searchParams.get("discord_id") || "";
+        const specId = requestUrl.searchParams.get("spec_id") || "";
+        if (!discordId || !specId) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "missing discord_id or spec_id" }));
+          return;
+        }
+
+        const serverId = getLatestServerIdForUser(db, discordId);
+        const spec = getSpecializationById(specializationsContent, specId);
+        const specName = spec?.name ?? null;
+
+        if (!serverId) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, unlocked: false, spec_name: specName, reason: "missing server" }));
+          return;
+        }
+
+        let player = getPlayer(db, serverId, discordId);
+        if (!player) player = newPlayerProfile(discordId);
+        const state = ensureSpecializationState(player);
+        const unlocked = state.unlocked_spec_ids.includes(specId);
+
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, unlocked, spec_name: specName }));
+        return;
+      }
+
+      if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== stripeWebhookPath)) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
         return;
@@ -373,141 +417,47 @@ import { getIcon } from "./ui/icons.js";
       try {
         rawBody = await getWebhookRawBody(req);
       } catch (error) {
-        res.writeHead(413, { "content-type": "text/plain" });
-        res.end("payload too large");
+        console.log("Webhook: Failed to read body", error?.message ?? error);
+        res.writeHead(400, { "content-type": "text/plain" });
+        res.end("bad request");
         return;
       }
 
-      const encoding = req.headers["content-encoding"];
-      const decodedBody = await decodeWebhookBody(rawBody, encoding);
-      const parsed = parseWebhookPayload(decodedBody, req.headers["content-type"]);
-      if (!parsed.ok) {
-        console.error("WEBHOOK: Invalid JSON body:", parsed.error?.message ?? parsed.error);
+      let decodedBody = rawBody;
+      try {
+        decodedBody = await decodeWebhookBody(rawBody, req.headers["content-encoding"]);
+      } catch (error) {
+        console.log("Webhook: Failed to decode body", error?.message ?? error);
+        res.writeHead(400, { "content-type": "text/plain" });
+        res.end("bad request");
+        return;
+      }
+
+      const parsedPayload = parseWebhookPayload(decodedBody, req.headers["content-type"]);
+      if (!parsedPayload.ok) {
+        console.log("Webhook: Failed to parse payload", parsedPayload.error?.message ?? parsedPayload.error);
         res.writeHead(400, { "content-type": "text/plain" });
         res.end("invalid json");
         return;
       }
-      const payload = parsed.value ?? {};
+      const payload = parsedPayload.value;
 
-      if (urlPath === webhookPath) {
-        const signature = req.headers["x-signature-ed25519"];
-        const timestamp = req.headers["x-signature-timestamp"];
-        const signatureOk = verifyDiscordSignature({
-          publicKeyHex,
-          signature,
-          timestamp,
+      if (urlPath === stripeWebhookPath) {
+        if (!stripeSecret) {
+          res.writeHead(500, { "content-type": "text/plain" });
+          res.end("missing stripe secret");
+          return;
+        }
+
+        const signatureHeader = req.headers["stripe-signature"];
+        const signatureOk = verifyStripeSignature({
+          secret: stripeSecret,
+          signatureHeader,
           rawBody
         });
         if (!signatureOk) {
-          res.writeHead(401, { "content-type": "text/plain" });
-          res.end("invalid signature");
-          return;
-        }
-
-        const { eventType, skuId, userId, guildId, entitlementId } = extractEntitlementPayload(payload);
-        console.log(
-          "WEBHOOK: Entitlement event",
-          JSON.stringify({ eventType, skuId, userId, guildId, entitlementId })
-        );
-        const normalizedEvent = eventType || "UNKNOWN";
-        if (normalizedEvent && !["ENTITLEMENT_CREATE", "ENTITLEMENT_UPDATE", "UNKNOWN"].includes(normalizedEvent)) {
-          res.writeHead(200, { "content-type": "text/plain" });
-          res.end("ignored");
-          return;
-        }
-
-        if (!skuId || !userId) {
-          res.writeHead(200, { "content-type": "text/plain" });
-          res.end("ignored");
-          return;
-        }
-
-        const specId = resolveStoreBundleSpecId(skuId);
-        if (!specId) {
-          console.log("WEBHOOK: Unknown SKU", skuId);
-          res.writeHead(200, { "content-type": "text/plain" });
-          res.end("unknown sku");
-          return;
-        }
-
-        if (!db) {
-          res.writeHead(503, { "content-type": "text/plain" });
-          res.end("db unavailable");
-          return;
-        }
-
-        const idempotencyKey = entitlementId ? `entitlement:${entitlementId}` : null;
-        if (idempotencyKey) {
-          const cached = getIdempotentResult(db, idempotencyKey);
-          if (cached) {
-            res.writeHead(200, { "content-type": "text/plain" });
-            res.end("ok");
-            return;
-          }
-        }
-
-        const serverId = guildId || getLatestServerIdForUser(db, userId);
-        if (!serverId) {
-          console.log("WEBHOOK: Missing server for user", userId);
-          res.writeHead(202, { "content-type": "text/plain" });
-          res.end("missing server");
-          return;
-        }
-
-        let player = getPlayer(db, serverId, userId);
-        if (!player) player = newPlayerProfile(userId);
-
-        const result = grantStoreBundle({
-          player,
-          specId,
-          specializationsContent,
-          decorSetsContent,
-          coins: 10000
-        });
-        console.log(
-          "WEBHOOK: Grant result",
-          JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
-        );
-
-        if (result.ok) {
-          upsertPlayer(db, serverId, userId, player, null, player.schema_version);
-          if (idempotencyKey) {
-            putIdempotentResult(db, {
-              key: idempotencyKey,
-              userId,
-              action: "entitlement_grant",
-              ttlSeconds: 60 * 60 * 24 * 30,
-              result: { ok: true, specId }
-            });
-          }
-        }
-
-        res.writeHead(200, { "content-type": "text/plain" });
-        res.end(result.ok || result.reason === "Already unlocked." ? "ok" : "ignored");
-        return;
-      }
-
-      if (urlPath === wcWebhookPath) {
-        if (!wcSecret) {
-          res.writeHead(500, { "content-type": "text/plain" });
-          res.end("missing wc secret");
-          return;
-        }
-
-        const signature = req.headers["x-wc-webhook-signature"];
-        const providedSecret = requestUrl.searchParams.get("secret") || req.headers["x-noodle-secret"];
-        const signatureOk = signature
-          ? verifyWooSignature({ secret: wcSecret, signature, rawBody })
-          : (providedSecret ? timingSafeEqual(providedSecret, wcSecret) : false);
-        if (!signatureOk) {
-          if (!signature) {
-            const headerKeys = Object.keys(req.headers || {}).sort();
-            console.log("WC: Missing signature header", JSON.stringify({ headers: headerKeys }));
-          }
-          console.log("WC: Invalid signature", {
-            signature: signature ? String(signature).slice(0, 8) : null,
-            topic: req.headers["x-wc-webhook-topic"] || null,
-            deliveryId: req.headers["x-wc-webhook-delivery-id"] || null
+          console.log("Stripe: Invalid signature", {
+            signature: signatureHeader ? String(signatureHeader).slice(0, 12) : null
           });
           res.writeHead(401, { "content-type": "text/plain" });
           res.end("invalid signature");
@@ -520,34 +470,31 @@ import { getIcon } from "./ui/icons.js";
           return;
         }
 
-        const order = payload;
-        const orderId = order?.id ?? null;
-        const status = String(order?.status || "").toLowerCase();
-        if (!orderId && order?.webhook_id) {
-          res.writeHead(200, { "content-type": "text/plain" });
-          res.end("ok");
-          return;
-        }
-        if (status !== "completed") {
-          console.log("WC: Ignored order with status", status, orderId);
+        const stripeEvent = payload;
+        if (stripeEvent?.type !== "checkout.session.completed") {
           res.writeHead(200, { "content-type": "text/plain" });
           res.end("ignored");
           return;
         }
-        const discordId = extractWooDiscordId(order, wcDiscordIdKey);
-        const lineItems = Array.isArray(order?.line_items) ? order.line_items : [];
+
+        const session = stripeEvent?.data?.object ?? {};
+        const sessionId = session?.id ?? null;
+        const metadata = session?.metadata ?? {};
+        const discordId = metadata?.discord_id || session?.client_reference_id || null;
+        const specId = metadata?.spec_id || null;
+
         console.log(
-          "WC: Order event",
-          JSON.stringify({ orderId, discordId, lineItems: lineItems.length })
+          "Stripe: Checkout completed",
+          JSON.stringify({ sessionId, discordId, specId })
         );
 
-        if (!discordId || !lineItems.length) {
+        if (!discordId || !specId) {
           res.writeHead(202, { "content-type": "text/plain" });
-          res.end("missing discord id or items");
+          res.end("missing discord id or spec id");
           return;
         }
 
-        const idempotencyKey = orderId ? `wc_order:${orderId}` : null;
+        const idempotencyKey = sessionId ? `stripe_session:${sessionId}` : null;
         if (idempotencyKey) {
           const cached = getIdempotentResult(db, idempotencyKey);
           if (cached) {
@@ -559,7 +506,7 @@ import { getIcon } from "./ui/icons.js";
 
         const serverId = getLatestServerIdForUser(db, discordId);
         if (!serverId) {
-          console.log("WC: Missing server for user", discordId);
+          console.log("Stripe: Missing server for user", discordId);
           res.writeHead(202, { "content-type": "text/plain" });
           res.end("missing server");
           return;
@@ -568,41 +515,132 @@ import { getIcon } from "./ui/icons.js";
         let player = getPlayer(db, serverId, discordId);
         if (!player) player = newPlayerProfile(discordId);
 
-        const grants = [];
-        for (const item of lineItems) {
-          const specId = String(item?.sku || "").trim();
-          if (!specId) continue;
-          const result = grantStoreBundle({
-            player,
-            specId,
-            specializationsContent,
-            decorSetsContent,
-            coins: 10000
-          });
-          grants.push({ specId, ok: result.ok, reason: result.reason });
+        const result = grantStoreBundle({
+          player,
+          specId,
+          specializationsContent,
+          decorSetsContent,
+          coins: 10000
+        });
+        console.log(
+          "Stripe: Grant result",
+          JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, discordId })
+        );
+
+        if (result.ok) {
+          upsertPlayer(db, serverId, discordId, player, null, player.schema_version);
+          if (idempotencyKey) {
+            putIdempotentResult(db, {
+              key: idempotencyKey,
+              userId: discordId,
+              action: "stripe_checkout",
+              ttlSeconds: 60 * 60 * 24 * 30,
+              result: { ok: true, specId }
+            });
+          }
         }
 
-        upsertPlayer(db, serverId, discordId, player, null, player.schema_version);
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end(result.ok || result.reason === "Already unlocked." ? "ok" : "ignored");
+        return;
+      }
+
+      const signature = req.headers["x-signature-ed25519"];
+      const timestamp = req.headers["x-signature-timestamp"];
+      const signatureOk = verifyDiscordSignature({
+        publicKeyHex,
+        signature,
+        timestamp,
+        rawBody
+      });
+      if (!signatureOk) {
+        if (!signature || !timestamp) {
+          const headerKeys = Object.keys(req.headers || {}).sort();
+          console.log("Discord: Missing signature headers", JSON.stringify({ headers: headerKeys }));
+        }
+        console.log("Discord: Invalid signature", {
+          signature: signature ? String(signature).slice(0, 8) : null
+        });
+        res.writeHead(401, { "content-type": "text/plain" });
+        res.end("invalid signature");
+        return;
+      }
+
+      if (!db) {
+        res.writeHead(503, { "content-type": "text/plain" });
+        res.end("db unavailable");
+        return;
+      }
+
+      const { eventType, skuId, userId, guildId, entitlementId } = extractEntitlementPayload(payload);
+      if (eventType !== "ENTITLEMENT_CREATE") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("ignored");
+        return;
+      }
+
+      const specId = resolveStoreBundleSpecId(skuId);
+      if (!specId || !userId) {
+        res.writeHead(202, { "content-type": "text/plain" });
+        res.end("missing sku or user");
+        return;
+      }
+
+      const idempotencyKey = entitlementId
+        ? `discord_entitlement:${entitlementId}`
+        : (userId && skuId ? `discord_entitlement:${userId}:${skuId}` : null);
+      if (idempotencyKey) {
+        const cached = getIdempotentResult(db, idempotencyKey);
+        if (cached) {
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("ok");
+          return;
+        }
+      }
+
+      const serverId = guildId || getLatestServerIdForUser(db, userId);
+      if (!serverId) {
+        console.log("Discord: Missing server for user", userId);
+        res.writeHead(202, { "content-type": "text/plain" });
+        res.end("missing server");
+        return;
+      }
+
+      let player = getPlayer(db, serverId, userId);
+      if (!player) player = newPlayerProfile(userId);
+
+      const result = grantStoreBundle({
+        player,
+        specId,
+        specializationsContent,
+        decorSetsContent,
+        coins: 10000
+      });
+      console.log(
+        "Discord: Grant result",
+        JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
+      );
+
+      if (result.ok) {
+        upsertPlayer(db, serverId, userId, player, null, player.schema_version);
         if (idempotencyKey) {
           putIdempotentResult(db, {
             key: idempotencyKey,
-            userId: discordId,
-            action: "wc_order",
+            userId,
+            action: "discord_entitlement",
             ttlSeconds: 60 * 60 * 24 * 30,
-            result: { ok: true, grants }
+            result: { ok: true, specId }
           });
         }
-
-        console.log("WC: Grant result", JSON.stringify(grants));
-        res.writeHead(200, { "content-type": "text/plain" });
-        res.end("ok");
-        return;
       }
+
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end(result.ok || result.reason === "Already unlocked." ? "ok" : "ignored");
     });
 
     server.listen(port, () => {
       console.log(`OK: Discord store webhook listening on ${port}${webhookPath}`);
-      console.log(`OK: WooCommerce webhook listening on ${port}${wcWebhookPath}`);
+      console.log(`OK: Stripe webhook listening on ${port}${stripeWebhookPath}`);
     });
   }
 
