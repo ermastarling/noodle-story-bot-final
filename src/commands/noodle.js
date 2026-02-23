@@ -908,7 +908,8 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
   };
 
   const getRarityScore = (itemId) => {
-    const rarity = String(content.items?.[itemId]?.rarity ?? "common").toLowerCase();
+    const item = content.items?.[itemId] ?? {};
+    const rarity = String(item.tier ?? item.rarity ?? "common").toLowerCase();
     return rarityRank[rarity] ?? 0;
   };
 

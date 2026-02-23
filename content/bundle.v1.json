@@ -628,7 +628,7 @@
     },
     "ginger_soft_noodles": {
       "recipe_id": "ginger_soft_noodles",
-      "name": "Ginger Broth with Soft Noodles",
+      "name": "Ginger Broth w/ Soft Noodles",
       "tier": "uncommon",
       "season": null,
       "ingredients": [
@@ -901,7 +901,7 @@
     },
     "citrus_broth_thin_noodles": {
       "recipe_id": "citrus_broth_thin_noodles",
-      "name": "Citrus Broth with Thin Noodles",
+      "name": "Citrus Broth w/ Thin Noodles",
       "tier": "rare",
       "season": null,
       "ingredients": [
