@@ -128,7 +128,8 @@ function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser }) {
     .setTitle(`${getIcon("leaderboard")} Server Leaderboard`)
     .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
     .setColor(theme.colors.info)
-    .setFooter({ text: `${ownerFooterText(ownerUser)}` });
+    .setFooter({ text: `${ownerFooterText(ownerUser)}` })
+    .setTimestamp();
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -167,6 +168,8 @@ function ownerFooterText(userOrMember) {
 function applyOwnerFooter(embed, user) {
   if (embed && user) {
     embed.setFooter({ text: ownerFooterText(user) });
+    embed.setTimestamp();
+    embed.setTimestamp();
   }
   return embed;
 }
@@ -614,7 +617,7 @@ async function handleParty(interaction) {
       const result = createParty(db, serverId, userId, cleanedName);
 
       const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("level_up")} Party Created!`)
+        .setTitle(`${getIcon("party")} Party Created!`)
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
           { name: "Party ID", value: `${formatPartyId(result.partyId)}`, inline: true },
@@ -640,7 +643,7 @@ async function handleParty(interaction) {
         const result = joinParty(db, partyId, userId);
         
         const embed = new EmbedBuilder()
-          .setTitle(`${getIcon("confetti")} Joined Party!`)
+          .setTitle(`${getIcon("party")} Joined Party!`)
           .setDescription(`You've joined the party **${result.partyName}**`)
           .setColor(theme.colors.success);
 
@@ -1178,7 +1181,7 @@ async function handleComponent(interaction) {
           const result = createParty(db, serverId, userId, cleanedName);
 
           const embed = new EmbedBuilder()
-            .setTitle(`${getIcon("level_up")} Party Created!`)
+            .setTitle(`${getIcon("party")} Party Created!`)
             .setDescription(`You've created the party **${result.partyName}**`)
             .addFields(
               { name: "Party ID", value: `\`\`\`${formatPartyId(result.partyId)}\`\`\``, inline: true },
@@ -2167,6 +2170,7 @@ async function handleComponent(interaction) {
             )
             .setColor(canComplete ? theme.colors.success : theme.colors.warning)
             .setFooter({ text: ownerFooterText(interaction.member ?? interaction.user) });
+          embed.setTimestamp();
         }
       }
 

@@ -140,6 +140,9 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
 export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, activeEventId = null) {
   const dayKey = dayKeyUTC();
   const orderSeedVersion = 3; // Increment when seed logic changes
+  if (playerState.orders_depleted_day && playerState.orders_depleted_day !== dayKey) {
+    playerState.orders_depleted_day = null;
+  }
   
   // Include temporary recipes in pool (B5: Order Board Guarantee)
   const permanentRecipes = playerState.known_recipes || [];
@@ -152,6 +155,10 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
   if (playerState.orders_day === dayKey 
       && playerState.order_seed_version === orderSeedVersion
       && Array.isArray(playerState.order_board)) {
+    if (playerState.order_board.length === 0) {
+      playerState.orders_depleted_day = dayKey;
+      return playerState;
+    }
     // Regenerate if no orders match the player's current recipe pool
     const hasPoolOrder = playerState.order_board.some((o) => playerRecipePool.has(o.recipe_id));
     if (hasPoolOrder) return playerState;

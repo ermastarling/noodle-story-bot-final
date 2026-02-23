@@ -48,7 +48,7 @@ import {
   PROFILE_BADGES_SHOWN,
   PROFILE_COLLECTIONS_SHOWN
 } from "../constants.js";
-import { nowTs } from "../util/time.js";
+import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
@@ -65,7 +65,6 @@ import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { getActiveEvent, getActiveEventEffects, getEventWindow, withEventRecipes } from "../game/events.js";
 import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
-import { dayKeyUTC } from "../util/time.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge } from "../game/badges.js";
@@ -162,7 +161,7 @@ const db = openDb();
 const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
-const DISCORD_STORE_URL = "https://discord.com/discovery/applications/1460058511802105976/store";
+const DISCORD_STORE_URL = "https://noodlestory.lol/home/shop/";
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -259,6 +258,7 @@ function getSpecializationAlert(player) {
 function applyOwnerFooter(embed, user) {
   if (embed && user) {
     embed.setFooter({ text: ownerFooterText(user) });
+    embed.setTimestamp();
   }
   return embed;
 }
@@ -352,6 +352,7 @@ function buildHelpPage({ page, userId, user }) {
     ? `Page ${safePage + 1}/${pages.length} • ${ownerText}`
     : `Page ${safePage + 1}/${pages.length}`;
   embed.setFooter({ text: footerText });
+  embed.setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -1504,17 +1505,23 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
     ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
     : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`;
 
+  const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
+  const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
+  const marketRestockTs = Math.floor(marketRestockMs / 1000);
+  const marketRestockLine = `${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
+
   const buyEmbed = buildMenuEmbed({
     title: `${getIcon("cart")} Multi-buy`,
     description:
       "Select up to **5** items\n" +
       "When you’re done selecting, if on Desktop, press **Esc** to continue\n\n" +
-      `${shoppingList}`,
+      `${shoppingList}\n\n${marketRestockLine}`,
     user: ownerUser
   });
   buyEmbed.setFooter({
     text: `Coins: ${p.coins || 0}c\n${ownerFooterText(ownerUser)}`
   });
+  buyEmbed.setTimestamp();
 
   return {
     content: " ",
@@ -2753,6 +2760,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     questsEmbed.setFooter({
       text: `${ownerText}`
     });
+    questsEmbed.setTimestamp();
 
     return commitState({
       content: " ",
@@ -3548,15 +3556,22 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (sweep2.warning) parts.push(sweep2.warning, "");
 
     const remaining = (p.order_board ?? []).length;
+    const ordersDayKey = p.orders_day ?? dayKeyUTC(now2);
+    const nextOrdersResetMs = parseYYYYMMDD(ordersDayKey) + (24 * 60 * 60 * 1000);
+    const nextOrdersResetTs = Math.floor(nextOrdersResetMs / 1000);
+    const nextOrdersResetText = `<t:${nextOrdersResetTs}:f> (<t:${nextOrdersResetTs}:R>)`;
     if (remaining > 0) {
       parts.push(
         "**Today’s Orders**",
         `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
       );
     } else if (acceptedLines.length) {
-      parts.push(`${getIcon("orders")} **Today’s Orders**`, "No new orders left today. Finish your accepted ones and come back tomorrow.");
+      parts.push(
+        `${getIcon("orders")} **Today’s Orders**`,
+        `No new orders left today. Finish your accepted ones and come back ${nextOrdersResetText}.`
+      );
     } else {
-      parts.push(`${getIcon("level_up")} You’ve completed all of today’s orders! Come back tomorrow for more.`);
+      parts.push(`${getIcon("level_up")} You’ve completed all of today’s orders! New orders arrive ${nextOrdersResetText}.`);
     }
 
 
@@ -4245,6 +4260,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
     }
 
+    if (servedCount > 0 && Array.isArray(p.order_board) && p.order_board.length === 0) {
+      p.orders_depleted_day = dayKeyUTC();
+    }
+
     if (!servedCount) {
       const failEmbed = buildMenuEmbed({
         title: `${getIcon("serve")} Orders Served`,
@@ -4286,6 +4305,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       delete p.orders_day; // Force regeneration by clearing day marker
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+      results.push(`${getIcon("orders")} Fresh orders are now on today’s board.`);
     }
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
@@ -4934,6 +4954,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     selectionEmbed.setFooter({
       text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
     });
+    selectionEmbed.setTimestamp();
 
     return componentCommit(interaction, {
       content: " ",
@@ -5070,6 +5091,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       selectionEmbed.setFooter({
         text: `Coins: ${p.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
       });
+      selectionEmbed.setTimestamp();
       return componentCommit(interaction, {
         content: " ",
         embeds: [selectionEmbed],
@@ -5228,6 +5250,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         buyEmbed.setFooter({
           text: `Coins: ${p2.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
         });
+        buyEmbed.setTimestamp();
 
         const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
         const tutorialActive = Boolean(p2.tutorial?.active && getCurrentTutorialStep(p2));

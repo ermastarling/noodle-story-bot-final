@@ -29,6 +29,11 @@ const DEFAULT_MAX_INACTIVE_DAYS = 30;
 const db = openDb();
 let isRunning = false;
 
+function ownerFooterText(user) {
+  const tag = user?.tag ?? user?.username ?? "Unknown";
+  return `Owner: ${tag}`;
+}
+
 function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   const row = new ActionRowBuilder();
   if (channelUrl) {
@@ -48,16 +53,19 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function buildReminderEmbed({ guildName, channelLine }) {
+function buildReminderEmbed({ guildName, channelLine, user }) {
   return new EmbedBuilder()
     .setTitle(`${getIcon("mail")} Daily Reward Ready`)
     .setDescription([
       `Your daily reward is ready in **${guildName}**!`,
+      `${getIcon("orders")} New orders are on the board today, come back to serve your regulars!`,
       "",
       channelLine,
       "\nDisable reminders below."
     ].filter(Boolean).join("\n"))
-    .setColor(theme.colors.primary);
+    .setColor(theme.colors.primary)
+    .setFooter({ text: ownerFooterText(user) })
+    .setTimestamp();
 }
 
 function normalizeNotifications(player) {
@@ -122,7 +130,7 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
         const channelLine = channelId
           ? `Last kitchen: [Open channel](${channelUrl}).`
           : null;
-        const embed = buildReminderEmbed({ guildName: lastGuildName, channelLine });
+        const embed = buildReminderEmbed({ guildName: lastGuildName, channelLine, user });
         const components = buildDmReminderComponents({
           userId: row.user_id,
           serverId,
