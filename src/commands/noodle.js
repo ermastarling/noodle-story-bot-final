@@ -682,8 +682,7 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || (plot.remaining ?? 0) <= 0);
 
   const description = [
-    `${getIcon("tree")} Plots unlocked: **${getGardenPlotCount(player, combinedEffects)}**` +
-      ` \n(plant with 1 seed + 1 compost bag, yields **${PLOT_YIELD}** items)`,
+    `${getIcon("tree")} Plots unlocked: **${getGardenPlotCount(player, combinedEffects)}**`,
     `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),
     `**Plots**\n${plotsSection}`,
     `**Seeds (unlimited)**\n${seedSection}`,
@@ -740,7 +739,8 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const embed = buildMenuEmbed({
     title: `${getIcon("tree")} Garden`,
     description,
-    user
+    user,
+    color: theme.colors.success
   });
 
   return {
@@ -798,8 +798,7 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 function noodleRecipesMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:garden:${userId}`).setLabel("Garden").setEmoji(getButtonEmoji("tree")).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -902,6 +901,7 @@ return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:garden:${userId}`).setLabel("Garden").setEmoji(getButtonEmoji("tree")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
 );
 }
@@ -3407,7 +3407,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const cooldownEmbed = buildMenuEmbed({
         title: `${getIcon("cooldown")} Forage Cooldown`,
         description: `You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`,
-        user: interaction.member ?? interaction.user
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
       });
       return commitState({
         content: " ",
@@ -3496,7 +3497,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const forageFullEmbed = buildMenuEmbed({
         title: `${getIcon("forage")} Forage`,
         description: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
-        user: interaction.member ?? interaction.user
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
       });
       return commitState({
         content: " ",
@@ -3517,7 +3519,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const forageFullEmbed = buildMenuEmbed({
         title: `${getIcon("forage")} Forage`,
         description: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`,
-        user: interaction.member ?? interaction.user
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
       });
       return commitState({
         content: " ",
@@ -3581,7 +3584,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const forageEmbed = buildMenuEmbed({
       title: `${getIcon("forage")} Forage`,
       description: `${header}${lines.join("\n")}${rejectedText}${tutorialSuffix(p)}`,
-      user: interaction.member ?? interaction.user
+      user: interaction.member ?? interaction.user,
+      color: theme.colors.success
     });
     forageEmbed.setDescription(description);
     const components = isTutorialStep(p, "intro_cook")
@@ -3605,7 +3609,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const lockedEmbed = buildMenuEmbed({
         title: `${getIcon("tree")} Garden`,
         description: `${getIcon("lock")} Reach shop level 25 to unlock your garden and start collecting seeds.`,
-        user: interaction.member ?? interaction.user
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
       });
       const navRows = [
         noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
@@ -3674,7 +3679,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const description = roomBags <= 0
         ? `${getIcon("basket")} Compost storage is full (${compostCount}/${compostCap}).`
         : `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
-      const embed = buildMenuEmbed({ title: `${getIcon("tree")} Garden`, description, user: interaction.member ?? interaction.user });
+      const embed = buildMenuEmbed({ title: `${getIcon("tree")} Garden`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
       return commitState({ content: " ", embeds: [embed], components: navRows });
     }
 
@@ -3682,7 +3687,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const embed = buildMenuEmbed({
         title: `${getIcon("tree")} Garden`,
         description: `${getIcon("info")} Enter at least 1 bag (max ${maxCraftable}).`,
-        user: interaction.member ?? interaction.user
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
       });
       return commitState({ content: " ", embeds: [embed], components: navRows, ephemeral: true });
     }
@@ -3729,7 +3735,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (remaining > 0) {
       const description = `${getIcon("warning")} Not enough ${source === "fresh" ? "fresh forageables" : source === "spoiled" ? "spoiled items" : "items"} to craft ${bagsToMake} bag(s).`;
-      const embed = buildMenuEmbed({ title: `${getIcon("tree")} Garden`, description, user: interaction.member ?? interaction.user });
+      const embed = buildMenuEmbed({ title: `${getIcon("tree")} Garden`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
       return commitState({ content: " ", embeds: [embed], components: navRows, ephemeral: true });
     }
 
@@ -3750,7 +3756,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const embed = buildMenuEmbed({
       title: `${getIcon("tree")} Garden`,
       description,
-      user: interaction.member ?? interaction.user
+      user: interaction.member ?? interaction.user,
+      color: theme.colors.success
     });
 
     return commitState({
