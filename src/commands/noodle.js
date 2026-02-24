@@ -5485,7 +5485,7 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const components = [view.rows.navRow, selectRow, actionRow, backRow, noodleMainMenuRowNoForage(userId)];
+  const components = [view.rows.navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
     embeds: [view.embed],
@@ -5563,7 +5563,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const components = [view.rows.navRow, selectRow, actionRow, backRow, noodleMainMenuRowNoForage(userId)];
+  const components = [view.rows.navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
     embeds: [view.embed],
@@ -5711,7 +5711,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   const components = [view.rows.navRow];
   if (selectRow) components.push(selectRow);
-  components.push(actionRow, backRow, noodleMainMenuRowNoForage(userId));
+  components.push(actionRow, backRow);
 
   return componentCommit(interaction, {
     content: " ",
