@@ -5601,15 +5601,16 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   const allowedSpoiled = {};
   const allowedFresh = {};
+  const unitsPerItemCap = amountRequested * COMPOST_PER_BAG;
   for (const raw of selections) {
     const [source, ...idParts] = String(raw).split(":");
     const itemId = idParts.join(":");
     if (!itemId) continue;
     if (source === "spoiled" && (garden.spoiled?.[itemId] || 0) > 0) {
-      allowedSpoiled[itemId] = Math.max(0, Math.min(garden.spoiled[itemId] || 0, amountRequested));
+      allowedSpoiled[itemId] = Math.max(0, Math.min(garden.spoiled[itemId] || 0, unitsPerItemCap));
     }
     if (source === "fresh" && (p.inv_ingredients?.[itemId] || 0) > 0) {
-      allowedFresh[itemId] = Math.max(0, Math.min(p.inv_ingredients[itemId] || 0, amountRequested));
+      allowedFresh[itemId] = Math.max(0, Math.min(p.inv_ingredients[itemId] || 0, unitsPerItemCap));
     }
   }
 
@@ -5662,6 +5663,10 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   garden.compost_bags = (garden.compost_bags || 0) + bagsToMake;
   cached.ts = Date.now();
   compostSelectionCache.set(messageId, cached);
+
+  if (db) {
+    upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+  }
 
   const formatUsage = (label, usedMap) => {
     const entries = Object.entries(usedMap || {}).filter(([, qty]) => qty > 0);
