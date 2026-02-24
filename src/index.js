@@ -722,16 +722,17 @@ import { getIcon } from "./ui/icons.js";
     if (!alreadyAck && (isBtn || isSelect)) {
       if (isNoodle || isNoodleSocial || isNoodleStaff || isNoodleUpgrades) {
         // Check if this button/select will show a modal
-        const willShowModal = cid?.includes("pick:cook_select:") ||
-                cid?.includes("action:party_create") ||
-                cid?.includes("action:party_join") ||
-                cid?.includes("action:party_invite") ||
-                cid?.includes("action:tip") ||
-                cid?.includes("action:bless") ||
-          cid?.includes("profile:edit_shop_name") ||
-          cid?.includes("profile:edit_tagline") ||
-                cid?.includes("action:shared_order_contribute") ||
-                cid?.includes("select:shared_order_ingredient");
+          const willShowModal = cid?.includes("pick:cook_select:") ||
+              cid?.includes("action:party_create") ||
+              cid?.includes("action:party_join") ||
+              cid?.includes("action:party_invite") ||
+              cid?.includes("action:tip") ||
+              cid?.includes("action:bless") ||
+              cid?.includes("action:compost") ||
+            cid?.includes("profile:edit_shop_name") ||
+            cid?.includes("profile:edit_tagline") ||
+              cid?.includes("action:shared_order_contribute") ||
+              cid?.includes("select:shared_order_ingredient");
         
         // Buttons that update message immediately without database operations
         const skipDeferButtons = cid?.includes("action:shared_order_confirm_complete") ||

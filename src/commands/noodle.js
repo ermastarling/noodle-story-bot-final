@@ -619,7 +619,7 @@ function noodleForageGardenRow(userId, {
       .setCustomId(`noodle:action:harvest:${userId}`)
       .setLabel("Harvest All")
       .setEmoji(getButtonEmoji("basket"))
-      .setStyle(ButtonStyle.Success)
+      .setStyle(canHarvest ? ButtonStyle.Success : ButtonStyle.Secondary)
       .setDisabled(!canHarvest)
   );
 
@@ -1626,20 +1626,7 @@ return interaction.reply(options);
 // Convert components to JSON if they're builder objects
 let finalOptions = { ...options };
 if (finalOptions.components) {
-  finalOptions.components = finalOptions.components.map(row => {
-    if (row.components) {
-      const converted = { type: 1, components: row.components.map(comp => {
-        const json = comp.toJSON?.() ?? comp;
-        if (json.options) {
-          json.options.forEach((opt, i) => {
-          });
-        }
-        return json;
-      })};
-      return converted;
-    }
-    return row;
-  });
+  finalOptions.components = normalizeComponents(finalOptions.components);
 }
 
 // Ensure embeds are included in finalOptions and converted to JSON
