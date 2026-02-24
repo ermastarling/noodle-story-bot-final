@@ -10,6 +10,7 @@ import { nowTs, dayKeyUTC } from "../util/time.js";
 import { makeStreamRng } from "../util/rng.js";
 import { getIcon } from "../ui/icons.js";
 import { getForageMaxForItem } from "./forage.js";
+import { isGardenUnlocked, stashSpoiledIngredient } from "./garden.js";
 
 // Inactivity thresholds (in milliseconds)
 const INACTIVE_7D_MS = 7 * 24 * 60 * 60 * 1000;
@@ -101,6 +102,9 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
         const amountToSpoil = getSpoilageAmount(itemId, qty, effects, tierMultiplier);
         inventory[itemId] = Math.max(0, (inventory[itemId] || 0) - amountToSpoil);
         spoiled[itemId] = (spoiled[itemId] || 0) + amountToSpoil;
+        if (isGardenUnlocked(player)) {
+          stashSpoiledIngredient(player, itemId, amountToSpoil);
+        }
       }
     }
   }

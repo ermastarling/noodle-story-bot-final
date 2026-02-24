@@ -1,12 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let Database = null;
+let SQLITE_AVAILABLE = true;
+try {
+  Database = (await import("better-sqlite3")).default;
+} catch (err) {
+  SQLITE_AVAILABLE = false;
+}
+
+const dbTestOpts = { skip: !SQLITE_AVAILABLE };
 
 import {
   grantBlessing,
@@ -32,6 +41,7 @@ import {
 import { nowTs } from "../src/util/time.js";
 
 function setupTestDb() {
+  if (!SQLITE_AVAILABLE) throw new Error("better-sqlite3 not available");
   const db = new Database(":memory:");
   const schemaPath = path.join(__dirname, "..", "src", "db", "schema.sql");
   const schema = fs.readFileSync(schemaPath, "utf-8");
@@ -116,7 +126,7 @@ test("Blessing: clearExpiredBlessings removes expired blessings", () => {
   assert.equal(result.social.active_blessing, null);
 });
 
-test("Party: create party successfully", () => {
+test("Party: create party successfully", dbTestOpts, () => {
   const db = setupTestDb();
   const result = createParty(db, "server1", "leader1", "Test Party");
   
@@ -132,7 +142,7 @@ test("Party: create party successfully", () => {
   db.close();
 });
 
-test("Party: join party successfully", () => {
+test("Party: join party successfully", dbTestOpts, () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
   
@@ -145,7 +155,7 @@ test("Party: join party successfully", () => {
   db.close();
 });
 
-test("Party: cannot join full party", () => {
+test("Party: cannot join full party", dbTestOpts, () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
   
@@ -161,7 +171,7 @@ test("Party: cannot join full party", () => {
   db.close();
 });
 
-test("Party: leave party successfully", () => {
+test("Party: leave party successfully", dbTestOpts, () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
   joinParty(db, "server1", partyId, "user2");
@@ -175,7 +185,7 @@ test("Party: leave party successfully", () => {
   db.close();
 });
 
-test("Party: leader leaving promotes another member", () => {
+test("Party: leader leaving promotes another member", dbTestOpts, () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
   joinParty(db, "server1", partyId, "user2");
@@ -189,7 +199,7 @@ test("Party: leader leaving promotes another member", () => {
   db.close();
 });
 
-test("Party: getUserActiveParty returns correct party", () => {
+test("Party: getUserActiveParty returns correct party", dbTestOpts, () => {
   const db = setupTestDb();
   const { partyId } = createParty(db, "server1", "leader1", "Test Party");
   
@@ -203,7 +213,7 @@ test("Party: getUserActiveParty returns correct party", () => {
   db.close();
 });
 
-test("Tip: transfer coins successfully", () => {
+test("Tip: transfer coins successfully", dbTestOpts, () => {
   const db = setupTestDb();
   const sender = mockPlayer("user1", 100);
   const receiver = mockPlayer("user2", 50);
@@ -219,7 +229,7 @@ test("Tip: transfer coins successfully", () => {
   db.close();
 });
 
-test("Tip: cannot tip self", () => {
+test("Tip: cannot tip self", dbTestOpts, () => {
   const db = setupTestDb();
   const player = mockPlayer("user1", 100);
   
@@ -230,7 +240,7 @@ test("Tip: cannot tip self", () => {
   db.close();
 });
 
-test("Tip: insufficient coins throws error", () => {
+test("Tip: insufficient coins throws error", dbTestOpts, () => {
   const db = setupTestDb();
   const sender = mockPlayer("user1", 10);
   const receiver = mockPlayer("user2", 50);
@@ -242,7 +252,7 @@ test("Tip: insufficient coins throws error", () => {
   db.close();
 });
 
-test("Tip: validates amount range", () => {
+test("Tip: validates amount range", dbTestOpts, () => {
   const db = setupTestDb();
   const sender = mockPlayer("user1", 100);
   const receiver = mockPlayer("user2", 50);
@@ -258,7 +268,7 @@ test("Tip: validates amount range", () => {
   db.close();
 });
 
-test("Tip: getUserTipStats returns correct statistics", () => {
+test("Tip: getUserTipStats returns correct statistics", dbTestOpts, () => {
   const db = setupTestDb();
   const sender = mockPlayer("user1", 200);
   const receiver = mockPlayer("user2", 50);

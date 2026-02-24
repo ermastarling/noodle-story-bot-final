@@ -110,6 +110,9 @@ function formatEffects(effects) {
       const divisor = value > 0 ? Math.round(1 / value) : 0;
       lines.push(`+1 bowl per ${divisor} prep levels`);
     }
+    else if (key === "garden_plot_bonus") lines.push(`+${value} garden plots`);
+    else if (key === "compost_capacity") lines.push(`+${value} compost bag cap`);
+    else if (key === "garden_seed_chance") lines.push(`+${(value * 100).toFixed(1)}% seed find chance`);
   }
   return lines.join(", ");
 }
@@ -141,6 +144,7 @@ function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
     { id: "staff", label: "Staff", icon: "staff_management" },
     { id: "kitchen", label: "Kitchen", icon: "category_kitchen" },
     { id: "storage", label: "Storage", icon: "category_storage" },
+    { id: "garden", label: "Garden", icon: "tree" },
     { id: "service", label: "Service", icon: "category_service" },
     { id: "ambience", label: "Ambiance", icon: "category_ambience" }
   ];

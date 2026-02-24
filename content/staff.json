@@ -92,14 +92,15 @@
     "forager": {
       "staff_id": "forager",
       "name": "Forager",
-      "description": "Knows the best spots for wild ingredients, adds +1 forage item per level.",
+      "description": "Knows the best spots for wild ingredients, adds +1 forage item per level and improves seed finds.",
       "category": "support",
       "rarity": "common",
       "max_level": 20,
       "base_cost": 100,
       "cost_scaling": 1.22,
       "effects_per_level": {
-        "forage_bonus_items": 1
+        "forage_bonus_items": 1,
+        "forage_seed_chance": 0.01
       }
     },
     "merchant": {

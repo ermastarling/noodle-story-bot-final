@@ -87,7 +87,10 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     npc_variety_bonus: 0,
     staff_capacity: 0,
     staff_effect_multiplier: 0,
-    prep_batch_bonus: 0
+    prep_batch_bonus: 0,
+    garden_plot_bonus: 0,
+    compost_capacity: 0,
+    garden_seed_chance: 0
   };
   
   if (!player.upgrades) return effects;

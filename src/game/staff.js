@@ -128,6 +128,7 @@ export function calculateStaffEffects(player, staffContent) {
     cooldown_reduction: 0,
     bowl_capacity_bonus: 0,
     forage_bonus_items: 0,
+    forage_seed_chance: 0,
     market_discount: 0,
     sxp_bonus_percent: 0,
     rare_epic_rep_bonus: 0,

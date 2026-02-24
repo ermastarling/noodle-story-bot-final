@@ -16,7 +16,8 @@ export function newPlayerProfile(userId) {
 
     upgrades: {
       u_prep:0,u_stoves:0,u_ladles:0,u_pantry:0,u_cold_cellar:0,u_secure_crates:0,
-      u_seating:0,u_hospitality:0,u_lantern:0,u_decor:0,u_staff_quarters:0,u_manuals:0
+      u_seating:0,u_hospitality:0,u_lantern:0,u_decor:0,u_staff_quarters:0,u_manuals:0,
+      u_garden_plots:0,u_compost_bins:0
     },
 
     inv_ingredients: { ...STARTER_PROFILE.inv_ingredients },
@@ -81,7 +82,9 @@ export function newPlayerProfile(userId) {
       dm_reminders_opt_out: false,
       last_noodle_channel_id: null,
       last_noodle_guild_id: null
-    }
+    },
+
+    garden: { seeds: {}, spoiled: {}, compost_bags: 0 }
   };
 }
 

@@ -143,6 +143,30 @@
       "effects_per_level": {
         "staff_effect_multiplier": 0.03
       }
+    },
+    "u_garden_plots": {
+      "upgrade_id": "u_garden_plots",
+      "name": "Garden Beds",
+      "category": "garden",
+      "description": "Expand your garden so more seeds can grow, +1 plot per level.",
+      "max_level": 20,
+      "base_cost": 220,
+      "cost_scaling": 1.25,
+      "effects_per_level": {
+        "garden_plot_bonus": 1
+      }
+    },
+    "u_compost_bins": {
+      "upgrade_id": "u_compost_bins",
+      "name": "Compost Bins",
+      "category": "garden",
+      "description": "Extra bins keep your compost tidy, +5 compost bag capacity per level.",
+      "max_level": 20,
+      "base_cost": 200,
+      "cost_scaling": 1.24,
+      "effects_per_level": {
+        "compost_capacity": 5
+      }
     }
   },
   "upgrade_categories": {
@@ -170,6 +194,11 @@
       "display_name": "Staff",
       "icon": "staff_management",
       "description": "Upgrades that enhance staff performance"
+    },
+    "garden": {
+      "display_name": "Garden",
+      "icon": "tree",
+      "description": "Grow seeds, make compost, and expand your plots"
     }
   }
 }
