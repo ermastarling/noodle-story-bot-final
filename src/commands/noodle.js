@@ -3757,7 +3757,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       userId
     });
 
-    const summary = `${getIcon("tree")} Planted **${displayItemName(seedId)}** in plot #${result.plotIndex + 1}. Compost left: **${result.compostAfter}**.`;
+    const summary = `${getIcon("tree")} Planted **${displayItemName(seedId)}** in plot #${result.plotIndex + 1}.`;
     const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
     view.embed.setDescription(`${summary}\n\n${baseDesc}`);
 
