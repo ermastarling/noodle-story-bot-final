@@ -652,7 +652,7 @@ function noodleDecorBackRow(userId) {
 function noodleQuestsActionRow(userId, { dailyAvailable = true } = {}) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward")).setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!dailyAvailable),
-new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success)
 );
 }
 
@@ -683,7 +683,7 @@ const row = new ActionRowBuilder().addComponents(primaryButton);
 
 if (showClaim) {
   row.addComponents(
-    new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success)
   );
 }
 
