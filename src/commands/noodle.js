@@ -965,12 +965,10 @@ function formatBonusValue(key, value) {
 }
 
 function formatBonusLabel(key) {
-    `${getIcon("tree")} Plots unlocked: **${getGardenPlotCount(player, combinedEffects)}**` +
-      ` \n(plant with 1 seed + 1 compost bag, yields **${PLOT_YIELD}** items)`,
-    `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),
-    `**Plots**\n${plotsSection}`,
-    `**Seeds (unlimited)**\n${seedSection}`,
-    `**Compost Inputs**\nSpoiled saved: **${spoiledTotal}** · Fresh forageables: **${pantryTotal}**`
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function normalizeIngredientType(itemId) {
   const raw = String(content.items?.[itemId]?.category ?? "").toLowerCase();
