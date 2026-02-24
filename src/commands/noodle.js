@@ -1915,7 +1915,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     const readyBowls = getTotalBowlsForRecipe(p, o.recipe_id);
     const labelRaw = `${shortOrderId(o.order_id)} — ${readyBowls} ready — ${rName}`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    const descRaw = `Regular: ${npcName}`;
+    const descRaw = `${npcName}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
     return { label, value: String(o.order_id), description };
   });
@@ -1985,9 +1985,11 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     const snap = entry?.order ?? null;
     const rName = snap ? (content.recipes[snap.recipe_id]?.name ?? snap.recipe_id) : "Unknown Recipe";
     const npcName = snap ? (content.npcs[snap.npc_archetype]?.name ?? snap.npc_archetype) : "Unknown NPC";
-    const labelRaw = `${shortOrderId(oid)} — ${rName} (${npcName})`;
+    const labelRaw = `${shortOrderId(oid)} — ${rName}`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    return { label, value: oid };
+    const descRaw = `${npcName}`;
+    const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
+    return { label, value: oid, description };
   });
 
   if (!opts.length) {
@@ -5603,7 +5605,8 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   const allowedSpoiled = {};
   const allowedFresh = {};
-  const unitsPerItemCap = amountRequested * COMPOST_PER_BAG;
+  // Mirror multi-buy semantics: cap each picked item independently to the requested amount
+  const unitsPerItemCap = amountRequested;
   for (const raw of selections) {
     const [source, ...idParts] = String(raw).split(":");
     const itemId = idParts.join(":");
