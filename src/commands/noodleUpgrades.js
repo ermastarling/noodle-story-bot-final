@@ -138,7 +138,7 @@ function staffCategoryIconId(category) {
   return "category_default";
 }
 
-function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
+function buildCategoryButtonsRows(userId, activeCategory = null, source = null) {
   const categories = [
     { id: "staff", label: "Staff", icon: "staff_management" },
     { id: "kitchen", label: "Kitchen", icon: "category_kitchen" },
@@ -160,7 +160,12 @@ function buildCategoryButtonsRow(userId, activeCategory = null, source = null) {
       .setStyle(cat.id === activeCategory ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 
-  return new ActionRowBuilder().addComponents(buttons);
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 5) {
+    const chunk = buttons.slice(i, i + 5);
+    if (chunk.length) rows.push(new ActionRowBuilder().addComponents(chunk));
+  }
+  return rows;
 }
 
 function buildStaffRarityRow(userId, activeRarity = "common", source = null) {
@@ -483,7 +488,7 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
 function buildUpgradesComponents(userId, player, { categoryId = null, staffRarity = "common", source = null } = {}) {
   const rows = [];
   if (categoryId !== "staff") {
-    rows.push(buildCategoryButtonsRow(userId, categoryId, source));
+    rows.push(...buildCategoryButtonsRows(userId, categoryId, source));
   }
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
 
