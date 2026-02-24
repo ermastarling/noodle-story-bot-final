@@ -39,7 +39,7 @@ import {
 import { withEventRecipes } from "../game/events.js";
 import { grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import { hasNewShopLevelSpecialization } from "../game/specialization.js";
-import { nowTs } from "../util/time.js";
+import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { containsProfanity } from "../util/profanity.js";
 import { theme } from "../ui/theme.js";
@@ -208,6 +208,14 @@ function applyGreenButtonFooter(embeds, components) {
     }
     return embed;
   });
+}
+
+function buildMarketRefreshFooterText(existingFooterText, marketRestockMs) {
+  if (!marketRestockMs) return existingFooterText;
+  const ts = Math.floor(marketRestockMs / 1000);
+  const marketText = `Market Restock: <t:${ts}:f> (<t:${ts}:R>)`;
+  if (existingFooterText?.includes("Market Restock:")) return existingFooterText;
+  return existingFooterText ? `${existingFooterText} • ${marketText}` : marketText;
 }
 
 /**
@@ -2053,6 +2061,7 @@ async function handleComponent(interaction) {
 
     if (action === "profile") {
       const player = ensurePlayer(serverId, userId);
+      const server = ensureServer(serverId);
       const party = getUserActiveParty(db, userId);
       const questsAvailable = hasDailyRewardAvailable(player, nowTs())
         || Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
@@ -2064,6 +2073,17 @@ async function handleComponent(interaction) {
         party?.party_name,
         interaction.member ?? interaction.user
       );
+      const marketStockKnown = player.market_stock && Object.keys(player.market_stock).length > 0;
+      const hasMarketStock = marketStockKnown && Object.values(player.market_stock ?? {}).some((qty) => Number(qty) > 0);
+      const ordersKnown = Array.isArray(player.order_board);
+      const remainingOrders = ordersKnown ? player.order_board.length : null;
+      if ((ordersKnown && remainingOrders === 0) || (marketStockKnown && !hasMarketStock)) {
+        const marketRestockDay = player.market_stock_day ?? server.market_day ?? dayKeyUTC();
+        const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
+        const existingFooter = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
+        const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
+        embed.setFooter({ text: footerText });
+      }
 
       return componentCommit(interaction, {
         embeds: [embed],

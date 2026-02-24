@@ -540,7 +540,7 @@
     "topping_chili_flakes": {
       "item_id": "topping_chili_flakes",
       "name": "Chili Flakes",
-      "category": "topping",
+      "category": "spice",
       "acquisition": "market",
       "tier": "common",
       "spoilable": false,

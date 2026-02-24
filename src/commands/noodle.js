@@ -301,6 +301,14 @@ function applyGreenButtonFooter(embeds, components) {
   });
 }
 
+function buildMarketRefreshFooterText(existingFooterText, marketRestockMs) {
+  if (!marketRestockMs) return existingFooterText;
+  const ts = Math.floor(marketRestockMs / 1000);
+  const marketText = `Market Restock: <t:${ts}:f> (<t:${ts}:R>)`;
+  if (existingFooterText?.includes("Market Restock:")) return existingFooterText;
+  return existingFooterText ? `${existingFooterText} • ${marketText}` : marketText;
+}
+
 function isDevAdmin(userId) {
   return String(userId ?? "") === DEV_ADMIN_USER_ID;
 }
@@ -577,9 +585,9 @@ new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve")
 );
 }
 
-function noodleOrdersAcceptOnlyRow(userId) {
+function noodleOrdersAcceptOnlyRow(userId, { highlightAccept = true } = {}) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success)
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary)
 );
 }
 
@@ -711,26 +719,26 @@ new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profil
 );
 }
 
-function noodleOrdersActionRow(userId) {
+function noodleOrdersActionRow(userId, { highlightAccept = true } = {}) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary)
 );
 }
 
-function noodleOrdersActionRowWithBack(userId) {
+function noodleOrdersActionRowWithBack(userId, { highlightAccept = true } = {}) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
 }
 
-function noodleOrdersMenuActionRow(userId, { showCancel = false } = {}) {
+function noodleOrdersMenuActionRow(userId, { showCancel = false, highlightAccept = true } = {}) {
 const row = new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success),
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary)
 );
@@ -1772,6 +1780,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
 function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
   const accepted = Object.entries(p.orders?.accepted ?? {});
+  const hasAcceptedOrders = accepted.length > 0;
 
   const opts = accepted.slice(0, 25).map(([oid, entry]) => {
     const snap = entry?.order ?? null;
@@ -1807,12 +1816,19 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     embeds: [actionEmbed],
     components: [
       new ActionRowBuilder().addComponents(menu),
-      ...(tutorialOnlyServeMenu ? [] : [action === "serve" ? noodleOrdersActionRowWithBack(userId) : noodleOrdersActionRow(userId)])
+      ...(tutorialOnlyServeMenu
+        ? []
+        : [
+            action === "serve"
+              ? noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders })
+              : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders })
+          ])
     ]
   };
 }
 
 function buildCookPickerPayload({ userId, p, s, ownerUser }) {
+  const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
   const available = getAvailableRecipes(p);
   const activeSeason = s?.season ?? null;
   const seasonFiltered = available.filter((rid) => {
@@ -1851,7 +1867,10 @@ function buildCookPickerPayload({ userId, p, s, ownerUser }) {
   const tutorialOnlyMenu = isTutorialStep(p, "intro_cook");
   const components = tutorialOnlyMenu
     ? [new ActionRowBuilder().addComponents(menu)]
-    : [new ActionRowBuilder().addComponents(menu), noodleOrdersActionRowWithBack(userId)];
+    : [
+        new ActionRowBuilder().addComponents(menu),
+        noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders })
+      ];
 
   return {
     content: " ",
@@ -2106,12 +2125,24 @@ if (sub === "help") {
 if (sub === "profile") {
   const u = opt.getUser("user") ?? interaction.user;
   const p = ensurePlayer(serverId, u.id);
+  const s = ensureServer(serverId);
   const selfPlayer = ensurePlayer(serverId, userId);
   const questsAvailable = hasDailyRewardAvailable(selfPlayer, nowTs()) || hasClaimableQuests(selfPlayer);
   const specializationsAvailable = getSpecializationAlert(selfPlayer);
   const party = getUserActiveParty(db, u.id);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
+  const marketStockKnown = p.market_stock && Object.keys(p.market_stock).length > 0;
+  const hasMarketStock = marketStockKnown && Object.values(p.market_stock ?? {}).some((qty) => Number(qty) > 0);
+  const ordersKnown = Array.isArray(p.order_board);
+  const remainingOrders = ordersKnown ? p.order_board.length : null;
+  if ((ordersKnown && remainingOrders === 0) || (marketStockKnown && !hasMarketStock)) {
+    const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
+    const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
+    const existingFooter = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
+    const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
+    embed.setFooter({ text: footerText });
+  }
   
   return commit({
     embeds: [embed],
@@ -3561,11 +3592,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     });
 
     const tutorialOnlyServe = isTutorialStep(p, "intro_serve");
+    const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
 
     return commitState({
       content: " ",
       embeds: [cookEmbed],
-      components: tutorialOnlyServe ? [noodleTutorialServeRow(userId)] : [noodleOrdersActionRow(userId)]
+      components: tutorialOnlyServe
+        ? [noodleTutorialServeRow(userId)]
+        : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders })]
     });
   }
 
@@ -3692,7 +3726,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         `No new orders left today. Finish your accepted ones and come back ${nextOrdersResetText}.`
       );
     } else {
-      parts.push(`${getIcon("level_up")} You’ve completed all of today’s orders! New orders arrive ${nextOrdersResetText}.`);
+      parts.push(`${getIcon("confetti")} You’ve completed all of today’s orders! New orders arrive ${nextOrdersResetText}.`);
     }
 
 
@@ -3713,21 +3747,24 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (tutSuffix) parts.push("", tutSuffix);
 
     const showCancel = acceptedEntries.length > 0;
+    const highlightAccept = acceptedEntries.length === 0;
     const menuEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Orders`,
       description: parts.join("\n"),
       user: interaction.member ?? interaction.user
     });
     if (remaining === 0 || !hasMarketStock) {
-      menuEmbed.setTimestamp(new Date(marketRestockMs));
+      const existingFooter = menuEmbed?.footer?.text ?? menuEmbed?.data?.footer?.text ?? "";
+      const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
+      menuEmbed.setFooter({ text: footerText });
     }
     const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
     return commitState({
       content: " ",
       embeds: [menuEmbed],
       components: tutorialOnlyAccept
-        ? [noodleOrdersAcceptOnlyRow(userId)]
-        : [noodleOrdersMenuActionRow(userId, { showCancel }), noodleMainMenuRowNoOrders(userId)]
+        ? [noodleOrdersAcceptOnlyRow(userId, { highlightAccept })]
+        : [noodleOrdersMenuActionRow(userId, { showCancel, highlightAccept }), noodleMainMenuRowNoOrders(userId)]
     });
   }
 
@@ -4049,13 +4086,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       description: `${results.join("\n")}${tutorialSuffix(p) ? `\n\n${tutorialSuffix(p)}` : ""}`,
       user: interaction.member ?? interaction.user
     });
+    const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
     const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
     return commitState({
       content: " ",
       embeds: [acceptEmbed],
       components: tutorialOnlyBuy
         ? [noodleTutorialBuyRow(userId)]
-        : [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)]
+        : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders }), noodleMainMenuRow(userId)]
     });
   }
 
@@ -4438,9 +4476,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
 
+    const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
     const components = tut.finished
       ? [noodleMainMenuRow(userId)]
-      : [noodleOrdersActionRow(userId), noodleMainMenuRow(userId)];
+      : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders }), noodleMainMenuRow(userId)];
     const embeds = [];
 
     const serveEmbed = buildMenuEmbed({
