@@ -726,9 +726,8 @@ import { getIcon } from "./ui/icons.js";
               cid?.includes("action:party_create") ||
               cid?.includes("action:party_join") ||
               cid?.includes("action:party_invite") ||
-              cid?.includes("action:tip") ||
-              cid?.includes("action:bless") ||
-              cid?.includes("action:compost") ||
+                cid?.includes("action:tip") ||
+                cid?.includes("action:bless") ||
             cid?.includes("profile:edit_shop_name") ||
             cid?.includes("profile:edit_tagline") ||
               cid?.includes("action:shared_order_contribute") ||
