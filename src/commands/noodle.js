@@ -2274,23 +2274,21 @@ if (sub === "start") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const gardenUnlocked = isGardenUnlocked(p);
-    const gardenState = ensureGardenState(p);
     const navRows = [
       noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
       noodleMainMenuRowNoForage(userId)
     ];
-    const cooldownEmbed = buildMenuEmbed({
-      title: `${getIcon("cooldown")} Forage Cooldown`,
-      description: `You’ve foraged recently. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`,
+
+    const embed = buildMenuEmbed({
+      title: `${getIcon("start")} Welcome to Noodle Story`,
+      description: "Use the buttons below to play. If you need the tutorial again, run /noodle help.",
       user: interaction.member ?? interaction.user
     });
+
     return commitState({
       content: " ",
-      embeds: [cooldownEmbed],
+      embeds: [embed],
       components: navRows
-        ? "You’ve already completed the tutorial. Use the menu below to play."
-        : (tut ?? "Welcome to your Noodle Story."),
-      user: interaction.member ?? interaction.user
     });
 
     const questsAvailable = hasDailyRewardAvailable(p, nowTs()) || hasClaimableQuests(p);
