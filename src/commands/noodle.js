@@ -1,11 +1,12 @@
 import fs from "fs";
 import path from "path";
 import {
-canForage,
-rollForageDrops,
-applyDropsToInventory,
-setForageCooldown,
-FORAGE_ITEM_IDS
+  canForage,
+  rollForageDrops,
+  applyDropsToInventory,
+  setForageCooldown,
+  FORAGE_ITEM_IDS,
+  RARE_FORAGE_ITEM_IDS
 } from "../game/forage.js";
 import { addIngredientsToInventory } from "../game/inventory.js";
 import {
@@ -2040,10 +2041,9 @@ function buildCookPickerPayload({ userId, p, s, ownerUser }) {
 
     // Show ingredient availability and max cookable for quick glance
     const ingTokens = (r?.ingredients ?? []).map((ing) => {
-      const need = Math.max(0, ing?.qty ?? 0);
       const have = Math.max(0, p.inv_ingredients?.[ing.item_id] ?? 0);
       const name = displayItemName(ing.item_id);
-      const base = `${name}:${have}/${need || 1}`;
+      const base = `${name}:${have}`;
       return ing.optional ? `${base} (opt)` : base;
     });
 
@@ -3458,6 +3458,31 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (itemId && bonusItems > 0) {
       drops[itemId] = (drops[itemId] ?? 0) + bonusItems;
+    }
+
+    // Pity: guarantee a rare forage after 10 forages without any rare drop
+    const allowedRare = RARE_FORAGE_ITEM_IDS.filter((id) => allowedForage.has(id));
+    if (allowedRare.length) {
+      const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
+      if (hasRareDrop) {
+        p.forage_pity_rare_count = 0;
+      } else {
+        p.forage_pity_rare_count = (p.forage_pity_rare_count || 0) + 1;
+        if (p.forage_pity_rare_count >= 10) {
+          const pityRng = makeStreamRng({
+            mode: "seeded",
+            seed: 98765,
+            streamName: "forage_pity",
+            serverId,
+            dayKey: dayKeyUTC(),
+            userId: interaction.user.id
+          });
+          const pickIdx = Math.floor(pityRng() * allowedRare.length);
+          const pityItem = allowedRare[Math.max(0, Math.min(allowedRare.length - 1, pickIdx))];
+          drops[pityItem] = (drops[pityItem] ?? 0) + 1;
+          p.forage_pity_rare_count = 0;
+        }
+      }
     }
     const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects);
     const { accepted, rejected } = capacityResult;
@@ -5452,7 +5477,15 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const components = [view.rows.navRow, selectRow, actionRow, noodleMainMenuRowNoForage(userId)];
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:garden:${userId}`)
+      .setLabel("Back")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const components = [view.rows.navRow, selectRow, actionRow, backRow, noodleMainMenuRowNoForage(userId)];
   return componentCommit(interaction, {
     content: " ",
     embeds: [view.embed],
@@ -5522,7 +5555,15 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     : `${getIcon("basket")} Choose items then press Add 5 / Add 10.`;
   view.embed.setDescription(`${header}\n\n${baseDesc}`);
 
-  const components = [view.rows.navRow, selectRow, actionRow, noodleMainMenuRowNoForage(userId)];
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:garden:${userId}`)
+      .setLabel("Back")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const components = [view.rows.navRow, selectRow, actionRow, backRow, noodleMainMenuRowNoForage(userId)];
   return componentCommit(interaction, {
     content: " ",
     embeds: [view.embed],
@@ -5565,10 +5606,10 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     const itemId = idParts.join(":");
     if (!itemId) continue;
     if (source === "spoiled" && (garden.spoiled?.[itemId] || 0) > 0) {
-      allowedSpoiled[itemId] = Math.max(0, garden.spoiled[itemId] || 0);
+      allowedSpoiled[itemId] = Math.max(0, Math.min(garden.spoiled[itemId] || 0, amountRequested));
     }
     if (source === "fresh" && (p.inv_ingredients?.[itemId] || 0) > 0) {
-      allowedFresh[itemId] = Math.max(0, p.inv_ingredients[itemId] || 0);
+      allowedFresh[itemId] = Math.max(0, Math.min(p.inv_ingredients[itemId] || 0, amountRequested));
     }
   }
 
@@ -5660,9 +5701,17 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
   view.embed.setDescription(`${summary}\n\n${baseDesc}`);
 
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:garden:${userId}`)
+      .setLabel("Back")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+
   const components = [view.rows.navRow];
   if (selectRow) components.push(selectRow);
-  components.push(actionRow, noodleMainMenuRowNoForage(userId));
+  components.push(actionRow, backRow, noodleMainMenuRowNoForage(userId));
 
   return componentCommit(interaction, {
     content: " ",

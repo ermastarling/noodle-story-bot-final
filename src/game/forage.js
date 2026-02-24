@@ -27,6 +27,9 @@ const FORAGE_TABLE = [
 ];
 
 export const FORAGE_ITEM_IDS = FORAGE_TABLE.map(e => e.item_id);
+export const RARE_FORAGE_ITEM_IDS = FORAGE_TABLE
+  .filter((e) => e.weight <= 20)
+  .map((e) => e.item_id);
 
 export function getForageEntry(itemId) {
   return FORAGE_TABLE.find((entry) => entry.item_id === itemId) ?? null;
