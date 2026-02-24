@@ -141,6 +141,8 @@ Constants
 
 // Temporary cache for multibuy selections to avoid custom ID length limits
 const multibuyCacheV2 = new Map();
+// Temporary cache for compost selections keyed by message id
+const compostSelectionCache = new Map();
 
 // Aliases for v14+ compatibility in code
 const ActionRowBuilder = MessageActionRow;
@@ -5372,19 +5374,12 @@ if (kind === "nav" && action === "sell") {
 
 /* ---------------- NAV BUTTONS ---------------- */
 // Compost button shows picker of compostable items
-if (kind === "action" && action === "compost" && interaction.isButton?.()) {
-  if (ownerId && ownerId !== userId) {
-    return componentCommit(interaction, { content: "That garden isn’t yours.", ephemeral: true });
-  }
-  const p = ensurePlayer(serverId, userId);
-  const garden = ensureGardenState(p);
-  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-  const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
-
+function buildCompostSelectOptions(player) {
+  const garden = ensureGardenState(player);
   const spoiledPool = Object.entries(garden.spoiled || {})
     .filter(([, qty]) => qty > 0)
     .map(([id, qty]) => ({ id, qty, source: "spoiled" }));
-  const freshPool = Object.entries(getCompostableForageables(p, content) || {})
+  const freshPool = Object.entries(getCompostableForageables(player, content) || {})
     .filter(([, qty]) => qty > 0)
     .map(([id, qty]) => ({ id, qty, source: "fresh" }));
 
@@ -5396,6 +5391,20 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
       value: `${entry.source}:${entry.id}`,
       description: `${entry.qty} unit(s) available`.slice(0, 100)
     }));
+
+  return { options, spoiledPool, freshPool };
+}
+
+if (kind === "action" && action === "compost" && interaction.isButton?.()) {
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That garden isn’t yours.", ephemeral: true });
+  }
+  const p = ensurePlayer(serverId, userId);
+  const garden = ensureGardenState(p);
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
+
+  const { options } = buildCompostSelectOptions(p);
 
   if (!options.length) {
     return componentCommit(interaction, { content: `${getIcon("basket")} No compostable items available.`, ephemeral: true });
@@ -5410,7 +5419,18 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
       .addOptions(options)
   );
 
-  const components = [view.rows.navRow, selectRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)];
+  const actionRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:garden:compost_add:${userId}:5`)
+      .setLabel("Add 5")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:garden:compost_add:${userId}:10`)
+      .setLabel("Add 10")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const components = [view.rows.navRow, selectRow, actionRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)];
   return componentCommit(interaction, {
     content: " ",
     embeds: [view.embed],
@@ -5428,7 +5448,84 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   if (!selections.length) {
     return componentCommit(interaction, { content: `${getIcon("info")} Pick at least one item to compost.`, ephemeral: true });
   }
+  const p = ensurePlayer(serverId, userId);
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
 
+  const now = Date.now();
+  const messageId = interaction.message?.id ?? `compost:${interaction.id}`;
+  compostSelectionCache.set(messageId, { userId, selections: [...selections], ts: now });
+  for (const [key, entry] of compostSelectionCache.entries()) {
+    if (now - (entry?.ts ?? 0) > 5 * 60 * 1000) {
+      compostSelectionCache.delete(key);
+    }
+  }
+
+  const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
+  const { options } = buildCompostSelectOptions(p);
+  if (!options.length) {
+    return componentCommit(interaction, { content: `${getIcon("basket")} No compostable items available.`, ephemeral: true });
+  }
+
+  const selectRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`noodle:garden:compost_select:${userId}`)
+      .setPlaceholder("Select items to compost")
+      .setMinValues(1)
+      .setMaxValues(Math.min(options.length, 25))
+      .addOptions(options)
+  );
+
+  const actionRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:garden:compost_add:${userId}:5`)
+      .setLabel("Add 5")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:garden:compost_add:${userId}:10`)
+      .setLabel("Add 10")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const selectionList = selections
+    .map((raw) => {
+      const [src, ...idParts] = String(raw).split(":");
+      const id = idParts.join(":");
+      return src && id ? `${src === "spoiled" ? "Spoiled" : "Fresh"} — ${displayItemName(id)}` : null;
+    })
+    .filter(Boolean)
+    .join("\n");
+  const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
+  const header = selectionList
+    ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nUse Add 5 / Add 10 to craft (respects storage and available items).`
+    : `${getIcon("basket")} Choose items then press Add 5 / Add 10.`;
+  view.embed.setDescription(`${header}\n\n${baseDesc}`);
+
+  const components = [view.rows.navRow, selectRow, actionRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)];
+  return componentCommit(interaction, {
+    content: " ",
+    embeds: [view.embed],
+    components,
+    targetMessageId: interaction.message?.id
+  });
+}
+
+// Compost add buttons craft using cached selections
+if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That garden isn’t yours.", ephemeral: true });
+  }
+  const amountRequested = Math.max(1, Number(parts[4] ?? 0) || 0);
+  const messageId = interaction.message?.id ?? null;
+  const cached = messageId ? compostSelectionCache.get(messageId) : null;
+  if (!cached || cached.userId !== userId) {
+    return componentCommit(interaction, { content: `${getIcon("info")} Select items to compost first.`, ephemeral: true });
+  }
+  if (Date.now() - (cached.ts ?? 0) > 5 * 60 * 1000) {
+    compostSelectionCache.delete(messageId);
+    return componentCommit(interaction, { content: `${getIcon("info")} Selection expired. Choose items again.`, ephemeral: true });
+  }
+
+  const selections = cached.selections ?? [];
   const p = ensurePlayer(serverId, userId);
   const garden = ensureGardenState(p);
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
@@ -5455,15 +5552,17 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
 
   const availableUnits = Object.values(allowedSpoiled).reduce((s, v) => s + v, 0) + Object.values(allowedFresh).reduce((s, v) => s + v, 0);
   if (!availableUnits) {
-    return componentCommit(interaction, { content: `${getIcon("warning")} Those items aren’t available anymore.`, ephemeral: true });
+    compostSelectionCache.delete(messageId);
+    return componentCommit(interaction, { content: `${getIcon("warning")} Those items aren’t available anymore. Reselect to continue.`, ephemeral: true });
   }
 
-  const craftableBags = Math.min(roomBags, Math.floor(availableUnits / COMPOST_PER_BAG));
-  if (craftableBags <= 0) {
+  const craftableMax = Math.min(roomBags, Math.floor(availableUnits / COMPOST_PER_BAG));
+  const bagsToMake = Math.max(0, Math.min(amountRequested, craftableMax));
+  if (bagsToMake <= 0) {
     return componentCommit(interaction, { content: `${getIcon("warning")} Need at least ${COMPOST_PER_BAG} unit(s) from the selected items to make 1 bag.`, ephemeral: true });
   }
 
-  const unitsNeeded = craftableBags * COMPOST_PER_BAG;
+  const unitsNeeded = bagsToMake * COMPOST_PER_BAG;
   const takeFromPool = (poolObj, allowedMap, units) => {
     let remaining = units;
     const used = {};
@@ -5494,10 +5593,12 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   }
 
   if (remaining > 0) {
-    return componentCommit(interaction, { content: `${getIcon("warning")} Not enough of the selected items to craft ${craftableBags} bag(s).`, ephemeral: true });
+    return componentCommit(interaction, { content: `${getIcon("warning")} Not enough of the selected items to craft ${bagsToMake} bag(s).`, ephemeral: true });
   }
 
-  garden.compost_bags = (garden.compost_bags || 0) + craftableBags;
+  garden.compost_bags = (garden.compost_bags || 0) + bagsToMake;
+  cached.ts = Date.now();
+  compostSelectionCache.set(messageId, cached);
 
   const formatUsage = (label, usedMap) => {
     const entries = Object.entries(usedMap || {}).filter(([, qty]) => qty > 0);
@@ -5506,18 +5607,44 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   };
 
   const usageBlocks = [formatUsage("Saved spoilage", spoiledUsed), formatUsage("Fresh forageables", freshUsed)].filter(Boolean).join("\n\n");
-  const summary = [`${getIcon("basket")} Packed **${craftableBags}** compost bag(s).`,
+  const summary = [`${getIcon("basket")} Packed **${bagsToMake}** compost bag(s).`,
     `Compost now: **${garden.compost_bags}/${compostCap}**.`,
     usageBlocks].filter(Boolean).join("\n\n");
 
   const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
-  const embed = view.embed;
-  embed.setDescription(`${summary}\n\n${embed.data?.description ?? embed.description ?? ""}`);
+  const { options } = buildCompostSelectOptions(p);
+  const selectRow = options.length
+    ? new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`noodle:garden:compost_select:${userId}`)
+          .setPlaceholder("Select items to compost")
+          .setMinValues(1)
+          .setMaxValues(Math.min(options.length, 25))
+          .addOptions(options)
+      )
+    : null;
 
-  const components = [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)];
+  const actionRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:garden:compost_add:${userId}:5`)
+      .setLabel("Add 5")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:garden:compost_add:${userId}:10`)
+      .setLabel("Add 10")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
+  view.embed.setDescription(`${summary}\n\n${baseDesc}`);
+
+  const components = [view.rows.navRow];
+  if (selectRow) components.push(selectRow);
+  components.push(actionRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId));
+
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    embeds: [view.embed],
     components,
     targetMessageId: interaction.message?.id
   });

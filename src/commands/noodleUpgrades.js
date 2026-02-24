@@ -143,9 +143,9 @@ function buildCategoryButtonsRows(userId, activeCategory = null, source = null) 
     { id: "staff", label: "Staff", icon: "staff_management" },
     { id: "kitchen", label: "Kitchen", icon: "category_kitchen" },
     { id: "storage", label: "Storage", icon: "category_storage" },
-    { id: "garden", label: "Garden", icon: "tree" },
+    { id: "ambience", label: "Ambiance", icon: "category_ambience" },
     { id: "service", label: "Service", icon: "category_service" },
-    { id: "ambience", label: "Ambiance", icon: "category_ambience" }
+    { id: "garden", label: "Garden", icon: "tree" }
   ];
 
   const buttons = categories.map((cat) =>
