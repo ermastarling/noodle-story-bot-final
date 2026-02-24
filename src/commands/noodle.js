@@ -114,6 +114,7 @@ import {
   ensureGardenPlots,
   plantSeedInPlot,
   harvestGardenPlots,
+  autoHarvestReadyPlots,
   getCompostableForageables,
   craftCompostBags,
   formatSeedLines,
@@ -581,27 +582,56 @@ new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profil
 );
 }
 
-function noodleForageGardenRow(userId, { active = "forage", gardenLocked = false } = {}) {
+function noodleForageGardenRow(userId, {
+  active = "forage",
+  gardenLocked = false,
+  includeGardenButton = true,
+  canCompost = false,
+  canHarvest = false
+} = {}) {
   const foragePrimary = active === "forage";
-  const gardenPrimary = active === "garden";
-  return new ActionRowBuilder().addComponents(
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:forage:${userId}`)
       .setLabel("Forage").setEmoji(getButtonEmoji("forage"))
-      .setStyle(foragePrimary ? ButtonStyle.Primary : ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:garden:${userId}`)
-      .setLabel("Garden").setEmoji(getButtonEmoji("tree"))
-      .setStyle(gardenPrimary ? ButtonStyle.Primary : ButtonStyle.Secondary)
-      .setDisabled(gardenLocked)
+      .setStyle(foragePrimary ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
+
+  if (includeGardenButton) {
+    const gardenPrimary = active === "garden";
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:garden:${userId}`)
+        .setLabel("Garden").setEmoji(getButtonEmoji("tree"))
+        .setStyle(gardenPrimary ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        .setDisabled(gardenLocked)
+    );
+  }
+
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:action:compost:${userId}`)
+      .setLabel("Make Compost")
+      .setEmoji(getButtonEmoji("basket"))
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!canCompost),
+    new ButtonBuilder()
+      .setCustomId(`noodle:action:harvest:${userId}`)
+      .setLabel("Harvest All")
+      .setEmoji(getButtonEmoji("basket"))
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(!canHarvest)
+  );
+
+  return row;
 }
 
-function buildGardenView({ player, combinedEffects, user, userId }) {
+function getGardenActionState(player, effects) {
   const garden = ensureGardenState(player);
-  const plots = ensureGardenPlots(player, combinedEffects);
+  const plots = ensureGardenPlots(player, effects);
+  const now = Date.now();
 
-  const compostCap = getCompostCap(player, combinedEffects);
+  const compostCap = getCompostCap(player, effects);
   const compostCount = garden.compost_bags || 0;
   const spoiledTotal = Object.values(garden.spoiled || {}).reduce((sum, v) => sum + (v || 0), 0);
   const pantryForageables = getCompostableForageables(player, content);
@@ -610,41 +640,50 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const room = Math.max(0, compostCap - compostCount);
   const canCraft = craftableBags > 0 && room > 0;
 
+  const readyPlots = plots
+    .map((plot, idx) => ({ plot, idx }))
+    .filter(({ plot }) => plot?.seed_id && (plot.remaining ?? 0) > 0 && (!plot.harvest_ready_at || plot.harvest_ready_at <= now))
+    .map(({ plot, idx }) => ({ ...plot, idx }));
+
+  return {
+    canCraft,
+    compostCap,
+    compostCount,
+    readyPlots,
+    hasHarvestable: readyPlots.length > 0,
+    spoiledTotal,
+    pantryTotal
+  };
+}
+
+function buildGardenView({ player, combinedEffects, user, userId }) {
+  const garden = ensureGardenState(player);
+  const plots = ensureGardenPlots(player, combinedEffects);
+  const gardenState = getGardenActionState(player, combinedEffects);
+  const compostCap = gardenState.compostCap;
+  const compostCount = gardenState.compostCount;
+  const spoiledTotal = gardenState.spoiledTotal;
+  const pantryTotal = gardenState.pantryTotal;
+  const canCraft = gardenState.canCraft;
+  const readyPlots = gardenState.readyPlots;
+  const room = Math.max(0, compostCap - compostCount);
+
   const seedSection = formatSeedLines(garden.seeds, content);
   const spoiledSection = formatSpoiledLines(garden.spoiled, content);
   const plotsSection = formatPlotLines(player, content, combinedEffects);
 
-  const hasHarvestable = plots.some((plot) => plot?.seed_id && (plot.remaining ?? 0) > 0);
+  const hasHarvestable = readyPlots.length > 0;
   const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || (plot.remaining ?? 0) <= 0);
 
   const description = [
     `${getIcon("tree")} Plots unlocked: **${getGardenPlotCount(player, combinedEffects)}**` +
-      ` (plant with 1 seed + 1 compost bag, yields **${PLOT_YIELD}** items)`,
+      ` \n(plant with 1 seed + 1 compost bag, yields **${PLOT_YIELD}** items)`,
     `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),
-    `${getIcon("rain")} Compost recipe: ${COMPOST_PER_BAG} spoiled or foraged items -> 1 bag`,
+    `${getIcon("rain")} Compost recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`,
     `**Plots**\n${plotsSection}`,
-    `**Seeds (no cap)**\n${seedSection}`,
-    `**Spoiled Ingredients**\n${spoiledSection}`,
+    `**Seeds (unlimited)**\n${seedSection}`,
     `**Compost Inputs**\nSpoiled saved: **${spoiledTotal}** · Fresh forageables: **${pantryTotal}**`
   ].join("\n\n");
-
-  const compostRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:action:compost:${userId}`)
-      .setLabel("Make Compost")
-      .setEmoji(getButtonEmoji("basket"))
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(!canCraft)
-  );
-
-  const harvestRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:action:harvest:${userId}`)
-      .setLabel("Harvest")
-      .setEmoji(getButtonEmoji("basket"))
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(!hasHarvestable)
-  );
 
   const seedOptions = Object.entries(garden.seeds || {})
     .filter(([, qty]) => qty > 0)
@@ -671,6 +710,27 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
       .addOptions(seedOptions)
   );
 
+  const harvestOptions = readyPlots.map((plot) => ({
+    label: `${displayItemName(plot.seed_id)} — Plot ${plot.idx + 1}`.slice(0, 100),
+    value: String(plot.idx),
+    description: `Harvest up to ${Math.floor(plot.remaining ?? 0)} items`.slice(0, 100)
+  })).slice(0, 25);
+
+  const harvestSelectRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`noodle:garden:harvest_select:${userId}`)
+      .setPlaceholder(hasHarvestable ? "Harvest a ready plot" : "No plots ready to harvest")
+      .setDisabled(!hasHarvestable)
+      .addOptions(harvestOptions.length ? harvestOptions : [{ label: "No plots ready", value: "none" }])
+  );
+
+  const navRow = noodleForageGardenRow(userId, {
+    active: "garden",
+    includeGardenButton: false,
+    canCompost: canCraft,
+    canHarvest: hasHarvestable
+  });
+
   const embed = buildMenuEmbed({
     title: `${getIcon("tree")} Garden`,
     description,
@@ -679,7 +739,7 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
 
   return {
     embed,
-    rows: { compostRow, harvestRow, plantRow },
+    rows: { navRow, plantRow, harvestSelectRow },
     flags: { canCraft, hasHarvestable, hasEmptyPlot }
   };
 }
@@ -3309,8 +3369,17 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "forage") {
     const gardenUnlocked = isGardenUnlocked(p);
     ensureGardenState(p);
+    if (combinedEffects.garden_autoharvest) {
+      autoHarvestReadyPlots(p, content, combinedEffects);
+    }
+    const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
-      noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
+      noodleForageGardenRow(userId, {
+        active: "forage",
+        gardenLocked: !gardenUnlocked,
+        canCompost: gardenState.canCraft,
+        canHarvest: gardenState.hasHarvestable
+      }),
       noodleMainMenuRowNoForage(userId)
     ];
 
@@ -3488,10 +3557,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   /* ---------------- GARDEN ---------------- */
   if (sub === "garden") {
     const gardenUnlocked = isGardenUnlocked(p);
-    const navRows = [
-      noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
-      noodleMainMenuRowNoForage(userId)
-    ];
+    if (combinedEffects.garden_autoharvest) {
+      autoHarvestReadyPlots(p, content, combinedEffects);
+    }
 
     if (!gardenUnlocked) {
       const lockedEmbed = buildMenuEmbed({
@@ -3499,6 +3567,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         description: `${getIcon("lock")} Reach shop level 25 to unlock your garden and start collecting seeds.`,
         user: interaction.member ?? interaction.user
       });
+      const navRows = [
+        noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
+        noodleMainMenuRowNoForage(userId)
+      ];
       return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
     }
 
@@ -3512,15 +3584,25 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: " ",
       embeds: [view.embed],
-      components: [...navRows, view.rows.compostRow, view.rows.harvestRow, view.rows.plantRow]
+      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)]
     });
   }
 
   /* ---------------- COMPOST ---------------- */
   if (sub === "compost") {
     const gardenUnlocked = isGardenUnlocked(p);
+    if (combinedEffects.garden_autoharvest) {
+      autoHarvestReadyPlots(p, content, combinedEffects);
+    }
+    const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
-      noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
+      noodleForageGardenRow(userId, {
+        active: "garden",
+        gardenLocked: !gardenUnlocked,
+        includeGardenButton: false,
+        canCompost: gardenState.canCraft,
+        canHarvest: gardenState.hasHarvestable
+      }),
       noodleMainMenuRowNoForage(userId)
     ];
 
@@ -3572,8 +3654,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   if (sub === "plant") {
     const gardenUnlocked = isGardenUnlocked(p);
+    if (combinedEffects.garden_autoharvest) {
+      autoHarvestReadyPlots(p, content, combinedEffects);
+    }
+    const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
-      noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
+      noodleForageGardenRow(userId, {
+        active: "garden",
+        gardenLocked: !gardenUnlocked,
+        includeGardenButton: false,
+        canCompost: gardenState.canCraft,
+        canHarvest: gardenState.hasHarvestable
+      }),
       noodleMainMenuRowNoForage(userId)
     ];
 
@@ -3617,14 +3709,24 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: summary,
       embeds: [view.embed],
-      components: [...navRows, view.rows.compostRow, view.rows.harvestRow, view.rows.plantRow]
+      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)]
     });
   }
 
   if (sub === "harvest") {
     const gardenUnlocked = isGardenUnlocked(p);
+    if (combinedEffects.garden_autoharvest) {
+      autoHarvestReadyPlots(p, content, combinedEffects);
+    }
+    const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
-      noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
+      noodleForageGardenRow(userId, {
+        active: "garden",
+        gardenLocked: !gardenUnlocked,
+        includeGardenButton: false,
+        canCompost: gardenState.canCraft,
+        canHarvest: gardenState.hasHarvestable
+      }),
       noodleMainMenuRowNoForage(userId)
     ];
 
@@ -3635,7 +3737,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
     }
 
-    const harvestResult = harvestGardenPlots(p, content, combinedEffects);
+    const plotIndex = opt.getInteger("plot_index");
+    const harvestResult = harvestGardenPlots(p, content, combinedEffects, {
+      plotIndex: Number.isInteger(plotIndex) ? plotIndex : null,
+      onlyReady: true
+    });
     const view = buildGardenView({
       player: p,
       combinedEffects,
@@ -3645,7 +3751,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     let summary;
     if (!harvestResult.anyHarvestable) {
-      summary = `${getIcon("info")} Nothing to harvest. Plant seeds first.`;
+      summary = `${getIcon("info")} Nothing ready to harvest yet.`;
     } else if (!harvestResult.results.length) {
       summary = `${getIcon("warning")} Pantry is full; nothing harvested.`;
     } else {
@@ -3664,7 +3770,7 @@ ${lines.join("\n")}`;
     return commitState({
       content: summary,
       embeds: [view.embed],
-      components: [...navRows, view.rows.compostRow, view.rows.harvestRow, view.rows.plantRow]
+      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)]
     });
   }
 
@@ -4996,6 +5102,25 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "plant_selec
   return runNoodle(interaction, {
     sub: "plant",
     overrides: { strings: { seed: seedId }, messageId: sourceMessageId }
+  });
+}
+
+if (interaction.isSelectMenu?.() && kind === "garden" && action === "harvest_select") {
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That garden isn’t yours.", ephemeral: true });
+  }
+  const value = interaction.values?.[0];
+  if (!value || value === "none") {
+    return componentCommit(interaction, { content: `${getIcon("info")} No plots are ready.`, ephemeral: true });
+  }
+  const plotIndex = Number(value);
+  if (!Number.isInteger(plotIndex)) {
+    return componentCommit(interaction, { content: `${getIcon("warning")} Unable to harvest that plot.`, ephemeral: true });
+  }
+  const sourceMessageId = interaction.message?.id ?? null;
+  return runNoodle(interaction, {
+    sub: "harvest",
+    overrides: { integers: { plot_index: plotIndex }, messageId: sourceMessageId }
   });
 }
 

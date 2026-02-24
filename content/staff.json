@@ -66,14 +66,15 @@
     "manager": {
       "staff_id": "manager",
       "name": "Forage Manager",
-      "description": "Optimizes operations, reducing foraging cooldown (up to 80%).",
+      "description": "Optimizes operations, reducing foraging and harvest cooldowns (up to 80%).",
       "category": "service",
       "rarity": "epic",
       "max_level": 10,
       "base_cost": 1800,
       "cost_scaling": 1.48,
       "effects_per_level": {
-        "cooldown_reduction": 0.10
+        "cooldown_reduction": 0.10,
+        "harvest_cooldown_reduction": 0.10
       }
     },
     "dishwasher": {
@@ -101,6 +102,20 @@
       "effects_per_level": {
         "forage_bonus_items": 1,
         "forage_seed_chance": 0.01
+      }
+    },
+    "gardener": {
+      "staff_id": "gardener",
+      "name": "Gardener",
+      "description": "Tends your plots automatically and may find extra seeds while harvesting.",
+      "category": "support",
+      "rarity": "epic",
+      "max_level": 10,
+      "base_cost": 3200,
+      "cost_scaling": 1.55,
+      "effects_per_level": {
+        "garden_autoharvest": 0.1,
+        "garden_harvest_seed_chance": 0.05
       }
     },
     "merchant": {

@@ -155,18 +155,6 @@
       "effects_per_level": {
         "garden_plot_bonus": 1
       }
-    },
-    "u_compost_bins": {
-      "upgrade_id": "u_compost_bins",
-      "name": "Compost Bins",
-      "category": "garden",
-      "description": "Extra bins keep your compost tidy, +5 compost bag capacity per level.",
-      "max_level": 20,
-      "base_cost": 200,
-      "cost_scaling": 1.24,
-      "effects_per_level": {
-        "compost_capacity": 5
-      }
     }
   },
   "upgrade_categories": {

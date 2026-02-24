@@ -111,7 +111,6 @@ function formatEffects(effects) {
       lines.push(`+1 bowl per ${divisor} prep levels`);
     }
     else if (key === "garden_plot_bonus") lines.push(`+${value} garden plots`);
-    else if (key === "compost_capacity") lines.push(`+${value} compost bag cap`);
     else if (key === "garden_seed_chance") lines.push(`+${(value * 100).toFixed(1)}% seed find chance`);
   }
   return lines.join(", ");

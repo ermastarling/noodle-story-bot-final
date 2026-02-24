@@ -122,6 +122,8 @@ function formatEffects(effects) {
     else if (key === "bowl_capacity_bonus") lines.push(`+${value} bowl capacity`);
     else if (key === "forage_bonus_items") lines.push(`+${value} forage items`);
     else if (key === "forage_seed_chance") lines.push(`+${(value * 100).toFixed(0)}% seed find chance`);
+    else if (key === "garden_autoharvest") lines.push(`Auto-harvest garden plots`);
+    else if (key === "garden_harvest_seed_chance") lines.push(`+${(value * 100).toFixed(0)}% harvest seed chance`);
     else if (key === "market_discount") lines.push(`${(value * 100).toFixed(0)}% market discount`);
     else if (key === "sxp_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% SXP`);
     else if (key === "rare_epic_rep_bonus") lines.push(`+${value} rep on rare/epic`);
@@ -242,6 +244,8 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (key === "cooldown_reduction") return `-${(value * 100).toFixed(0)}% cooldowns`;
     if (key === "forage_bonus_items") return `+${value} forage items`;
     if (key === "forage_seed_chance") return `+${(value * 100).toFixed(0)}% seed find chance`;
+    if (key === "garden_autoharvest") return `Auto-harvests garden plots`;
+    if (key === "garden_harvest_seed_chance") return `+${(value * 100).toFixed(0)}% seed chance on harvest`;
     if (key === "market_discount") return `${(value * 100).toFixed(0)}% market discount`;
     if (key === "sxp_bonus_percent") return `+${(value * 100).toFixed(0)}% SXP`;
     if (key === "rare_epic_rep_bonus") return `+${value} rep on rare/epic`;
