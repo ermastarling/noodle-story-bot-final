@@ -797,7 +797,8 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 function noodleRecipesMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:garden:${userId}`).setLabel("Garden").setEmoji(getButtonEmoji("tree")).setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -2036,7 +2037,28 @@ function buildCookPickerPayload({ userId, p, s, ownerUser }) {
     const r = content.recipes?.[rid];
     const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    return { label, value: rid };
+
+    // Show ingredient availability and max cookable for quick glance
+    const ingTokens = (r?.ingredients ?? []).map((ing) => {
+      const need = Math.max(0, ing?.qty ?? 0);
+      const have = Math.max(0, p.inv_ingredients?.[ing.item_id] ?? 0);
+      const name = displayItemName(ing.item_id);
+      const base = `${name}:${have}/${need || 1}`;
+      return ing.optional ? `${base} (opt)` : base;
+    });
+
+    const maxCookable = (r?.ingredients ?? [])
+      .filter((ing) => !ing.optional && (ing?.qty ?? 0) > 0)
+      .map((ing) => Math.floor((p.inv_ingredients?.[ing.item_id] ?? 0) / (ing.qty ?? 1)))
+      .reduce((min, cur) => Math.min(min, cur), Infinity);
+    const cookable = Number.isFinite(maxCookable) ? Math.max(0, maxCookable) : 0;
+
+    const descRaw = ingTokens.length
+      ? `${ingTokens.join(" · ")} | Max ${cookable}`
+      : `Max ${cookable}`;
+    const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
+
+    return { label, value: rid, description };
   });
 
   if (!opts.length) {
@@ -5430,7 +5452,7 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const components = [view.rows.navRow, selectRow, actionRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)];
+  const components = [view.rows.navRow, selectRow, actionRow, noodleMainMenuRowNoForage(userId)];
   return componentCommit(interaction, {
     content: " ",
     embeds: [view.embed],
@@ -5500,7 +5522,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     : `${getIcon("basket")} Choose items then press Add 5 / Add 10.`;
   view.embed.setDescription(`${header}\n\n${baseDesc}`);
 
-  const components = [view.rows.navRow, selectRow, actionRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)];
+  const components = [view.rows.navRow, selectRow, actionRow, noodleMainMenuRowNoForage(userId)];
   return componentCommit(interaction, {
     content: " ",
     embeds: [view.embed],
@@ -5640,7 +5662,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   const components = [view.rows.navRow];
   if (selectRow) components.push(selectRow);
-  components.push(actionRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId));
+  components.push(actionRow, noodleMainMenuRowNoForage(userId));
 
   return componentCommit(interaction, {
     content: " ",
