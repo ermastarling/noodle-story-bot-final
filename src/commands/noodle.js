@@ -1913,9 +1913,11 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
     const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
     const readyBowls = getTotalBowlsForRecipe(p, o.recipe_id);
-    const labelRaw = `${shortOrderId(o.order_id)} — ${readyBowls} ready — ${rName} (${npcName})`;
+    const labelRaw = `${shortOrderId(o.order_id)} — ${readyBowls} ready — ${rName}`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-    return { label, value: String(o.order_id) };
+    const descRaw = `Regular: ${npcName}`;
+    const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
+    return { label, value: String(o.order_id), description };
   });
 
   if (!opts.length) {
@@ -5630,14 +5632,24 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const takeFromPool = (poolObj, allowedMap, units) => {
     let remaining = units;
     const used = {};
-    for (const [id, qty] of Object.entries(allowedMap)) {
-      if (remaining <= 0) break;
-      const take = Math.min(remaining, qty || 0);
-      if (take <= 0) continue;
-      poolObj[id] = Math.max(0, (poolObj[id] || 0) - take);
-      if (poolObj[id] <= 0) delete poolObj[id];
-      used[id] = (used[id] || 0) + take;
-      remaining -= take;
+    const entries = Object.entries(allowedMap).filter(([, qty]) => qty > 0);
+    while (remaining > 0 && entries.length > 0) {
+      const share = Math.max(1, Math.floor(remaining / entries.length));
+      for (let i = 0; i < entries.length && remaining > 0; i++) {
+        const [id, cap] = entries[i];
+        const available = Math.min(cap, poolObj[id] || 0);
+        const take = Math.min(available, share, remaining);
+        if (take <= 0) continue;
+        poolObj[id] = Math.max(0, (poolObj[id] || 0) - take);
+        if (poolObj[id] <= 0) delete poolObj[id];
+        allowedMap[id] = Math.max(0, (allowedMap[id] || 0) - take);
+        used[id] = (used[id] || 0) + take;
+        remaining -= take;
+        if ((allowedMap[id] || 0) <= 0 || (poolObj[id] || 0) <= 0) {
+          entries.splice(i, 1);
+          i--;
+        }
+      }
     }
     return { remaining, used };
   };
