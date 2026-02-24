@@ -1415,6 +1415,22 @@ warning: `${lines.join("\n")}${more}`
 /*  Component-safe commit helpers                                      */
 /* ------------------------------------------------------------------ */
 
+function normalizeComponents(rows) {
+  if (!Array.isArray(rows)) return rows;
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized.length ? normalized : [];
+}
+
 async function componentCommit(interaction, payload) {
 const { ephemeral, targetMessageId, ...rest } = payload ?? {};
 
@@ -1442,14 +1458,9 @@ if (targetMessageId && !ephemeral) {
     const target = await interaction.channel?.messages?.fetch(targetMessageId);
     if (target) {
       // Convert components to JSON if they're builder objects
-      let editPayload = { ...rest };
+      const editPayload = { ...rest };
       if (editPayload.components) {
-        editPayload.components = editPayload.components.map(row => {
-          if (row.components) {
-            return { type: 1, components: row.components.map(comp => comp.toJSON?.() ?? comp) };
-          }
-          return row;
-        });
+        editPayload.components = normalizeComponents(editPayload.components);
       }
       // Dismiss the modal response only for modal submits
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
@@ -1472,6 +1483,9 @@ if (targetMessageId && !ephemeral) {
 const hasComponents = Array.isArray(rest.components) ? rest.components.length > 0 : Boolean(rest.components);
 const shouldBeEphemeral = ephemeral === true && !hasComponents;
 const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral } : { ...rest };
+if (options.components) {
+  options.components = normalizeComponents(options.components);
+}
 
 if (shouldBeEphemeral) {
   try {
@@ -2113,6 +2127,9 @@ if (ephemeral && (interaction.deferred || interaction.replied)) {
   return interaction.followUp({ ...base, ephemeral: true });
 }
 const options = ephemeral ? { ...base, ephemeral: true } : { ...base };
+if (options.components) {
+  options.components = normalizeComponents(options.components);
+}
 // If deferred, use editReply. Otherwise use reply (shouldn't happen but safety)
 if (interaction.deferred || interaction.replied) return interaction.editReply(options);
 return interaction.reply(options);
@@ -2124,14 +2141,9 @@ if (overrides?.messageId && !payload?.ephemeral) {
     const target = await interaction.channel?.messages?.fetch(overrides.messageId);
     if (target) {
       // Convert components to JSON if they're builder objects
-      let editPayload = { ...payload };
+      const editPayload = { ...payload };
       if (editPayload.components) {
-        editPayload.components = editPayload.components.map(row => {
-          if (row.components) {
-            return { type: 1, components: row.components.map(comp => comp.toJSON?.() ?? comp) };
-          }
-          return row;
-        });
+        editPayload.components = normalizeComponents(editPayload.components);
       }
       const result = await target.edit(editPayload);
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
