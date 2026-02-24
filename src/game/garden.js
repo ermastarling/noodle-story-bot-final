@@ -291,7 +291,7 @@ export function formatPlotLines(player, content, effects = {}, now = Date.now())
       }
       const readyText = !plot.harvest_ready_at || plot.harvest_ready_at <= now
         ? "ready"
-        : `ready in ${formatDuration(plot.harvest_ready_at - now)}`;
+        : `ready ${formatTimestamp(plot.harvest_ready_at)}`;
       return `${label}: ${getItemName(plot.seed_id, content)} — **${plot.remaining}/${PLOT_YIELD}** left (${readyText})`;
     })
     .join("\n");
@@ -307,4 +307,9 @@ function formatDuration(ms) {
   const seconds = totalSeconds % 60;
   if (minutes > 0) return `${minutes}m ${seconds}s`;
   return `${seconds}s`;
+}
+
+function formatTimestamp(ms) {
+  const ts = Math.floor(ms / 1000);
+  return `<t:${ts}:R>`;
 }
