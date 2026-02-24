@@ -2143,10 +2143,12 @@ if (sub === "profile") {
     const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
     embed.setFooter({ text: footerText });
   }
+  const profileComponents = [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })];
+  applyGreenButtonFooter([embed], profileComponents);
   
   return commit({
     embeds: [embed],
-    components: [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
+    components: profileComponents
   });
 }
 
