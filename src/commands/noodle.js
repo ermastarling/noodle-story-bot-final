@@ -5513,7 +5513,7 @@ function buildCompostSelectOptions(player) {
     .sort((a, b) => displayItemName(a.id).localeCompare(displayItemName(b.id)))
     .slice(0, 25 - options.length)
     .map((entry) => ({
-      label: `Fresh — ${displayItemName(entry.id)} (${entry.qty})`.slice(0, 100),
+      label: `${displayItemName(entry.id)} (${entry.qty})`.slice(0, 100),
       value: `${entry.source}:${entry.id}`,
       description: `${entry.qty} unit(s) available`.slice(0, 100)
     }));
@@ -5634,8 +5634,8 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     .join("\n");
   const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
   const header = selectionList
-    ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nChoose items then press Add 5 / Add 10.`
-    : `${getIcon("basket")} No items selected. Choose items then press Add 5 / Add 10.`;
+    ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nAdd 5/10 pulls that many units from each selected source (pooled into bags).`
+    : `${getIcon("basket")} No items selected. Add 5/10 pulls that many units from each selected source (pooled into bags).`;
   view.embed.setDescription(`${header}`);
 
   const backRow = new ActionRowBuilder().addComponents(
@@ -5672,8 +5672,23 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   }
 
   const selections = cached.selections ?? [];
+  const parsedSelections = selections
+    .map((raw) => {
+      const [source, ...idParts] = String(raw).split(":");
+      const itemId = idParts.join(":");
+      if (!source || !itemId) return null;
+      return { source, itemId };
+    })
+    .filter(Boolean);
+
+  if (!parsedSelections.length) {
+    compostSelectionCache.delete(messageId);
+    return componentCommit(interaction, { content: `${getIcon("info")} Select items to compost first.`, ephemeral: true });
+  }
+
   const p = ensurePlayer(serverId, userId);
   const garden = ensureGardenState(p);
+  if (!p.inv_ingredients) p.inv_ingredients = {};
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
   const compostCap = getCompostCap(p, combinedEffects);
   const compostCount = garden.compost_bags || 0;
@@ -5682,79 +5697,46 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     return componentCommit(interaction, { content: `${getIcon("basket")} Compost storage is full (${compostCount}/${compostCap}).`, ephemeral: true });
   }
 
-  const allowedSpoiled = {};
-  const allowedFresh = {};
-  // Cap each picked item independently to the units needed for the requested bags
-  const unitsPerItemCap = amountRequested * COMPOST_PER_BAG;
-  for (const raw of selections) {
-    const [source, ...idParts] = String(raw).split(":");
-    const itemId = idParts.join(":");
-    if (!itemId) continue;
-    if (source === "spoiled" && (garden.spoiled?.[itemId] || 0) > 0) {
-      allowedSpoiled[itemId] = Math.max(0, Math.min(garden.spoiled[itemId] || 0, unitsPerItemCap));
-    }
-    if (source === "fresh" && (p.inv_ingredients?.[itemId] || 0) > 0) {
-      allowedFresh[itemId] = Math.max(0, Math.min(p.inv_ingredients[itemId] || 0, unitsPerItemCap));
-    }
-  }
-
-  const availableUnits = Object.values(allowedSpoiled).reduce((s, v) => s + v, 0) + Object.values(allowedFresh).reduce((s, v) => s + v, 0);
-  if (!availableUnits) {
-    compostSelectionCache.delete(messageId);
-    return componentCommit(interaction, { content: `${getIcon("warning")} Those items aren’t available anymore. Reselect to continue.`, ephemeral: true });
-  }
-
-  const craftableMax = Math.min(roomBags, Math.floor(availableUnits / COMPOST_PER_BAG));
-  const bagsToMake = Math.max(0, Math.min(amountRequested, craftableMax));
-  if (bagsToMake <= 0) {
-    return componentCommit(interaction, { content: `${getIcon("warning")} Need at least ${COMPOST_PER_BAG} unit(s) from the selected items to make 1 bag.`, ephemeral: true });
-  }
-
-  const unitsNeeded = bagsToMake * COMPOST_PER_BAG;
-  const takeFromPool = (poolObj, allowedMap, units) => {
-    let remaining = units;
-    const used = {};
-    const entries = Object.entries(allowedMap).filter(([, qty]) => qty > 0);
-    while (remaining > 0 && entries.length > 0) {
-      const share = Math.max(1, Math.floor(remaining / entries.length));
-      for (let i = 0; i < entries.length && remaining > 0; i++) {
-        const [id, cap] = entries[i];
-        const available = Math.min(cap, poolObj[id] || 0);
-        const take = Math.min(available, share, remaining);
-        if (take <= 0) continue;
-        poolObj[id] = Math.max(0, (poolObj[id] || 0) - take);
-        if (poolObj[id] <= 0) delete poolObj[id];
-        allowedMap[id] = Math.max(0, (allowedMap[id] || 0) - take);
-        used[id] = (used[id] || 0) + take;
-        remaining -= take;
-        if ((allowedMap[id] || 0) <= 0 || (poolObj[id] || 0) <= 0) {
-          entries.splice(i, 1);
-          i--;
-        }
-      }
-    }
-    return { remaining, used };
-  };
-
-  let remaining = unitsNeeded;
   let spoiledUsed = {};
   let freshUsed = {};
+  let totalUnitsUsed = 0;
+  const maxUnitsByStorage = roomBags * COMPOST_PER_BAG;
 
-  const spoiledTake = takeFromPool(garden.spoiled, allowedSpoiled, remaining);
-  spoiledUsed = spoiledTake.used;
-  remaining = spoiledTake.remaining;
+  for (const { source, itemId } of parsedSelections) {
+    if (totalUnitsUsed >= maxUnitsByStorage) break;
+    const pool = source === "spoiled" ? garden.spoiled : p.inv_ingredients;
+    const availableUnits = Math.max(0, pool?.[itemId] || 0);
+    if (availableUnits <= 0) continue;
 
-  if (remaining > 0) {
-    const freshTake = takeFromPool(p.inv_ingredients || {}, allowedFresh, remaining);
-    freshUsed = freshTake.used;
-    remaining = freshTake.remaining;
+    const unitsToUse = Math.min(amountRequested, availableUnits, maxUnitsByStorage - totalUnitsUsed);
+    if (unitsToUse <= 0) continue;
+
+    pool[itemId] = Math.max(0, availableUnits - unitsToUse);
+    if (pool[itemId] <= 0) delete pool[itemId];
+
+    if (source === "spoiled") {
+      spoiledUsed[itemId] = (spoiledUsed[itemId] || 0) + unitsToUse;
+    } else {
+      freshUsed[itemId] = (freshUsed[itemId] || 0) + unitsToUse;
+    }
+
+    totalUnitsUsed += unitsToUse;
   }
 
-  if (remaining > 0) {
-    return componentCommit(interaction, { content: `${getIcon("warning")} Not enough of the selected items to craft ${bagsToMake} bag(s).`, ephemeral: true });
+  const bagsMade = Math.min(roomBags, Math.floor(totalUnitsUsed / COMPOST_PER_BAG));
+  if (bagsMade <= 0) {
+    compostSelectionCache.delete(messageId);
+    return componentCommit(interaction, { content: `${getIcon("warning")} Not enough of the selected items to craft any compost bags.`, ephemeral: true });
   }
 
-  garden.compost_bags = (garden.compost_bags || 0) + bagsToMake;
+  const requestedUnits = amountRequested * parsedSelections.length;
+  const partialNote = totalUnitsUsed < requestedUnits
+    ? totalUnitsUsed >= maxUnitsByStorage
+      ? `${getIcon("info")} Compost storage capped this batch.`
+      : `${getIcon("info")} Not enough of the selected items for the full amount.`
+    : null;
+
+  garden.compost_bags = (garden.compost_bags || 0) + bagsMade;
   cached.ts = Date.now();
   compostSelectionCache.set(messageId, cached);
 
@@ -5772,9 +5754,13 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   };
 
   const usageBlocks = [formatUsage("Saved spoilage", spoiledUsed), formatUsage("Fresh forageables", freshUsed)].filter(Boolean).join("\n\n");
-  const summary = [`${getIcon("basket")} Packed **${bagsToMake}** compost bag(s).`,
+  const summaryParts = [
+    `${getIcon("basket")} Packed **${bagsMade}** compost bag(s).`,
     `Compost now: **${garden.compost_bags}/${compostCap}**.`,
-    usageBlocks].filter(Boolean).join("\n\n");
+    usageBlocks,
+    partialNote
+  ];
+  const summary = summaryParts.filter(Boolean).join("\n\n");
 
   const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
   const { options } = buildCompostSelectOptions(p);
