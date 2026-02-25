@@ -715,7 +715,7 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const description = [
     `${getIcon("tree")} Plots available: **${getGardenPlotCount(player, combinedEffects)}**`,
     `**Plots**\n${plotsSection}`,
-    `**Seeds (unlimited)**\n${seedSection}`,
+    `${getIcon("tree")} **Seeds (unlimited)**\n${seedSection}`,
     `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),  
     `**Compost Inputs**\nSpoiled saved: **${spoiledTotal}** · Fresh forageables: **${pantryTotal}**\nRecipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
   ].join("\n\n");
@@ -5634,8 +5634,8 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     .join("\n");
   const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
   const header = selectionList
-    ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nAdd 5/10 pulls that many units from each selected source (pooled into bags).`
-    : `${getIcon("basket")} No items selected. Add 5/10 pulls that many units from each selected source (pooled into bags).`;
+    ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nAdd 5/10 pulls that many units from each selected source.`
+    : `${getIcon("basket")} No items selected. Add 5/10 pulls that many units from each selected source.`;
   view.embed.setDescription(`${header}`);
 
   const backRow = new ActionRowBuilder().addComponents(
