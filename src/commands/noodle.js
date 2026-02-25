@@ -5705,7 +5705,28 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   for (const { source, itemId } of parsedSelections) {
     if (totalUnitsUsed >= maxUnitsByStorage) break;
-    const pool = source === "spoiled" ? garden.spoiled : p.inv_ingredients;
+
+    if (source === "spoiled") {
+      const spoiledEntries = Object.entries(garden.spoiled || {}).filter(([, qty]) => qty > 0);
+      const availableUnits = spoiledEntries.reduce((sum, [, qty]) => sum + qty, 0);
+      const unitsToUse = Math.min(amountRequested, availableUnits, maxUnitsByStorage - totalUnitsUsed);
+      if (unitsToUse <= 0) continue;
+
+      let remainingUse = unitsToUse;
+      for (const [sid, qty] of spoiledEntries) {
+        if (remainingUse <= 0) break;
+        const take = Math.min(qty, remainingUse);
+        garden.spoiled[sid] = Math.max(0, qty - take);
+        if (garden.spoiled[sid] <= 0) delete garden.spoiled[sid];
+        remainingUse -= take;
+      }
+
+      spoiledUsed[SPOILED_STASH_KEY] = (spoiledUsed[SPOILED_STASH_KEY] || 0) + unitsToUse;
+      totalUnitsUsed += unitsToUse;
+      continue;
+    }
+
+    const pool = p.inv_ingredients;
     const availableUnits = Math.max(0, pool?.[itemId] || 0);
     if (availableUnits <= 0) continue;
 
@@ -5715,12 +5736,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     pool[itemId] = Math.max(0, availableUnits - unitsToUse);
     if (pool[itemId] <= 0) delete pool[itemId];
 
-    if (source === "spoiled") {
-      spoiledUsed[itemId] = (spoiledUsed[itemId] || 0) + unitsToUse;
-    } else {
-      freshUsed[itemId] = (freshUsed[itemId] || 0) + unitsToUse;
-    }
-
+    freshUsed[itemId] = (freshUsed[itemId] || 0) + unitsToUse;
     totalUnitsUsed += unitsToUse;
   }
 

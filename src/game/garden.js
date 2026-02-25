@@ -23,8 +23,8 @@ const SEED_ALIASES = {
 };
 
 const SEED_DISPLAY = {
-  citrus_seed: "Citrus Seeds",
-  flower_bush: "Flower Bush Seeds"
+  citrus_seed: "Citrus Plants",
+  flower_bush: "Flower Bushes"
 };
 
 export function isGardenUnlocked(player) {
