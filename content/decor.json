@@ -7,7 +7,7 @@
       "set_id": "comfort_food_inn",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 2 },
+      "unlock_rule": { "level": 30 },
       "flavor_text": "A soft linen banner that sways with a friendly hello."
     },
     {
@@ -17,7 +17,7 @@
       "set_id": "festival_noodle_house",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 6 },
+      "unlock_rule": { "level": 10 },
       "flavor_text": "A bright entry arch strung with festive tassels."
     },
     {
@@ -26,8 +26,8 @@
       "slot": "front",
       "set_id": "forest_kitchen",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 40 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 20 },
       "flavor_text": "Green stalks and gentle chimes greet every guest."
     },
     {
@@ -36,8 +36,8 @@
       "slot": "front",
       "set_id": "moonlit_atelier",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 60 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 50 },
       "flavor_text": "A soft silver arch that glows with evening light."
     },
     {
@@ -77,7 +77,7 @@
       "set_id": "festival_noodle_house",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 1 },
+      "unlock_rule": { "level": 10 },
       "flavor_text": "A simple cedar counter polished by gentle hands."
     },
     {
@@ -86,8 +86,8 @@
       "slot": "counter",
       "set_id": "forest_kitchen",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 50 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 20 },
       "flavor_text": "A sturdy counter carved from wind-fallen cedar."
     },
     {
@@ -97,7 +97,7 @@
       "set_id": "comfort_food_inn",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 4 },
+      "unlock_rule": { "level": 30 },
       "flavor_text": "Soft edges and warm tones invite long conversations."
     },
     {
@@ -106,8 +106,8 @@
       "slot": "counter",
       "set_id": "moonlit_atelier",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 65 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 50 },
       "flavor_text": "A sleek counter with a faint lunar sheen."
     },
     {
@@ -147,7 +147,7 @@
       "set_id": "festival_noodle_house",
       "rarity": "rare",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 4 },
+      "unlock_rule": { "level": 10 },
       "flavor_text": "A cheerful row of paper lanterns."
     },
     {
@@ -156,8 +156,8 @@
       "slot": "wall",
       "set_id": "forest_kitchen",
       "rarity": "common",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 15 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 20 },
       "flavor_text": "Soft greenery and a hint of forest air."
     },
     {
@@ -167,7 +167,7 @@
       "set_id": "comfort_food_inn",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 3 },
+      "unlock_rule": { "level": 30 },
       "flavor_text": "Warm tones and gentle patterns for cozy nights."
     },
     {
@@ -176,8 +176,8 @@
       "slot": "wall",
       "set_id": "moonlit_atelier",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 45 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 50 },
       "flavor_text": "A shimmering mural with soft lunar hues."
     },
     {
@@ -187,7 +187,7 @@
       "set_id": "comet_kitchen",
       "rarity": "seasonal",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 100 },
+      "unlock_rule": { "level": 70 },
       "flavor_text": "A glowing mural traced by a comet’s tail."
     },
     {
@@ -227,7 +227,7 @@
       "set_id": "festival_noodle_house",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 1 },
+      "unlock_rule": { "level": 10 },
       "flavor_text": "A brush-painted sign with your shop’s name."
     },
     {
@@ -236,8 +236,8 @@
       "slot": "sign",
       "set_id": "forest_kitchen",
       "rarity": "common",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 25 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 20 },
       "flavor_text": "Hand-carved wood with a leafy flourish."
     },
     {
@@ -247,7 +247,7 @@
       "set_id": "comfort_food_inn",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 5 },
+      "unlock_rule": { "level": 30 },
       "flavor_text": "A gentle script that welcomes every traveler."
     },
     {
@@ -256,8 +256,8 @@
       "slot": "sign",
       "set_id": "moonlit_atelier",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 55 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 50 },
       "flavor_text": "A silvered sign with a soft lunar glow."
     },
     {
@@ -297,7 +297,7 @@
       "set_id": "comfort_food_inn",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 2 },
+      "unlock_rule": { "level": 30 },
       "flavor_text": "A humble frame for cozy snapshots."
     },
     {
@@ -307,7 +307,7 @@
       "set_id": "festival_noodle_house",
       "rarity": "common",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 3 },
+      "unlock_rule": { "level": 10 },
       "flavor_text": "A lacquered frame lined with tiny festival charms."
     },
     {
@@ -316,8 +316,8 @@
       "slot": "frame",
       "set_id": "forest_kitchen",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 35 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 20 },
       "flavor_text": "A woven frame with pressed evergreen leaves."
     },
     {
@@ -336,8 +336,8 @@
       "slot": "frame",
       "set_id": "moonlit_atelier",
       "rarity": "rare",
-      "unlock_source": "rep",
-      "unlock_rule": { "rep": 30 },
+      "unlock_source": "shop_level",
+      "unlock_rule": { "level": 50 },
       "flavor_text": "A silver-blue frame kissed by moonlight."
     },
     {
@@ -347,7 +347,7 @@
       "set_id": "starlight_caravan",
       "rarity": "epic",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 75 },
+      "unlock_rule": { "level": 60 },
       "flavor_text": "A shimmering arch with drifting starlight lanterns."
     },
     {
@@ -357,7 +357,7 @@
       "set_id": "starlight_caravan",
       "rarity": "epic",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 75 },
+      "unlock_rule": { "level": 60 },
       "flavor_text": "A woven night sky that glows with soft constellations."
     },
     {
@@ -367,7 +367,7 @@
       "set_id": "starlight_caravan",
       "rarity": "epic",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 75 },
+      "unlock_rule": { "level": 60 },
       "flavor_text": "A painted sign traced with comet dust."
     },
     {
@@ -377,7 +377,7 @@
       "set_id": "starlight_caravan",
       "rarity": "epic",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 75 },
+      "unlock_rule": { "level": 60 },
       "flavor_text": "A polished counter that glints like a clear night sky."
     },
     {
@@ -387,7 +387,7 @@
       "set_id": "starlight_caravan",
       "rarity": "epic",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 75 },
+      "unlock_rule": { "level": 60 },
       "flavor_text": "A luminous frame dotted with tiny constellations."
     },
     {
@@ -397,7 +397,7 @@
       "set_id": "comet_kitchen",
       "rarity": "seasonal",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 100 },
+      "unlock_rule": { "level": 70 },
       "flavor_text": "A radiant entrance streaked with a comet’s trail."
     },
     {
@@ -407,7 +407,7 @@
       "set_id": "comet_kitchen",
       "rarity": "seasonal",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 100 },
+      "unlock_rule": { "level": 70 },
       "flavor_text": "Polished stone that glitters like a passing comet."
     },
     {
@@ -417,7 +417,7 @@
       "set_id": "comet_kitchen",
       "rarity": "seasonal",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 100 },
+      "unlock_rule": { "level": 70 },
       "flavor_text": "A luminous frame that leaves a faint star trail."
     },
     {
@@ -427,7 +427,7 @@
       "set_id": "comet_kitchen",
       "rarity": "seasonal",
       "unlock_source": "shop_level",
-      "unlock_rule": { "level": 100 },
+      "unlock_rule": { "level": 70 },
       "flavor_text": "A radiant sign streaked with a comet’s glow."
     },
     {

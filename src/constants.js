@@ -51,15 +51,15 @@ export const PROFILE_BADGES_SHOWN = 12;
 export const PROFILE_COLLECTIONS_SHOWN = 3;
 
 export const DISCOVERY_TIER_UNLOCK_LEVEL = { 
-  rare: 5, 
-  epic: 15, 
-  seasonal: 25 
+  rare: 10, 
+  epic: 25, 
+  seasonal: 30 
 };
 
 export const DISCOVERY_TIER_UNLOCK_REP = { 
-  rare: 25, 
-  epic: 75, 
-  seasonal: 150 
+  rare: 250, 
+  epic: 1000, 
+  seasonal: 1500 
 };
 
 // Recipe discovery weighting by tier (lower weight = rarer to discover)

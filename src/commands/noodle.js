@@ -5235,7 +5235,7 @@ ${lines.join("\n")}`;
       delete p.orders_day; // Force regeneration by clearing day marker
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
-      results.push(`${getIcon("orders")} Fresh orders are now on today’s board.`);
+      results.push(`\n${getIcon("orders")} Fresh orders are now on today’s board.`);
     }
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
