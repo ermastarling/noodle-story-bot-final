@@ -7,7 +7,8 @@ import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "..
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
-import { loadBadgesContent, loadContentBundle, loadEventsContent, loadSpecializationsContent } from "../content/index.js";
+import { applyQuestProgress } from "../game/quests.js";
+import { loadBadgesContent, loadContentBundle, loadEventsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
 import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed } from "./noodle.js";
 import {
   grantBlessing,
@@ -77,6 +78,7 @@ const eventsContent = loadEventsContent();
 const content = withEventRecipes(baseContent, eventsContent);
 const specializationsContent = loadSpecializationsContent();
 const badgesContent = loadBadgesContent();
+const questsContent = loadQuestsContent();
 
 const SHARED_ORDER_MIN_SERVINGS = 5;
 const SHARED_ORDER_REWARD = {
@@ -210,11 +212,35 @@ function applyGreenButtonFooter(embeds, components) {
   });
 }
 
-function buildMarketRefreshFooterText(existingFooterText, marketRestockMs) {
+function buildMarketRefreshFooterText(existingFooterText, marketRestockMs, nowMs = Date.now()) {
   if (!marketRestockMs) return existingFooterText;
-  const ts = Math.floor(marketRestockMs / 1000);
-  const marketText = `Market Restock: <t:${ts}:f> (<t:${ts}:R>)`;
-  if (existingFooterText?.includes("Market Restock:")) return existingFooterText;
+  if (existingFooterText?.toLowerCase?.().includes("market restock:")) return existingFooterText;
+
+  const locale = "en-US";
+  const dateText = new Date(marketRestockMs).toLocaleString(locale, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+
+  const diffMs = marketRestockMs - nowMs;
+  const absMinutes = Math.round(Math.abs(diffMs) / 60000);
+  let relativeText = "";
+  if (absMinutes === 0) {
+    relativeText = "now";
+  } else if (absMinutes < 60) {
+    relativeText = `${absMinutes} min ${diffMs >= 0 ? "from now" : "ago"}`;
+  } else {
+    const hours = Math.round(absMinutes / 60);
+    const mins = absMinutes % 60;
+    const hourPart = `${hours} hr${hours === 1 ? "" : "s"}`;
+    const minPart = mins ? ` ${mins} min` : "";
+    relativeText = `${hourPart}${minPart} ${diffMs >= 0 ? "from now" : "ago"}`;
+  }
+
+  const marketText = `Market Restock: ${dateText}${relativeText ? ` (${relativeText})` : ""}`;
   return existingFooterText ? `${existingFooterText} • ${marketText}` : marketText;
 }
 
@@ -917,6 +943,8 @@ async function handleTip(interaction) {
       try {
         const result = transferTip(db, serverId, sender, receiver, amount, message);
 
+        applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
+
         // Save both players
         if (db) {
           upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
@@ -1445,6 +1473,8 @@ async function handleComponent(interaction) {
           try {
             const result = transferTip(db, serverId, sender, receiver, amount, null);
 
+            applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
+
             if (db) {
               upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
               upsertPlayer(db, serverId, targetId, result.receiver, null, result.receiver.schema_version);
@@ -1504,6 +1534,7 @@ async function handleComponent(interaction) {
         return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
           let serverState = ensureServer(serverId);
           let targetPlayer = ensurePlayer(serverId, targetId);
+          let visitor = ensurePlayer(serverId, userId);
 
           try {
             const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
@@ -1511,7 +1542,10 @@ async function handleComponent(interaction) {
 
             serverState = logVisitActivity(serverState, userId, targetId);
 
+            applyQuestProgress(visitor, questsContent, userId, { type: "bless_player", amount: 1 }, nowTs());
+
             if (db) {
+              upsertPlayer(db, serverId, userId, visitor, null, visitor.schema_version);
               upsertPlayer(db, serverId, targetId, targetPlayer, null, targetPlayer.schema_version);
               upsertServer(db, serverId, serverState, null);
             }
@@ -2725,6 +2759,8 @@ async function handleComponent(interaction) {
               player.coins = (player.coins || 0) + coinsReward;
               player.rep = (player.rep || 0) + repReward;
               player.sxp_progress = (player.sxp_progress || 0) + sxpReward;
+
+              applyQuestProgress(player, questsContent, contributorId, { type: "shared_order_complete", amount: 1 }, nowTs());
 
               // Apply SXP level up (modifies player in place)
               applySxpLevelUp(player);

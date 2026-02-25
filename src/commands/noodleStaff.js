@@ -120,8 +120,8 @@ function formatEffects(effects) {
     else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(1)}% order quality`);
     else if (key === "cooldown_reduction") lines.push(`-${(value * 100).toFixed(0)}% cooldowns`);
     else if (key === "bowl_capacity_bonus") lines.push(`+${value} bowl capacity`);
-    else if (key === "forage_bonus_items") lines.push(`+${value} forage items`);
-    else if (key === "forage_seed_chance") lines.push(`+${(value * 100).toFixed(0)}% seed find chance`);
+    else if (key === "forage_bonus_items") lines.push(`+${Number(value).toFixed(2)} forage items`);
+    else if (key === "forage_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
     else if (key === "garden_autoharvest") lines.push(`Auto-harvest garden plots`);
     else if (key === "garden_harvest_seed_chance") lines.push(`+${(value * 100).toFixed(0)}% harvest seed chance`);
     else if (key === "market_discount") lines.push(`${(value * 100).toFixed(0)}% market discount`);
@@ -242,8 +242,8 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (key === "rep_bonus_percent") return `+${(value * 100).toFixed(0)}% rep`;
     if (key === "bowl_capacity_bonus") return `+${value} bowl capacity`;
     if (key === "cooldown_reduction") return `-${(value * 100).toFixed(0)}% cooldowns`;
-    if (key === "forage_bonus_items") return `+${value} forage items`;
-    if (key === "forage_seed_chance") return `+${(value * 100).toFixed(0)}% seed find chance`;
+    if (key === "forage_bonus_items") return `+${Number(value).toFixed(2)} forage items`;
+    if (key === "forage_seed_chance") return `+${(value * 100).toFixed(2)}% seed find chance`;
     if (key === "garden_autoharvest") return `Auto-harvests garden plots`;
     if (key === "garden_harvest_seed_chance") return `+${(value * 100).toFixed(0)}% seed chance on harvest`;
     if (key === "market_discount") return `${(value * 100).toFixed(0)}% market discount`;
@@ -277,6 +277,18 @@ export function buildStaffOverviewEmbed(player, server, user) {
       const qualityTotal = qualityPerLevel * level * staffMultiplier;
       effectLines.push(
         `**${staff.name}** — -${(failTotal * 100).toFixed(0)}% rare/epic cook fail, +${(qualityTotal * 100).toFixed(0)}% rare/epic cook quality`
+      );
+      continue;
+    }
+
+    if (staffId === "forager") {
+      const effectsPerLevel = staff.effects_per_level ?? {};
+      const bonusPerLevel = Number(effectsPerLevel.forage_bonus_items ?? 0);
+      const seedPerLevel = Number(effectsPerLevel.forage_seed_chance ?? 0);
+      const bonusTotal = bonusPerLevel * level * staffMultiplier;
+      const seedTotal = seedPerLevel * level * staffMultiplier;
+      effectLines.push(
+        `**${staff.name}** — +${bonusTotal.toFixed(2)} forage items, +${(seedTotal * 100).toFixed(2)}% seed find chance`
       );
       continue;
     }

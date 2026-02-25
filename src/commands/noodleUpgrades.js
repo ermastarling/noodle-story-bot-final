@@ -718,12 +718,13 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         source
       });
 
-      return {
-        content: result.message,
+      const response = {
         embeds: [updatedEmbed],
         components: updatedComponents,
         ephemeral: !result.success
       };
+      if (!result.success) response.content = result.message;
+      return response;
     }
 
     if (action === "staff") {
@@ -737,17 +738,17 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       const updatedEmbed = buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, "staff", { staffRarity });
       const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, { categoryId: "staff", staffRarity, source });
 
-      return {
-        content: result.message,
+      const response = {
         embeds: [updatedEmbed],
         components: updatedComponents,
         ephemeral: !result.success
       };
+      if (!result.success) response.content = result.message;
+      return response;
     }
 
     if (action === "category" || action === "refresh" || action === "staffpage") {
       return {
-        content: " ",
         embeds: [embed],
         components
       };

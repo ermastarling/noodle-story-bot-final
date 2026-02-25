@@ -121,6 +121,7 @@ import {
   formatSeedLines,
   formatSpoiledLines,
   formatPlotLines,
+  GARDEN_UNLOCK_LEVEL,
   COMPOST_PER_BAG,
   PLOT_YIELD
 } from "../game/garden.js";
@@ -144,6 +145,13 @@ Constants
 const multibuyCacheV2 = new Map();
 // Temporary cache for compost selections keyed by message id
 const compostSelectionCache = new Map();
+
+function gardenUnlockLine(prevLevel, newLevel) {
+  if ((prevLevel ?? 0) < GARDEN_UNLOCK_LEVEL && (newLevel ?? 0) >= GARDEN_UNLOCK_LEVEL) {
+    return `\n${getIcon("tree")} Garden unlocked! Find it in Forage or Pantry.`;
+  }
+  return "";
+}
 
 // Aliases for v14+ compatibility in code
 const ActionRowBuilder = MessageActionRow;
@@ -322,11 +330,35 @@ function applyGreenButtonFooter(embeds, components) {
   });
 }
 
-function buildMarketRefreshFooterText(existingFooterText, marketRestockMs) {
+function buildMarketRefreshFooterText(existingFooterText, marketRestockMs, nowMs = Date.now()) {
   if (!marketRestockMs) return existingFooterText;
-  const ts = Math.floor(marketRestockMs / 1000);
-  const marketText = `Market Restock: <t:${ts}:f> (<t:${ts}:R>)`;
-  if (existingFooterText?.includes("Market Restock:")) return existingFooterText;
+  if (existingFooterText?.toLowerCase?.().includes("market restock:")) return existingFooterText;
+
+  const locale = "en-US";
+  const dateText = new Date(marketRestockMs).toLocaleString(locale, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+
+  const diffMs = marketRestockMs - nowMs;
+  const absMinutes = Math.round(Math.abs(diffMs) / 60000);
+  let relativeText = "";
+  if (absMinutes === 0) {
+    relativeText = "now";
+  } else if (absMinutes < 60) {
+    relativeText = `${absMinutes} min ${diffMs >= 0 ? "from now" : "ago"}`;
+  } else {
+    const hours = Math.round(absMinutes / 60);
+    const mins = absMinutes % 60;
+    const hourPart = `${hours} hr${hours === 1 ? "" : "s"}`;
+    const minPart = mins ? ` ${mins} min` : "";
+    relativeText = `${hourPart}${minPart} ${diffMs >= 0 ? "from now" : "ago"}`;
+  }
+
+  const marketText = `Market Restock: ${dateText}${relativeText ? ` (${relativeText})` : ""}`;
   return existingFooterText ? `${existingFooterText} • ${marketText}` : marketText;
 }
 
@@ -570,16 +602,6 @@ function noodleMainMenuRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("basket")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
-);
-}
-
-function noodleMainMenuRowNoForage(userId) {
-return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("basket")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
 );
@@ -603,11 +625,13 @@ function noodleForageGardenRow(userId, {
 
   if (includeGardenButton) {
     const gardenPrimary = active === "garden";
+    const gardenUnlocked = !gardenLocked;
+    const gardenStyle = gardenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary;
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:garden:${userId}`)
         .setLabel("Garden").setEmoji(getButtonEmoji("tree"))
-        .setStyle(gardenPrimary ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        .setStyle(gardenPrimary ? ButtonStyle.Success : gardenStyle)
         .setDisabled(gardenLocked)
     );
   }
@@ -682,7 +706,7 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || (plot.remaining ?? 0) <= 0);
 
   const description = [
-    `${getIcon("tree")} Plots unlocked: **${getGardenPlotCount(player, combinedEffects)}**`,
+    `${getIcon("tree")} Plots available: **${getGardenPlotCount(player, combinedEffects)}**`,
     `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),
     `**Plots**\n${plotsSection}`,
     `**Seeds (unlimited)**\n${seedSection}`,
@@ -790,7 +814,6 @@ function noodleMainMenuRowNoProfile(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("basket")).setStyle(ButtonStyle.Secondary)
 );
 }
@@ -900,8 +923,6 @@ function noodleMainMenuRowNoPantry(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:garden:${userId}`).setLabel("Garden").setEmoji(getButtonEmoji("tree")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
 );
 }
@@ -909,7 +930,6 @@ new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profil
 function noodleMainMenuRowNoOrders(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:forage:${userId}`).setLabel("Forage").setEmoji(getButtonEmoji("forage")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("basket")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary)
 );
@@ -1734,7 +1754,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
   const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
   const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
   const marketRestockTs = Math.floor(marketRestockMs / 1000);
-  const marketRestockLine = `${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
+  const marketRestockLine = `\n${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
 
   if (!opts.length) {
     const emptyEmbed = buildMenuEmbed({
@@ -2304,7 +2324,7 @@ if (sub === "start") {
     const gardenUnlocked = isGardenUnlocked(p);
     const navRows = [
       noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
-      noodleMainMenuRowNoForage(userId)
+      noodleMainMenuRow(userId)
     ];
 
     const embed = buildMenuEmbed({
@@ -2351,6 +2371,7 @@ if (sub === "profile") {
   const p = ensurePlayer(serverId, u.id);
   const s = ensureServer(serverId);
   const selfPlayer = ensurePlayer(serverId, userId);
+  const viewingSelf = u.id === userId;
   const questsAvailable = hasDailyRewardAvailable(selfPlayer, nowTs()) || hasClaimableQuests(selfPlayer);
   const specializationsAvailable = getSpecializationAlert(selfPlayer);
   const party = getUserActiveParty(db, u.id);
@@ -2367,11 +2388,13 @@ if (sub === "profile") {
     const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
     embed.setFooter({ text: footerText });
   }
-  const profileComponents = [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })];
-  applyGreenButtonFooter([embed], profileComponents);
+  const profileComponents = viewingSelf
+    ? [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
+    : [];
+  const embedsWithFooter = applyGreenButtonFooter([embed], profileComponents);
   
   return commit({
-    embeds: [embed],
+    embeds: embedsWithFooter,
     components: profileComponents
   });
 }
@@ -2402,6 +2425,7 @@ if (sub === "pantry") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
+    const gardenUnlocked = isGardenUnlocked(p);
     const now = nowTs();
     const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
@@ -2532,7 +2556,11 @@ if (sub === "pantry") {
     return commit({
       content: " ",
       embeds: [pantryEmbed],
-      components: [noodleMainMenuRowNoPantry(userId), noodleRecipesMenuRow(userId)]
+      components: [
+        noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
+        noodleMainMenuRowNoPantry(userId),
+        noodleRecipesMenuRow(userId)
+      ]
     });
   });
 }
@@ -2565,12 +2593,13 @@ if (sub === "recipes") {
       const recipe = content.recipes?.[recipeId];
       const name = recipe?.name ?? recipeId ?? "Unknown recipe";
       const tier = recipe?.tier ? ` (${recipe.tier})` : "";
+      const eventTag = recipe?.event_id ? ` ${getIcon("event")} Event` : "";
       const count = entry.count ?? 0;
       const revealed = entry.revealed_ingredients ?? [];
       const revealedNames = revealed.length
         ? revealed.map((id) => displayItemName(id)).join(", ")
         : "_No ingredients revealed yet._";
-      return `• **${name}**${tier}\n **${count}/${CLUES_TO_UNLOCK_RECIPE}** Clues revealed: ${revealedNames}`;
+      return `• **${name}**${tier}${eventTag}\n **${count}/${CLUES_TO_UNLOCK_RECIPE}** Clues revealed: ${revealedNames}`;
     })
     .sort((a, b) => a.localeCompare(b));
 
@@ -2817,7 +2846,9 @@ if (sub === "status") {
 
 /* ---------------- EVENT ---------------- */
 if (sub === "event") {
-  const dailyAvailable = hasDailyRewardAvailable(ensurePlayer(serverId, userId), nowTs());
+  const player = ensurePlayer(serverId, userId);
+  const knownRecipeIds = new Set(getAvailableRecipes(player));
+  const dailyAvailable = hasDailyRewardAvailable(player, nowTs());
   const eventRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:action:quests_daily:${userId}`)
@@ -2894,7 +2925,10 @@ if (sub === "event") {
     ? `**Special Event Recipes**\n${eventRecipes
         .map((recipe) => {
           const tier = recipe?.tier ? ` (${recipe.tier})` : "";
-          return `• **${recipe?.name ?? recipe?.recipe_id ?? "Unknown"}**${tier}`;
+          const recipeId = recipe?.recipe_id ?? recipe?.id ?? null;
+          const collected = recipeId && knownRecipeIds.has(recipeId);
+          const collectedIcon = collected ? `${getIcon("status_complete")} ` : "";
+          return `• ${collectedIcon}**${recipe?.name ?? recipeId ?? "Unknown"}**${tier}`;
         })
         .join("\n")}`
     : "**Special Event Recipes**\n_No special event recipes listed._";
@@ -3154,9 +3188,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
+    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
     const embed = buildMenuEmbed({
       title: `${getIcon("daily_reward")} Daily Reward`,
-      description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")}${levelLine}`,
+      description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")} ${levelLine}${gardenLine}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -3175,6 +3210,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   /* ---------------- QUESTS: CLAIM ---------------- */
   if (sub === "quests_claim") {
+    const prevShopLevel = p.shop_level ?? 1;
     const result = claimCompletedQuests(p);
     const lines = result.claimed.length
       ? result.claimed.map((entry) => {
@@ -3187,9 +3223,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       : ["_No completed quests to claim._"]; 
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
+    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
     const embed = buildMenuEmbed({
       title: `${getIcon("status_complete")} Quest Rewards`,
-      description: `${lines.join("\n")}${levelLine}`,
+      description: `${lines.join("\n")}${levelLine}${gardenLine}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -3395,7 +3432,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         gardenLocked: !gardenUnlocked,
         showGardenActions: false
       }),
-      noodleMainMenuRowNoForage(userId)
+      noodleMainMenuRow(userId)
     ];
 
     const baseCooldownMs = 2 * 60 * 1000;
@@ -3614,7 +3651,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
       const navRows = [
         noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
-        noodleMainMenuRowNoForage(userId)
+        noodleMainMenuRow(userId)
       ];
       return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
     }
@@ -3629,7 +3666,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: " ",
       embeds: [view.embed],
-      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)]
+      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
 
@@ -3649,7 +3686,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         canCompost: gardenState.canCraft,
         canHarvest: gardenState.hasHarvestable
       }),
-      noodleMainMenuRowNoForage(userId)
+      noodleMainMenuRow(userId)
     ];
 
     if (!gardenUnlocked) {
@@ -3740,6 +3777,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     garden.compost_bags = (garden.compost_bags || 0) + bagsToMake;
+    if (bagsToMake > 0) {
+      applyQuestProgress(p, questsContent, userId, { type: "garden_compost", amount: bagsToMake }, now);
+    }
 
     const formatUsage = (label, usedMap) => {
       const entries = Object.entries(usedMap || {}).filter(([, qty]) => qty > 0);
@@ -3782,7 +3822,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         canCompost: gardenState.canCraft,
         canHarvest: gardenState.hasHarvestable
       }),
-      noodleMainMenuRowNoForage(userId)
+      noodleMainMenuRow(userId)
     ];
 
     if (!gardenUnlocked) {
@@ -3813,6 +3853,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({ content: reasonText, components: navRows, ephemeral: true });
     }
 
+    applyQuestProgress(p, questsContent, userId, { type: "garden_plant", amount: 1 }, now);
+
     const view = buildGardenView({
       player: p,
       combinedEffects,
@@ -3827,7 +3869,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: " ",
       embeds: [view.embed],
-      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)]
+      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
 
@@ -3846,7 +3888,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         canCompost: gardenState.canCraft,
         canHarvest: gardenState.hasHarvestable
       }),
-      noodleMainMenuRowNoForage(userId)
+      noodleMainMenuRow(userId)
     ];
 
     if (!gardenUnlocked) {
@@ -3886,13 +3928,18 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 ${lines.join("\n")}`;
     }
 
+    const harvestedPlots = harvestResult.harvestedPlots ?? 0;
+    if (harvestedPlots > 0) {
+      applyQuestProgress(p, questsContent, userId, { type: "garden_harvest", amount: harvestedPlots }, now);
+    }
+
     const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
     view.embed.setDescription(`${summary}\n\n${baseDesc}`);
 
     return commitState({
       content: " ",
       embeds: [view.embed],
-      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRowNoForage(userId)]
+      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
 
@@ -4348,7 +4395,7 @@ ${lines.join("\n")}`;
     if (tutSuffix) parts.push("", tutSuffix);
 
     const showCancel = acceptedEntries.length > 0;
-    const highlightAccept = acceptedEntries.length === 0;
+    const highlightAccept = acceptedEntries.length === 0 && remaining > 0;
     const menuEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Orders`,
       description: parts.join("\n"),
@@ -4785,6 +4832,7 @@ ${lines.join("\n")}`;
     
     const results = [];
     const discoveryMessages = [];
+    const prevShopLevel = p.shop_level ?? 1;
     let totalCoins = 0;
     let totalRep = 0;
     let totalSxp = 0;
@@ -5073,6 +5121,7 @@ ${lines.join("\n")}`;
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
     const levelLine = leveledUp ? `\n${getIcon("level_up")} Level up! You're now **Level ${p.shop_level}**.` : "";
+    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
     const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.join("\n")}` : "";
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
@@ -5085,7 +5134,7 @@ ${lines.join("\n")}`;
 
     const serveEmbed = buildMenuEmbed({
       title: `${getIcon("serve")} Orders Served`,
-      description: `${results.join("\n")}\n\n${summary}${levelLine}${discoveryLine}${suffix}`,
+      description: `${results.join("\n")}\n\n${summary}${levelLine}${gardenLine}${discoveryLine}${suffix}`,
       user: interaction.member ?? interaction.user
     });
 
@@ -5485,7 +5534,7 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
     new ButtonBuilder()
       .setCustomId(`noodle:garden:compost_add:${userId}:10`)
       .setLabel("Add 10")
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 
   const backRow = new ActionRowBuilder().addComponents(
@@ -5549,7 +5598,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     new ButtonBuilder()
       .setCustomId(`noodle:garden:compost_add:${userId}:10`)
       .setLabel("Add 10")
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 
   const selectionList = selections
@@ -5562,9 +5611,9 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     .join("\n");
   const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
   const header = selectionList
-    ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nUse Add 5 / Add 10 to craft (respects storage and available items).`
-    : `${getIcon("basket")} Choose items then press Add 5 / Add 10.`;
-  view.embed.setDescription(`${header}\n\n${baseDesc}`);
+    ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nChoose items then press Add 5 / Add 10.`
+    : `${getIcon("basket")} No items selected. Choose items then press Add 5 / Add 10.`;
+  view.embed.setDescription(`${header}`);
 
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -5722,7 +5771,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     new ButtonBuilder()
       .setCustomId(`noodle:garden:compost_add:${userId}:10`)
       .setLabel("Add 10")
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 
   const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";

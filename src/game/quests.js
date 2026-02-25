@@ -75,10 +75,21 @@ function createQuestInstance(template, instanceId, cadence, rewards) {
     target: template.target,
     progress: 0,
     reward: rewards,
+    min_shop_level: template.min_shop_level ?? null,
     assigned_at: nowTs(),
     completed_at: null,
     claimed_at: null
   };
+}
+
+function isQuestTemplateEligible(template, playerLevel) {
+  const minLevel = Number(template.min_shop_level ?? 0);
+  if (Number.isFinite(minLevel) && minLevel > 0 && playerLevel < minLevel) return false;
+
+  const maxLevel = Number(template.max_shop_level ?? 0);
+  if (Number.isFinite(maxLevel) && maxLevel > 0 && playerLevel > maxLevel) return false;
+
+  return true;
 }
 
 export function ensureQuests(player, questsContent, userId, now = nowTs()) {
@@ -86,6 +97,7 @@ export function ensureQuests(player, questsContent, userId, now = nowTs()) {
   const counts = questsContent?.counts ?? { daily: 3, weekly: 2, monthly: 1, story: 0, seasonal: 0 };
   const multipliers = questsContent?.cadence_multipliers ?? { daily: 1, weekly: 2.5, monthly: 4, story: 4, seasonal: 3 };
   const templates = questsContent?.quests ?? [];
+  const playerLevel = player?.shop_level ?? 1;
 
   const dailyKey = dayKeyUTC(now);
   if (quests.daily_day !== dailyKey) {
@@ -94,7 +106,7 @@ export function ensureQuests(player, questsContent, userId, now = nowTs()) {
     for (const [id, quest] of Object.entries(quests.active)) {
       if (quest.cadence === "daily") delete quests.active[id];
     }
-    const dailyTemplates = templates.filter((q) => q.cadence === "daily");
+    const dailyTemplates = templates.filter((q) => q.cadence === "daily" && isQuestTemplateEligible(q, playerLevel));
     const rng = makeStreamRng({ mode: "seeded", seed: 1337, streamName: "quests", serverId: userId, dayKey: dailyKey });
     const picks = pickQuestTemplates(rng, dailyTemplates, counts.daily || 0);
     for (const template of picks) {
@@ -110,7 +122,7 @@ export function ensureQuests(player, questsContent, userId, now = nowTs()) {
     for (const [id, quest] of Object.entries(quests.active)) {
       if (quest.cadence === "weekly") delete quests.active[id];
     }
-    const weeklyTemplates = templates.filter((q) => q.cadence === "weekly");
+    const weeklyTemplates = templates.filter((q) => q.cadence === "weekly" && isQuestTemplateEligible(q, playerLevel));
     const rng = makeStreamRng({ mode: "seeded", seed: 2021, streamName: "quests-weekly", serverId: userId, dayKey: weekKey });
     const picks = pickQuestTemplates(rng, weeklyTemplates, counts.weekly || 0);
     for (const template of picks) {
@@ -126,7 +138,7 @@ export function ensureQuests(player, questsContent, userId, now = nowTs()) {
     for (const [id, quest] of Object.entries(quests.active)) {
       if (quest.cadence === "monthly") delete quests.active[id];
     }
-    const monthlyTemplates = templates.filter((q) => q.cadence === "monthly");
+    const monthlyTemplates = templates.filter((q) => q.cadence === "monthly" && isQuestTemplateEligible(q, playerLevel));
     const rng = makeStreamRng({ mode: "seeded", seed: 3031, streamName: "quests-monthly", serverId: userId, dayKey: monthKey });
     const picks = pickQuestTemplates(rng, monthlyTemplates, counts.monthly || 0);
     for (const template of picks) {

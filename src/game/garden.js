@@ -282,7 +282,7 @@ export function formatSpoiledLines(spoiled = {}, content) {
 
 export function formatPlotLines(player, content, effects = {}, now = Date.now()) {
   const plots = ensureGardenPlots(player, effects);
-  if (!plots.length) return "_No plots unlocked yet._";
+  if (!plots.length) return "_No plots available yet._";
   return plots
     .map((plot, idx) => {
       const label = `Plot ${idx + 1}`;
