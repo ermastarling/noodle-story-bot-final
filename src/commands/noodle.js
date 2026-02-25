@@ -942,28 +942,28 @@ new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profil
 );
 }
 
-function noodleOrdersActionRow(userId, { highlightAccept = true } = {}) {
+function noodleOrdersActionRow(userId, { highlightAccept = true, disableServe = false } = {}) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe)
 );
 }
 
-function noodleOrdersActionRowWithBack(userId, { highlightAccept = true } = {}) {
+function noodleOrdersActionRowWithBack(userId, { highlightAccept = true, disableServe = false } = {}) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe),
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
 }
 
-function noodleOrdersMenuActionRow(userId, { showCancel = false, highlightAccept = true } = {}) {
+function noodleOrdersMenuActionRow(userId, { showCancel = false, highlightAccept = true, disableServe = false } = {}) {
 const row = new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(ButtonStyle.Primary)
+new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe)
 );
 
 if (showCancel) {
@@ -1733,13 +1733,13 @@ if (idMatches.length === 1) return idMatches[0];
 return null;
 }
 
-function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
+function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   if (!s.market_prices) s.market_prices = {};
   if (!p.market_stock) p.market_stock = {};
 
   const allowed = getUnlockedIngredientIds(p, content);
 
-  const opts = (MARKET_ITEM_IDS ?? [])
+  const allOpts = (MARKET_ITEM_IDS ?? [])
     .map((id) => {
       if (!allowed.has(id)) return null;
 
@@ -1756,8 +1756,12 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
 
       return { label, value: id };
     })
-    .filter(Boolean)
-    .slice(0, 25);
+    .filter(Boolean);
+
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(allOpts.length / pageSize));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const opts = allOpts.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
   const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
   const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
@@ -1785,6 +1789,23 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
     .setMinValues(1)
     .setMaxValues(Math.min(5, opts.length))
     .addOptions(opts);
+
+  const navRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:buy:${userId}:${safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage <= 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:buy:${userId}:${safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage >= totalPages - 1)
+      )
+    : null;
 
   const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
   const allNeeded = {};
@@ -1841,33 +1862,39 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser }) {
     description: descriptionLines.join("\n"),
     user: ownerUser
   });
+  const footerBase = `Coins: ${p.coins || 0}c`;
+  const footerOwner = ownerFooterText(ownerUser);
+  const pageLabel = totalPages > 1 ? `Page ${safePage + 1}/${totalPages}` : null;
+  const footerParts = [footerBase, pageLabel].filter(Boolean).join(" • ");
   buyEmbed.setFooter({
-    text: `Coins: ${p.coins || 0}c\n${ownerFooterText(ownerUser)}`
+    text: `${footerParts}\n${footerOwner}`
   });
+
+  const rows = [new ActionRowBuilder().addComponents(menu)];
+  if (navRow) rows.push(navRow);
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:sell:${userId}`)
+        .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:profile:${userId}`)
+        .setLabel("Cancel")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
 
   return {
     content: " ",
     embeds: [buyEmbed],
-    components: [
-      new ActionRowBuilder().addComponents(menu),
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`noodle:nav:sell:${userId}`)
-          .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`noodle:nav:profile:${userId}`)
-          .setLabel("Cancel")
-          .setStyle(ButtonStyle.Secondary)
-      )
-    ]
+    components: rows
   };
 }
 
-function buildSellPickerPayload({ userId, p, s, ownerUser }) {
+function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const ownedItems = Object.entries(p.inv_ingredients ?? {})
-    .filter(([id, q]) => q > 0 && MARKET_ITEM_IDS.includes(id))
-    .slice(0, 25);
+    .filter(([id, q]) => q > 0 && MARKET_ITEM_IDS.includes(id));
 
   if (!ownedItems.length) {
     return {
@@ -1876,7 +1903,12 @@ function buildSellPickerPayload({ userId, p, s, ownerUser }) {
     };
   }
 
-  const opts = ownedItems.map(([id, ownedQty]) => {
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(ownedItems.length / pageSize));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const ownedPage = ownedItems.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  const opts = ownedPage.map(([id, ownedQty]) => {
     const it = content.items?.[id];
     if (!it) return null;
 
@@ -1906,6 +1938,23 @@ function buildSellPickerPayload({ userId, p, s, ownerUser }) {
     .setLabel("Cancel")
     .setStyle(ButtonStyle.Secondary);
 
+  const navRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:sell:${userId}:${safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage <= 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:sell:${userId}:${safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage >= totalPages - 1)
+      )
+    : null;
+
   const sellEmbed = buildMenuEmbed({
     title: `${getIcon("coins")} Sell Items`,
     description:
@@ -1914,11 +1963,19 @@ function buildSellPickerPayload({ userId, p, s, ownerUser }) {
     user: ownerUser
   });
 
+  if (totalPages > 1) {
+    const existingFooter = sellEmbed?.data?.footer?.text ?? sellEmbed?.footer?.text ?? "";
+    const pageLabel = `Page ${safePage + 1}/${totalPages}`;
+    const footerText = existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel;
+    sellEmbed.setFooter({ text: footerText });
+  }
+
   return {
     content: " ",
     embeds: [sellEmbed],
     components: [
       new ActionRowBuilder().addComponents(menu),
+      ...(navRow ? [navRow] : []),
       new ActionRowBuilder().addComponents(cancelButton)
     ]
   };
@@ -2054,8 +2111,8 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
         ? []
         : [
             action === "serve"
-              ? noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders })
-              : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders })
+              ? noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
+              : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
           ])
     ]
   };
@@ -2123,7 +2180,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser }) {
     ? [new ActionRowBuilder().addComponents(menu)]
     : [
         new ActionRowBuilder().addComponents(menu),
-        noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders })
+        noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
       ];
 
   return {
@@ -2583,10 +2640,16 @@ if (sub === "recipes") {
   const p = ensurePlayer(serverId, userId);
   const knownIds = getAvailableRecipes(p);
   const knownSet = new Set(knownIds);
+  const rarityOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
   const knownRecipes = knownIds
     .map((id) => content.recipes?.[id])
     .filter(Boolean)
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    .sort((a, b) => {
+      const aTier = rarityOrder[a.tier] ?? 999;
+      const bTier = rarityOrder[b.tier] ?? 999;
+      if (aTier !== bTier) return aTier - bTier;
+      return String(a.name).localeCompare(String(b.name));
+    });
 
   const knownLines = knownRecipes.map((r) => {
     const tier = r.tier ? ` (${r.tier})` : "";
@@ -2677,9 +2740,15 @@ if (sub === "recipes") {
 
 /* ---------------- REGULARS ---------------- */
 if (sub === "regulars") {
+  const rarityOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
   const npcs = Object.values(content.npcs ?? {})
     .filter(Boolean)
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    .sort((a, b) => {
+      const aTier = rarityOrder[a.rarity] ?? 999;
+      const bTier = rarityOrder[b.rarity] ?? 999;
+      if (aTier !== bTier) return aTier - bTier;
+      return String(a.name).localeCompare(String(b.name));
+    });
 
   const pageSize = 5;
   const maxPages = 3;
@@ -3987,6 +4056,7 @@ ${lines.join("\n")}`;
   if (sub === "buy") {
     const itemId = opt.getString("item");
     const qty = opt.getInteger("quantity");
+    const page = opt.getInteger("page") ?? 0;
 
     // Multi-buy entry
     if (!itemId) {
@@ -3994,7 +4064,8 @@ ${lines.join("\n")}`;
         userId,
         p,
         s,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page
       });
 
       return commit(payload);
@@ -4080,13 +4151,15 @@ ${lines.join("\n")}`;
   if (sub === "sell") {
     const itemId = opt.getString("item");
     const qty = opt.getInteger("quantity");
+    const page = opt.getInteger("page") ?? 0;
 
     if (!itemId) {
       const payload = buildSellPickerPayload({
         userId,
         p,
         s,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page
       });
 
       return commit(payload);
@@ -4287,7 +4360,7 @@ ${lines.join("\n")}`;
       embeds: [cookEmbed],
       components: tutorialOnlyServe
         ? [noodleTutorialServeRow(userId)]
-        : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders })]
+        : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })]
     });
   }
 
@@ -4452,7 +4525,10 @@ ${lines.join("\n")}`;
       embeds: [menuEmbed],
       components: tutorialOnlyAccept
         ? [noodleOrdersAcceptOnlyRow(userId, { highlightAccept })]
-        : [noodleOrdersMenuActionRow(userId, { showCancel, highlightAccept }), noodleMainMenuRowNoOrders(userId)]
+        : [
+            noodleOrdersMenuActionRow(userId, { showCancel, highlightAccept, disableServe: acceptedEntries.length === 0 }),
+            noodleMainMenuRowNoOrders(userId)
+          ]
     });
   }
 
@@ -4781,7 +4857,10 @@ ${lines.join("\n")}`;
       embeds: [acceptEmbed],
       components: tutorialOnlyBuy
         ? [noodleTutorialBuyRow(userId)]
-        : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders }), noodleMainMenuRow(userId)]
+        : [
+            noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders }),
+            noodleMainMenuRow(userId)
+          ]
     });
   }
 
@@ -5169,7 +5248,10 @@ ${lines.join("\n")}`;
     const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
     const components = tut.finished
       ? [noodleMainMenuRow(userId)]
-      : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders }), noodleMainMenuRow(userId)];
+      : [
+          noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders }),
+          noodleMainMenuRow(userId)
+        ];
     const embeds = [];
 
     const serveEmbed = buildMenuEmbed({
@@ -5505,12 +5587,14 @@ if (kind === "nav" && action === "sell") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
   const targetMessageId = interaction.message?.id ?? null;
+  const page = Number(parts[4] ?? 0);
 
   const payload = buildSellPickerPayload({
     userId,
     p,
     s,
-    ownerUser: interaction.member ?? interaction.user
+    ownerUser: interaction.member ?? interaction.user,
+    page
   });
 
   return componentCommit(interaction, {
