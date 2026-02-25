@@ -3168,6 +3168,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   /* ---------------- QUESTS: DAILY ---------------- */
   if (sub === "quests_daily") {
+    const prevShopLevel = p.shop_level ?? 1;
     const result = claimDailyReward(p, dailyRewards, now);
     if (!result.ok) {
       const embed = buildMenuEmbed({
