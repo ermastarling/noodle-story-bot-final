@@ -811,10 +811,16 @@ new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve")
 );
 }
 
-function noodleOrdersAcceptOnlyRow(userId, { highlightAccept = true } = {}) {
-return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary)
-);
+function noodleOrdersAcceptOnlyRow(userId, { highlightAccept = true, disableAccept = false } = {}) {
+  const style = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:pick:accept:${userId}`)
+      .setLabel("Accept")
+      .setEmoji(getButtonEmoji("status_complete"))
+      .setStyle(style)
+      .setDisabled(disableAccept)
+  );
 }
 
 function noodleMainMenuRowNoProfile(userId) {
@@ -942,26 +948,39 @@ new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profil
 );
 }
 
-function noodleOrdersActionRow(userId, { highlightAccept = true, disableServe = false } = {}) {
-return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe)
-);
+function noodleOrdersActionRow(userId, { highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
+  const acceptStyle = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:pick:accept:${userId}`)
+      .setLabel("Accept")
+      .setEmoji(getButtonEmoji("status_complete"))
+      .setStyle(acceptStyle)
+      .setDisabled(disableAccept),
+    new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe)
+  );
 }
 
-function noodleOrdersActionRowWithBack(userId, { highlightAccept = true, disableServe = false } = {}) {
-return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe),
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
-);
+function noodleOrdersActionRowWithBack(userId, { highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
+  const acceptStyle = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:pick:accept:${userId}`)
+      .setLabel("Accept")
+      .setEmoji(getButtonEmoji("status_complete"))
+      .setStyle(acceptStyle)
+      .setDisabled(disableAccept),
+    new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe),
+    new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
+  );
 }
 
-function noodleOrdersMenuActionRow(userId, { showCancel = false, highlightAccept = true, disableServe = false } = {}) {
+function noodleOrdersMenuActionRow(userId, { showCancel = false, highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
+const acceptStyle = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
 const row = new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(acceptStyle).setDisabled(disableAccept),
 new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe)
 );
@@ -2118,8 +2137,12 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
   };
 }
 
-function buildCookPickerPayload({ userId, p, s, ownerUser }) {
+function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
+  const ordersKnown = Array.isArray(p.order_board);
+  const remainingOrders = ordersKnown ? p.order_board.length : null;
+  const disableAccept = ordersKnown && remainingOrders === 0;
+  const highlightAccept = !hasAcceptedOrders && !disableAccept;
   const available = getAvailableRecipes(p);
   const activeSeason = s?.season ?? null;
   const seasonFiltered = available.filter((rid) => {
@@ -2128,7 +2151,19 @@ function buildCookPickerPayload({ userId, p, s, ownerUser }) {
     if (r.tier !== "seasonal") return true;
     return !!activeSeason && r.season === activeSeason;
   });
-  const opts = seasonFiltered.slice(0, 25).map((rid) => {
+
+  const sortKey = (rid) => {
+    const r = content.recipes?.[rid];
+    return (r?.name ?? displayItemName(rid, content) ?? "").toLowerCase();
+  };
+
+  const sorted = [...seasonFiltered].sort((a, b) => sortKey(a).localeCompare(sortKey(b), "en", { sensitivity: "base" }));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / 25));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+
+  const opts = sorted
+    .slice(safePage * 25, (safePage + 1) * 25)
+    .map((rid) => {
     const r = content.recipes?.[rid];
     const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
@@ -2171,17 +2206,40 @@ function buildCookPickerPayload({ userId, p, s, ownerUser }) {
 
   const cookEmbed = buildMenuEmbed({
     title: `${getIcon("cook")} Cook`,
-    description: "Select a recipe to cook:",
+    description: totalPages > 1
+      ? `Select a recipe to cook:\n(page ${safePage + 1}/${totalPages})`
+      : "Select a recipe to cook:",
     user: ownerUser
   });
 
   const tutorialOnlyMenu = isTutorialStep(p, "intro_cook");
-  const components = tutorialOnlyMenu
-    ? [new ActionRowBuilder().addComponents(menu)]
-    : [
-        new ActionRowBuilder().addComponents(menu),
-        noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
-      ];
+  const navRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:cook:${userId}:${safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage <= 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:cook:${userId}:${safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage >= totalPages - 1)
+      )
+    : null;
+
+  const components = [];
+  components.push(new ActionRowBuilder().addComponents(menu));
+  if (navRow) components.push(navRow);
+  if (!tutorialOnlyMenu) {
+    components.push(noodleOrdersActionRowWithBack(userId, {
+      highlightAccept,
+      disableAccept,
+      disableServe: !hasAcceptedOrders
+    }));
+  }
 
   return {
     content: " ",
@@ -4509,6 +4567,7 @@ ${lines.join("\n")}`;
 
     const showCancel = acceptedEntries.length > 0;
     const highlightAccept = acceptedEntries.length === 0 && remaining > 0;
+    const disableAccept = remaining <= 0;
     const menuEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Orders`,
       description: parts.join("\n"),
@@ -4524,9 +4583,9 @@ ${lines.join("\n")}`;
       content: " ",
       embeds: [menuEmbed],
       components: tutorialOnlyAccept
-        ? [noodleOrdersAcceptOnlyRow(userId, { highlightAccept })]
+        ? [noodleOrdersAcceptOnlyRow(userId, { highlightAccept, disableAccept })]
         : [
-            noodleOrdersMenuActionRow(userId, { showCancel, highlightAccept, disableServe: acceptedEntries.length === 0 }),
+            noodleOrdersMenuActionRow(userId, { showCancel, highlightAccept, disableAccept, disableServe: acceptedEntries.length === 0 }),
             noodleMainMenuRowNoOrders(userId)
           ]
     });
@@ -5994,11 +6053,13 @@ if (action === "cook") {
   // select a recipe from known_recipes, then modal for qty
   const p = ensurePlayer(serverId, userId);
   const s = ensureServer(serverId);
+  const rawPage = Number(parts[4] ?? 0);
   const payload = buildCookPickerPayload({
     userId,
     p,
     s,
-    ownerUser: interaction.member ?? interaction.user
+    ownerUser: interaction.member ?? interaction.user,
+    page: Number.isFinite(rawPage) ? rawPage : 0
   });
 
   return componentCommit(interaction, payload);
