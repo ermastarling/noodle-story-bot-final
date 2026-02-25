@@ -531,8 +531,8 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
         const staffMenu = new StringSelectMenuBuilder()
           .setCustomId(
             source
-              ? `noodle-upgrades:staff:${userId}:${source}`
-              : `noodle-upgrades:staff:${userId}`
+              ? `noodle-upgrades:staff:${userId}:${staffRarity}:${source}`
+              : `noodle-upgrades:staff:${userId}:${staffRarity}`
           )
           .setPlaceholder("Level up staff member")
           .addOptions(staffOptions);
@@ -677,6 +677,11 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         const allowed = new Set(["overview", "common", "rare", "epic", "upgrades"]);
         return allowed.has(candidate) ? candidate : "overview";
       }
+      if (action === "staff") {
+        const candidate = parts[3];
+        const allowed = new Set(["overview", "common", "rare", "epic", "upgrades"]);
+        return allowed.has(candidate) ? candidate : "common";
+      }
       return "common";
     };
 
@@ -688,7 +693,7 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         const isStaff = parts[3] === "staff";
         return isStaff ? parts[6] ?? null : parts[5] ?? null;
       }
-      if (action === "staff") return parts[3] ?? null;
+      if (action === "staff") return parts[4] ?? null;
       return null;
     };
 
