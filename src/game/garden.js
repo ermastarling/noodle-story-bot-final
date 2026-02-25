@@ -1,15 +1,71 @@
 import { addIngredientsToInventory } from "./inventory.js";
-import { applyCooldownReduction } from "./upgrades.js";
+import { applyHarvestCooldownReduction } from "./upgrades.js";
 
 export const GARDEN_UNLOCK_LEVEL = 25;
 export const BASE_GARDEN_PLOTS = 5;
 export const BASE_COMPOST_CAP = 100;
 export const COMPOST_PER_BAG = 5;
 export const PLOT_YIELD = 5;
-export const PLOT_BASE_COOLDOWN_MS = 5 * 60 * 1000;
+export const SPOILED_STASH_KEY = "spoiled_generic";
+
+const COOLDOWN_BY_TIER_MS = {
+  common: 60 * 60 * 1000,
+  uncommon: 2 * 60 * 60 * 1000,
+  rare: 3 * 60 * 60 * 1000
+};
+
+const CITRUS_COOLDOWN_MS = 5 * 60 * 60 * 1000;
+
+const SEED_ALIASES = {
+  citrus_peels: "citrus_seed",
+  citrus_slices: "citrus_seed",
+  petal_garnish: "flower_bush"
+};
+
+const SEED_DISPLAY = {
+  citrus_seed: "Citrus Seeds",
+  flower_bush: "Flower Bush Seeds"
+};
 
 export function isGardenUnlocked(player) {
   return (player?.shop_level ?? 0) >= GARDEN_UNLOCK_LEVEL;
+}
+
+export function canonicalSeedId(seedId) {
+  return SEED_ALIASES[seedId] ?? seedId;
+}
+
+export function getSeedIdForIngredient(itemId) {
+  return canonicalSeedId(itemId);
+}
+
+function normalizeSeedCounts(seeds = {}) {
+  const merged = {};
+  for (const [seedId, qty] of Object.entries(seeds)) {
+    const canonical = canonicalSeedId(seedId);
+    const n = Math.max(0, Number(qty) || 0);
+    if (n <= 0) continue;
+    merged[canonical] = (merged[canonical] || 0) + n;
+  }
+  return merged;
+}
+
+function normalizeYieldMap(raw, seedId = null) {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const out = {};
+    for (const [itemId, qty] of Object.entries(raw)) {
+      const n = Math.max(0, Math.floor(Number(qty) || 0));
+      if (n > 0) out[itemId] = n;
+    }
+    return out;
+  }
+  const n = Math.max(0, Math.floor(Number(raw ?? 0)));
+  if (!seedId || n <= 0) return {};
+  return { [seedId]: n };
+}
+
+export function getYieldTotal(yieldMap = {}) {
+  return Object.values(yieldMap || {}).reduce((sum, v) => sum + (v || 0), 0);
 }
 
 export function ensureGardenState(player) {
@@ -20,6 +76,7 @@ export function ensureGardenState(player) {
   if (!player.garden.spoiled) player.garden.spoiled = {};
   if (!Number.isFinite(player.garden.compost_bags)) player.garden.compost_bags = 0;
   if (!Array.isArray(player.garden.plots)) player.garden.plots = [];
+  player.garden.seeds = normalizeSeedCounts(player.garden.seeds);
   return player.garden;
 }
 
@@ -33,11 +90,16 @@ export function ensureGardenPlots(player, effects = {}) {
   while (garden.plots.length < target) {
     garden.plots.push({ seed_id: null, remaining: 0, harvest_ready_at: 0 });
   }
-  garden.plots = garden.plots.map((plot) => ({
-    seed_id: plot?.seed_id ?? null,
-    remaining: Math.max(0, Number(plot?.remaining ?? 0)),
-    harvest_ready_at: Number(plot?.harvest_ready_at ?? 0)
-  }));
+  garden.plots = garden.plots.map((plot) => {
+    const rawSeedId = plot?.seed_id ?? null;
+    const canonical = canonicalSeedId(rawSeedId);
+    return {
+      seed_id: canonical,
+      remaining: normalizeYieldMap(plot?.remaining, rawSeedId),
+      total_yield: normalizeYieldMap(plot?.total_yield ?? plot?.remaining, rawSeedId),
+      harvest_ready_at: Number(plot?.harvest_ready_at ?? 0)
+    };
+  });
   return garden.plots;
 }
 
@@ -46,17 +108,74 @@ export function getGardenPlotCount(player, effects = {}) {
   return BASE_GARDEN_PLOTS + bonus;
 }
 
+export function getSeedDisplayName(seedId, content) {
+  const canonical = canonicalSeedId(seedId);
+  if (SEED_DISPLAY[canonical]) return SEED_DISPLAY[canonical];
+  return getItemName(canonical, content);
+}
+
+export function getSeedTier(seedId, content) {
+  const canonical = canonicalSeedId(seedId);
+  if (canonical === "flower_bush") return content?.items?.petal_garnish?.tier ?? "uncommon";
+  if (canonical === "citrus_seed") return content?.items?.citrus_peels?.tier ?? "common";
+  return content?.items?.[canonical]?.tier ?? "common";
+}
+
+export function getSeedBaseCooldownMs(seedId, content) {
+  const canonical = canonicalSeedId(seedId);
+  if (canonical === "citrus_seed") return CITRUS_COOLDOWN_MS;
+  const tier = getSeedTier(canonical, content);
+  return COOLDOWN_BY_TIER_MS[tier] ?? COOLDOWN_BY_TIER_MS.common;
+}
+
+export function getSeedYieldMap(seedId, { allowedIngredients = null } = {}) {
+  const canonical = canonicalSeedId(seedId);
+  const allowedSet = allowedIngredients ? new Set(allowedIngredients) : null;
+
+  if (canonical === "citrus_seed") {
+    const hasPeels = !allowedSet || allowedSet.has("citrus_peels");
+    const hasSlices = !allowedSet || allowedSet.has("citrus_slices");
+    if (hasPeels && hasSlices) return { citrus_peels: PLOT_YIELD, citrus_slices: PLOT_YIELD };
+    if (hasSlices) return { citrus_slices: PLOT_YIELD };
+    return { citrus_peels: PLOT_YIELD };
+  }
+
+  if (canonical === "flower_bush") {
+    return { petal_garnish: PLOT_YIELD };
+  }
+
+  return { [canonical]: PLOT_YIELD };
+}
+
+export function describeYieldMap(yieldMap = {}, content) {
+  const entries = Object.entries(yieldMap || {});
+  if (!entries.length) return "nothing";
+  return entries
+    .map(([itemId, qty]) => `${qty} ${getItemName(itemId, content)}`)
+    .join(" + ");
+}
+
 export function getCompostCap(player, effects = {}) {
   void player; // compost cap is now flat
   void effects;
   return BASE_COMPOST_CAP;
 }
 
+export function getPlotYieldRemaining(plot) {
+  return normalizeYieldMap(plot?.remaining, canonicalSeedId(plot?.seed_id ?? null));
+}
+
+export function getPlotTotalYield(plot) {
+  const canonical = canonicalSeedId(plot?.seed_id ?? null);
+  return normalizeYieldMap(plot?.total_yield ?? plot?.remaining, canonical);
+}
+
 export function addSeeds(player, seedDrops) {
   const garden = ensureGardenState(player);
   for (const [itemId, qty] of Object.entries(seedDrops || {})) {
     if (!qty || qty <= 0) continue;
-    garden.seeds[itemId] = (garden.seeds[itemId] || 0) + qty;
+    const canonical = canonicalSeedId(itemId);
+    garden.seeds[canonical] = (garden.seeds[canonical] || 0) + qty;
   }
   return garden.seeds;
 }
@@ -64,8 +183,9 @@ export function addSeeds(player, seedDrops) {
 export function stashSpoiledIngredient(player, itemId, qty) {
   if (!qty || qty <= 0) return 0;
   const garden = ensureGardenState(player);
-  garden.spoiled[itemId] = (garden.spoiled[itemId] || 0) + qty;
-  return garden.spoiled[itemId];
+  const key = SPOILED_STASH_KEY;
+  garden.spoiled[key] = (garden.spoiled[key] || 0) + qty;
+  return garden.spoiled[key];
 }
 
 export function totalSpoiledCount(player) {
@@ -147,43 +267,52 @@ export function craftCompostBags(player, content, effects = {}, { maxBags = null
   };
 }
 
-export function plantSeedInPlot(player, seedId, effects = {}, now = Date.now()) {
+export function plantSeedInPlot(player, seedId, content, effects = {}, { now = Date.now(), allowedIngredients = null } = {}) {
   const garden = ensureGardenState(player);
   const plots = ensureGardenPlots(player, effects);
   if (!seedId) return { ok: false, reason: "no_seed" };
-  const seedsAvailable = garden.seeds?.[seedId] || 0;
+  const canonical = canonicalSeedId(seedId);
+  const seedsAvailable = garden.seeds?.[canonical] || 0;
   if (seedsAvailable <= 0) return { ok: false, reason: "no_seeds" };
   if ((garden.compost_bags || 0) <= 0) return { ok: false, reason: "no_compost" };
 
-  const emptyIndex = plots.findIndex((plot) => !plot.seed_id && (plot.remaining ?? 0) <= 0);
+  const emptyIndex = plots.findIndex((plot) => !plot.seed_id && getYieldTotal(getPlotYieldRemaining(plot)) <= 0);
   if (emptyIndex === -1) return { ok: false, reason: "no_empty_plot" };
 
-  const baseCooldown = PLOT_BASE_COOLDOWN_MS;
-  const harvestReduction = (effects.cooldown_reduction || 0) + (effects.harvest_cooldown_reduction || 0);
-  const cappedReduction = Math.min(0.8, Math.max(0, harvestReduction));
-  const readyIn = Math.max(30 * 1000, Math.floor(baseCooldown * (1 - cappedReduction)));
+  const baseCooldown = getSeedBaseCooldownMs(canonical, content);
+  const readyIn = Math.max(30 * 1000, applyHarvestCooldownReduction(baseCooldown, effects));
 
-  garden.seeds[seedId] = seedsAvailable - 1;
-  if (garden.seeds[seedId] <= 0) delete garden.seeds[seedId];
+  const yieldMap = getSeedYieldMap(canonical, { allowedIngredients });
+  const totalYield = getYieldTotal(yieldMap);
+  if (totalYield <= 0) return { ok: false, reason: "no_yield" };
+
+  garden.seeds[canonical] = seedsAvailable - 1;
+  if (garden.seeds[canonical] <= 0) delete garden.seeds[canonical];
   garden.compost_bags -= 1;
 
   plots[emptyIndex] = {
-    seed_id: seedId,
-    remaining: PLOT_YIELD,
+    seed_id: canonical,
+    remaining: yieldMap,
+    total_yield: yieldMap,
     harvest_ready_at: now + readyIn
   };
 
   return {
     ok: true,
     plotIndex: emptyIndex,
-    seedId,
-    remaining: PLOT_YIELD,
+    seedId: canonical,
+    remaining: yieldMap,
     compostAfter: garden.compost_bags,
     harvestReadyAt: now + readyIn
   };
 }
 
-export function harvestGardenPlots(player, content, effects = {}, { plotIndex = null, now = Date.now(), onlyReady = false } = {}) {
+export function harvestGardenPlots(
+  player,
+  content,
+  effects = {},
+  { plotIndex = null, now = Date.now(), onlyReady = false, allowedIngredients = null } = {}
+) {
   const plots = ensureGardenPlots(player, effects);
   const targets = plotIndex === null ? plots.map((_, idx) => idx) : [plotIndex];
   const results = [];
@@ -193,19 +322,21 @@ export function harvestGardenPlots(player, content, effects = {}, { plotIndex = 
 
   for (const idx of targets) {
     const plot = plots[idx];
-    if (!plot || !plot.seed_id || (plot.remaining ?? 0) <= 0) continue;
+    const seedId = canonicalSeedId(plot?.seed_id ?? null);
+    const remainingMap = getPlotYieldRemaining(plot);
+    const remainingTotal = getYieldTotal(remainingMap);
+    if (!plot || !seedId || remainingTotal <= 0) continue;
     if (onlyReady && plot.harvest_ready_at && plot.harvest_ready_at > now) continue;
     anyHarvestable = true;
-    const seedId = plot.seed_id;
-    const qty = Math.max(0, Math.floor(plot.remaining ?? 0));
-    if (qty <= 0) continue;
 
     if (plot.harvest_ready_at && plot.harvest_ready_at > now) {
       results.push({
         plotIndex: idx,
         seedId,
         added: 0,
-        leftover: qty,
+        addedItems: {},
+        leftover: remainingTotal,
+        leftoverItems: remainingMap,
         blocked: true,
         notReady: true,
         readyAt: plot.harvest_ready_at
@@ -213,15 +344,21 @@ export function harvestGardenPlots(player, content, effects = {}, { plotIndex = 
       continue;
     }
 
-    const invResult = addIngredientsToInventory(player, { [seedId]: qty }, "truncate");
-    const added = invResult.added[seedId] || 0;
-    const leftover = Math.max(0, qty - added);
+    const invResult = addIngredientsToInventory(player, remainingMap, "truncate");
+    const addedItems = invResult.added || {};
+    const leftoverItems = {};
+    for (const [itemId, qty] of Object.entries(remainingMap)) {
+      const added = addedItems[itemId] || 0;
+      const leftover = Math.max(0, qty - added);
+      if (leftover > 0) leftoverItems[itemId] = leftover;
+      if (added > 0) {
+        totalAdded[itemId] = (totalAdded[itemId] || 0) + added;
+      }
+    }
 
-    plot.remaining = leftover;
-    if (plot.remaining <= 0) plots[idx] = { seed_id: null, remaining: 0, harvest_ready_at: 0 };
-
-    if (added > 0) {
-      totalAdded[seedId] = (totalAdded[seedId] || 0) + added;
+    plot.remaining = leftoverItems;
+    if (Object.keys(plot.remaining).length === 0) {
+      plots[idx] = { seed_id: null, remaining: 0, total_yield: {}, harvest_ready_at: 0 };
     }
 
     const harvestSeedChance = Math.min(0.5, effects.garden_harvest_seed_chance || 0);
@@ -229,12 +366,17 @@ export function harvestGardenPlots(player, content, effects = {}, { plotIndex = 
       seedBonus[seedId] = (seedBonus[seedId] || 0) + 1;
     }
 
+    const addedTotal = getYieldTotal(addedItems);
+    const leftoverTotal = getYieldTotal(leftoverItems);
+
     results.push({
       plotIndex: idx,
       seedId,
-      added,
-      leftover,
-      blocked: leftover > 0,
+      added: addedTotal,
+      addedItems,
+      leftover: leftoverTotal,
+      leftoverItems,
+      blocked: leftoverTotal > 0,
       readyAt: 0
     });
   }
@@ -252,8 +394,8 @@ export function harvestGardenPlots(player, content, effects = {}, { plotIndex = 
   };
 }
 
-export function autoHarvestReadyPlots(player, content, effects = {}, now = Date.now()) {
-  const result = harvestGardenPlots(player, content, effects, { now, onlyReady: true });
+export function autoHarvestReadyPlots(player, content, effects = {}, { now = Date.now(), allowedIngredients = null } = {}) {
+  const result = harvestGardenPlots(player, content, effects, { now, onlyReady: true, allowedIngredients });
   const harvested = result.results.filter((r) => !r.notReady && r.added > 0);
   return {
     harvested,
@@ -266,18 +408,16 @@ export function formatSeedLines(seeds = {}, content) {
   const entries = Object.entries(seeds).filter(([, qty]) => qty > 0);
   if (!entries.length) return "_No seeds collected yet._";
   return entries
-    .sort(([a], [b]) => getItemName(a, content).localeCompare(getItemName(b, content)))
-    .map(([itemId, qty]) => `• ${getItemName(itemId, content)}: **${qty} seeds**`)
+    .map(([seedId, qty]) => [seedId, qty, getSeedDisplayName(seedId, content)])
+    .sort(([, , nameA], [, , nameB]) => nameA.localeCompare(nameB))
+    .map(([seedId, qty, name]) => `• ${name}: **${qty} seeds**`)
     .join("\n");
 }
 
 export function formatSpoiledLines(spoiled = {}, content) {
-  const entries = Object.entries(spoiled).filter(([, qty]) => qty > 0);
-  if (!entries.length) return "_No spoiled ingredients saved._";
-  return entries
-    .sort(([a], [b]) => getItemName(a, content).localeCompare(getItemName(b, content)))
-    .map(([itemId, qty]) => `• ${getItemName(itemId, content)}: **${qty}**`)
-    .join("\n");
+  const total = Object.values(spoiled || {}).reduce((sum, v) => sum + (v || 0), 0);
+  if (!total) return "_No spoiled ingredients saved._";
+  return `• Spoiled ingredients: **${total}**`;
 }
 
 export function formatPlotLines(player, content, effects = {}, now = Date.now()) {
@@ -286,13 +426,18 @@ export function formatPlotLines(player, content, effects = {}, now = Date.now())
   return plots
     .map((plot, idx) => {
       const label = `Plot ${idx + 1}`;
-      if (!plot?.seed_id || (plot.remaining ?? 0) <= 0) {
+      const remainingMap = getPlotYieldRemaining(plot);
+      const remainingTotal = getYieldTotal(remainingMap);
+      if (!plot?.seed_id || remainingTotal <= 0) {
         return `${label}: Empty (needs 1 seed + 1 compost bag)`;
       }
+      const totalYield = getYieldTotal(getPlotTotalYield(plot));
       const readyText = !plot.harvest_ready_at || plot.harvest_ready_at <= now
         ? "ready"
         : `ready ${formatTimestamp(plot.harvest_ready_at)}`;
-      return `${label}: ${getItemName(plot.seed_id, content)} — **${plot.remaining}/${PLOT_YIELD}** left (${readyText})`;
+      const seedName = getSeedDisplayName(plot.seed_id, content);
+      const progressTotal = totalYield || remainingTotal;
+      return `${label}: ${seedName} — **${remainingTotal}/${progressTotal}** left (${readyText})`;
     })
     .join("\n");
 }

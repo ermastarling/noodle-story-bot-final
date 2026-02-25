@@ -118,12 +118,18 @@ import {
   autoHarvestReadyPlots,
   getCompostableForageables,
   craftCompostBags,
+  getSeedIdForIngredient,
+  getSeedDisplayName,
+  getSeedYieldMap,
+  getPlotYieldRemaining,
+  describeYieldMap,
+  getYieldTotal,
   formatSeedLines,
   formatSpoiledLines,
   formatPlotLines,
   GARDEN_UNLOCK_LEVEL,
   COMPOST_PER_BAG,
-  PLOT_YIELD
+  SPOILED_STASH_KEY
 } from "../game/garden.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js";
@@ -671,9 +677,9 @@ function getGardenActionState(player, effects) {
   const canCraft = craftableBags > 0 && room > 0;
 
   const readyPlots = plots
-    .map((plot, idx) => ({ plot, idx }))
-    .filter(({ plot }) => plot?.seed_id && (plot.remaining ?? 0) > 0 && (!plot.harvest_ready_at || plot.harvest_ready_at <= now))
-    .map(({ plot, idx }) => ({ ...plot, idx }));
+    .map((plot, idx) => ({ plot, idx, remainingTotal: getYieldTotal(getPlotYieldRemaining(plot)) }))
+    .filter(({ plot, remainingTotal }) => plot?.seed_id && remainingTotal > 0 && (!plot.harvest_ready_at || plot.harvest_ready_at <= now))
+    .map(({ plot, idx, remainingTotal }) => ({ ...plot, idx, remainingTotal }));
 
   return {
     canCraft,
@@ -690,6 +696,7 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const garden = ensureGardenState(player);
   const plots = ensureGardenPlots(player, combinedEffects);
   const gardenState = getGardenActionState(player, combinedEffects);
+  const allowedIngredients = getUnlockedIngredientIds(player, content);
   const compostCap = gardenState.compostCap;
   const compostCount = gardenState.compostCount;
   const spoiledTotal = gardenState.spoiledTotal;
@@ -703,22 +710,22 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const plotsSection = formatPlotLines(player, content, combinedEffects);
 
   const hasHarvestable = readyPlots.length > 0;
-  const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || (plot.remaining ?? 0) <= 0);
+  const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || getYieldTotal(getPlotYieldRemaining(plot)) <= 0);
 
   const description = [
     `${getIcon("tree")} Plots available: **${getGardenPlotCount(player, combinedEffects)}**`,
-    `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),
     `**Plots**\n${plotsSection}`,
     `**Seeds (unlimited)**\n${seedSection}`,
+    `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),  
     `**Compost Inputs**\nSpoiled saved: **${spoiledTotal}** · Fresh forageables: **${pantryTotal}**\nRecipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
   ].join("\n\n");
 
   const seedOptions = Object.entries(garden.seeds || {})
     .filter(([, qty]) => qty > 0)
     .map(([seedId, qty]) => ({
-      label: `${displayItemName(seedId)} (${qty} seeds)`?.slice(0, 100),
+      label: `${getSeedDisplayName(seedId, content)} (${qty} seeds)`?.slice(0, 100),
       value: seedId,
-      description: `Uses 1 compost bag — yields ${PLOT_YIELD} ${displayItemName(seedId)}`.slice(0, 100)
+      description: `Uses 1 compost bag — yields ${describeYieldMap(getSeedYieldMap(seedId, { allowedIngredients }), content)}`.slice(0, 100)
     }))
     .slice(0, 25);
 
@@ -739,9 +746,9 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   );
 
   const harvestOptions = readyPlots.map((plot) => ({
-    label: `${displayItemName(plot.seed_id)} — Plot ${plot.idx + 1}`.slice(0, 100),
+    label: `${getSeedDisplayName(plot.seed_id, content)} — Plot ${plot.idx + 1}`.slice(0, 100),
     value: String(plot.idx),
-    description: `Harvest up to ${Math.floor(plot.remaining ?? 0)} items`.slice(0, 100)
+    description: `Harvest up to ${Math.floor(plot.remainingTotal ?? 0)} items`.slice(0, 100)
   })).slice(0, 25);
 
   const harvestSelectRow = new ActionRowBuilder().addComponents(
@@ -3589,13 +3596,16 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         for (let i = 0; i < rolls; i++) {
           if (Math.random() < seedChance) found += 1;
         }
-        if (found > 0) seedDrops[id] = found;
+        if (found > 0) {
+          const seedId = getSeedIdForIngredient(id);
+          seedDrops[seedId] = (seedDrops[seedId] || 0) + found;
+        }
       }
 
       if (Object.keys(seedDrops).length) {
         addSeeds(p, seedDrops);
         const seedLines = Object.entries(seedDrops)
-          .map(([id, q]) => `• **${q}×** ${displayItemName(id)} seeds`)
+          .map(([id, q]) => `• **${q}×** ${getSeedDisplayName(id, content)}`)
           .join("\n");
         description += `\n\n${getIcon("tree")} Seeds collected:\n${seedLines}`;
       } else {
@@ -3841,7 +3851,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       });
     }
 
-    const result = plantSeedInPlot(p, seedId, combinedEffects);
+    const allowedIngredients = getUnlockedIngredientIds(p, content);
+    const result = plantSeedInPlot(p, seedId, content, combinedEffects, { allowedIngredients });
     if (!result.ok) {
       const reasons = {
         no_seeds: "You don't have that seed anymore.",
@@ -3862,7 +3873,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       userId
     });
 
-    const summary = `${getIcon("tree")} Planted **${displayItemName(seedId)}** in plot #${result.plotIndex + 1}.`;
+    const summary = `${getIcon("tree")} Planted **${getSeedDisplayName(seedId, content)}** in plot #${result.plotIndex + 1}.`;
     const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
     view.embed.setDescription(`${summary}\n\n${baseDesc}`);
 
@@ -3917,12 +3928,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       summary = `${getIcon("warning")} Pantry is full; nothing harvested.`;
     } else {
       const lines = harvestResult.results.map((r) => {
-        const friendly = displayItemName(r.seedId);
+        const addedText = describeYieldMap(r.addedItems || {}, content);
+        const leftoverText = describeYieldMap(r.leftoverItems || {}, content);
         if (r.added > 0 && r.leftover > 0) {
-          return `Plot #${r.plotIndex + 1}: +${r.added} ${friendly}, **${r.leftover}** left (pantry full).`;
+          return `Plot #${r.plotIndex + 1}: +${addedText}, **${leftoverText}** left (pantry full).`;
         }
-        if (r.added > 0) return `Plot #${r.plotIndex + 1}: +${r.added} ${friendly}.`;
-        return `Plot #${r.plotIndex + 1}: pantry full, **${r.leftover}** ${friendly} left to harvest.`;
+        if (r.added > 0) return `Plot #${r.plotIndex + 1}: +${addedText}.`;
+        return `Plot #${r.plotIndex + 1}: pantry full, **${leftoverText}** left to harvest.`;
       });
       summary = `${getIcon("basket")} Harvested.
 ${lines.join("\n")}`;
@@ -5483,23 +5495,32 @@ if (kind === "nav" && action === "sell") {
 // Compost button shows picker of compostable items
 function buildCompostSelectOptions(player) {
   const garden = ensureGardenState(player);
-  const spoiledPool = Object.entries(garden.spoiled || {})
-    .filter(([, qty]) => qty > 0)
-    .map(([id, qty]) => ({ id, qty, source: "spoiled" }));
+  const spoiledCount = Object.values(garden.spoiled || {}).reduce((sum, v) => sum + (v || 0), 0);
   const freshPool = Object.entries(getCompostableForageables(player, content) || {})
     .filter(([, qty]) => qty > 0)
     .map(([id, qty]) => ({ id, qty, source: "fresh" }));
 
-  const options = [...spoiledPool, ...freshPool]
+  const options = [];
+  if (spoiledCount > 0) {
+    options.push({
+      label: `Spoiled ingredients (${spoiledCount})`.slice(0, 100),
+      value: `spoiled:${SPOILED_STASH_KEY}`,
+      description: `${spoiledCount} unit(s) available`.slice(0, 100)
+    });
+  }
+
+  const freshOptions = freshPool
     .sort((a, b) => displayItemName(a.id).localeCompare(displayItemName(b.id)))
-    .slice(0, 25)
+    .slice(0, 25 - options.length)
     .map((entry) => ({
-      label: `${entry.source === "spoiled" ? "Spoiled" : "Fresh"} — ${displayItemName(entry.id)} (${entry.qty})`.slice(0, 100),
+      label: `Fresh — ${displayItemName(entry.id)} (${entry.qty})`.slice(0, 100),
       value: `${entry.source}:${entry.id}`,
       description: `${entry.qty} unit(s) available`.slice(0, 100)
     }));
 
-  return { options, spoiledPool, freshPool };
+  options.push(...freshOptions);
+
+  return { options };
 }
 
 if (kind === "action" && action === "compost" && interaction.isButton?.()) {
@@ -5605,7 +5626,9 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     .map((raw) => {
       const [src, ...idParts] = String(raw).split(":");
       const id = idParts.join(":");
-      return src && id ? `${src === "spoiled" ? "Spoiled" : "Fresh"} — ${displayItemName(id)}` : null;
+      if (!src || !id) return null;
+      const name = src === "spoiled" ? "Spoiled ingredients" : displayItemName(id);
+      return `${src === "spoiled" ? "Spoiled" : "Fresh"} — ${name}`;
     })
     .filter(Boolean)
     .join("\n");
@@ -5661,8 +5684,8 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   const allowedSpoiled = {};
   const allowedFresh = {};
-  // Mirror multi-buy semantics: cap each picked item independently to the requested amount
-  const unitsPerItemCap = amountRequested;
+  // Cap each picked item independently to the units needed for the requested bags
+  const unitsPerItemCap = amountRequested * COMPOST_PER_BAG;
   for (const raw of selections) {
     const [source, ...idParts] = String(raw).split(":");
     const itemId = idParts.join(":");
@@ -5742,7 +5765,10 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const formatUsage = (label, usedMap) => {
     const entries = Object.entries(usedMap || {}).filter(([, qty]) => qty > 0);
     if (!entries.length) return null;
-    return `${label} used:\n${entries.map(([id, qty]) => `• **${qty}×** ${displayItemName(id)}`).join("\n")}`;
+    return `${label} used:\n${entries.map(([id, qty]) => {
+      const name = id === SPOILED_STASH_KEY ? "Spoiled ingredients" : displayItemName(id);
+      return `• **${qty}×** ${name}`;
+    }).join("\n")}`;
   };
 
   const usageBlocks = [formatUsage("Saved spoilage", spoiledUsed), formatUsage("Fresh forageables", freshUsed)].filter(Boolean).join("\n\n");
