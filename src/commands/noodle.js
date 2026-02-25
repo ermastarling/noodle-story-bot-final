@@ -1404,15 +1404,16 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
     ? `${lines.join("\n\n")}\n\nUse **Select Specialization** below to switch.`
     : "No specializations available.";
 
-  if (totalPages > 1) {
-    description += `\n\n*(page ${safePage + 1}/${totalPages})*`;
-  }
-
   const embed = buildMenuEmbed({
     title: `${getIcon("sparkle")} Specializations`,
     description,
     user: ownerUser
   });
+
+  const pageLabel = `Page ${safePage + 1}/${totalPages}`;
+  const existingFooter = embed?.data?.footer?.text ?? embed?.footer?.text ?? "";
+  const footerText = existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel;
+  embed.setFooter({ text: footerText });
 
   return { embed, page: safePage, totalPages };
 }
@@ -1993,9 +1994,14 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   const acceptEmbed = buildMenuEmbed({
     title: `${getIcon("status_complete")} Accept Orders`,
-    description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.\n\n(page ${safePage + 1}/${totalPages})`,
+    description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.`,
     user: ownerUser
   });
+
+  const pageLabel = `Page ${safePage + 1}/${totalPages}`;
+  const existingFooter = acceptEmbed?.data?.footer?.text ?? acceptEmbed?.footer?.text ?? "";
+  const footerText = existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel;
+  acceptEmbed.setFooter({ text: footerText });
 
   return {
     content: " ",
@@ -2614,24 +2620,38 @@ if (sub === "recipes") {
     .filter((recipe) => !recipe?.event_id).length;
   const unlockedEventRecipeCount = knownRecipes.filter((recipe) => recipe?.event_id).length;
   const totalRecipes = baseRecipeCount + unlockedEventRecipeCount;
-  const totalPages = 2;
+
+  const recipesPerPage = 5;
+  const recipePages = Math.max(1, Math.ceil((knownLines.length || 0) / recipesPerPage));
+  const totalPages = recipePages + 1; // recipe pages + clues page
   const rawPage = opt.getInteger("page") ?? 0;
   const page = Math.min(Math.max(rawPage, 0), totalPages - 1);
 
-  const pageTitle = page === 0
-    ? `**Unlocked Recipes (${knownRecipes.length}/${totalRecipes})**`
+  const isCluePage = page >= recipePages;
+  const recipePageIndex = Math.min(page, recipePages - 1);
+  const recipeStart = recipePageIndex * recipesPerPage;
+  const recipeSlice = knownLines.slice(recipeStart, recipeStart + recipesPerPage);
+
+  const pageTitle = !isCluePage
+    ? `**Unlocked Recipes (${knownRecipes.length}/${totalRecipes})**${recipePages > 1 ? ` — Page ${recipePageIndex + 1}/${recipePages}` : ""}`
     : `**Clues Collected (${clueEntries.length})**`;
-  const pageBody = page === 0
-    ? (knownLines.length ? knownLines.join("\n\n") : "_None yet._")
+
+  const pageBody = !isCluePage
+    ? (recipeSlice.length ? recipeSlice.join("\n\n") : "_None yet._")
     : (clueLines.length ? clueLines.join("\n\n") : "_No clues yet._");
 
-  const section = `${pageTitle}\n${pageBody}\n\n*(page ${page + 1}/${totalPages})*`;
+  const section = `${pageTitle}\n${pageBody}`;
 
   const recipesEmbed = buildMenuEmbed({
     title: `${getIcon("recipes")} **Recipes**`,
     description: section,
     user: interaction.member ?? interaction.user
   });
+
+  const pageLabel = `Page ${page + 1}/${totalPages}`;
+  const existingFooter = recipesEmbed?.data?.footer?.text ?? recipesEmbed?.footer?.text ?? "";
+  const footerText = existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel;
+  recipesEmbed.setFooter({ text: footerText });
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -2683,10 +2703,17 @@ if (sub === "regulars") {
   const regularsEmbed = buildMenuEmbed({
     title: `${getIcon("chef")} Regulars`,
     description: lines.length
-      ? `${lines.join("\n\n")}\n\n*(page ${page + 1}/${totalPages})*`
+      ? lines.join("\n\n")
       : "No regulars found.",
     user: interaction.member ?? interaction.user
   });
+
+  if (lines.length) {
+    const pageLabel = `Page ${page + 1}/${totalPages}`;
+    const existingFooter = regularsEmbed?.data?.footer?.text ?? regularsEmbed?.footer?.text ?? "";
+    const footerText = existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel;
+    regularsEmbed.setFooter({ text: footerText });
+  }
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()

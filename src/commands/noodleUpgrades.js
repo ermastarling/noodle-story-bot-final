@@ -369,7 +369,7 @@ function buildUpgradesManagementEmbed(player, user) {
 
   if (effectLines.length > 0) {
     embed.addFields({
-      name: "Active Bonuses",
+      name: "\nActive Bonuses",
       value: effectLines.join("\n"),
       inline: false
     });
