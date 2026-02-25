@@ -577,11 +577,12 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
       const placeholder = categoryId === "staff"
         ? "Purchase Staff Upgrades"
         : "Purchase Shop Upgrades";
+      const staffRaritySuffix = categoryId === "staff" ? `:${staffRarity}` : "";
       const menu = new StringSelectMenuBuilder()
         .setCustomId(
           source
-            ? `noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}:${source}`
-            : `noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}`
+            ? `noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}${staffRaritySuffix}:${source}`
+            : `noodle-upgrades:buy:${userId}:${categoryId || "all"}:${idx}${staffRaritySuffix}`
         )
         .setPlaceholder(placeholder)
         .addOptions(chunk);
@@ -671,13 +672,22 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         const allowed = new Set(["overview", "common", "rare", "epic", "upgrades"]);
         return allowed.has(candidate) ? candidate : "overview";
       }
+      if (action === "buy" && parts[3] === "staff") {
+        const candidate = parts[5];
+        const allowed = new Set(["overview", "common", "rare", "epic", "upgrades"]);
+        return allowed.has(candidate) ? candidate : "overview";
+      }
       return "common";
     };
 
     const resolveSource = () => {
       if (action === "category") return parts[4] ?? null;
       if (action === "staffpage") return parts[4] ?? null;
-      if (action === "buy") return parts[5] ?? null;
+      if (action === "buy") {
+        // buy customIds: noodle-upgrades:buy:<userId>:<category|all>:<idx>[:<staffRarity>][:<source>]
+        const isStaff = parts[3] === "staff";
+        return isStaff ? parts[6] ?? null : parts[5] ?? null;
+      }
       if (action === "staff") return parts[3] ?? null;
       return null;
     };
