@@ -2013,7 +2013,12 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
 
   const pageSize = 25;
-  const firstPage = generateOrderPageForPlayer({
+  const { totalCount, consumedSet, availableCount } = getOrdersMeta(p);
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, totalCount) / pageSize));
+  const requestedPage = Math.max(0, page);
+  let safePage = Math.min(requestedPage, totalPages - 1);
+
+  const loadPage = (pageNumber) => generateOrderPageForPlayer({
     playerState: p,
     settings: set,
     content,
@@ -2021,23 +2026,31 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     serverId,
     userId,
     activeEventId,
-    page,
+    page: pageNumber,
     pageSize
   });
 
-  const totalPages = Math.max(1, Math.ceil(Math.max(0, firstPage.availableCount) / pageSize));
-  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
-  const pageData = safePage === page ? firstPage : generateOrderPageForPlayer({
-    playerState: p,
-    settings: set,
-    content,
-    activeSeason: s.season,
-    serverId,
-    userId,
-    activeEventId,
-    page: safePage,
-    pageSize
-  });
+  let pageData = loadPage(safePage);
+
+  // When earlier pages are fully consumed, jump to the first page with available orders
+  if (!pageData.orders.length && availableCount > 0) {
+    let firstAvailableIndex = 0;
+    for (let i = 0; i < totalCount; i++) {
+      if (!consumedSet.has(i)) {
+        firstAvailableIndex = i;
+        break;
+      }
+    }
+    const fallbackPage = Math.floor(firstAvailableIndex / pageSize);
+    if (fallbackPage !== safePage) {
+      safePage = fallbackPage;
+      pageData = loadPage(safePage);
+    }
+  }
+
+  if (!pageData.orders.length) {
+    return { content: "No orders available to accept.", ephemeral: true };
+  }
 
   const opts = pageData.orders.map((o) => {
     const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
@@ -2049,10 +2062,6 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
     return { label, value: String(o.order_id), description };
   });
-
-  if (!opts.length) {
-    return { content: "No orders available to accept.", ephemeral: true };
-  }
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:accept_select:${userId}`)
