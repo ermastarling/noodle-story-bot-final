@@ -461,6 +461,25 @@ function buildSharedOrderProgress({ recipe, servings, contributions }) {
   return { items, isComplete };
 }
 
+function getSharedOrderIngredientLimit(recipe) {
+  const ingredientCount = Array.isArray(recipe?.ingredients) ? recipe.ingredients.length : 0;
+  if (ingredientCount === 3) return 2;
+  if (ingredientCount === 2) return 1;
+  return Infinity;
+}
+
+function getUserIngredientSlots(contributions, userId) {
+  return new Set(
+    (contributions ?? [])
+      .filter((c) => c?.user_id === userId && c?.ingredient_id)
+      .map((c) => c.ingredient_id)
+  );
+}
+
+function hasNonLeaderContributor(contributions, leaderUserId) {
+  return (contributions ?? []).some((c) => c?.user_id && c.user_id !== leaderUserId);
+}
+
 /**
  * Party creation buttons (only shown if not in a party)
  */
@@ -1669,9 +1688,20 @@ async function handleComponent(interaction) {
             contributions
           });
 
+          const maxSlots = getSharedOrderIngredientLimit(recipe);
+          const userIngredientSlots = getUserIngredientSlots(contributions, userId);
+          const userSlotsUsed = userIngredientSlots.size;
+
           const selected = progress.items.find((i) => i.ingredientId === ingredientId);
           if (!selected || selected.remaining <= 0) {
             return componentCommit(interaction, { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true });
+          }
+
+          if (!userIngredientSlots.has(ingredientId) && Number.isFinite(maxSlots) && userSlotsUsed >= maxSlots) {
+            return componentCommit(interaction, {
+              content: `${getIcon("warning")} You've reached your max ingredient slots for this shared order. Ask teammates to cover another ingredient.`,
+              ephemeral: true
+            });
           }
 
           if (quantity > selected.remaining) {
@@ -1690,7 +1720,7 @@ async function handleComponent(interaction) {
           }
 
           // Contribute to shared order
-          contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity);
+          contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, { maxIngredientSlots: maxSlots });
 
           const embed = new EmbedBuilder()
             .setTitle(`${getIcon("status_complete")} Contribution Recorded!`)
@@ -1709,10 +1739,12 @@ async function handleComponent(interaction) {
             servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
             contributions: updatedContributions
           });
+          const hasOtherContributor = hasNonLeaderContributor(updatedContributions, party.leader_user_id);
+          const canComplete = updatedProgress.isComplete && hasOtherContributor;
 
           return componentCommit(interaction, {
             embeds: [embed],
-            components: [sharedOrderActionRow(userId, true, isLeader, updatedProgress.isComplete), socialMainMenuRow(userId)],
+            components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)],
             targetMessageId: sourceMessageId
           });
         } catch (err) {
@@ -1888,9 +1920,20 @@ async function handleComponent(interaction) {
         contributions
       });
 
+      const maxSlots = getSharedOrderIngredientLimit(recipe);
+      const userIngredientSlots = getUserIngredientSlots(contributions, userId);
+      const userSlotsUsed = userIngredientSlots.size;
+
       const selected = progress.items.find((i) => i.ingredientId === ingredientId);
       if (!selected || selected.remaining <= 0) {
         return componentCommit(interaction, { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true });
+      }
+
+      if (!userIngredientSlots.has(ingredientId) && Number.isFinite(maxSlots) && userSlotsUsed >= maxSlots) {
+        return componentCommit(interaction, {
+          content: `${getIcon("warning")} You've reached your max ingredient slots for this shared order. Ask teammates to cover another ingredient.`,
+          ephemeral: true
+        });
       }
 
       const sourceMessageId = interaction.message?.id ?? null;
@@ -2239,7 +2282,8 @@ async function handleComponent(interaction) {
             servings: existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
             contributions
           });
-          canComplete = progress.isComplete;
+          const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
+          canComplete = progress.isComplete && hasOtherContributor;
 
           // Build ingredient progress display
           const ingredientLines = progress.items.map(item => {
@@ -2503,8 +2547,18 @@ async function handleComponent(interaction) {
         contributions
       });
 
+      const maxSlots = getSharedOrderIngredientLimit(recipe);
+      const userIngredientSlots = getUserIngredientSlots(contributions, userId);
+      const userSlotsUsed = userIngredientSlots.size;
+
       const ingredientOptions = progress.items
-        .filter((i) => i.remaining > 0)
+        .filter((i) => {
+          if (i.remaining <= 0) return false;
+          const alreadyContributed = userIngredientSlots.has(i.ingredientId);
+          if (alreadyContributed) return true;
+          if (!Number.isFinite(maxSlots)) return true;
+          return userSlotsUsed < maxSlots;
+        })
         .slice(0, 25)
         .map((i) => {
           const name = content.items?.[i.ingredientId]?.name ?? i.ingredientId;
@@ -2518,8 +2572,11 @@ async function handleComponent(interaction) {
         });
 
       if (!ingredientOptions.length) {
+        const reason = Number.isFinite(maxSlots) && userSlotsUsed >= maxSlots
+          ? `${getIcon("warning")} You've reached your max ingredient slots for this shared order. Ask teammates to cover the rest.`
+          : `${getIcon("status_complete")} All ingredients are already covered!`;
         return componentCommit(interaction, {
-          content: `${getIcon("status_complete")} All ingredients are already covered!`,
+          content: reason,
           ephemeral: true
         });
       }
@@ -2539,9 +2596,12 @@ async function handleComponent(interaction) {
 
       applyOwnerFooter(contributeEmbed, interaction.member ?? interaction.user);
 
+      const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
+      const canComplete = progress.isComplete && hasOtherContributor;
+
       return componentCommit(interaction, {
         embeds: [contributeEmbed],
-        components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, progress.isComplete), socialMainMenuRow(userId)]
+        components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
       });
     }
 
@@ -2577,6 +2637,14 @@ async function handleComponent(interaction) {
           servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
           contributions
         });
+
+        const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
+        if (!hasOtherContributor) {
+          return componentCommit(interaction, {
+            content: `${getIcon("warning")} At least one other party member must contribute before completing this shared order.`,
+            ephemeral: true
+          });
+        }
 
         if (!progress.isComplete) {
           return componentCommit(interaction, {
@@ -2719,6 +2787,13 @@ async function handleComponent(interaction) {
 
         // Get contributions
         const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+        const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
+        if (!hasOtherContributor) {
+          return componentCommit(interaction, {
+            content: `${getIcon("warning")} You can’t complete this shared order alone. A party member must contribute first.`,
+            ephemeral: true
+          });
+        }
         
         // Use the actual servings from the order
         const servings = sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS;
@@ -2942,7 +3017,8 @@ async function handleComponent(interaction) {
             servings: existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
             contributions
           });
-          canComplete = progress.isComplete;
+          const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
+          canComplete = progress.isComplete && hasOtherContributor;
         }
       }
       const keepEmbed = new EmbedBuilder()

@@ -525,7 +525,7 @@ export function createSharedOrder(db, partyId, recipeId, serverId, servings = 5)
 /**
  * Contribute to a shared order
  */
-export function contributeToSharedOrder(db, sharedOrderId, userId, ingredientId, quantity) {
+export function contributeToSharedOrder(db, sharedOrderId, userId, ingredientId, quantity, { maxIngredientSlots = null } = {}) {
   const now = nowTs();
   
   // Check if shared order exists and is active
@@ -540,9 +540,19 @@ export function contributeToSharedOrder(db, sharedOrderId, userId, ingredientId,
     throw new Error("Not a member of this party");
   }
   
-  // Record contribution
   const existing = db.prepare("SELECT * FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ? AND ingredient_id = ?")
     .get(sharedOrderId, userId, ingredientId);
+
+  if (!existing && Number.isFinite(maxIngredientSlots)) {
+    const slotCount = db.prepare(
+      "SELECT COUNT(DISTINCT ingredient_id) as cnt FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
+    ).get(sharedOrderId, userId).cnt || 0;
+    if (slotCount >= maxIngredientSlots) {
+      const error = new Error("You have already contributed the maximum ingredient types for this shared order.");
+      error.code = "SHARED_ORDER_SLOT_LIMIT";
+      throw error;
+    }
+  }
   
   if (existing) {
     db.prepare(`
