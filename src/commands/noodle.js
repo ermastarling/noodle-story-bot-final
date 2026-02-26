@@ -2844,13 +2844,17 @@ if (sub === "regulars") {
   const lines = pageItems.map((npc) => {
     const rarity = npc.rarity ? ` (${npc.rarity})` : "";
     const flavor = npc.flavor ? `_${npc.flavor}_` : "_No flavor text._";
-    const bonuses = npc.bonuses && Object.keys(npc.bonuses).length
+    const bonusLines = npc.bonuses && Object.keys(npc.bonuses).length
       ? Object.entries(npc.bonuses)
           .map(([key, value]) => `• ${formatBonusLabel(key)}: **${formatBonusValue(key, value)}**`)
           .join("\n")
-      : "• _No bonuses listed._";
+      : null;
 
-    return `**${npc.name}**${rarity}\n${flavor}\n${bonuses}`;
+    return [
+      `**${npc.name}**${rarity}`,
+      flavor,
+      bonusLines
+    ].filter(Boolean).join("\n");
   });
 
   const regularsEmbed = buildMenuEmbed({
