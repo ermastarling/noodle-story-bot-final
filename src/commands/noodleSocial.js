@@ -480,6 +480,30 @@ function hasNonLeaderContributor(contributions, leaderUserId) {
   return (contributions ?? []).some((c) => c?.user_id && c.user_id !== leaderUserId);
 }
 
+function getCommonPartyRecipes(db, serverId, party) {
+  const memberIds = Array.isArray(party?.members) ? party.members.map((m) => m.user_id) : [];
+  let common = null;
+
+  for (const memberId of memberIds) {
+    const memberPlayer = getPlayer(db, serverId, memberId);
+    const knownSet = new Set(Array.isArray(memberPlayer?.known_recipes) ? memberPlayer.known_recipes : []);
+
+    if (common === null) {
+      common = new Set(knownSet);
+    } else {
+      for (const recipeId of Array.from(common)) {
+        if (!knownSet.has(recipeId)) {
+          common.delete(recipeId);
+        }
+      }
+    }
+
+    if (common && common.size === 0) break;
+  }
+
+  return common ?? new Set();
+}
+
 /**
  * Party creation buttons (only shown if not in a party)
  */
@@ -1778,10 +1802,33 @@ async function handleComponent(interaction) {
   /* ---------------- SELECT MENUS ---------------- */
   if (kind === "select") {
     if (action === "shared_order_recipe") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} You're not in a party.`,
+          ephemeral: true
+        });
+      }
+
+      if (party.leader_user_id !== userId) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} Only the party leader can choose a shared order recipe.`,
+          ephemeral: true
+        });
+      }
+
       const selectedRecipe = interaction.values?.[0];
       if (!selectedRecipe || !content.recipes[selectedRecipe]) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} Invalid recipe selection.`,
+          ephemeral: true
+        });
+      }
+
+      const commonRecipeIds = getCommonPartyRecipes(db, serverId, party);
+      if (!commonRecipeIds.has(selectedRecipe)) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} All party members must know this recipe to start a shared order.`,
           ephemeral: true
         });
       }
@@ -1852,6 +1899,14 @@ async function handleComponent(interaction) {
             return componentCommit(interaction, { 
               content: `${getIcon("error")} Your party already has an active shared order. Complete it first.`, 
               ephemeral: true 
+            });
+          }
+
+          const commonRecipeIds = getCommonPartyRecipes(db, serverId, party);
+          if (!commonRecipeIds.has(recipeId)) {
+            return componentCommit(interaction, {
+              content: `${getIcon("error")} All party members must know this recipe to start a shared order.`,
+              ephemeral: true
             });
           }
 
@@ -2363,20 +2418,11 @@ async function handleComponent(interaction) {
         });
       }
 
-      // Get recipes known by party members
-      const partyMemberIds = party.members.map(m => m.user_id);
-      const knownRecipeIds = new Set();
-    
-      for (const memberId of partyMemberIds) {
-        const memberPlayer = getPlayer(db, serverId, memberId);
-        if (memberPlayer && Array.isArray(memberPlayer.known_recipes)) {
-          memberPlayer.known_recipes.forEach(recipeId => knownRecipeIds.add(recipeId));
-        }
-      }
+      // Show recipe picker (only recipes known by all party members)
+      const commonRecipeIds = getCommonPartyRecipes(db, serverId, party);
 
-      // Show recipe picker (only recipes known by party members)
       const recipeOptions = Object.entries(content.recipes)
-        .filter(([id]) => knownRecipeIds.has(id))
+        .filter(([id]) => commonRecipeIds.has(id))
         .slice(0, 25) // Discord limit
         .map(([id, recipe]) => ({
           label: recipe.name.length > 100 ? recipe.name.slice(0, 97) + "..." : recipe.name,
@@ -2386,7 +2432,7 @@ async function handleComponent(interaction) {
 
       if (!recipeOptions.length) {
         return componentCommit(interaction, {
-          content: `${getIcon("error")} No recipes available. Party members need to unlock recipes first!`,
+          content: `${getIcon("error")} No recipes available. Everyone in the party must unlock the same recipes first!`,
           ephemeral: true
         });
       }
