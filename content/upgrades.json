@@ -115,7 +115,7 @@
       "upgrade_id": "u_decor",
       "name": "Art",
       "category": "ambience",
-      "description": "Beautiful decorations attract customers, +1% regulars variety per level.",
+      "description": "Beautiful decorations attract bonus regulars, +1% bonus-regulars variety per level.",
       "max_level": 50,
       "base_cost": 200,
       "cost_scaling": 1.25,

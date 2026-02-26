@@ -2836,8 +2836,7 @@ if (sub === "regulars") {
     });
 
   const pageSize = 5;
-  const maxPages = 3;
-  const totalPages = Math.max(1, Math.min(maxPages, Math.ceil(npcs.length / pageSize)));
+  const totalPages = Math.max(1, Math.ceil(npcs.length / pageSize));
   const rawPage = opt.getInteger("page") ?? 0;
   const page = Math.min(Math.max(rawPage, 0), totalPages - 1);
   const pageItems = npcs.slice(page * pageSize, (page + 1) * pageSize);

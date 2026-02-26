@@ -103,7 +103,7 @@ function formatEffects(effects) {
     else if (key === "rep_bonus_flat") lines.push(`+${value.toFixed(1)} rep`);
     else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(2)}% rep`);
     else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(2)}% order quality`);
-    else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(2)}% regulars variety`);
+    else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(2)}% bonus regulars variety`);
     else if (key === "order_board_bonus") lines.push(`+${value} daily orders`);
     else if (key === "staff_capacity") lines.push(`+${value.toFixed(1)} staff capacity`);
     else if (key === "staff_effect_multiplier") lines.push(`+${(value * 100).toFixed(2)}% staff effects`);
@@ -350,7 +350,7 @@ function buildUpgradesManagementEmbed(player, user) {
     if (effectKey === "rep_bonus_flat") return `+${total.toFixed(1)} rep per serve`;
     if (effectKey === "rep_bonus_percent") return `+${(total * 100).toFixed(2)}% rep`;
     if (effectKey === "order_quality_bonus") return `+${(total * 100).toFixed(2)}% order quality`;
-    if (effectKey === "npc_variety_bonus") return `+${(total * 100).toFixed(2)}% regulars variety`;
+    if (effectKey === "npc_variety_bonus") return `+${(total * 100).toFixed(2)}% bonus regulars variety`;
     if (effectKey === "order_board_bonus") return `+${total} daily orders`;
     if (effectKey === "staff_capacity") return `+${total.toFixed(1)} staff capacity`;
     if (effectKey === "staff_effect_multiplier") return `+${(total * 100).toFixed(2)}% staff effects`;

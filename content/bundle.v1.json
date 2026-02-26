@@ -1193,6 +1193,76 @@
         "next_roll_discovery_chance_bonus": 0.01
       }
     },
+    "morning_commuter": {
+      "npc_id": "morning_commuter",
+      "name": "Morning Commuter",
+      "rarity": "common",
+      "flavor": "Half-awake and clutching a paper cup, they chase warmth before the day’s rush hits. Reliability matters more than flair right now.",
+      "bonuses": {}
+    },
+    "book_cart_vendor": {
+      "npc_id": "book_cart_vendor",
+      "name": "Book Cart Vendor",
+      "rarity": "common",
+      "flavor": "Smells faintly of ink and dusted cinnamon. Trades gossip about foot traffic for a quick bowl before the stalls open.",
+      "bonuses": {}
+    },
+    "quiet_artist": {
+      "npc_id": "quiet_artist",
+      "name": "Quiet Artist",
+      "rarity": "common",
+      "flavor": "Sketchbook balanced on one knee, they watch the steam for shapes and colors. Nods count as compliments.",
+      "bonuses": {}
+    },
+    "late_shift_nurse": {
+      "npc_id": "late_shift_nurse",
+      "name": "Late Shift Nurse",
+      "rarity": "common",
+      "flavor": "Hands still smell of herbs and clean linen. They sit with their back to the wall, savoring silence between alarms.",
+      "bonuses": {}
+    },
+    "street_lantern_lighter": {
+      "npc_id": "street_lantern_lighter",
+      "name": "Street Lantern Lighter",
+      "rarity": "common",
+      "flavor": "Clothes dusted with soot and oil, they warm up after walking the alleys. Likes their broth bright and simple.",
+      "bonuses": {}
+    },
+    "bridge_sentry": {
+      "npc_id": "bridge_sentry",
+      "name": "Bridge Sentry",
+      "rarity": "common",
+      "flavor": "Boots muddy from pacing the same stones. Grateful for a bowl they can eat without removing their gloves.",
+      "bonuses": {}
+    },
+    "dockside_fisher": {
+      "npc_id": "dockside_fisher",
+      "name": "Dockside Fisher",
+      "rarity": "uncommon",
+      "flavor": "Smells of salt and rope. Quietly counts tides and tips, savoring heat after dawn hauls.",
+      "bonuses": {}
+    },
+    "gardener_monk": {
+      "npc_id": "gardener_monk",
+      "name": "Gardener Monk",
+      "rarity": "uncommon",
+      "flavor": "Sleeves rolled, nails stained with soil, they taste broth the way they tend moss: patiently and without hurry.",
+      "bonuses": {}
+    },
+    "mountain_messenger": {
+      "npc_id": "mountain_messenger",
+      "name": "Mountain Messenger",
+      "rarity": "uncommon",
+      "flavor": "Wind-chapped and lean, they drop satchels by the door before sitting. Stories are scarce; appetite is not.",
+      "bonuses": {}
+    },
+    "clockmaker": {
+      "npc_id": "clockmaker",
+      "name": "Clockmaker",
+      "rarity": "uncommon",
+      "flavor": "Punctual to a fault, eyes flicking to the shop’s hourglass. Prefers predictable bowls they can measure their day against.",
+      "bonuses": {}
+    },
     "moonlit_spirit": {
       "npc_id": "moonlit_spirit",
       "name": "Moonlit Spirit",

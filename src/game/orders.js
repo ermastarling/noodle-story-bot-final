@@ -61,7 +61,8 @@ function buildNpcWeights({ content, recipePoolsByTier, hasSeasonal, settings, va
         const rarity = npc?.rarity ?? "common";
         const baseWeight = npcRarityWeights[rarity] ?? 1;
         const rarityMult = npcBlessingActive ? (npcRarityMultipliers[rarity] ?? 1) : 1;
-        const varietyMult = 1 + varietyBonus * (rarityBoosts[rarity] ?? 0);
+        const hasServeBonus = !!(npc?.bonuses && Object.keys(npc.bonuses).length > 0);
+        const varietyMult = hasServeBonus ? 1 + varietyBonus * (rarityBoosts[rarity] ?? 0) : 1;
         return [npc.npc_id, Math.max(0.01, baseWeight * rarityMult * varietyMult)];
       })
   );
