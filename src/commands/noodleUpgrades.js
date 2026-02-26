@@ -104,6 +104,7 @@ function formatEffects(effects) {
     else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(2)}% rep`);
     else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(2)}% order quality`);
     else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(2)}% regulars variety`);
+    else if (key === "order_board_bonus") lines.push(`+${value} daily orders`);
     else if (key === "staff_capacity") lines.push(`+${value.toFixed(1)} staff capacity`);
     else if (key === "staff_effect_multiplier") lines.push(`+${(value * 100).toFixed(2)}% staff effects`);
     else if (key === "prep_batch_bonus") {
@@ -265,7 +266,9 @@ function buildUpgradesOverviewEmbed(player, user) {
     if (!categoryData.upgrades || categoryData.upgrades.length === 0) continue;
 
     const lines = categoryData.upgrades.map(u => {
-      const status = u.isMaxed ? `${getIcon("status_complete")} MAX` : `${u.nextCost}c`;
+      const status = u.isMaxed
+        ? `${getIcon("status_complete")} MAX`
+        : (u.requirementLabel ?? `${u.nextCost}c`);
       return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
     });
 
@@ -285,6 +288,7 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effects.rep_bonus_flat > 0) effectLines.push(`${getIcon("rep")} +${effects.rep_bonus_flat.toFixed(1)} rep per serve`);
   if (effects.rep_bonus_percent > 0) effectLines.push(`${getIcon("rep")} +${(effects.rep_bonus_percent * 100).toFixed(2)}% rep`);
   if (effects.staff_effect_multiplier > 0) effectLines.push(`${getIcon("staff_management")} +${(effects.staff_effect_multiplier * 100).toFixed(2)}% staff effects`);
+  if (effects.order_board_bonus > 0) effectLines.push(`${getIcon("orders")} +${effects.order_board_bonus} daily orders`);
 
   if (effectLines.length > 0) {
     embed.addFields({
@@ -347,6 +351,7 @@ function buildUpgradesManagementEmbed(player, user) {
     if (effectKey === "rep_bonus_percent") return `+${(total * 100).toFixed(2)}% rep`;
     if (effectKey === "order_quality_bonus") return `+${(total * 100).toFixed(2)}% order quality`;
     if (effectKey === "npc_variety_bonus") return `+${(total * 100).toFixed(2)}% regulars variety`;
+    if (effectKey === "order_board_bonus") return `+${total} daily orders`;
     if (effectKey === "staff_capacity") return `+${total.toFixed(1)} staff capacity`;
     if (effectKey === "staff_effect_multiplier") return `+${(total * 100).toFixed(2)}% staff effects`;
     if (effectKey === "prep_batch_bonus") {
@@ -470,7 +475,9 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
 
   const upgrades = upgradesByCategory[categoryId]?.upgrades ?? [];
   const lines = upgrades.map((u) => {
-    const status = u.isMaxed ? `${getIcon("status_complete")} MAX` : `${u.nextCost}c`;
+    const status = u.isMaxed
+      ? `${getIcon("status_complete")} MAX`
+      : (u.requirementLabel ?? `${u.nextCost}c`);
     const desc = u.description ? `\n  _${u.description}_` : "";
     return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}${desc}`;
   });
@@ -556,8 +563,9 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
       const description = `Lv${upgrade.currentLevel}->${upgrade.currentLevel + 1}: ${effectStr}`.substring(0, 100);
       
       const optionEmoji = getButtonEmoji(categoryData?.icon);
+      const costLabel = upgrade.requirementLabel ?? `${upgrade.nextCost}c`;
       const option = {
-        label: `${upgrade.name} — ${upgrade.nextCost}c`,
+        label: `${upgrade.name} — ${costLabel}`,
         description,
         value: upgrade.upgradeId
       };

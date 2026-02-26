@@ -78,9 +78,11 @@ export function purchaseUpgrade(player, upgradeId, upgradesContent) {
   player.coins -= cost;
   
   return { 
-    success: true, 
-    message: `Upgraded ${upgrade.name} to level ${currentLevel + 1} for ${cost}c!`, 
-    cost, 
+    success: true,
+    message: cost > 0
+      ? `Upgraded ${upgrade.name} to level ${currentLevel + 1} for ${cost}c!`
+      : `Upgraded ${upgrade.name} to level ${currentLevel + 1}.`,
+    cost,
     newLevel: currentLevel + 1 
   };
 }
@@ -180,6 +182,14 @@ export function getUpgradesByCategory(player, upgradesContent) {
     const currentLevel = player.upgrades?.[upgradeId] || 0;
     const nextCost = calculateUpgradeCost(upgrade, currentLevel);
     const isMaxed = currentLevel >= upgrade.max_level;
+
+    const repRequirements = Array.isArray(upgrade.requirements?.rep)
+      ? upgrade.requirements.rep
+      : (typeof upgrade.requirements?.rep === "number" ? [upgrade.requirements.rep] : []);
+    const repRequirement = !isMaxed && repRequirements.length
+      ? repRequirements[Math.min(currentLevel, repRequirements.length - 1)]
+      : null;
+    const requirementLabel = repRequirement ? `Requires ${repRequirement} REP` : null;
     
     const upgradeInfo = {
       upgradeId,
@@ -189,7 +199,8 @@ export function getUpgradesByCategory(player, upgradesContent) {
       maxLevel: upgrade.max_level,
       nextCost,
       isMaxed,
-      effects: upgrade.effects_per_level
+      effects: upgrade.effects_per_level,
+      requirementLabel
     };
     
     const category = upgrade.category || "other";
