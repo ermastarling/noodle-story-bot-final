@@ -40,6 +40,7 @@ import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, rollPlayerMarketStock, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
 import {
   ensureDailyOrdersForPlayer,
+  computeOrderCount,
   generateOrderPageForPlayer,
   findOrderByToken,
   getOrdersMeta,
@@ -3164,6 +3165,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   s.season = computeActiveSeason(set);
   const activeEventEffects = getActiveEventEffects(eventsContent, s);
   const activeEventId = s.active_event_id ?? null;
+  const baseOrders = Math.max(1, Number(set.ORDERS_BASE_COUNT ?? 100));
+  const totalOrders = computeOrderCount(set, combinedEffects);
   
   // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
   const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
@@ -3174,7 +3177,15 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (!s.market_prices) s.market_prices = {};
   
   // Roll per-player market stock daily
-  rollPlayerMarketStock({ userId, serverId, content, playerState: p, eventEffects: activeEventEffects });
+  rollPlayerMarketStock({
+    userId,
+    serverId,
+    content,
+    playerState: p,
+    eventEffects: activeEventEffects,
+    orderCountHint: totalOrders,
+    baseOrders
+  });
   if (!p.market_stock) p.market_stock = {};
 
   const prevOrdersDay = p.orders_day;
@@ -3186,7 +3197,16 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (dayChanged) {
     p.market_stock_day = null;
     p.market_stock = null;
-    rollPlayerMarketStock({ userId, serverId, content, playerState: p, eventEffects: activeEventEffects });
+    const orderCountForStock = Math.max(totalOrders, Number(p.orders_total_count ?? 0));
+    rollPlayerMarketStock({
+      userId,
+      serverId,
+      content,
+      playerState: p,
+      eventEffects: activeEventEffects,
+      orderCountHint: orderCountForStock,
+      baseOrders
+    });
   }
 
   // Apply resilience mechanics (B1-B9)

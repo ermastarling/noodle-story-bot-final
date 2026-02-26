@@ -5,6 +5,7 @@ const MARKET_ROLL_MIN = 0.85;
 const MARKET_ROLL_MAX = 1.15;
 const SELL_RATE = 0.60;
 const PRICE_MIN = 1;
+const ORDER_STOCK_SCALE_MAX = 5; // Cap stock scaling when order caps increase
 
 // ✅ Market pool: guarantees these are available daily (if present in content.items)
 export const MARKET_ITEM_IDS = [
@@ -97,7 +98,15 @@ export function rollMarket({ serverId, content, serverState, eventEffects = null
 }
 
 // Roll per-player market stock (called once per day per player)
-export function rollPlayerMarketStock({ userId, serverId, content, playerState, eventEffects = null }) {
+export function rollPlayerMarketStock({
+  userId,
+  serverId,
+  content,
+  playerState,
+  eventEffects = null,
+  orderCountHint = null,
+  baseOrders = 100
+}) {
   const dayKey = dayKeyUTC();
   const hasStock = playerState.market_stock && Object.values(playerState.market_stock).some((qty) => Number(qty) > 0);
   
@@ -111,6 +120,12 @@ export function rollPlayerMarketStock({ userId, serverId, content, playerState, 
   const stockMultRaw = Number(eventEffects?.market?.stock_mult ?? 1);
   const stockMult = Number.isFinite(stockMultRaw) ? stockMultRaw : 1;
 
+  const baseOrdersSafe = Math.max(1, Number(baseOrders) || 1);
+  const orderScaleRaw = Number(orderCountHint);
+  const orderScale = Number.isFinite(orderScaleRaw)
+    ? Math.max(1, Math.min(orderScaleRaw / baseOrdersSafe, ORDER_STOCK_SCALE_MAX))
+    : 1;
+
   for (const itemId of MARKET_ITEM_IDS) {
     const item = content.items?.[itemId];
     if (!item || !item.base_price) continue;
@@ -121,7 +136,7 @@ export function rollPlayerMarketStock({ userId, serverId, content, playerState, 
     if (max <= 0) continue;
     
     const qty = rngInt(rng, min, max);
-    stock[itemId] = Math.max(0, Math.floor(qty * stockMult));
+    stock[itemId] = Math.max(0, Math.floor(qty * stockMult * orderScale));
   }
 
   playerState.market_stock = stock;

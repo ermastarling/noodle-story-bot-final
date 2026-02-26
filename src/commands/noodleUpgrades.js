@@ -741,13 +741,20 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         source
       });
 
-      const response = {
+      if (!result.success) {
+        return {
+          content: result.message,
+          embeds: [],
+          components: [],
+          ephemeral: true
+        };
+      }
+
+      return {
         embeds: [updatedEmbed],
         components: updatedComponents,
-        ephemeral: !result.success
+        ephemeral: false
       };
-      if (!result.success) response.content = result.message;
-      return response;
     }
 
     if (action === "staff") {

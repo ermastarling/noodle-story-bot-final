@@ -9,7 +9,7 @@ const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
 const MAX_ORDERS_CAP = 500;
 
-function computeOrderCount(settings, combinedEffects) {
+export function computeOrderCount(settings, combinedEffects) {
   const base = Math.min(Number(settings.ORDERS_BASE_COUNT ?? MAX_ORDERS_CAP), MAX_ORDERS_CAP);
   const bonus = combinedEffects?.order_board_bonus ? Number(combinedEffects.order_board_bonus) : 0;
   const total = Math.max(1, Math.floor(base + bonus));
