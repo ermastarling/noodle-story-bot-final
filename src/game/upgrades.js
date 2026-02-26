@@ -42,6 +42,23 @@ export function purchaseUpgrade(player, upgradeId, upgradesContent) {
       newLevel: currentLevel 
     };
   }
+
+  // Non-consumable requirements (e.g., reputation gates)
+  const requirements = upgrade.requirements || {};
+  const repRequirements = Array.isArray(requirements.rep)
+    ? requirements.rep
+    : (typeof requirements.rep === "number" ? [requirements.rep] : []);
+  const repRequirement = repRequirements.length
+    ? repRequirements[Math.min(currentLevel, repRequirements.length - 1)]
+    : null;
+  if (repRequirement && (player.rep ?? 0) < repRequirement) {
+    return {
+      success: false,
+      message: `Requires ${repRequirement} REP to unlock the next level.`,
+      cost: 0,
+      newLevel: currentLevel
+    };
+  }
   
   // Calculate cost
   const cost = calculateUpgradeCost(upgrade, currentLevel);
@@ -85,6 +102,7 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     rep_bonus_percent: 0,
     order_quality_bonus: 0,
     npc_variety_bonus: 0,
+    order_board_bonus: 0,
     staff_capacity: 0,
     staff_effect_multiplier: 0,
     prep_batch_bonus: 0,

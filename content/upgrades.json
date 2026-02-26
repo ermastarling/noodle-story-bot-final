@@ -74,14 +74,17 @@
     },
     "u_seating": {
       "upgrade_id": "u_seating",
-      "name": "Seating Comfort",
+      "name": "Seating",
       "category": "service",
-      "description": "Comfortable seating improves customer experience, +0.5 rep per level.",
-      "max_level": 20,
-      "base_cost": 280,
-      "cost_scaling": 1.35,
+      "description": "More tables to seat the crowd. Each level adds +100 daily orders.",
+      "max_level": 4,
+      "base_cost": 0,
+      "cost_scaling": 1,
+      "requirements": {
+        "rep": [5000, 7500, 10000, 12500]
+      },
       "effects_per_level": {
-        "rep_bonus_flat": 0.5
+        "order_board_bonus": 100
       }
     },
     "u_hospitality": {

@@ -110,7 +110,7 @@ test("Upgrades: calculateUpgradeEffects aggregates multiple upgrades", () => {
   const effects = calculateUpgradeEffects(player, upgradesContent);
   
   assert.ok(effects.ingredient_save_chance > 0);
-  assert.ok(effects.rep_bonus_flat > 0);
+  assert.ok(effects.order_board_bonus > 0);
   assert.ok(effects.ingredient_capacity > 0);
 });
 

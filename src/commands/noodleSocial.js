@@ -42,6 +42,7 @@ import { grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import { hasNewShopLevelSpecialization } from "../game/specialization.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
+import { getOrdersMeta } from "../game/orders.js";
 import { containsProfanity } from "../util/profanity.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
@@ -2109,8 +2110,9 @@ async function handleComponent(interaction) {
       );
       const marketStockKnown = player.market_stock && Object.keys(player.market_stock).length > 0;
       const hasMarketStock = marketStockKnown && Object.values(player.market_stock ?? {}).some((qty) => Number(qty) > 0);
-      const ordersKnown = Array.isArray(player.order_board);
-      const remainingOrders = ordersKnown ? player.order_board.length : null;
+      const { availableCount, totalCount } = getOrdersMeta(player);
+      const ordersKnown = totalCount > 0;
+      const remainingOrders = ordersKnown ? availableCount : null;
       if ((ordersKnown && remainingOrders === 0) || (marketStockKnown && !hasMarketStock)) {
         const marketRestockDay = player.market_stock_day ?? server.market_day ?? dayKeyUTC();
         const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);

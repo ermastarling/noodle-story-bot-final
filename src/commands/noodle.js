@@ -38,7 +38,13 @@ import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { computeActiveSeason } from "../game/seasons.js";
 import { rollMarket, rollPlayerMarketStock, sellPrice, MARKET_ITEM_IDS } from "../game/market.js";
-import { ensureDailyOrders, ensureDailyOrdersForPlayer } from "../game/orders.js";
+import {
+  ensureDailyOrdersForPlayer,
+  generateOrderPageForPlayer,
+  findOrderByToken,
+  getOrdersMeta,
+  markOrderConsumed
+} from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import {
   STARTER_PROFILE,
@@ -1830,10 +1836,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const allNeeded = {};
   acceptedEntries.forEach(([fullId, a]) => {
     const snap = a?.order ?? null;
-    const order =
-      snap ??
-      (p.order_board ?? []).find((o) => o.order_id === fullId) ??
-      null;
+    const order = snap;
 
     if (order?.recipe_id) {
       const recipe = content.recipes[order.recipe_id];
@@ -2008,12 +2011,34 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
 
-  const all = p.order_board ?? [];
   const pageSize = 25;
-  const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
-  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const firstPage = generateOrderPageForPlayer({
+    playerState: p,
+    settings: set,
+    content,
+    activeSeason: s.season,
+    serverId,
+    userId,
+    activeEventId,
+    page,
+    pageSize
+  });
 
-  const opts = all.slice(safePage * pageSize, (safePage + 1) * pageSize).map((o) => {
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, firstPage.availableCount) / pageSize));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const pageData = safePage === page ? firstPage : generateOrderPageForPlayer({
+    playerState: p,
+    settings: set,
+    content,
+    activeSeason: s.season,
+    serverId,
+    userId,
+    activeEventId,
+    page: safePage,
+    pageSize
+  });
+
+  const opts = pageData.orders.map((o) => {
     const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
     const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
     const readyBowls = getTotalBowlsForRecipe(p, o.recipe_id);
@@ -2139,9 +2164,9 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
 
 function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
-  const ordersKnown = Array.isArray(p.order_board);
-  const remainingOrders = ordersKnown ? p.order_board.length : null;
-  const disableAccept = ordersKnown && remainingOrders === 0;
+  const { availableCount } = getOrdersMeta(p);
+  const remainingOrders = availableCount;
+  const disableAccept = remainingOrders === 0;
   const highlightAccept = !hasAcceptedOrders && !disableAccept;
   const available = getAvailableRecipes(p);
   const activeSeason = s?.season ?? null;
@@ -2507,8 +2532,9 @@ if (sub === "profile") {
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
   const marketStockKnown = p.market_stock && Object.keys(p.market_stock).length > 0;
   const hasMarketStock = marketStockKnown && Object.values(p.market_stock ?? {}).some((qty) => Number(qty) > 0);
-  const ordersKnown = Array.isArray(p.order_board);
-  const remainingOrders = ordersKnown ? p.order_board.length : null;
+  const { availableCount, totalCount } = getOrdersMeta(p);
+  const ordersKnown = totalCount > 0;
+  const remainingOrders = ordersKnown ? availableCount : null;
   if ((ordersKnown && remainingOrders === 0) || (marketStockKnown && !hasMarketStock)) {
     const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
     const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
@@ -4433,10 +4459,7 @@ ${lines.join("\n")}`;
     const allNeeded = {};
     acceptedEntries.forEach(([fullId, a]) => {
       const snap = a?.order ?? null;
-      const order =
-        snap ??
-        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
-        null;
+      const order = snap;
       
       if (order && order.recipe_id) {
         const recipe = content.recipes[order.recipe_id];
@@ -4461,10 +4484,7 @@ ${lines.join("\n")}`;
     const uniqueRecipes = new Set();
     acceptedEntries.forEach(([fullId, a]) => {
       const snap = a?.order ?? null;
-      const order =
-        snap ??
-        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
-        null;
+      const order = snap;
       if (order?.recipe_id) {
         uniqueRecipes.add(order.recipe_id);
       }
@@ -4509,10 +4529,7 @@ ${lines.join("\n")}`;
         else timeLeft = ` *(<t:${Math.floor(a.expires_at / 1000)}:R>)*`;
       } else timeLeft = " *(no rush)*";
 
-      const order =
-        snap ??
-        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
-        null;
+      const order = snap;
 
       if (!order) return `${getIcon("status_complete")} \`${shortOrderId(fullId)}\`${timeLeft}`;
 
@@ -4526,7 +4543,8 @@ ${lines.join("\n")}`;
     const parts = [];
     if (sweep2.warning) parts.push(sweep2.warning, "");
 
-    const remaining = (p.order_board ?? []).length;
+    const { availableCount } = getOrdersMeta(p);
+    const remaining = availableCount;
     const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC(now2);
     const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
     const hasMarketStock = Object.values(p.market_stock ?? {}).some((qty) => Number(qty) > 0);
@@ -4626,7 +4644,6 @@ ${lines.join("\n")}`;
 
     if (!p.orders.accepted) p.orders.accepted = {};
 
-    const board = p.order_board ?? [];
     const results = [];
     const readyBowlsByRecipe = new Map();
     const acceptedOrdersNow = [];
@@ -4638,10 +4655,15 @@ ${lines.join("\n")}`;
         break;
       }
 
-      const order = board.find((o) => {
-        const full = String(o.order_id).toUpperCase();
-        const short = shortOrderId(o.order_id);
-        return full === tok || short === tok;
+      const order = findOrderByToken({
+        playerState: p,
+        settings: set,
+        content,
+        activeSeason: s.season,
+        serverId,
+        userId,
+        activeEventId,
+        token: tok
       });
 
       if (!order) {
@@ -4667,6 +4689,7 @@ ${lines.join("\n")}`;
         accepted_at: acceptedAt,
         expires_at: expiresAt,
         order: {
+          order_index: order.order_index,
           order_id: order.order_id,
           recipe_id: order.recipe_id,
           tier: order.tier,
@@ -4842,10 +4865,7 @@ ${lines.join("\n")}`;
 
     acceptedEntries.forEach(([fullId, a]) => {
       const snap = a?.order ?? null;
-      const order =
-        snap ??
-        (p.order_board ?? []).find((o) => o.order_id === fullId) ??
-        null;
+      const order = snap;
 
       if (!order?.recipe_id) return;
 
@@ -5040,8 +5060,16 @@ ${lines.join("\n")}`;
         continue;
       }
 
-      const live = (p.order_board ?? []).find((o) => o.order_id === fullOrderId);
-      const order = live ?? accepted.order;
+      const order = accepted.order ?? findOrderByToken({
+        playerState: p,
+        settings: set,
+        content,
+        activeSeason: s.season,
+        serverId,
+        userId,
+        activeEventId,
+        token: fullOrderId
+      });
       if (!order) {
         delete acceptedMap[fullOrderId];
         results.push(`${getIcon("warning")} Order \`${shortOrderId(fullOrderId)}\` can't be found anymore.`);
@@ -5097,9 +5125,7 @@ ${lines.join("\n")}`;
       if (bowl.qty <= 0) delete p.inv_bowls[selectedEntry?.key ?? order.recipe_id];
 
       delete acceptedMap[fullOrderId];
-      if (Array.isArray(p.order_board)) {
-        p.order_board = p.order_board.filter((o) => o.order_id !== fullOrderId);
-      }
+      markOrderConsumed(p, order.order_index);
 
       p.coins += rewards.coins;
       p.rep += rewards.rep;
@@ -5249,7 +5275,8 @@ ${lines.join("\n")}`;
       });
     }
 
-    if (servedCount > 0 && Array.isArray(p.order_board) && p.order_board.length === 0) {
+    const { availableCount: availableAfterServe } = getOrdersMeta(p);
+    if (servedCount > 0 && availableAfterServe === 0) {
       p.orders_depleted_day = dayKeyUTC();
     }
 
