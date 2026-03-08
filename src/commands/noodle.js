@@ -2222,9 +2222,13 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const highlightAccept = !hasAcceptedOrders && !disableAccept;
   const available = getAvailableRecipes(p);
   const activeSeason = s?.season ?? null;
+  const activeEventId = s?.active_event_id ?? null;
   const seasonFiltered = available.filter((rid) => {
     const r = content.recipes?.[rid];
     if (!r) return true;
+    if (r.is_event_recipe) {
+      return !!activeEventId && r.event_id === activeEventId;
+    }
     if (r.tier !== "seasonal") return true;
     return !!activeSeason && r.season === activeSeason;
   });
@@ -2274,6 +2278,34 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     return { content: msg, ephemeral: true };
   }
 
+  // Show what needs to be cooked for accepted orders
+  const neededByRecipe = {};
+  Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+    const recipeId = entry?.order?.recipe_id;
+    if (!recipeId) return;
+    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+  });
+
+  const cookNeedLines = Object.entries(neededByRecipe).map(([recipeId, need]) => {
+    const ready = getTotalBowlsForRecipe(p, recipeId);
+    const short = Math.max(0, need - ready);
+    const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
+    const line = `• ${recipeName} — need **${need}**, ready **${ready}**${short > 0 ? ` (cook **${short}** more)` : ""}`;
+    return { short, line, recipeName };
+  });
+
+  cookNeedLines.sort((a, b) => {
+    if (b.short !== a.short) return b.short - a.short;
+    return a.recipeName.localeCompare(b.recipeName);
+  });
+
+  const cookNeedsText = cookNeedLines.length
+    ? `${getIcon("cook")} Accepted orders to cook:\n${cookNeedLines
+        .slice(0, 6)
+        .map((x) => x.line)
+        .join("\n")}${cookNeedLines.length > 6 ? "\n…" : ""}`
+    : `${getIcon("orders") } No accepted orders yet.`;
+
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:cook_select:${userId}`)
     .setPlaceholder("Select a recipe to cook")
@@ -2288,6 +2320,12 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
       : "Select a recipe to cook:",
     user: ownerUser
   });
+
+  if (cookNeedsText) {
+    const baseDesc = cookEmbed?.data?.description ?? cookEmbed?.description ?? "";
+    const combined = baseDesc ? `${baseDesc}\n\n${cookNeedsText}` : cookNeedsText;
+    cookEmbed.setDescription(combined);
+  }
 
   const tutorialOnlyMenu = isTutorialStep(p, "intro_cook");
   const navRow = totalPages > 1
@@ -4376,6 +4414,15 @@ ${lines.join("\n")}`;
     if (!availableRecipes.includes(recipeId)) {
       return commitState({ content: "You don't know that recipe yet.", ephemeral: true });
     }
+    if (r.is_event_recipe) {
+      const activeEventId = s?.active_event_id ?? null;
+      if (!activeEventId || r.event_id !== activeEventId) {
+        return commitState({
+          content: "That recipe is only available during the active event.",
+          ephemeral: true
+        });
+      }
+    }
     if (r.tier === "seasonal") {
       const activeSeason = s?.season ?? null;
       if (!activeSeason || r.season !== activeSeason) {
@@ -4721,6 +4768,7 @@ ${lines.join("\n")}`;
     if (!p.orders.accepted) p.orders.accepted = {};
 
     const results = [];
+    const missingByRecipe = {};
     const readyBowlsByRecipe = new Map();
     const acceptedOrdersNow = [];
     let acceptedNow = 0;
@@ -5159,10 +5207,12 @@ ${lines.join("\n")}`;
       const bowl = selectedEntry?.bowl ?? null;
       if (!bowl || (bowl.qty ?? 0) <= 0) {
         const recipeName = content.recipes?.[order.recipe_id]?.name ?? "that recipe";
+        missingByRecipe[order.recipe_id] = (missingByRecipe[order.recipe_id] ?? 0) + 1;
         results.push(`${getIcon("basket")} You don't have a bowl ready for **${recipeName}**.`);
         continue;
       }
       if (bowl.recipe_id !== order.recipe_id) {
+        missingByRecipe[order.recipe_id] = (missingByRecipe[order.recipe_id] ?? 0) + 1;
         results.push(`${getIcon("warning")} Bowl doesn't match recipe for order \`${shortOrderId(fullOrderId)}\`.`);
         continue;
       }
@@ -5356,10 +5406,20 @@ ${lines.join("\n")}`;
       p.orders_depleted_day = dayKeyUTC();
     }
 
+    const missingLines = Object.entries(missingByRecipe).map(([recipeId, count]) => {
+      const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+      const suffix = count === 1 ? "" : "s";
+      return `• ${rName} — missing **${count}** bowl${suffix}`;
+    });
+    const missingBlock = missingLines.length ? `${getIcon("basket")} Missing bowls\n${missingLines.join("\n")}` : "";
+
     if (!servedCount) {
+      const failLines = [results.join("\n") || "Nothing served."];
+      if (missingBlock) failLines.push("", missingBlock);
+
       const failEmbed = buildMenuEmbed({
         title: `${getIcon("serve")} Orders Served`,
-        description: results.join("\n") || "Nothing served.",
+        description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
       return commitState({ content: " ", embeds: [failEmbed] });
@@ -5416,9 +5476,13 @@ ${lines.join("\n")}`;
         ];
     const embeds = [];
 
+    const serveLines = [results.join("\n")];
+    if (missingBlock) serveLines.push("", missingBlock);
+    serveLines.push("", `${summary}${levelLine}${gardenLine}${discoveryLine}${suffix}`);
+
     const serveEmbed = buildMenuEmbed({
       title: `${getIcon("serve")} Orders Served`,
-      description: `${results.join("\n")}\n\n${summary}${levelLine}${gardenLine}${discoveryLine}${suffix}`,
+      description: serveLines.join("\n"),
       user: interaction.member ?? interaction.user
     });
 
@@ -6957,12 +7021,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
         const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
 
-        const sellEmbed = buildMenuEmbed({
-          title: `${getIcon("coins")} Sold Items`,
-          description: `Sold:\n${pretty}\n\nTotal: **${totalGain}c**.`,
-          user: interaction.member ?? interaction.user
-        });
-
         const pickerPayload = buildSellPickerPayload({
           userId,
           p: p2,
@@ -6970,9 +7028,27 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           ownerUser: interaction.member ?? interaction.user
         });
 
+        const baseEmbed = pickerPayload.embeds?.[0] ?? null;
+        const saleSummary = `Sold:\n${pretty}\n\nTotal: **${totalGain}c**.`;
+
+        let sellEmbed;
+        if (baseEmbed) {
+          const baseDescription = baseEmbed?.data?.description ?? baseEmbed?.description ?? "";
+          const combinedDescription = [saleSummary, baseDescription].filter(Boolean).join("\n\n");
+          baseEmbed.setTitle(`${getIcon("coins")} Sell Items`);
+          baseEmbed.setDescription(combinedDescription);
+          sellEmbed = baseEmbed;
+        } else {
+          sellEmbed = buildMenuEmbed({
+            title: `${getIcon("coins")} Sold Items`,
+            description: saleSummary,
+            user: interaction.member ?? interaction.user
+          });
+        }
+
         const replyObj = {
           content: pickerPayload.content ?? " ",
-          embeds: [sellEmbed, ...(pickerPayload.embeds ?? [])],
+          embeds: [sellEmbed],
           components: (pickerPayload.components ?? []).length
             ? pickerPayload.components
             : [noodleMainMenuRow(userId)],
