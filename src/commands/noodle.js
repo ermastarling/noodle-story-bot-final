@@ -2286,13 +2286,16 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
   });
 
-  const cookNeedLines = Object.entries(neededByRecipe).map(([recipeId, need]) => {
-    const ready = getTotalBowlsForRecipe(p, recipeId);
-    const short = Math.max(0, need - ready);
-    const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
-    const line = `• ${recipeName} — need **${need}**, ready **${ready}**${short > 0 ? ` (cook **${short}** more)` : ""}`;
-    return { short, line, recipeName };
-  });
+  const cookNeedLines = Object.entries(neededByRecipe)
+    .map(([recipeId, need]) => {
+      const ready = getTotalBowlsForRecipe(p, recipeId);
+      const short = Math.max(0, need - ready);
+      if (short <= 0) return null; // hide recipes already ready
+      const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
+      const line = `• ${recipeName} — need **${need}**, ready **${ready}** (cook **${short}** more)`;
+      return { short, line, recipeName };
+    })
+    .filter(Boolean);
 
   cookNeedLines.sort((a, b) => {
     if (b.short !== a.short) return b.short - a.short;
@@ -2304,7 +2307,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
         .slice(0, 6)
         .map((x) => x.line)
         .join("\n")}${cookNeedLines.length > 6 ? "\n…" : ""}`
-    : `${getIcon("orders") } No accepted orders yet.`;
+    : "";
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:pick:cook_select:${userId}`)
@@ -4768,7 +4771,6 @@ ${lines.join("\n")}`;
     if (!p.orders.accepted) p.orders.accepted = {};
 
     const results = [];
-    const missingByRecipe = {};
     const readyBowlsByRecipe = new Map();
     const acceptedOrdersNow = [];
     let acceptedNow = 0;
