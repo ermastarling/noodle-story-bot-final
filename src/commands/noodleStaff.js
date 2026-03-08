@@ -43,6 +43,10 @@ const db = openDb();
 const staffContent = loadStaffContent();
 const upgradesContent = loadUpgradesContent();
 
+function formatTwoDecimals(value) {
+  return Number(Number(value ?? 0).toFixed(2));
+}
+
 function ownerFooterText(userOrMember) {
   const member = userOrMember?.user ? userOrMember : null;
   const fallbackUser = member?.user ?? userOrMember;
@@ -115,18 +119,18 @@ function formatEffects(effects) {
   for (const [key, value] of Object.entries(effects)) {
     if (key === "ingredient_save_chance") lines.push(`${(value * 100).toFixed(0)}% ingredient save`);
     else if (key === "double_craft_chance") lines.push(`${(value * 100).toFixed(0)}% double craft`);
-    else if (key === "rep_bonus_flat") lines.push(`+${value} rep`);
+    else if (key === "rep_bonus_flat") lines.push(`+${formatTwoDecimals(value)} rep`);
     else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% rep`);
     else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(1)}% order quality`);
     else if (key === "cooldown_reduction") lines.push(`-${(value * 100).toFixed(0)}% cooldowns`);
-    else if (key === "bowl_capacity_bonus") lines.push(`+${value} bowl capacity`);
+    else if (key === "bowl_capacity_bonus") lines.push(`+${formatTwoDecimals(value)} bowl capacity`);
     else if (key === "forage_bonus_items") lines.push(`+${Number(value).toFixed(2)} forage items`);
     else if (key === "forage_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
     else if (key === "garden_autoharvest") lines.push(`Auto-harvest garden plots`);
     else if (key === "garden_harvest_seed_chance") lines.push(`+${(value * 100).toFixed(0)}% harvest seed chance`);
     else if (key === "market_discount") lines.push(`${(value * 100).toFixed(0)}% market discount`);
     else if (key === "sxp_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% SXP`);
-    else if (key === "rare_epic_rep_bonus") lines.push(`+${value} rep on rare/epic`);
+    else if (key === "rare_epic_rep_bonus") lines.push(`+${formatTwoDecimals(value)} rep on rare/epic`);
     else if (key === "rare_epic_quality_bonus") lines.push(`+${(value * 100).toFixed(0)}% rare/epic cook quality`);
     else if (key === "rare_epic_fail_reduction") lines.push(`-${(value * 100).toFixed(0)}% rare/epic cook fail`);
   }
@@ -240,7 +244,7 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (key === "double_craft_chance") return `${(value * 100).toFixed(0)}% double craft`;
     if (key === "rep_bonus_flat") return `+${value.toFixed(1)} rep per serve`;
     if (key === "rep_bonus_percent") return `+${(value * 100).toFixed(0)}% rep`;
-    if (key === "bowl_capacity_bonus") return `+${value} bowl capacity`;
+    if (key === "bowl_capacity_bonus") return `+${formatTwoDecimals(value)} bowl capacity`;
     if (key === "cooldown_reduction") return `-${(value * 100).toFixed(0)}% cooldowns`;
     if (key === "forage_bonus_items") return `+${Number(value).toFixed(2)} forage items`;
     if (key === "forage_seed_chance") return `+${(value * 100).toFixed(2)}% seed find chance`;
@@ -248,7 +252,7 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (key === "garden_harvest_seed_chance") return `+${(value * 100).toFixed(0)}% seed chance on harvest`;
     if (key === "market_discount") return `${(value * 100).toFixed(0)}% market discount`;
     if (key === "sxp_bonus_percent") return `+${(value * 100).toFixed(0)}% SXP`;
-    if (key === "rare_epic_rep_bonus") return `+${value} rep on rare/epic`;
+    if (key === "rare_epic_rep_bonus") return `+${formatTwoDecimals(value)} rep on rare/epic`;
     if (key === "order_quality_bonus") return `+${(value * 100).toFixed(1)}% order quality`;
     if (key === "rare_epic_quality_bonus") return `+${(value * 100).toFixed(0)}% rare/epic cook quality`;
     if (key === "rare_epic_fail_reduction") return `-${(value * 100).toFixed(0)}% rare/epic cook fail`;

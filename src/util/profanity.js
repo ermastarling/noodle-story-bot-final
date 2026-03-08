@@ -45,7 +45,8 @@ const PROFANITY_WORDS = new Set([
   "fag",
   "faggot",
   "hitler",
-  "trump"
+  "trump",
+  "slave"
 ]);
 
 const LEET_MAP = {

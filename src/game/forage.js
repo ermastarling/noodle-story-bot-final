@@ -3,8 +3,11 @@ import { makeStreamRng } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
 import { addIngredientsToInventory } from "./inventory.js";
 
-// ✅ Forage-only pool (your list)
+// ✅ Forage-only pool
 // If the user chooses a specific item, we validate against this table.
+// Seasonal-only items get a reduced effective weight so they drop less often.
+const SEASONAL_FORAGE_WEIGHT_MULTIPLIER = 0.4;
+
 const FORAGE_TABLE = [
   // Toppings/Vegetables
   { item_id: "scallions",        weight: 60, min: 1, max: 3 },
@@ -17,13 +20,13 @@ const FORAGE_TABLE = [
   { item_id: "night_herbs",      weight: 20, min: 1, max: 1 },
   { item_id: "ember_peppers",     weight: 30, min: 1, max: 1 },
   { item_id: "dew_greens",       weight: 30, min: 1, max: 2 },
-  { item_id: "petal_garnish",    weight: 20, min: 1, max: 1 },
-  { item_id: "roasted_roots",    weight: 20, min: 1, max: 1 },
+  { item_id: "petal_garnish",    weight: 20, min: 1, max: 1, seasonalOnly: true },
+  { item_id: "roasted_roots",    weight: 20, min: 1, max: 1, seasonalOnly: true },
 
   // Spices/Aromatics
   { item_id: "black_garlic",     weight: 20,  min: 1, max: 1 },
-  { item_id: "star_anise",       weight: 20, min: 1, max: 1 },
-  { item_id: "night_spices",     weight: 20,  min: 1, max: 1 }
+  { item_id: "star_anise",       weight: 20, min: 1, max: 1, seasonalOnly: true },
+  { item_id: "night_spices",     weight: 20,  min: 1, max: 1, seasonalOnly: true }
 ];
 
 export const FORAGE_ITEM_IDS = FORAGE_TABLE.map(e => e.item_id);
@@ -46,13 +49,19 @@ function rngInt(rng, min, max) {
 }
 
 function weightedPick(rng, table) {
-  const total = table.reduce((sum, e) => sum + e.weight, 0);
+  const total = table.reduce((sum, e) => sum + getEffectiveWeight(e), 0);
   let roll = rngInt(rng, 1, total);
   for (const entry of table) {
-    roll -= entry.weight;
+    roll -= getEffectiveWeight(entry);
     if (roll <= 0) return entry;
   }
   return table[table.length - 1];
+}
+
+function getEffectiveWeight(entry) {
+  const base = entry.weight ?? 1;
+  const multiplier = entry.seasonalOnly ? SEASONAL_FORAGE_WEIGHT_MULTIPLIER : 1;
+  return Math.max(1, Math.round(base * multiplier));
 }
 
 export function canForage(player, nowMs, cooldownMs = 5 * 60 * 1000) {

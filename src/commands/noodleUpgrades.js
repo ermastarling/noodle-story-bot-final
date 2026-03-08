@@ -43,6 +43,10 @@ const db = openDb();
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
 
+function formatTwoDecimals(value) {
+  return Number(Number(value ?? 0).toFixed(2));
+}
+
 function ownerFooterText(userOrMember) {
   const member = userOrMember?.user ? userOrMember : null;
   const fallbackUser = member?.user ?? userOrMember;
@@ -96,22 +100,22 @@ function formatEffects(effects) {
   const lines = [];
   for (const [key, value] of Object.entries(effects)) {
     if (key === "ingredient_save_chance") lines.push(`+${(value * 100).toFixed(2)}% ingredient save`);
-    else if (key === "bowl_capacity_bonus") lines.push(`+${value} bowl capacity`);
-    else if (key === "ingredient_capacity") lines.push(`+${value} ingredient storage`);
+    else if (key === "bowl_capacity_bonus") lines.push(`+${formatTwoDecimals(value)} bowl capacity`);
+    else if (key === "ingredient_capacity") lines.push(`+${formatTwoDecimals(value)} ingredient storage`);
     else if (key === "spoilage_reduction") lines.push(`-${(value * 100).toFixed(2)}% spoilage`);
-    else if (key === "bowl_storage_capacity") lines.push(`+${value} bowl storage`);
+    else if (key === "bowl_storage_capacity") lines.push(`+${formatTwoDecimals(value)} bowl storage`);
     else if (key === "rep_bonus_flat") lines.push(`+${value.toFixed(1)} rep`);
     else if (key === "rep_bonus_percent") lines.push(`+${(value * 100).toFixed(2)}% rep`);
     else if (key === "order_quality_bonus") lines.push(`+${(value * 100).toFixed(2)}% order quality`);
     else if (key === "npc_variety_bonus") lines.push(`+${(value * 100).toFixed(2)}% bonus regulars variety`);
-    else if (key === "order_board_bonus") lines.push(`+${value} daily orders`);
+    else if (key === "order_board_bonus") lines.push(`+${formatTwoDecimals(value)} daily orders`);
     else if (key === "staff_capacity") lines.push(`+${value.toFixed(1)} staff capacity`);
     else if (key === "staff_effect_multiplier") lines.push(`+${(value * 100).toFixed(2)}% staff effects`);
     else if (key === "prep_batch_bonus") {
       const divisor = value > 0 ? Math.round(1 / value) : 0;
       lines.push(`+1 bowl per ${divisor} prep levels`);
     }
-    else if (key === "garden_plot_bonus") lines.push(`+${value} garden plots`);
+    else if (key === "garden_plot_bonus") lines.push(`+${formatTwoDecimals(value)} garden plots`);
     else if (key === "garden_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
   }
   return lines.join(", ");
@@ -282,9 +286,9 @@ function buildUpgradesOverviewEmbed(player, user) {
   // Active effects summary
   const effectLines = [];
   if (effects.ingredient_save_chance > 0) effectLines.push(`${getIcon("ingredient_save")} ${(effects.ingredient_save_chance * 100).toFixed(2)}% ingredient save`);
-  if (effects.bowl_capacity_bonus > 0) effectLines.push(`${getIcon("bowl_capacity")} +${effects.bowl_capacity_bonus} bowl capacity`);
-  if (effects.ingredient_capacity > 0) effectLines.push(`${getIcon("ingredient_capacity")} +${effects.ingredient_capacity} ingredient capacity`);
-  if (effects.bowl_storage_capacity > 0) effectLines.push(`${getIcon("bowl_storage")} +${effects.bowl_storage_capacity} bowl storage`);
+  if (effects.bowl_capacity_bonus > 0) effectLines.push(`${getIcon("bowl_capacity")} +${formatTwoDecimals(effects.bowl_capacity_bonus)} bowl capacity`);
+  if (effects.ingredient_capacity > 0) effectLines.push(`${getIcon("ingredient_capacity")} +${formatTwoDecimals(effects.ingredient_capacity)} ingredient capacity`);
+  if (effects.bowl_storage_capacity > 0) effectLines.push(`${getIcon("bowl_storage")} +${formatTwoDecimals(effects.bowl_storage_capacity)} bowl storage`);
   if (effects.rep_bonus_flat > 0) effectLines.push(`${getIcon("rep")} +${effects.rep_bonus_flat.toFixed(1)} rep per serve`);
   if (effects.rep_bonus_percent > 0) effectLines.push(`${getIcon("rep")} +${(effects.rep_bonus_percent * 100).toFixed(2)}% rep`);
   if (effects.staff_effect_multiplier > 0) effectLines.push(`${getIcon("staff_management")} +${(effects.staff_effect_multiplier * 100).toFixed(2)}% staff effects`);
@@ -343,15 +347,15 @@ function buildUpgradesManagementEmbed(player, user) {
   const formatUpgradeEffectValue = (upgrade, level, effectKey, perLevel) => {
     const total = perLevel * level;
     if (effectKey === "ingredient_save_chance") return `+${(total * 100).toFixed(2)}% ingredient save`;
-    if (effectKey === "bowl_capacity_bonus") return `+${total} bowl capacity`;
-    if (effectKey === "ingredient_capacity") return `+${total} ingredient storage`;
+    if (effectKey === "bowl_capacity_bonus") return `+${formatTwoDecimals(total)} bowl capacity`;
+    if (effectKey === "ingredient_capacity") return `+${formatTwoDecimals(total)} ingredient storage`;
     if (effectKey === "spoilage_reduction") return `-${(total * 100).toFixed(2)}% spoilage`;
-    if (effectKey === "bowl_storage_capacity") return `+${total} bowl storage`;
+    if (effectKey === "bowl_storage_capacity") return `+${formatTwoDecimals(total)} bowl storage`;
     if (effectKey === "rep_bonus_flat") return `+${total.toFixed(1)} rep per serve`;
     if (effectKey === "rep_bonus_percent") return `+${(total * 100).toFixed(2)}% rep`;
     if (effectKey === "order_quality_bonus") return `+${(total * 100).toFixed(2)}% order quality`;
     if (effectKey === "npc_variety_bonus") return `+${(total * 100).toFixed(2)}% bonus regulars variety`;
-    if (effectKey === "order_board_bonus") return `+${total} daily orders`;
+    if (effectKey === "order_board_bonus") return `+${formatTwoDecimals(total)} daily orders`;
     if (effectKey === "staff_capacity") return `+${total.toFixed(1)} staff capacity`;
     if (effectKey === "staff_effect_multiplier") return `+${(total * 100).toFixed(2)}% staff effects`;
     if (effectKey === "prep_batch_bonus") {

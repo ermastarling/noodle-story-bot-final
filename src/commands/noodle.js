@@ -969,7 +969,7 @@ function noodleOrdersActionRow(userId, { highlightAccept = true, disableAccept =
   );
 }
 
-function noodleOrdersActionRowWithBack(userId, { highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
+function noodleOrdersActionRowWithBack(userId, { highlightAccept = true, disableAccept = false, disableServe = false, showServeAll = false, disableServeAll = false } = {}) {
   const acceptStyle = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -980,6 +980,16 @@ function noodleOrdersActionRowWithBack(userId, { highlightAccept = true, disable
       .setDisabled(disableAccept),
     new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe),
+    ...(showServeAll
+      ? [
+          new ButtonBuilder()
+            .setCustomId(`noodle:pick:serveall:${userId}`)
+            .setLabel("Serve All")
+            .setEmoji(getButtonEmoji("serve"))
+            .setStyle(disableServeAll ? ButtonStyle.Secondary : ButtonStyle.Success)
+            .setDisabled(disableServeAll)
+        ]
+      : []),
     new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
   );
 }
@@ -1103,6 +1113,32 @@ function getBowlEntriesByRecipe(player, recipeId) {
 function getTotalBowlsForRecipe(player, recipeId) {
   return getBowlEntriesByRecipe(player, recipeId)
     .reduce((sum, { bowl }) => sum + (bowl?.qty ?? 0), 0);
+}
+
+function canServeAllOrders(player) {
+  const acceptedEntries = Object.values(player?.orders?.accepted ?? {});
+  if (!acceptedEntries.length) return false;
+
+  const now = nowTs();
+  const neededByRecipe = {};
+
+  for (const entry of acceptedEntries) {
+    const order = entry?.order;
+    if (!order) return false; // Missing snapshot means we can't confidently serve
+
+    if (entry.expires_at && now > entry.expires_at) return false; // Expired order blocks serve-all
+
+    const recipeId = order.recipe_id;
+    if (!recipeId) return false;
+    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+  }
+
+  for (const [recipeId, count] of Object.entries(neededByRecipe)) {
+    const ready = getTotalBowlsForRecipe(player, recipeId);
+    if (ready < count) return false;
+  }
+
+  return true;
 }
 
 function getBestBowlEntry(player, recipeId) {
@@ -2124,6 +2160,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
   const accepted = Object.entries(p.orders?.accepted ?? {});
   const hasAcceptedOrders = accepted.length > 0;
+  const canServeAll = action === "serve" ? canServeAllOrders(p) : false;
 
   const opts = accepted.slice(0, 25).map(([oid, entry]) => {
     const snap = entry?.order ?? null;
@@ -2165,7 +2202,12 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
         ? []
         : [
             action === "serve"
-              ? noodleOrdersActionRowWithBack(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
+              ? noodleOrdersActionRowWithBack(userId, {
+                  highlightAccept: !hasAcceptedOrders,
+                  disableServe: !hasAcceptedOrders,
+                  showServeAll: true,
+                  disableServeAll: !canServeAll
+                })
               : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
           ])
     ]
@@ -4313,13 +4355,15 @@ ${lines.join("\n")}`;
   if (sub === "cook") {
     const recipeId = opt.getString("recipe");
     const qty = opt.getInteger("quantity");
+    const page = opt.getInteger("page") ?? 0;
 
     if (!recipeId) {
       const payload = buildCookPickerPayload({
         userId,
         p,
         s,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page
       });
 
       return commit(payload);
@@ -6096,6 +6140,38 @@ if (action === "accept") {
   return componentCommit(interaction, payload);
 }
 
+if (action === "serveall") {
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That menu isn't for you.", ephemeral: true });
+  }
+
+  const p = ensurePlayer(serverId, userId);
+  if (!canServeAllOrders(p)) {
+    const payload = buildCancelServePickerPayload({
+      action: "serve",
+      userId,
+      p,
+      ownerUser: interaction.member ?? interaction.user
+    });
+
+    return componentCommit(interaction, {
+      ...payload,
+      content: `${getIcon("warning")} Not all accepted orders are ready to serve.`,
+      ephemeral: payload.ephemeral ?? false
+    });
+  }
+
+  const orderTokens = Object.keys(p.orders?.accepted ?? {}).map((oid) => shortOrderId(oid)).join(",");
+
+  return runNoodle(interaction, {
+    sub: "serve",
+    overrides: {
+      strings: { order_id: orderTokens },
+      messageId: interaction.message?.id ?? null
+    }
+  });
+}
+
 if (action === "cancel" || action === "serve") {
   const p = ensurePlayer(serverId, userId);
   const payload = buildCancelServePickerPayload({
@@ -6887,11 +6963,21 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           user: interaction.member ?? interaction.user
         });
 
+        const pickerPayload = buildSellPickerPayload({
+          userId,
+          p: p2,
+          s,
+          ownerUser: interaction.member ?? interaction.user
+        });
+
         const replyObj = {
-          content: " ",
-          embeds: [sellEmbed],
-          components: [noodleMainMenuRow(userId)],
-          targetMessageId: interaction.message?.id ?? null
+          content: pickerPayload.content ?? " ",
+          embeds: [sellEmbed, ...(pickerPayload.embeds ?? [])],
+          components: (pickerPayload.components ?? []).length
+            ? pickerPayload.components
+            : [noodleMainMenuRow(userId)],
+          targetMessageId: pickerPayload.ephemeral ? undefined : (interaction.message?.id ?? null),
+          ephemeral: pickerPayload.ephemeral
         };
 
         if (db) {
