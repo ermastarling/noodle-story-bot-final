@@ -5156,6 +5156,7 @@ ${lines.join("\n")}`;
     
     const results = [];
     const discoveryMessages = [];
+    const missingByRecipe = {};
     const prevShopLevel = p.shop_level ?? 1;
     let totalCoins = 0;
     let totalRep = 0;
