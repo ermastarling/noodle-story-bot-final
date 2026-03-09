@@ -854,13 +854,13 @@ function noodleRecipesMenuRow(userId, { kitchenUnlocked = false } = {}) {
   const kitchenStyle = kitchenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary;
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:kitchen:${userId}`)
       .setLabel("Kitchen")
       .setEmoji(getButtonEmoji("cook"))
       .setStyle(kitchenStyle)
-      .setDisabled(!kitchenUnlocked),
-    new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary)
+      .setDisabled(!kitchenUnlocked)
   );
 }
 
@@ -1269,7 +1269,7 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
 
 function getKitchenBrothItems() {
   return Object.values(content.items ?? {})
-    .filter((item) => String(item?.category ?? "").toLowerCase() === "broth")
+    .filter((item) => String(item?.category ?? "").toLowerCase() === "broth" && String(item?.acquisition ?? "").toLowerCase() === "market")
     .sort((a, b) => {
       const tierOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
       const aTier = tierOrder[String(a?.tier ?? "common").toLowerCase()] ?? 99;
@@ -1302,6 +1302,10 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   const nextReadyMs = status.nextReadyMs ?? null;
   const nextReadyTs = nextReadyMs != null ? Math.floor((now + nextReadyMs) / 1000) : null;
   const brothItems = getKitchenBrothItems();
+  const plannedUse = planKitchenIngredients(player, KITCHEN_FORAGE_PER_BROTH);
+  const plannedUseLine = Object.entries(plannedUse.used ?? {})
+    .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
+    .join(" · ") || `${KITCHEN_FORAGE_PER_BROTH} from pantry`;
 
   const foragePool = getKitchenForagePool(player);
   const forageEntries = Object.entries(foragePool).filter(([, qty]) => qty > 0);
@@ -1316,7 +1320,7 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
     kitchenLines.push(summaryLine);
 
     if (batches.length === 0) {
-      kitchenLines.push(`${getIcon("info")} No broth is simmering. Select a broth below to start (cost: ${KITCHEN_FORAGE_PER_BROTH} forageables).`);
+      kitchenLines.push(`${getIcon("cook")} No broth is simmering. Select a broth below to start (cost: ${KITCHEN_FORAGE_PER_BROTH} forageables).`);
     } else {
       const batchLines = batches.slice(0, 5).map((batch) => {
         const readyText = batch.ready
@@ -1353,7 +1357,7 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   embed.addFields(
     {
       name: "Forageables Available",
-      value: `${getIcon("basket")} **${totalForage}** in stash (craft up to **${craftable}** broth${craftable === 1 ? "" : "s"}).\n${forageList}${forageFooter}`,
+      value: `${getIcon("basket")} **${totalForage}** in pantry (craft up to **${craftable}** broth${craftable === 1 ? "" : "s"}).\n${forageList}${forageFooter}`,
       inline: false
     },
     {
@@ -1366,14 +1370,14 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   const options = brothItems.map((item) => ({
     label: `${item?.name ?? item?.item_id ?? "Unknown"}`.slice(0, 100),
     value: item?.item_id ?? "unknown",
-    description: `${(item?.tier ?? "" ) ? `${item.tier} ` : ""}Broth — cost ${KITCHEN_FORAGE_PER_BROTH} forageables`.slice(0, 100)
+    description: `Consumes ${plannedUseLine}`.slice(0, 100)
   })).slice(0, 25);
 
   const components = [];
   const selectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`noodle:kitchen:start:${userId}`)
-      .setPlaceholder(`Select a broth to simmer (${KITCHEN_FORAGE_PER_BROTH} forageables)${!kitchenUnlocked ? " — locked" : remainingSlots <= 0 ? " — slots full" : ""}`)
+      .setPlaceholder(`Select a broth to simmer (uses ${plannedUseLine})${!kitchenUnlocked ? " — locked" : remainingSlots <= 0 ? " — slots full" : ""}`)
       .setMinValues(1)
       .setMaxValues(1)
       .setDisabled(!kitchenUnlocked || remainingSlots <= 0 || craftable <= 0 || options.length === 0)
@@ -3090,7 +3094,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
           now,
           kitchenUnlocked,
           effects: combinedEffects,
-          banner: `${getIcon("info")} Select a broth to start simmering.`
+          banner: `${getIcon("cook")} Select a broth to start simmering.`
         });
         return finalize({ ...view, ephemeral: true });
       }
@@ -3177,7 +3181,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
         now,
         kitchenUnlocked,
         effects: combinedEffects,
-        banner: `${getIcon("cook")} Simmering **${displayItemName(brothId)}** — used ${usedLine || "forageables"}. Ready in ${formatDurationShort(KITCHEN_SIMMER_MS)}.`
+        banner: `${getIcon("cook")} Now simmering **${displayItemName(brothId)}** — ready in ${formatDurationShort(KITCHEN_SIMMER_MS)}. Used: ${usedLine || "pantry"}.`
       });
       return finalize(view);
     }
@@ -3195,7 +3199,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
           now,
           kitchenUnlocked,
           effects: combinedEffects,
-          banner: `${getIcon("info")} Nothing is simmering right now.`
+          banner: `${getIcon("help")} Nothing is simmering right now.`
         });
         return finalize({ ...view, ephemeral: true });
       }
@@ -4489,7 +4493,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (bagsToMake <= 0) {
       const embed = buildMenuEmbed({
         title: `${getIcon("tree")} Garden`,
-        description: `${getIcon("info")} Enter at least 1 bag (max ${maxCraftable}).`,
+        description: `${getIcon("help")} Enter at least 1 bag (max ${maxCraftable}).`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -4679,7 +4683,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     let summary;
     if (!harvestResult.anyHarvestable) {
-      summary = `${getIcon("info")} Nothing ready to harvest yet.`;
+      summary = `${getIcon("help")} Nothing ready to harvest yet.`;
     } else if (!harvestResult.results.length) {
       summary = `${getIcon("warning")} Pantry is full; nothing harvested.`;
     } else {
@@ -6093,7 +6097,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "harvest_sel
   }
   const value = interaction.values?.[0];
   if (!value || value === "none") {
-    return componentCommit(interaction, { content: `${getIcon("info")} No plots are ready.`, ephemeral: true });
+    return componentCommit(interaction, { content: `${getIcon("help")} No plots are ready.`, ephemeral: true });
   }
   const plotIndex = Number(value);
   if (!Number.isInteger(plotIndex)) {
@@ -6408,7 +6412,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   }
   const selections = interaction.values ?? [];
   if (!selections.length) {
-    return componentCommit(interaction, { content: `${getIcon("info")} Pick at least one item to compost.`, ephemeral: true });
+    return componentCommit(interaction, { content: `${getIcon("help")} Pick at least one item to compost.`, ephemeral: true });
   }
   const p = ensurePlayer(serverId, userId);
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
@@ -6490,11 +6494,11 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const messageId = interaction.message?.id ?? null;
   const cached = messageId ? compostSelectionCache.get(messageId) : null;
   if (!cached || cached.userId !== userId) {
-    return componentCommit(interaction, { content: `${getIcon("info")} Select items to compost first.`, ephemeral: true });
+    return componentCommit(interaction, { content: `${getIcon("help")} Select items to compost first.`, ephemeral: true });
   }
   if (Date.now() - (cached.ts ?? 0) > 5 * 60 * 1000) {
     compostSelectionCache.delete(messageId);
-    return componentCommit(interaction, { content: `${getIcon("info")} Selection expired. Choose items again.`, ephemeral: true });
+    return componentCommit(interaction, { content: `${getIcon("help")} Selection expired. Choose items again.`, ephemeral: true });
   }
 
   const selections = cached.selections ?? [];
@@ -6509,7 +6513,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   if (!parsedSelections.length) {
     compostSelectionCache.delete(messageId);
-    return componentCommit(interaction, { content: `${getIcon("info")} Select items to compost first.`, ephemeral: true });
+    return componentCommit(interaction, { content: `${getIcon("help")} Select items to compost first.`, ephemeral: true });
   }
 
   const p = ensurePlayer(serverId, userId);
@@ -6574,8 +6578,8 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const requestedUnits = amountRequested * parsedSelections.length;
   const partialNote = totalUnitsUsed < requestedUnits
     ? totalUnitsUsed >= maxUnitsByStorage
-      ? `${getIcon("info")} Compost storage capped this batch.`
-      : `${getIcon("info")} Not enough of the selected items for the full amount.`
+      ? `${getIcon("help")} Compost storage capped this batch.`
+      : `${getIcon("help")} Not enough of the selected items for the full amount.`
     : null;
 
   garden.compost_bags = (garden.compost_bags || 0) + bagsMade;
