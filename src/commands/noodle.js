@@ -828,11 +828,11 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   });
 
   embed.addFields(
-        { name: " ", value: "· · · · · · ·", inline: false },
-        { name: "Plots", value: plotsValue, inline: true },
-        { name: "Seeds", value: seedsValue, inline: true },
-        { name: "Compost", value: compostValue, inline: true },
-        { name: " ", value: "· · · · · · ·", inline: false }
+    { name: "Plots", value: plotsValue, inline: true },
+    { name: " ", value: "· · · · · · ·", inline: false },
+    { name: "Seeds", value: seedsValue, inline: true },
+    { name: " ", value: "· · · · · · ·", inline: false },
+    { name: "Compost", value: compostValue, inline: true }
   );
 
   return {
@@ -1456,21 +1456,16 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   });
 
   embed.addFields(
-    { name: " ", value: "· · · · · · ·", inline: false },
     {
       name: "Forageables Available",
       value: forageValue,
       inline: true
     },
+    { name: " ", value: "· · · · · · ·", inline: false },
     {
       name: "Kitchen Status",
       value: kitchenStatusValue,
       inline: true
-    },
-    {
-      name: " ",
-      value: "-----",
-      inline: false
     }
   );
 
@@ -3141,26 +3136,22 @@ if (sub === "pantry") {
       user: interaction.member ?? interaction.user
     });
     pantryEmbed.addFields(
-      { name: " ", value: "· · · · · · ·", inline: false },
       {
         name: " ",
         value: ingredientsValue,
         inline: true
       },
+      { name: " ", value: "· · · · · · ·", inline: false },
       {
         name: " ",
         value: flavorValue,
         inline: true
       },
+      { name: " ", value: "· · · · · · ·", inline: false },
       {
         name: " ",
         value: bowlsValue,
         inline: true
-      },
-      {
-        name: " ",
-        value: "· · · · · · ·",
-        inline: false
       },
       {
         name: "Bowl Quality",
