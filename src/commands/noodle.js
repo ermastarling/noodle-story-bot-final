@@ -733,7 +733,20 @@ function getGardenActionState(player, effects) {
   };
 }
 
-function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocked = false, kitchenJustUnlocked = false }) {
+function gardenPageRow(userId, page = 0) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:garden:${userId}:0`)
+      .setLabel("Plots")
+      .setStyle(page === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:garden:${userId}:1`)
+      .setLabel("Seeds / Compost")
+      .setStyle(page === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+}
+
+function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocked = false, kitchenJustUnlocked = false, page = 0 }) {
   const garden = ensureGardenState(player);
   const plots = ensureGardenPlots(player, combinedEffects);
   const gardenState = getGardenActionState(player, combinedEffects);
@@ -753,14 +766,18 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const hasHarvestable = readyPlots.length > 0;
   const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || getYieldTotal(getPlotYieldRemaining(plot)) <= 0);
 
-  const plotsValue = [
-    `${getIcon("tree")} Plots available: **${getGardenPlotCount(player, combinedEffects)}**`,
-    `**Plots**\n${plotsSection}`
-  ].join("\n\n");
+  const plotSummary = `${getIcon("tree")} Plots available: **${getGardenPlotCount(player, combinedEffects)}**`;
+  const plotsLinesRaw = plotsSection ? plotsSection.split("\n").filter(Boolean) : [];
+  const plotsLines = plotsLinesRaw.length ? plotsLinesRaw : ["_No plots available yet._"];
 
-  const seedsValue = `${getIcon("tree")} **Seeds (unlimited)**\n${seedSection}`;
+  const seedsValue = [
+    "· · · · · · ·",
+    `${getIcon("tree")} **Seeds (unlimited)**`,
+    seedSection
+  ].join("\n");
 
   const compostValue = [
+    "· · · · · · ·",
     `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
     `**Compost Inputs**`,
     `Spoiled saved: **${spoiledTotal}**`,
@@ -768,7 +785,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
   ].join("\n");
 
-  const description = `${getIcon("tree")} Manage your garden.`;
+  const description = [`${getIcon("tree")} Manage your garden.`, plotSummary].join("\n\n");
 
   const seedOptions = Object.entries(garden.seeds || {})
     .filter(([, qty]) => qty > 0)
@@ -819,6 +836,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     canCompost: canCraft,
     canHarvest: hasHarvestable
   });
+  const pageRow = gardenPageRow(userId, page);
 
   const embed = buildMenuEmbed({
     title: `${getIcon("tree")} Garden`,
@@ -827,15 +845,29 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     color: theme.colors.success
   });
 
-  embed.addFields(
-    { name: " ", value: plotsValue, inline: true },
-    { name: " ", value: `· · · · · · ·\n${seedsValue}`, inline: true },
-    { name: " ", value: `· · · · · · ·\n${compostValue}`, inline: true }
-  );
+  if (page === 0) {
+    // Plots page — chunk plots into inline columns
+    const columns = plotsLines.length <= 2
+      ? Math.max(1, plotsLines.length)
+      : (plotsLines.length <= 4 ? 2 : 3);
+    const chunkSize = Math.max(1, Math.ceil(plotsLines.length / Math.max(1, columns)));
+    for (let i = 0; i < columns; i++) {
+      const chunk = plotsLines.slice(i * chunkSize, (i + 1) * chunkSize);
+      if (!chunk.length) continue;
+      const value = ["· · · · · · ·", ...chunk].join("\n");
+      embed.addFields({ name: " ", value, inline: true });
+    }
+  } else {
+    // Seeds / Compost page
+    embed.addFields(
+      { name: " ", value: seedsValue, inline: true },
+      { name: " ", value: compostValue, inline: true }
+    );
+  }
 
   return {
     embed,
-    rows: { navRow, plantRow, harvestSelectRow },
+    rows: { navRow, pageRow, plantRow, harvestSelectRow },
     flags: { canCraft, hasHarvestable, hasEmptyPlot }
   };
 }
@@ -1470,14 +1502,21 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
       : `Max ${maxCraft}`;
     const description = descRaw.length > 100 ? `${descRaw.slice(0, 97)}…` : descRaw;
     const craftableFlag = maxCraft > 0;
-    const labelRaw = `${craftableFlag ? `${getIcon("status_complete")} ` : ""}${item?.name ?? item?.item_id ?? "Unknown"}`;
+    const labelRaw = `${item?.name ?? item?.item_id ?? "Unknown"}`;
     const label = labelRaw.length > 100 ? `${labelRaw.slice(0, 97)}…` : labelRaw;
 
-    return {
+    const option = {
       label,
       value: item?.item_id ?? "unknown",
       description
     };
+
+    if (craftableFlag) {
+      const emoji = getButtonEmoji("status_complete");
+      if (emoji) option.emoji = emoji;
+    }
+
+    return option;
   }).slice(0, 25);
 
   const components = [];
@@ -4487,6 +4526,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   /* ---------------- GARDEN ---------------- */
   if (sub === "garden") {
+    const page = Math.max(0, Math.min(1, opt.getInteger("page") ?? 0));
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     if (combinedEffects.garden_autoharvest) {
@@ -4513,13 +4553,14 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       user: interaction.member ?? interaction.user,
       userId,
       kitchenUnlocked,
-      kitchenJustUnlocked
+      kitchenJustUnlocked,
+      page
     });
 
     return commitState({
       content: " ",
       embeds: [view.embed],
-      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
+      components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
 
@@ -4731,7 +4772,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     return commitState({
       content: " ",
       embeds: [view.embed],
-      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
+      components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
 
@@ -4802,7 +4843,7 @@ ${lines.join("\n")}`;
     return commitState({
       content: " ",
       embeds: [view.embed],
-      components: [view.rows.navRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
+      components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
 
