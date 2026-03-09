@@ -7,6 +7,7 @@ import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
 import { noodleMainMenuRow } from "./noodle.js";
 import { buildStaffOverviewEmbed } from "./noodleStaff.js";
+import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../game/kitchen.js";
 import {
   purchaseUpgrade,
   calculateUpgradeCost,
@@ -42,6 +43,7 @@ const ButtonStyle = {
 const db = openDb();
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
+const KITCHEN_BROTH_UPGRADE_IDS = new Set(["u_kitchen_simmer", "u_kitchen_simmer_speed"]);
 
 function formatTwoDecimals(value) {
   return Number(Number(value ?? 0).toFixed(2));
@@ -117,6 +119,8 @@ function formatEffects(effects) {
     }
     else if (key === "garden_plot_bonus") lines.push(`+${formatTwoDecimals(value)} garden plots`);
     else if (key === "garden_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
+    else if (key === "kitchen_simmer_capacity") lines.push(`+${formatTwoDecimals(value)} kitchen slots`);
+    else if (key === "kitchen_simmer_time_reduction") lines.push(`-${(value * 100).toFixed(2)}% simmer time`);
   }
   return lines.join(", ");
 }
@@ -259,6 +263,7 @@ export async function noodleUpgradesHandler(interaction) {
 function buildUpgradesOverviewEmbed(player, user) {
   const effects = calculateUpgradeEffects(player, upgradesContent);
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
+  const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
   
   const embed = new EmbedBuilder()
     .setTitle(`${getIcon("upgrades")} Shop Upgrades`)
@@ -270,9 +275,15 @@ function buildUpgradesOverviewEmbed(player, user) {
     if (!categoryData.upgrades || categoryData.upgrades.length === 0) continue;
 
     const lines = categoryData.upgrades.map(u => {
-      const status = u.isMaxed
-        ? `${getIcon("status_complete")} MAX`
-        : (u.requirementLabel ?? `${u.nextCost}c`);
+      const isBrothUpgrade = KITCHEN_BROTH_UPGRADE_IDS.has(u.upgradeId);
+      const lockedStatus = !kitchenUnlocked && isBrothUpgrade
+        ? `${getIcon("lock")} Unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}`
+        : null;
+      const status = lockedStatus
+        ? lockedStatus
+        : (u.isMaxed
+          ? `${getIcon("status_complete")} MAX`
+          : (u.requirementLabel ?? `${u.nextCost}c`));
       return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
     });
 
@@ -293,6 +304,8 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effects.rep_bonus_percent > 0) effectLines.push(`${getIcon("rep")} +${(effects.rep_bonus_percent * 100).toFixed(2)}% rep`);
   if (effects.staff_effect_multiplier > 0) effectLines.push(`${getIcon("staff_management")} +${(effects.staff_effect_multiplier * 100).toFixed(2)}% staff effects`);
   if (effects.order_board_bonus > 0) effectLines.push(`${getIcon("orders")} +${effects.order_board_bonus} daily orders`);
+  if (effects.kitchen_simmer_capacity > 0) effectLines.push(`${getIcon("cook")} +${formatTwoDecimals(effects.kitchen_simmer_capacity)} kitchen slots`);
+  if (effects.kitchen_simmer_time_reduction > 0) effectLines.push(`${getIcon("hourglass")} -${(effects.kitchen_simmer_time_reduction * 100).toFixed(2)}% simmer time`);
 
   if (effectLines.length > 0) {
     embed.addFields({
@@ -363,6 +376,8 @@ function buildUpgradesManagementEmbed(player, user) {
       const bonus = divisor > 0 ? Math.floor(level / divisor) : 0;
       return bonus > 0 ? `+${bonus} bowls per batch` : `+1 bowl per ${divisor} prep levels`;
     }
+    if (effectKey === "kitchen_simmer_capacity") return `+${formatTwoDecimals(total)} kitchen slots`;
+    if (effectKey === "kitchen_simmer_time_reduction") return `-${(total * 100).toFixed(2)}% simmer time`;
     return null;
   };
 
@@ -391,6 +406,7 @@ function buildUpgradesManagementEmbed(player, user) {
 function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "common" } = {}) {
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
   const categoryData = upgradesContent.upgrade_categories?.[categoryId];
+  const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
 
   if (categoryId === "staff") {
     if (staffRarity === "overview") {
@@ -479,9 +495,15 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
 
   const upgrades = upgradesByCategory[categoryId]?.upgrades ?? [];
   const lines = upgrades.map((u) => {
-    const status = u.isMaxed
-      ? `${getIcon("status_complete")} MAX`
-      : (u.requirementLabel ?? `${u.nextCost}c`);
+    const isBrothUpgrade = KITCHEN_BROTH_UPGRADE_IDS.has(u.upgradeId);
+    const lockedStatus = !kitchenUnlocked && isBrothUpgrade
+      ? `${getIcon("lock")} Unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}`
+      : null;
+    const status = lockedStatus
+      ? lockedStatus
+      : (u.isMaxed
+        ? `${getIcon("status_complete")} MAX`
+        : (u.requirementLabel ?? `${u.nextCost}c`));
     const desc = u.description ? `\n  _${u.description}_` : "";
     return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}${desc}`;
   });
@@ -502,6 +524,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
     rows.push(...buildCategoryButtonsRows(userId, categoryId, source));
   }
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
+  const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
 
   if (categoryId === "staff") {
     rows.push(buildStaffRarityRow(userId, staffRarity, source));
@@ -561,6 +584,8 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
   for (const [catId, categoryData] of categoryEntries) {
     if (!categoryData?.upgrades) continue;
     for (const upgrade of categoryData.upgrades || []) {
+      const isBrothUpgrade = KITCHEN_BROTH_UPGRADE_IDS.has(upgrade.upgradeId);
+      if (!kitchenUnlocked && isBrothUpgrade) continue;
       if (upgrade.isMaxed) continue;
 
       const effectStr = formatEffects(upgrade.effects);

@@ -225,6 +225,12 @@ export function getKitchenCapacity(player, effects = {}) {
   return Math.max(0, KITCHEN_BASE_SLOTS + bonus);
 }
 
+export function getKitchenSimmerDurationMs(effects = {}) {
+  const reduction = Math.max(0, Math.min(0.9, Number(effects.kitchen_simmer_time_reduction ?? 0)));
+  const duration = Math.floor(KITCHEN_SIMMER_MS * (1 - reduction));
+  return Math.max(1000, duration);
+}
+
 export function getKitchenForagePool(player) {
   const pool = {};
   for (const id of FORAGE_ITEM_IDS) {

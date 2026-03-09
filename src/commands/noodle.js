@@ -149,7 +149,7 @@ import {
   getBrothRecipe,
   planKitchenIngredients,
   KITCHEN_FORAGE_PER_BROTH,
-  KITCHEN_SIMMER_MS,
+  getKitchenSimmerDurationMs,
   KITCHEN_BROTH_RECIPES,
   KITCHEN_UNLOCK_LEVEL
 } from "../game/kitchen.js";
@@ -639,6 +639,9 @@ function noodleForageGardenRow(userId, {
   active = "forage",
   gardenLocked = false,
   includeGardenButton = true,
+  includeKitchenButton = false,
+  kitchenUnlocked = false,
+  kitchenJustUnlocked = false,
   canCompost = false,
   canHarvest = false,
   showGardenActions = false
@@ -661,6 +664,21 @@ function noodleForageGardenRow(userId, {
         .setLabel("Garden").setEmoji(getButtonEmoji("tree"))
         .setStyle(gardenPrimary ? ButtonStyle.Success : gardenStyle)
         .setDisabled(gardenLocked)
+    );
+  }
+
+  if (includeKitchenButton) {
+    const kitchenPrimary = active === "kitchen";
+    const kitchenStyle = !kitchenUnlocked
+      ? ButtonStyle.Secondary
+      : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:kitchen:${userId}`)
+        .setLabel("Kitchen")
+        .setEmoji(getButtonEmoji("cook"))
+        .setStyle(kitchenPrimary ? ButtonStyle.Success : kitchenStyle)
+        .setDisabled(!kitchenUnlocked)
     );
   }
 
@@ -714,7 +732,7 @@ function getGardenActionState(player, effects) {
   };
 }
 
-function buildGardenView({ player, combinedEffects, user, userId }) {
+function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocked = false, kitchenJustUnlocked = false }) {
   const garden = ensureGardenState(player);
   const plots = ensureGardenPlots(player, combinedEffects);
   const gardenState = getGardenActionState(player, combinedEffects);
@@ -784,6 +802,9 @@ function buildGardenView({ player, combinedEffects, user, userId }) {
   const navRow = noodleForageGardenRow(userId, {
     active: "garden",
     includeGardenButton: false,
+    includeKitchenButton: true,
+    kitchenUnlocked,
+    kitchenJustUnlocked,
     showGardenActions: true,
     canCompost: canCraft,
     canHarvest: hasHarvestable
@@ -1366,16 +1387,13 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     kitchenLines.push(summaryLine);
 
     if (batches.length === 0) {
-      kitchenLines.push(`${getIcon("cook")} No broth is simmering. Select a broth below to start.`);
+      kitchenLines.push(`${getIcon("cook")} Select a broth below to start.`);
     } else {
       const batchLines = batches.slice(0, 5).map((batch) => {
         const readyText = batch.ready
           ? `${getIcon("status_complete")} Ready`
           : `${getIcon("hourglass")} Ready ${batch.ready_at ? `<t:${Math.floor(batch.ready_at / 1000)}:R>` : "soon"}`;
-        const ingLines = Object.entries(batch.ingredients ?? {})
-          .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
-          .join(" · ");
-        return `• ${displayItemName(batch.broth_id)} — ${readyText}${ingLines ? ` — ${ingLines}` : ""}`;
+        return `• ${displayItemName(batch.broth_id)} — ${readyText}`;
       });
       kitchenLines.push(...batchLines);
       const extra = batches.length - batchLines.length;
@@ -2843,8 +2861,9 @@ if (sub === "start") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const gardenUnlocked = isGardenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const navRows = [
-      noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
+      noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked, includeKitchenButton: true, kitchenUnlocked, kitchenJustUnlocked }),
       noodleMainMenuRow(userId)
     ];
 
@@ -3085,7 +3104,7 @@ if (sub === "pantry") {
       content: " ",
       embeds: [pantryEmbed],
       components: [
-        noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
+        noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked, includeKitchenButton: true, kitchenUnlocked, kitchenJustUnlocked }),
         noodleMainMenuRowNoPantry(userId),
         noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
       ]
@@ -3212,7 +3231,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
         id: batchId,
         broth_id: brothId,
         started_at: now,
-        ready_at: now + KITCHEN_SIMMER_MS,
+        ready_at: now + getKitchenSimmerDurationMs(combinedEffects),
         ingredients: plan.used
       });
 
@@ -3221,7 +3240,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
         .join(" · ");
 
       const view = kitchenView({
-        banner: `${getIcon("cook")} Now simmering **${displayItemName(brothId)}** — ready in ${formatDurationShort(KITCHEN_SIMMER_MS)}. Used: ${usedLine || "pantry"}.`
+        banner: `${getIcon("cook")} Now simmering **${displayItemName(brothId)}**. Used: ${usedLine || "pantry"}.`
       });
       return finalize(view);
     }
@@ -4199,6 +4218,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   /* ---------------- FORAGE ---------------- */
   if (sub === "forage") {
     const gardenUnlocked = isGardenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     ensureGardenState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects);
@@ -4208,7 +4228,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       noodleForageGardenRow(userId, {
         active: "forage",
         gardenLocked: !gardenUnlocked,
-        showGardenActions: false
+        showGardenActions: false,
+        includeKitchenButton: true,
+        kitchenUnlocked,
+        kitchenJustUnlocked
       }),
       noodleMainMenuRow(userId)
     ];
@@ -4419,6 +4442,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   /* ---------------- GARDEN ---------------- */
   if (sub === "garden") {
     const gardenUnlocked = isGardenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects);
     }
@@ -4431,7 +4455,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         color: theme.colors.success
       });
       const navRows = [
-        noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked }),
+        noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked, includeKitchenButton: true, kitchenUnlocked, kitchenJustUnlocked }),
         noodleMainMenuRow(userId)
       ];
       return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
@@ -4441,7 +4465,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       player: p,
       combinedEffects,
       user: interaction.member ?? interaction.user,
-      userId
+      userId,
+      kitchenUnlocked,
+      kitchenJustUnlocked
     });
 
     return commitState({
@@ -4454,6 +4480,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   /* ---------------- COMPOST ---------------- */
   if (sub === "compost") {
     const gardenUnlocked = isGardenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects);
     }
@@ -4463,6 +4490,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         active: "garden",
         gardenLocked: !gardenUnlocked,
         includeGardenButton: false,
+        includeKitchenButton: true,
+        kitchenUnlocked,
+        kitchenJustUnlocked,
         showGardenActions: true,
         canCompost: gardenState.canCraft,
         canHarvest: gardenState.hasHarvestable
@@ -4590,6 +4620,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   if (sub === "plant") {
     const gardenUnlocked = isGardenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects);
     }
@@ -4599,6 +4630,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         active: "garden",
         gardenLocked: !gardenUnlocked,
         includeGardenButton: false,
+        includeKitchenButton: true,
+        kitchenUnlocked,
+        kitchenJustUnlocked,
         showGardenActions: true,
         canCompost: gardenState.canCraft,
         canHarvest: gardenState.hasHarvestable

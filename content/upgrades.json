@@ -36,6 +36,18 @@
         "kitchen_simmer_capacity": 10
       }
     },
+    "u_kitchen_simmer_speed": {
+      "upgrade_id": "u_kitchen_simmer_speed",
+      "name": "Rapid Simmer",
+      "category": "kitchen",
+      "description": "High-pressure kettles shave simmer time, -5% broth simmer duration per level (stacks additively).",
+      "max_level": 10,
+      "base_cost": 5200,
+      "cost_scaling": 1.45,
+      "effects_per_level": {
+        "kitchen_simmer_time_reduction": 0.05
+      }
+    },
     "u_ladles": {
       "upgrade_id": "u_ladles",
       "name": "Premium Ladles",

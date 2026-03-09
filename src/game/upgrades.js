@@ -110,7 +110,8 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     prep_batch_bonus: 0,
     garden_plot_bonus: 0,
     garden_seed_chance: 0,
-    kitchen_simmer_capacity: 0
+    kitchen_simmer_capacity: 0,
+    kitchen_simmer_time_reduction: 0
   };
   
   if (!player.upgrades) return effects;
@@ -213,6 +214,16 @@ export function getUpgradesByCategory(player, upgradesContent) {
       }
       result.other.upgrades.push(upgradeInfo);
     }
+  }
+
+  // Sort upgrades within each category by next cost then name for consistent display
+  for (const cat of Object.values(result)) {
+    if (!Array.isArray(cat?.upgrades)) continue;
+    cat.upgrades.sort((a, b) => {
+      if (a.isMaxed !== b.isMaxed) return a.isMaxed ? 1 : -1;
+      if (a.nextCost !== b.nextCost) return a.nextCost - b.nextCost;
+      return String(a.name || "").localeCompare(String(b.name || ""), "en", { sensitivity: "base" });
+    });
   }
   
   return result;
