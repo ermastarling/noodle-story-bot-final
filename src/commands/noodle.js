@@ -1297,7 +1297,7 @@ function formatDurationShort(ms) {
   return `${seconds}s`;
 }
 
-function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], banner = null, now = nowTs(), kitchenUnlocked = false, kitchenJustUnlocked = false, effects = {} }) {
+function buildKitchenViewPayload({ player, user, userId, server = null, pendingMessages = [], banner = null, now = nowTs(), kitchenUnlocked = false, kitchenJustUnlocked = false, effects = {} }) {
   ensureKitchenState(player);
   const status = getKitchenStatus(player, now);
   const batches = status.batches ?? [];
@@ -1306,7 +1306,34 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   const remainingSlots = Math.max(0, capacity - batches.length);
   const nextReadyMs = status.nextReadyMs ?? null;
   const nextReadyTs = nextReadyMs != null ? Math.floor((now + nextReadyMs) / 1000) : null;
-  const brothItems = getKitchenBrothItems();
+  const availableRecipes = getAvailableRecipes(player);
+  const activeSeason = server?.season ?? null;
+  const activeEventId = server?.active_event_id ?? null;
+  const seasonFilteredRecipes = availableRecipes.filter((rid) => {
+    const r = content.recipes?.[rid];
+    if (!r) return true;
+    if (r.is_event_recipe) {
+      return !!activeEventId && r.event_id === activeEventId;
+    }
+    if (r.tier !== "seasonal") return true;
+    return !!activeSeason && r.season === activeSeason;
+  });
+
+  const unlockedBrothIds = new Set();
+  seasonFilteredRecipes.forEach((rid) => {
+    const r = content.recipes?.[rid];
+    (r?.ingredients ?? []).forEach((ing) => {
+      if (normalizeIngredientType(ing.item_id) === "broth") {
+        unlockedBrothIds.add(ing.item_id);
+      }
+    });
+  });
+
+  const brothItems = getKitchenBrothItems().filter((item) => {
+    if (unlockedBrothIds.size === 0) return true;
+    return unlockedBrothIds.has(item?.item_id);
+  });
+
   const recipePlans = brothItems.map((item) => {
     const plan = planKitchenIngredients(player, item?.item_id);
     const recipe = getBrothRecipe(item?.item_id) ?? [];
@@ -1390,19 +1417,24 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   );
 
   const options = recipePlans.map(({ item, plan, recipe, craftableCount }) => {
-    const tokens = (recipe ?? []).map((ing) => {
-      const need = Math.max(1, Number(ing?.qty ?? 0));
-      return `${displayItemName(ing.item_id)} x${need}`;
+    const ingTokens = (recipe ?? []).map((ing) => {
+      const have = Math.max(0, Number(player?.inv_ingredients?.[ing.item_id] ?? 0));
+      const name = displayItemName(ing.item_id);
+      const base = `${name}:${have}`;
+      return ing.optional ? `${base} (opt)` : base;
     });
     const maxCraft = Math.max(0, craftableCount ?? 0);
-    const descRaw = [tokens.join(" · ") || "Needs forageables", `Max ${maxCraft}`]
-      .filter(Boolean)
-      .join(" | ");
+    const descRaw = ingTokens.length
+      ? `${ingTokens.join(" · ")} | Max ${maxCraft}`
+      : `Max ${maxCraft}`;
+    const description = descRaw.length > 100 ? `${descRaw.slice(0, 97)}…` : descRaw;
+    const labelRaw = `${item?.name ?? item?.item_id ?? "Unknown"}`;
+    const label = labelRaw.length > 100 ? `${labelRaw.slice(0, 97)}…` : labelRaw;
 
     return {
-      label: `${item?.name ?? item?.item_id ?? "Unknown"}`.slice(0, 100),
+      label,
       value: item?.item_id ?? "unknown",
-      description: descRaw.slice(0, 100)
+      description
     };
   }).slice(0, 25);
 
@@ -3114,6 +3146,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       player: p,
       user: interaction.member ?? interaction.user,
       userId,
+      server: s,
       pendingMessages,
       now,
       kitchenUnlocked,
