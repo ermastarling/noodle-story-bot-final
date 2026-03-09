@@ -762,7 +762,9 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
 
   const compostValue = [
     `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
-    `**Compost Inputs**\nSpoiled saved: **${spoiledTotal}** · Fresh forageables: **${pantryTotal}**`,
+    `**Compost Inputs**`,
+    `Spoiled saved: **${spoiledTotal}**`,
+    `Fresh forageables: **${pantryTotal}**`,
     `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
   ].join("\n");
 
@@ -773,7 +775,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     .map(([seedId, qty]) => ({
       label: `${getSeedDisplayName(seedId, content)} (${qty} seeds)`?.slice(0, 100),
       value: seedId,
-      description: `Uses 1 compost bag — yields ${describeYieldMap(getSeedYieldMap(seedId, { allowedIngredients }), content)}`.slice(0, 100)
+      description: `Yields ${describeYieldMap(getSeedYieldMap(seedId, { allowedIngredients }), content)}`.slice(0, 100)
     }))
     .slice(0, 25);
 
@@ -788,7 +790,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const plantRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`noodle:garden:plant_select:${userId}`)
-      .setPlaceholder("Plant a seed (1 compost + 1 seed)")
+      .setPlaceholder("Plant a seed")
       .setDisabled(!hasEmptyPlot || compostCount <= 0 || seedOptions.length === 0)
       .addOptions(seedOptions)
   );
@@ -3059,6 +3061,9 @@ if (sub === "pantry") {
       })
       .filter(Boolean);
 
+    const stapleBlocks = [categoryBlocks[0], categoryBlocks[1]].filter(Boolean).join("\n\n") || "No ingredients yet.";
+    const flavorBlocks = [categoryBlocks[2], categoryBlocks[3]].filter(Boolean).join("\n\n") || "No spices or toppings yet.";
+
     const bowlGroups = new Map();
     for (const [, bowl] of Object.entries(p.inv_bowls ?? {})) {
       if (!bowl?.qty || bowl.qty <= 0) continue;
@@ -3117,7 +3122,8 @@ if (sub === "pantry") {
       "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage."
     ].filter(Boolean).join("\n\n");
 
-    const ingredientsValue = categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.";
+    const ingredientsValue = stapleBlocks;
+    const flavorValue = flavorBlocks;
     const bowlsValue = bowlsBlock;
 
     const pantryEmbed = buildMenuEmbed({
@@ -3129,6 +3135,11 @@ if (sub === "pantry") {
       {
         name: "Ingredients",
         value: ingredientsValue,
+        inline: true
+      },
+      {
+        name: "Spice & Toppings",
+        value: flavorValue,
         inline: true
       },
       {
@@ -6423,7 +6434,23 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
   const p = ensurePlayer(serverId, userId);
   const garden = ensureGardenState(p);
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-  const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
+  const gardenState = getGardenActionState(p, combinedEffects);
+  const compostCap = getCompostCap(p, combinedEffects);
+  const compostCount = garden.compost_bags || 0;
+  const room = Math.max(0, compostCap - compostCount);
+  const compostDescription = [
+    `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `Spoiled saved: **${gardenState.spoiledTotal}**`,
+    `Fresh forageables: **${gardenState.pantryTotal}**`,
+    `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
+  ].join("\n");
+
+  const compostEmbed = buildMenuEmbed({
+    title: `${getIcon("tree")} Compost`,
+    description: compostDescription,
+    user: interaction.member ?? interaction.user,
+    color: theme.colors.success
+  });
 
   const { options } = buildCompostSelectOptions(p);
 
@@ -6459,10 +6486,21 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const components = [view.rows.navRow, selectRow, actionRow, backRow];
+  const navRow = noodleForageGardenRow(userId, {
+    active: "compost",
+    includeGardenButton: false,
+    includeKitchenButton: true,
+    kitchenUnlocked: getKitchenUnlockState(p).unlocked,
+    kitchenJustUnlocked: getKitchenUnlockState(p).justUnlocked,
+    showGardenActions: true,
+    canCompost: gardenState.canCraft,
+    canHarvest: gardenState.hasHarvestable
+  });
+
+  const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    embeds: [view.embed],
+    embeds: [compostEmbed],
     components,
     targetMessageId: interaction.message?.id
   });
