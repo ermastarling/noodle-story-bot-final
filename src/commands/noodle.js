@@ -1407,15 +1407,6 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     if (batches.length === 0) {
       kitchenLines.push(`${getIcon("cook")} Select a broth below to start.`);
     } else {
-      const summaryByBroth = batches.reduce((acc, batch) => {
-        const key = displayItemName(batch.broth_id);
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      }, {});
-      const summaryLines = Object.entries(summaryByBroth)
-        .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
-        .map(([name, qty]) => `• ${name}: **${qty}** simmering`);
-
       const batchLines = batches.slice(0, 5).map((batch) => {
         const readyText = batch.ready
           ? `${getIcon("status_complete")} Ready`
@@ -1426,8 +1417,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
       const batchBlock = extra > 0
         ? `${batchLines.join("\n")}\n${getIcon("cook")} …and ${extra} more batch${extra === 1 ? "" : "es"}.`
         : batchLines.join("\n");
-      kitchenLines.push(`**What’s simmering (by broth)**\n${summaryLines.join("\n")}`);
-      kitchenLines.push(`**Details**\n${batchBlock}`);
+      kitchenLines.push(`**What’s simmering (by broth)**\n${batchBlock}`);
     }
   }
 
