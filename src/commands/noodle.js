@@ -1460,7 +1460,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   const forageFooter = hiddenCount > 0 ? `\n…and ${hiddenCount} more.` : "";
   const craftableLine = craftableMax > 0
     ? null
-    : `${getIcon("warning")} Add the listed forageables to start simmering.`;
+    : " ";
   const forageValue = [
     `${getIcon("basket")} **${totalForage}** in pantry.`,
     craftableLine,
@@ -2920,6 +2920,31 @@ if (group === "dev" && sub === "reset_tutorial") {
       content: `${getIcon("upgrades")} Complete reset for ${mention}.${tut ? `\n\n${tut}` : ""}`,
       ephemeral: true
     });
+  });
+}
+
+if (group === "dev" && sub === "wipe_user") {
+  if (!isDevAdmin(userId)) {
+    return commit({ content: "You don’t have access to that command.", ephemeral: true });
+  }
+  const target = opt.getUser("user");
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  if (!target) {
+    return commit({ content: "Pick a user to wipe.", ephemeral: true });
+  }
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  }
+
+  const lockKey = `lock:user:${targetServerId}:${target.id}`;
+  return await withLock(db, lockKey, owner, 8000, async () => {
+    const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(targetServerId, target.id);
+    const deleted = result?.changes ?? 0;
+    const mention = `<@${target.id}>`;
+    if (deleted === 0) {
+      return commit({ content: `${getIcon("info")} No profile found for ${mention} on server ${targetServerId}.`, ephemeral: true });
+    }
+    return commit({ content: `${getIcon("upgrades")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`, ephemeral: true });
   });
 }
 
@@ -7929,6 +7954,18 @@ if (includeDevCommands) {
             .setName("reset_tutorial")
             .setDescription("Reset a user’s tutorial progress.")
             .addUserOption((o) => o.setName("user").setDescription("User to reset").setRequired(true))
+        )
+        .addSubcommand((sc) =>
+          sc
+            .setName("wipe_user")
+            .setDescription("Delete a user’s profile from the DB.")
+            .addUserOption((o) => o.setName("user").setDescription("User to wipe").setRequired(true))
+            .addStringOption((o) =>
+              o
+                .setName("server_id")
+                .setDescription("Override server ID (defaults to current guild)")
+                .setRequired(false)
+            )
         )
     );
 }
