@@ -127,6 +127,32 @@ import { getIcon } from "./ui/icons.js";
     }
   }
 
+  function friendlyErrorMessage(err) {
+    const code = err?.code || err?.name || "";
+    const message = String(err?.message || "").toLowerCase();
+
+    if (code === 10062 || message.includes("unknown interaction")) {
+      return "That action expired. Please press a button again.";
+    }
+    if (code === "LOCK_BUSY" || code === "ERR_LOCK_BUSY") {
+      return "Your shop is already busy. Try again in a moment.";
+    }
+    if (message.includes("rate limit") || code === "RATE_LIMITED") {
+      return "You're going too fast, please slow down and try again.";
+    }
+    if (message.includes("missing access") || message.includes("missing permissions")) {
+      return "I don't have permission to reply in this channel. Try a different channel or update Discord permissions.";
+    }
+    if (message.includes("could not find the requested resource") || message.includes("unknown channel")) {
+      return "I couldn't find that channel. Try again from a visible channel.";
+    }
+    if (code === "INTERACTION_ALREADY_REPLIED") {
+      return "That interaction was already handled. Use the latest buttons or run the command again.";
+    }
+
+    return "Something went a little sideways. Please try again.";
+  }
+
   process.on("unhandledRejection", (reason) => {
     console.error("UNHANDLED REJECTION:", reason?.stack ?? reason);
   });
@@ -974,10 +1000,11 @@ import { getIcon } from "./ui/icons.js";
           return;
         }
         try {
+          const msg = friendlyErrorMessage(e);
           if (interaction.replied || interaction.deferred) {
-            return interaction.followUp({ content: "Something went a little sideways, try again.", ephemeral: true });
+            return interaction.followUp({ content: msg, ephemeral: true });
           }
-          return interaction.reply({ content: "Something went a little sideways, try again.", flags: MessageFlags.Ephemeral });
+          return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
         } catch {}
         return;
       }
@@ -1005,11 +1032,11 @@ import { getIcon } from "./ui/icons.js";
       }
 
       try {
-        const msg = "Something went a little sideways, try again.";
+        const msg = friendlyErrorMessage(e);
         if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral });
+          await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
         } else {
-          await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+          await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
         }
       } catch (replyErr) {
         console.error("❌ Failed to send error reply:", replyErr?.message ?? replyErr);

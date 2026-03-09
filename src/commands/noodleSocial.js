@@ -679,13 +679,33 @@ function touchLastKitchen(player, serverId, channelId, userId) {
 }
 
 function cozyError(errOrCode) {
-  const code = typeof errOrCode === "string" ? errOrCode : errOrCode?.code;
-  const map = {
-    ERR_LOCK_BUSY: "Your shop is already busy, try again in a moment.",
-    LOCK_BUSY: "Your shop is already busy, try again in a moment.",
-    ERR_CONFLICT: "State updated at the same time, run the command again."
-  };
-  return map[code] ?? "Something went sideways, try again.";
+  return friendlyErrorMessage(errOrCode);
+}
+
+function friendlyErrorMessage(errOrCode) {
+  const code = typeof errOrCode === "string" ? errOrCode : errOrCode?.code || errOrCode?.name || "";
+  const message = String(typeof errOrCode === "string" ? errOrCode : errOrCode?.message || "").toLowerCase();
+
+  if (code === 10062 || message.includes("unknown interaction")) {
+    return "That action expired. Please press a button again.";
+  }
+  if (code === "LOCK_BUSY" || code === "ERR_LOCK_BUSY") {
+    return "Your shop is already busy. Try again in a moment.";
+  }
+  if (message.includes("rate limit") || code === "RATE_LIMITED") {
+    return "You're going too fast, please slow down and try again.";
+  }
+  if (message.includes("missing access") || message.includes("missing permissions")) {
+    return "I don't have permission to reply here. Try a different channel or update Discord permissions.";
+  }
+  if (message.includes("could not find the requested resource") || message.includes("unknown channel")) {
+    return "I couldn't find that channel. Try again from a visible channel.";
+  }
+  if (code === "INTERACTION_ALREADY_REPLIED") {
+    return "That interaction was already handled. Use the latest buttons or run the command again.";
+  }
+
+  return "Something went a little sideways. Please try again.";
 }
 
 /* ------------------------------------------------------------------ */
