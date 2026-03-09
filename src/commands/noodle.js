@@ -683,12 +683,13 @@ function noodleForageGardenRow(userId, {
   }
 
   if (showGardenActions) {
+    const compostPrimary = active === "compost";
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:action:compost:${userId}`)
         .setLabel("Make Compost")
         .setEmoji(getButtonEmoji("basket"))
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(compostPrimary ? ButtonStyle.Success : ButtonStyle.Primary)
         .setDisabled(!canCompost),
       new ButtonBuilder()
         .setCustomId(`noodle:action:harvest:${userId}`)
@@ -752,13 +753,20 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const hasHarvestable = readyPlots.length > 0;
   const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || getYieldTotal(getPlotYieldRemaining(plot)) <= 0);
 
-  const description = [
+  const plotsValue = [
     `${getIcon("tree")} Plots available: **${getGardenPlotCount(player, combinedEffects)}**`,
-    `**Plots**\n${plotsSection}`,
-    `${getIcon("tree")} **Seeds (unlimited)**\n${seedSection}`,
-    `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags` + (room <= 0 ? " (capacity reached)" : ""),  
-    `**Compost Inputs**\nSpoiled saved: **${spoiledTotal}** · Fresh forageables: **${pantryTotal}**\nRecipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
+    `**Plots**\n${plotsSection}`
   ].join("\n\n");
+
+  const seedsValue = `${getIcon("tree")} **Seeds (unlimited)**\n${seedSection}`;
+
+  const compostValue = [
+    `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `**Compost Inputs**\nSpoiled saved: **${spoiledTotal}** · Fresh forageables: **${pantryTotal}**`,
+    `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
+  ].join("\n");
+
+  const description = `${getIcon("tree")} Manage your garden.`;
 
   const seedOptions = Object.entries(garden.seeds || {})
     .filter(([, qty]) => qty > 0)
@@ -816,6 +824,12 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     user,
     color: theme.colors.success
   });
+
+  embed.addFields(
+    { name: "Plots", value: plotsValue, inline: true },
+    { name: "Seeds", value: seedsValue, inline: true },
+    { name: "Compost", value: compostValue, inline: true }
+  );
 
   return {
     embed,
@@ -1389,6 +1403,15 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     if (batches.length === 0) {
       kitchenLines.push(`${getIcon("cook")} Select a broth below to start.`);
     } else {
+      const summaryByBroth = batches.reduce((acc, batch) => {
+        const key = displayItemName(batch.broth_id);
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {});
+      const summaryLines = Object.entries(summaryByBroth)
+        .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+        .map(([name, qty]) => `• ${name}: **${qty}** simmering`);
+
       const batchLines = batches.slice(0, 5).map((batch) => {
         const readyText = batch.ready
           ? `${getIcon("status_complete")} Ready`
@@ -1399,7 +1422,8 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
       const batchBlock = extra > 0
         ? `${batchLines.join("\n")}\n${getIcon("cook")} …and ${extra} more batch${extra === 1 ? "" : "es"}.`
         : batchLines.join("\n");
-      kitchenLines.push(batchBlock);
+      kitchenLines.push(`**What’s simmering (by broth)**\n${summaryLines.join("\n")}`);
+      kitchenLines.push(`**Details**\n${batchBlock}`);
     }
   }
 
@@ -1419,7 +1443,8 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     `${forageList}${forageFooter}`
   ].filter(Boolean).join("\n");
 
-  const descriptionParts = [banner, pendingMessages.length ? pendingMessages.join("\n") : null, ...kitchenLines].filter(Boolean);
+  const kitchenStatusValue = kitchenLines.join("\n\n") || `${getIcon("cook")} Select a broth below to start.`;
+  const descriptionParts = [banner, pendingMessages.length ? pendingMessages.join("\n") : null].filter(Boolean);
   const embed = buildMenuEmbed({
     title: `${getIcon("cook")} Kitchen`,
     description: descriptionParts.join("\n\n"),
@@ -1430,7 +1455,12 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     {
       name: "Forageables Available",
       value: forageValue,
-      inline: false
+      inline: true
+    },
+    {
+      name: "Kitchen Status",
+      value: kitchenStatusValue,
+      inline: true
     }
   );
 
@@ -3084,21 +3114,34 @@ if (sub === "pantry") {
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
       kitchenLine,
-      "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage.",
-      categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
-      bowlsBlock
+      "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage."
     ].filter(Boolean).join("\n\n");
+
+    const ingredientsValue = categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.";
+    const bowlsValue = bowlsBlock;
 
     const pantryEmbed = buildMenuEmbed({
       title: `${getIcon("basket")} Pantry`,
       description: pantryDescription,
       user: interaction.member ?? interaction.user
     });
-    pantryEmbed.addFields({
-      name: "Bowl Quality",
-      value: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
-      inline: false
-    });
+    pantryEmbed.addFields(
+      {
+        name: "Ingredients",
+        value: ingredientsValue,
+        inline: true
+      },
+      {
+        name: "Cooked Bowls",
+        value: bowlsValue,
+        inline: true
+      },
+      {
+        name: "Bowl Quality",
+        value: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
+        inline: false
+      }
+    );
 
     return commit({
       content: " ",
@@ -4487,7 +4530,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
       noodleForageGardenRow(userId, {
-        active: "garden",
+        active: "compost",
         gardenLocked: !gardenUnlocked,
         includeGardenButton: false,
         includeKitchenButton: true,
@@ -4527,13 +4570,13 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       const description = roomBags <= 0
         ? `${getIcon("basket")} Compost storage is full (${compostCount}/${compostCap}).`
         : `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
-      const embed = buildMenuEmbed({ title: `${getIcon("tree")} Garden`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
+      const embed = buildMenuEmbed({ title: `${getIcon("tree")} Compost`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
       return commitState({ content: " ", embeds: [embed], components: navRows });
     }
 
     if (bagsToMake <= 0) {
       const embed = buildMenuEmbed({
-        title: `${getIcon("tree")} Garden`,
+        title: `${getIcon("tree")} Compost`,
         description: `${getIcon("help")} Enter at least 1 bag (max ${maxCraftable}).`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
@@ -4605,7 +4648,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       usageBlocks].filter(Boolean).join("\n\n");
 
     const embed = buildMenuEmbed({
-      title: `${getIcon("tree")} Garden`,
+      title: `${getIcon("tree")} Compost`,
       description,
       user: interaction.member ?? interaction.user,
       color: theme.colors.success
