@@ -42,6 +42,7 @@ import { getIcon } from "./ui/icons.js";
   const { getIdempotentResult, putIdempotentResult } = await import("./infra/idempotency.js");
   const { newPlayerProfile } = await import("./game/player.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
+  const { getKitchenUnlockState, KITCHEN_BROTH_RECIPES } = await import("./game/kitchen.js");
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
   const { ensureSpecializationState, getSpecializationById } = await import("./game/specialization.js");
@@ -200,6 +201,18 @@ import { getIcon } from "./ui/icons.js";
 
       for (const ing of (r.ingredients ?? [])) {
         if (ing?.item_id) out.add(ing.item_id);
+      }
+    }
+
+    // If the kitchen is unlocked, also expose forageables needed for unlocked broths
+    const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
+    if (kitchenUnlocked) {
+      const brothIds = Object.keys(KITCHEN_BROTH_RECIPES ?? {});
+      for (const brothId of brothIds) {
+        const recipe = KITCHEN_BROTH_RECIPES[brothId] ?? [];
+        for (const ing of recipe) {
+          if (ing?.item_id) out.add(ing.item_id);
+        }
       }
     }
 

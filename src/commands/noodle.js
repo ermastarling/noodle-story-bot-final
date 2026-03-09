@@ -143,11 +143,14 @@ import {
   getKitchenStatus,
   getKitchenBatches,
   getKitchenCapacity,
+  getKitchenUnlockState,
   getKitchenForagePool,
-  isKitchenUnlocked,
+  getCraftableCountForBroth,
+  getBrothRecipe,
   planKitchenIngredients,
   KITCHEN_FORAGE_PER_BROTH,
   KITCHEN_SIMMER_MS,
+  KITCHEN_BROTH_RECIPES,
   KITCHEN_UNLOCK_LEVEL
 } from "../game/kitchen.js";
 import { theme } from "../ui/theme.js";
@@ -850,8 +853,10 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 );
 }
 
-function noodleRecipesMenuRow(userId, { kitchenUnlocked = false } = {}) {
-  const kitchenStyle = kitchenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary;
+function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false } = {}) {
+  const kitchenStyle = !kitchenUnlocked
+    ? ButtonStyle.Secondary
+    : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary),
@@ -1292,7 +1297,7 @@ function formatDurationShort(ms) {
   return `${seconds}s`;
 }
 
-function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], banner = null, now = nowTs(), kitchenUnlocked = false, effects = {} }) {
+function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], banner = null, now = nowTs(), kitchenUnlocked = false, kitchenJustUnlocked = false, effects = {} }) {
   ensureKitchenState(player);
   const status = getKitchenStatus(player, now);
   const batches = status.batches ?? [];
@@ -1302,15 +1307,29 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   const nextReadyMs = status.nextReadyMs ?? null;
   const nextReadyTs = nextReadyMs != null ? Math.floor((now + nextReadyMs) / 1000) : null;
   const brothItems = getKitchenBrothItems();
-  const plannedUse = planKitchenIngredients(player, KITCHEN_FORAGE_PER_BROTH);
-  const plannedUseLine = Object.entries(plannedUse.used ?? {})
-    .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
-    .join(" · ") || `${KITCHEN_FORAGE_PER_BROTH} from pantry`;
+  const recipePlans = brothItems.map((item) => {
+    const plan = planKitchenIngredients(player, item?.item_id);
+    const recipe = getBrothRecipe(item?.item_id) ?? [];
+    const recipeLine = recipe
+      .map((ing) => `${displayItemName(ing.item_id)} x${ing.qty}`)
+      .join(" · ") || `${KITCHEN_FORAGE_PER_BROTH} forageables`;
+    const missingLine = Object.entries(plan.missing ?? {})
+      .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
+      .join(" · ");
+    const craftableCount = getCraftableCountForBroth(player, item?.item_id);
+    return { item, plan, recipe, recipeLine, missingLine, craftableCount };
+  });
+
+  const craftableMax = recipePlans.reduce((max, entry) => Math.max(max, entry.craftableCount ?? 0), 0);
+  const bestCraftable = recipePlans.reduce((best, entry) => {
+    if (!best) return entry;
+    if ((entry?.craftableCount ?? 0) > (best?.craftableCount ?? 0)) return entry;
+    return best;
+  }, null);
 
   const foragePool = getKitchenForagePool(player);
   const forageEntries = Object.entries(foragePool).filter(([, qty]) => qty > 0);
   const totalForage = forageEntries.reduce((sum, [, qty]) => sum + qty, 0);
-  const craftable = Math.floor(totalForage / KITCHEN_FORAGE_PER_BROTH);
 
   const kitchenLines = [];
   if (!kitchenUnlocked) {
@@ -1320,12 +1339,12 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
     kitchenLines.push(summaryLine);
 
     if (batches.length === 0) {
-      kitchenLines.push(`${getIcon("cook")} No broth is simmering. Select a broth below to start (cost: ${KITCHEN_FORAGE_PER_BROTH} forageables).`);
+      kitchenLines.push(`${getIcon("cook")} No broth is simmering. Select a broth below to start — each broth lists its forageables.`);
     } else {
       const batchLines = batches.slice(0, 5).map((batch) => {
         const readyText = batch.ready
           ? `${getIcon("status_complete")} Ready`
-          : `${getIcon("hourglass")} Ready ${batch.ready_at ? `<t:${Math.floor(batch.ready_at / 1000)}:R>` : "soon"} (${formatDurationShort(batch.remainingMs)} left)`;
+          : `${getIcon("hourglass")} Ready ${batch.ready_at ? `<t:${Math.floor(batch.ready_at / 1000)}:R>` : "soon"}`;
         const ingLines = Object.entries(batch.ingredients ?? {})
           .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
           .join(" · ");
@@ -1346,6 +1365,9 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
     .join("\n") || "_No forageables yet._";
   const hiddenCount = Math.max(0, forageEntries.length - 10);
   const forageFooter = hiddenCount > 0 ? `\n…and ${hiddenCount} more.` : "";
+  const craftableLine = craftableMax > 0
+    ? `${getIcon("cook")} Craft up to **${craftableMax}** batch${craftableMax === 1 ? "" : "es"}${bestCraftable?.item ? ` (best fit: ${displayItemName(bestCraftable.item.item_id)})` : ""}.`
+    : `${getIcon("warning")} Add the listed forageables to start simmering.`;
 
   const descriptionParts = [banner, pendingMessages.length ? pendingMessages.join("\n") : null, ...kitchenLines].filter(Boolean);
   const embed = buildMenuEmbed({
@@ -1357,30 +1379,25 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   embed.addFields(
     {
       name: "Forageables Available",
-      value: `${getIcon("basket")} **${totalForage}** in pantry (craft up to **${craftable}** broth${craftable === 1 ? "" : "s"}).\n${forageList}${forageFooter}`,
-      inline: false
-    },
-    {
-      name: "Capacity",
-      value: `${getIcon("status_ready")} ${batches.length}/${capacity} simmering · ${remainingSlots} slot${remainingSlots === 1 ? "" : "s"} open`,
+      value: `${getIcon("basket")} **${totalForage}** in pantry.\n${craftableLine}\n${forageList}${forageFooter}`,
       inline: false
     }
   );
 
-  const options = brothItems.map((item) => ({
+  const options = recipePlans.map(({ item, plan, recipeLine, missingLine }) => ({
     label: `${item?.name ?? item?.item_id ?? "Unknown"}`.slice(0, 100),
     value: item?.item_id ?? "unknown",
-    description: `Consumes ${plannedUseLine}`.slice(0, 100)
+    description: (plan?.ok ? `Needs ${recipeLine}` : `Missing ${missingLine || recipeLine}`).slice(0, 100)
   })).slice(0, 25);
 
   const components = [];
   const selectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`noodle:kitchen:start:${userId}`)
-      .setPlaceholder(`Select a broth to simmer (uses ${plannedUseLine})${!kitchenUnlocked ? " — locked" : remainingSlots <= 0 ? " — slots full" : ""}`)
+      .setPlaceholder(`Select a broth to simmer (see requirements)${!kitchenUnlocked ? " — locked" : remainingSlots <= 0 ? " — slots full" : craftableMax <= 0 ? " — need ingredients" : ""}`)
       .setMinValues(1)
       .setMaxValues(1)
-      .setDisabled(!kitchenUnlocked || remainingSlots <= 0 || craftable <= 0 || options.length === 0)
+      .setDisabled(!kitchenUnlocked || remainingSlots <= 0 || craftableMax <= 0 || options.length === 0)
       .addOptions(options.length ? options : [{ label: "No broths available", value: "none", description: "Missing broth data" }])
   );
   components.push(selectRow);
@@ -1397,7 +1414,7 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
     components.push(collectRow);
   }
 
-  components.push(noodleRecipesMenuRow(userId, { kitchenUnlocked }), noodleMainMenuRow(userId));
+  components.push(noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked }), noodleMainMenuRow(userId));
 
   return { content: " ", embeds: [embed], components };
 }
@@ -1666,21 +1683,32 @@ return msg ? `\n\n${msg}` : "";
 }
 
 function getUnlockedIngredientIds(player, contentBundle) {
-const out = new Set();
-// Use getAvailableRecipes to include both permanent and temporary recipes
-const known = getAvailableRecipes(player);
+  const out = new Set();
+  // Use getAvailableRecipes to include both permanent and temporary recipes
+  const known = getAvailableRecipes(player);
 
-for (const recipeId of known) {
-const r = contentBundle.recipes?.[recipeId];
-if (!r) continue;
+  for (const recipeId of known) {
+    const r = contentBundle.recipes?.[recipeId];
+    if (!r) continue;
 
-for (const ing of r.ingredients ?? []) {
-  if (ing?.item_id) out.add(ing.item_id);
-}
+    for (const ing of r.ingredients ?? []) {
+      if (ing?.item_id) out.add(ing.item_id);
+    }
+  }
 
-}
+  // If the kitchen is unlocked, also expose forageables needed for unlocked broths
+  const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
+  if (kitchenUnlocked) {
+    const brothIds = Object.keys(KITCHEN_BROTH_RECIPES ?? {});
+    for (const brothId of brothIds) {
+      const recipe = KITCHEN_BROTH_RECIPES[brothId] ?? [];
+      for (const ing of recipe) {
+        if (ing?.item_id) out.add(ing.item_id);
+      }
+    }
+  }
 
-return out;
+  return out;
 }
 
 function formatRecipeNeeds({ recipeId, content: contentBundle, player }) {
@@ -2874,7 +2902,7 @@ if (sub === "pantry") {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
     const gardenUnlocked = isGardenUnlocked(p);
-    const kitchenUnlocked = isKitchenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const now = nowTs();
     const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
@@ -2984,9 +3012,9 @@ if (sub === "pantry") {
       upsertServer(db, serverId, s, null);
     }
 
-    const kitchenLine = kitchenUnlocked
-      ? `${getIcon("cook")} Kitchen unlocked! Simmer broths with forageables in the Kitchen.`
-      : `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`;
+    const kitchenLine = !kitchenUnlocked
+      ? `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`
+      : (kitchenJustUnlocked ? `${getIcon("cook")} Kitchen unlocked! Simmer broths with forageables in the Kitchen.` : null);
 
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
@@ -2994,7 +3022,7 @@ if (sub === "pantry") {
       "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage.",
       categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
       bowlsBlock
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
 
     const pantryEmbed = buildMenuEmbed({
       title: `${getIcon("basket")} Pantry`,
@@ -3013,7 +3041,7 @@ if (sub === "pantry") {
       components: [
         noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
         noodleMainMenuRowNoPantry(userId),
-        noodleRecipesMenuRow(userId, { kitchenUnlocked })
+        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
       ]
     });
   });
@@ -3053,7 +3081,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       p.notifications.pending_pantry_messages.push(...spoilageMessages);
     }
 
-    const kitchenUnlocked = isKitchenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const capacity = getKitchenCapacity(p, combinedEffects);
     const pendingMessages = p.notifications?.pending_pantry_messages ?? [];
     if (pendingMessages.length > 0) {
@@ -3068,16 +3096,20 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       return commit({ ...payload });
     };
 
+    const kitchenView = (overrides = {}) => buildKitchenViewPayload({
+      player: p,
+      user: interaction.member ?? interaction.user,
+      userId,
+      pendingMessages,
+      now,
+      kitchenUnlocked,
+      kitchenJustUnlocked,
+      effects: combinedEffects,
+      ...overrides
+    });
+
     if (!kitchenUnlocked && sub !== "kitchen") {
-      const viewLocked = buildKitchenViewPayload({
-        player: p,
-        user: interaction.member ?? interaction.user,
-        userId,
-        pendingMessages,
-        now,
-        kitchenUnlocked,
-        effects: combinedEffects
-      });
+      const viewLocked = kitchenView();
       return finalize({ ...viewLocked, content: `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`, ephemeral: true });
     }
 
@@ -3086,14 +3118,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       const brothId = String(brothIdRaw || "").trim();
       const batches = getKitchenBatches(p, now);
       if (!brothId || brothId === "none") {
-        const view = buildKitchenViewPayload({
-          player: p,
-          user: interaction.member ?? interaction.user,
-          userId,
-          pendingMessages,
-          now,
-          kitchenUnlocked,
-          effects: combinedEffects,
+        const view = kitchenView({
           banner: `${getIcon("cook")} Select a broth to start simmering.`
         });
         return finalize({ ...view, ephemeral: true });
@@ -3101,58 +3126,33 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 
       const brothItem = content.items?.[brothId];
       if (!brothItem || String(brothItem.category).toLowerCase() !== "broth") {
-        const view = buildKitchenViewPayload({
-          player: p,
-          user: interaction.member ?? interaction.user,
-          userId,
-          pendingMessages,
-          now,
-          kitchenUnlocked,
-          effects: combinedEffects,
+        const view = kitchenView({
           banner: `${getIcon("warning")} That isn't a broth you can simmer.`
         });
         return finalize({ ...view, ephemeral: true });
       }
 
       if (batches.length >= capacity) {
-        const view = buildKitchenViewPayload({
-          player: p,
-          user: interaction.member ?? interaction.user,
-          userId,
-          pendingMessages,
-          now,
-          kitchenUnlocked,
-          effects: combinedEffects,
+        const view = kitchenView({
           banner: `${getIcon("hourglass")} All ${capacity} kitchen slot${capacity === 1 ? "" : "s"} are simmering.`
         });
         return finalize({ ...view, ephemeral: true });
       }
 
-      const plan = planKitchenIngredients(p, KITCHEN_FORAGE_PER_BROTH);
+      const plan = planKitchenIngredients(p, brothId);
       if (!plan.ok) {
-        const view = buildKitchenViewPayload({
-          player: p,
-          user: interaction.member ?? interaction.user,
-          userId,
-          pendingMessages,
-          now,
-          kitchenUnlocked,
-          effects: combinedEffects,
-          banner: `${getIcon("warning")} Not enough forageables to simmer a broth (${KITCHEN_FORAGE_PER_BROTH} needed).`
+        const missingLine = Object.entries(plan.missing ?? {})
+          .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
+          .join(" · ");
+        const view = kitchenView({
+          banner: `${getIcon("warning")} Not enough forageables for ${displayItemName(brothId)}.${missingLine ? ` Missing: ${missingLine}.` : ""}`
         });
         return finalize({ ...view, ephemeral: true });
       }
 
       const removal = removeIngredientsFromInventory(p, plan.used);
       if (!removal.success) {
-        const view = buildKitchenViewPayload({
-          player: p,
-          user: interaction.member ?? interaction.user,
-          userId,
-          pendingMessages,
-          now,
-          kitchenUnlocked,
-          effects: combinedEffects,
+        const view = kitchenView({
           banner: `${getIcon("warning")} Pantry changed — not enough forageables right now.`
         });
         return finalize({ ...view, ephemeral: true });
@@ -3173,14 +3173,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
         .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
         .join(" · ");
 
-      const view = buildKitchenViewPayload({
-        player: p,
-        user: interaction.member ?? interaction.user,
-        userId,
-        pendingMessages,
-        now,
-        kitchenUnlocked,
-        effects: combinedEffects,
+      const view = kitchenView({
         banner: `${getIcon("cook")} Now simmering **${displayItemName(brothId)}** — ready in ${formatDurationShort(KITCHEN_SIMMER_MS)}. Used: ${usedLine || "pantry"}.`
       });
       return finalize(view);
@@ -3191,14 +3184,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       const batches = getKitchenBatches(p, now);
       const readyBatches = batches.filter((b) => b.ready);
       if (readyBatches.length === 0) {
-        const view = buildKitchenViewPayload({
-          player: p,
-          user: interaction.member ?? interaction.user,
-          userId,
-          pendingMessages,
-          now,
-          kitchenUnlocked,
-          effects: combinedEffects,
+        const view = kitchenView({
           banner: `${getIcon("help")} Nothing is simmering right now.`
         });
         return finalize({ ...view, ephemeral: true });
@@ -3213,14 +3199,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       const accepted = capacityResult.accepted ?? {};
       const acceptedTotal = Object.values(accepted).reduce((sum, qty) => sum + qty, 0);
       if (acceptedTotal < 1) {
-        const view = buildKitchenViewPayload({
-          player: p,
-          user: interaction.member ?? interaction.user,
-          userId,
-          pendingMessages,
-          now,
-          kitchenUnlocked,
-          effects: combinedEffects,
+        const view = kitchenView({
           banner: `${getIcon("basket")} Pantry full — free broth capacity to collect.`
         });
         return finalize({ ...view, ephemeral: true });
@@ -3250,28 +3229,13 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
         bannerParts.push(`${getIcon("basket")} Pantry full for ${rejectedLines}.`);
       }
 
-      const view = buildKitchenViewPayload({
-        player: p,
-        user: interaction.member ?? interaction.user,
-        userId,
-        pendingMessages,
-        now,
-        kitchenUnlocked,
-        effects: combinedEffects,
+      const view = kitchenView({
         banner: bannerParts.join(" ")
       });
       return finalize(view);
     }
 
-    const view = buildKitchenViewPayload({
-      player: p,
-      user: interaction.member ?? interaction.user,
-      userId,
-      pendingMessages,
-      now,
-      kitchenUnlocked,
-      effects: combinedEffects
-    });
+    const view = kitchenView();
     return finalize(view);
   });
 }

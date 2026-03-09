@@ -86,7 +86,7 @@ export function newPlayerProfile(userId) {
 
     garden: { seeds: {}, spoiled: {}, compost_bags: 0 },
 
-    kitchen: { active_batch: null }
+    kitchen: { active_batch: null, unlock_seen_level: STARTER_PROFILE.shop_level }
   };
 }
 
