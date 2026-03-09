@@ -3104,7 +3104,7 @@ if (sub === "pantry") {
       content: " ",
       embeds: [pantryEmbed],
       components: [
-        noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked, includeKitchenButton: true, kitchenUnlocked, kitchenJustUnlocked }),
+        noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
         noodleMainMenuRowNoPantry(userId),
         noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
       ]
