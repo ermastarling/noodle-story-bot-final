@@ -828,10 +828,11 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   });
 
   embed.addFields(
-    { name: "Plots", value: plotsValue, inline: true },
-    { name: "Seeds", value: seedsValue, inline: true },
-    { name: "Compost", value: compostValue, inline: true },
-    { name: " ", value: "-----", inline: false }
+        { name: " ", value: "· · · · · · ·", inline: false },
+        { name: "Plots", value: plotsValue, inline: true },
+        { name: "Seeds", value: seedsValue, inline: true },
+        { name: "Compost", value: compostValue, inline: true },
+        { name: " ", value: "· · · · · · ·", inline: false }
   );
 
   return {
@@ -1455,6 +1456,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   });
 
   embed.addFields(
+    { name: " ", value: "· · · · · · ·", inline: false },
     {
       name: "Forageables Available",
       value: forageValue,
@@ -3139,6 +3141,7 @@ if (sub === "pantry") {
       user: interaction.member ?? interaction.user
     });
     pantryEmbed.addFields(
+      { name: " ", value: "· · · · · · ·", inline: false },
       {
         name: " ",
         value: ingredientsValue,
@@ -3156,9 +3159,9 @@ if (sub === "pantry") {
       },
       {
         name: " ",
-        value: "-----",
+        value: "· · · · · · ·",
         inline: false
-      },
+      }
       {
         name: "Bowl Quality",
         value: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
