@@ -775,7 +775,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     .map(([seedId, qty]) => ({
       label: `${getSeedDisplayName(seedId, content)} (${qty} seeds)`?.slice(0, 100),
       value: seedId,
-      description: `Yields ${describeYieldMap(getSeedYieldMap(seedId, { allowedIngredients }), content)}`.slice(0, 100)
+      description: `Uses 1 compost bag — yields ${describeYieldMap(getSeedYieldMap(seedId, { allowedIngredients }), content)}`.slice(0, 100)
     }))
     .slice(0, 25);
 
@@ -790,7 +790,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const plantRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`noodle:garden:plant_select:${userId}`)
-      .setPlaceholder("Plant a seed")
+      .setPlaceholder("Plant a seed (1 compost + 1 seed)")
       .setDisabled(!hasEmptyPlot || compostCount <= 0 || seedOptions.length === 0)
       .addOptions(seedOptions)
   );
@@ -1478,7 +1478,8 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
       ? `${ingTokens.join(" · ")} | Max ${maxCraft}`
       : `Max ${maxCraft}`;
     const description = descRaw.length > 100 ? `${descRaw.slice(0, 97)}…` : descRaw;
-    const labelRaw = `${item?.name ?? item?.item_id ?? "Unknown"}`;
+    const craftableFlag = maxCraft > 0;
+    const labelRaw = `${craftableFlag ? `${getIcon("status_complete")} ` : ""}${item?.name ?? item?.item_id ?? "Unknown"}`;
     const label = labelRaw.length > 100 ? `${labelRaw.slice(0, 97)}…` : labelRaw;
 
     return {
@@ -3133,17 +3134,17 @@ if (sub === "pantry") {
     });
     pantryEmbed.addFields(
       {
-        name: "Ingredients",
+        name: " ",
         value: ingredientsValue,
         inline: true
       },
       {
-        name: "Spice & Toppings",
+        name: " ",
         value: flavorValue,
         inline: true
       },
       {
-        name: "Cooked Bowls",
+        name: " ",
         value: bowlsValue,
         inline: true
       },

@@ -431,7 +431,7 @@ export function formatPlotLines(player, content, effects = {}, now = Date.now())
       const remainingMap = getPlotYieldRemaining(plot);
       const remainingTotal = getYieldTotal(remainingMap);
       if (!plot?.seed_id || remainingTotal <= 0) {
-        return `${label}: Empty (needs 1 seed + 1 compost bag)`;
+        return `${label}: Empty`;
       }
       const totalYield = getYieldTotal(getPlotTotalYield(plot));
       const readyText = !plot.harvest_ready_at || plot.harvest_ready_at <= now
