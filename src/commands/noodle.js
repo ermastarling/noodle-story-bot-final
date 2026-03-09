@@ -2427,7 +2427,12 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     const descRaw = `${npcName}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
-    return { label, value: String(o.order_id), description };
+    const option = { label, value: String(o.order_id), description };
+    if (readyBowls > 0) {
+      const emoji = getButtonEmoji("status_complete");
+      if (emoji) option.emoji = emoji;
+    }
+    return option;
   });
 
   const menu = new StringSelectMenuBuilder()
@@ -2521,7 +2526,13 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     const descRaw = `${npcName}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
-    return { label, value: oid, description };
+    const ready = entry?.order?.recipe_id ? getTotalBowlsForRecipe(p, entry.order.recipe_id) > 0 : false;
+    const option = { label, value: oid, description };
+    if (action === "serve" && ready) {
+      const emoji = getButtonEmoji("status_complete");
+      if (emoji) option.emoji = emoji;
+    }
+    return option;
   });
 
   if (!opts.length) {
@@ -2623,7 +2634,13 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
       : `Max ${cookable}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
 
-    return { label, value: rid, description };
+    const option = { label, value: rid, description };
+    if (cookable > 0) {
+      const emoji = getButtonEmoji("status_complete");
+      if (emoji) option.emoji = emoji;
+    }
+
+    return option;
   });
 
   if (!opts.length) {
@@ -4306,7 +4323,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     ensureGardenState(p);
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects);
+      autoHarvestReadyPlots(p, content, combinedEffects, {
+        capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
+      });
     }
     const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
@@ -4530,7 +4549,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects);
+      autoHarvestReadyPlots(p, content, combinedEffects, {
+        capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
+      });
     }
 
     if (!gardenUnlocked) {
@@ -4569,7 +4590,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects);
+      autoHarvestReadyPlots(p, content, combinedEffects, {
+        capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
+      });
     }
     const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
@@ -4709,7 +4732,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects);
+      autoHarvestReadyPlots(p, content, combinedEffects, {
+        capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
+      });
     }
     const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
@@ -4779,7 +4804,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "harvest") {
     const gardenUnlocked = isGardenUnlocked(p);
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects);
+      autoHarvestReadyPlots(p, content, combinedEffects, {
+        capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
+      });
     }
     const gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
@@ -4802,9 +4829,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const plotIndex = opt.getInteger("plot_index");
+    const capacityLimiter = (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects);
     const harvestResult = harvestGardenPlots(p, content, combinedEffects, {
       plotIndex: Number.isInteger(plotIndex) ? plotIndex : null,
-      onlyReady: true
+      onlyReady: true,
+      capacityLimiter
     });
     const view = buildGardenView({
       player: p,
@@ -6575,6 +6604,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   }
   const p = ensurePlayer(serverId, userId);
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const gardenState = getGardenActionState(p, combinedEffects);
 
   const now = Date.now();
   const messageId = interaction.message?.id ?? `compost:${interaction.id}`;
@@ -6585,7 +6615,6 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     }
   }
 
-  const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
   const { options } = buildCompostSelectOptions(p);
   if (!options.length) {
     return componentCommit(interaction, { content: `${getIcon("basket")} No compostable items available.`, ephemeral: true });
@@ -6621,11 +6650,23 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     })
     .filter(Boolean)
     .join("\n");
-  const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
   const header = selectionList
     ? `${getIcon("basket")} Selected sources:\n${selectionList}\n\nAdd 5/10 pulls that many units from each selected source.`
     : `${getIcon("basket")} No items selected. Add 5/10 pulls that many units from each selected source.`;
-  view.embed.setDescription(`${header}`);
+  const compostCap = gardenState.compostCap;
+  const compostCount = gardenState.compostCount;
+  const room = Math.max(0, compostCap - compostCount);
+  const compostDescription = [
+    `${getIcon("basket")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    header
+  ].join("\n\n");
+
+  const compostEmbed = buildMenuEmbed({
+    title: `${getIcon("tree")} Compost`,
+    description: compostDescription,
+    user: interaction.member ?? interaction.user,
+    color: theme.colors.success
+  });
 
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -6635,10 +6676,21 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const components = [view.rows.navRow, selectRow, actionRow, backRow];
+  const navRow = noodleForageGardenRow(userId, {
+    active: "compost",
+    includeGardenButton: false,
+    includeKitchenButton: true,
+    kitchenUnlocked: getKitchenUnlockState(p).unlocked,
+    kitchenJustUnlocked: getKitchenUnlockState(p).justUnlocked,
+    showGardenActions: true,
+    canCompost: gardenState.canCraft,
+    canHarvest: gardenState.hasHarvestable
+  });
+
+  const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    embeds: [view.embed],
+    embeds: [compostEmbed],
     components,
     targetMessageId: interaction.message?.id
   });
@@ -6679,6 +6731,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const garden = ensureGardenState(p);
   if (!p.inv_ingredients) p.inv_ingredients = {};
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const gardenState = getGardenActionState(p, combinedEffects);
   const compostCap = getCompostCap(p, combinedEffects);
   const compostCount = garden.compost_bags || 0;
   const roomBags = Math.max(0, compostCap - compostCount);
@@ -6767,7 +6820,6 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   ];
   const summary = summaryParts.filter(Boolean).join("\n\n");
 
-  const view = buildGardenView({ player: p, combinedEffects, user: interaction.member ?? interaction.user, userId });
   const { options } = buildCompostSelectOptions(p);
   const selectRow = options.length
     ? new ActionRowBuilder().addComponents(
@@ -6791,8 +6843,14 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
       .setStyle(ButtonStyle.Primary)
   );
 
-  const baseDesc = view.embed?.data?.description ?? view.embed?.description ?? "";
-  view.embed.setDescription(`${summary}\n\n${baseDesc}`);
+  const compostDescription = summary;
+
+  const compostEmbed = buildMenuEmbed({
+    title: `${getIcon("tree")} Compost`,
+    description: compostDescription,
+    user: interaction.member ?? interaction.user,
+    color: theme.colors.success
+  });
 
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -6802,13 +6860,24 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const components = [view.rows.navRow];
+  const navRow = noodleForageGardenRow(userId, {
+    active: "compost",
+    includeGardenButton: false,
+    includeKitchenButton: true,
+    kitchenUnlocked: getKitchenUnlockState(p).unlocked,
+    kitchenJustUnlocked: getKitchenUnlockState(p).justUnlocked,
+    showGardenActions: true,
+    canCompost: gardenState.canCraft,
+    canHarvest: gardenState.hasHarvestable
+  });
+
+  const components = [navRow];
   if (selectRow) components.push(selectRow);
   components.push(actionRow, backRow);
 
   return componentCommit(interaction, {
     content: " ",
-    embeds: [view.embed],
+    embeds: [compostEmbed],
     components,
     targetMessageId: interaction.message?.id
   });

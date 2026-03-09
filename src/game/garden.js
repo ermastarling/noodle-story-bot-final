@@ -313,7 +313,7 @@ export function harvestGardenPlots(
   player,
   content,
   effects = {},
-  { plotIndex = null, now = Date.now(), onlyReady = false, allowedIngredients = null } = {}
+  { plotIndex = null, now = Date.now(), onlyReady = false, allowedIngredients = null, capacityLimiter = null } = {}
 ) {
   const plots = ensureGardenPlots(player, effects);
   const targets = plotIndex === null ? plots.map((_, idx) => idx) : [plotIndex];
@@ -346,7 +346,11 @@ export function harvestGardenPlots(
       continue;
     }
 
-    const invResult = addIngredientsToInventory(player, remainingMap, "truncate");
+    const capacityResult = typeof capacityLimiter === "function"
+      ? capacityLimiter(remainingMap) || {}
+      : { accepted: remainingMap, rejected: {} };
+    const acceptedDrops = capacityResult.accepted || remainingMap;
+    const invResult = addIngredientsToInventory(player, acceptedDrops, "truncate");
     const addedItems = invResult.added || {};
     const leftoverItems = {};
     for (const [itemId, qty] of Object.entries(remainingMap)) {
@@ -396,8 +400,8 @@ export function harvestGardenPlots(
   };
 }
 
-export function autoHarvestReadyPlots(player, content, effects = {}, { now = Date.now(), allowedIngredients = null } = {}) {
-  const result = harvestGardenPlots(player, content, effects, { now, onlyReady: true, allowedIngredients });
+export function autoHarvestReadyPlots(player, content, effects = {}, { now = Date.now(), allowedIngredients = null, capacityLimiter = null } = {}) {
+  const result = harvestGardenPlots(player, content, effects, { now, onlyReady: true, allowedIngredients, capacityLimiter });
   const harvested = result.results.filter((r) => !r.notReady && r.added > 0);
   return {
     harvested,
