@@ -1395,11 +1395,11 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
           : `${getIcon("hourglass")} Ready ${batch.ready_at ? `<t:${Math.floor(batch.ready_at / 1000)}:R>` : "soon"}`;
         return `• ${displayItemName(batch.broth_id)} — ${readyText}`;
       });
-      kitchenLines.push(...batchLines);
       const extra = batches.length - batchLines.length;
-      if (extra > 0) {
-        kitchenLines.push(`${getIcon("cook")} …and ${extra} more batch${extra === 1 ? "" : "es"}.`);
-      }
+      const batchBlock = extra > 0
+        ? `${batchLines.join("\n")}\n${getIcon("cook")} …and ${extra} more batch${extra === 1 ? "" : "es"}.`
+        : batchLines.join("\n");
+      kitchenLines.push(batchBlock);
     }
   }
 
