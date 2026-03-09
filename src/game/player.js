@@ -84,7 +84,9 @@ export function newPlayerProfile(userId) {
       last_noodle_guild_id: null
     },
 
-    garden: { seeds: {}, spoiled: {}, compost_bags: 0 }
+    garden: { seeds: {}, spoiled: {}, compost_bags: 0 },
+
+    kitchen: { active_batch: null }
   };
 }
 

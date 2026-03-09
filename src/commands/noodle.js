@@ -8,7 +8,7 @@ import {
   FORAGE_ITEM_IDS,
   RARE_FORAGE_ITEM_IDS
 } from "../game/forage.js";
-import { addIngredientsToInventory } from "../game/inventory.js";
+import { addIngredientsToInventory, removeIngredientsFromInventory } from "../game/inventory.js";
 import {
 advanceTutorial,
 ensureTutorial,
@@ -138,6 +138,18 @@ import {
   COMPOST_PER_BAG,
   SPOILED_STASH_KEY
 } from "../game/garden.js";
+import {
+  ensureKitchenState,
+  getKitchenStatus,
+  getKitchenBatches,
+  getKitchenCapacity,
+  getKitchenForagePool,
+  isKitchenUnlocked,
+  planKitchenIngredients,
+  KITCHEN_FORAGE_PER_BROTH,
+  KITCHEN_SIMMER_MS,
+  KITCHEN_UNLOCK_LEVEL
+} from "../game/kitchen.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 import discordPkg from "discord.js";
@@ -838,11 +850,18 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 );
 }
 
-function noodleRecipesMenuRow(userId) {
-return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary)
-);
+function noodleRecipesMenuRow(userId, { kitchenUnlocked = false } = {}) {
+  const kitchenStyle = kitchenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary;
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:kitchen:${userId}`)
+      .setLabel("Kitchen")
+      .setEmoji(getButtonEmoji("cook"))
+      .setStyle(kitchenStyle)
+      .setDisabled(!kitchenUnlocked),
+    new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary)
+  );
 }
 
 function noodleSecondaryMenuRow(userId, { questsAvailable = false } = {}) {
@@ -1246,6 +1265,137 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
   }
 
   return { accepted, rejected, current, capacity, remainingByType };
+}
+
+function getKitchenBrothItems() {
+  return Object.values(content.items ?? {})
+    .filter((item) => String(item?.category ?? "").toLowerCase() === "broth")
+    .sort((a, b) => {
+      const tierOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
+      const aTier = tierOrder[String(a?.tier ?? "common").toLowerCase()] ?? 99;
+      const bTier = tierOrder[String(b?.tier ?? "common").toLowerCase()] ?? 99;
+      if (aTier !== bTier) return aTier - bTier;
+      return String(a?.name ?? a?.item_id ?? "").localeCompare(String(b?.name ?? b?.item_id ?? ""));
+    });
+}
+
+function formatDurationShort(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  }
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], banner = null, now = nowTs(), kitchenUnlocked = false, effects = {} }) {
+  ensureKitchenState(player);
+  const status = getKitchenStatus(player, now);
+  const batches = status.batches ?? [];
+  const readyBatches = batches.filter((b) => b.ready);
+  const capacity = getKitchenCapacity(player, effects);
+  const remainingSlots = Math.max(0, capacity - batches.length);
+  const nextReadyMs = status.nextReadyMs ?? null;
+  const nextReadyTs = nextReadyMs != null ? Math.floor((now + nextReadyMs) / 1000) : null;
+  const brothItems = getKitchenBrothItems();
+
+  const foragePool = getKitchenForagePool(player);
+  const forageEntries = Object.entries(foragePool).filter(([, qty]) => qty > 0);
+  const totalForage = forageEntries.reduce((sum, [, qty]) => sum + qty, 0);
+  const craftable = Math.floor(totalForage / KITCHEN_FORAGE_PER_BROTH);
+
+  const kitchenLines = [];
+  if (!kitchenUnlocked) {
+    kitchenLines.push(`${getIcon("lock")} Reach shop level ${KITCHEN_UNLOCK_LEVEL} to unlock the kitchen.`);
+  } else {
+    const summaryLine = `${getIcon("cook")} Simmering **${batches.length}/${capacity}** batches${readyBatches.length ? ` — ${readyBatches.length} ready` : ""}${!readyBatches.length && nextReadyMs != null ? ` — next ready ${nextReadyTs ? `<t:${nextReadyTs}:R>` : `in ${formatDurationShort(nextReadyMs)}`}` : ""}`;
+    kitchenLines.push(summaryLine);
+
+    if (batches.length === 0) {
+      kitchenLines.push(`${getIcon("info")} No broth is simmering. Select a broth below to start (cost: ${KITCHEN_FORAGE_PER_BROTH} forageables).`);
+    } else {
+      const batchLines = batches.slice(0, 5).map((batch) => {
+        const readyText = batch.ready
+          ? `${getIcon("status_complete")} Ready`
+          : `${getIcon("hourglass")} Ready ${batch.ready_at ? `<t:${Math.floor(batch.ready_at / 1000)}:R>` : "soon"} (${formatDurationShort(batch.remainingMs)} left)`;
+        const ingLines = Object.entries(batch.ingredients ?? {})
+          .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
+          .join(" · ");
+        return `• ${displayItemName(batch.broth_id)} — ${readyText}${ingLines ? ` — ${ingLines}` : ""}`;
+      });
+      kitchenLines.push(...batchLines);
+      const extra = batches.length - batchLines.length;
+      if (extra > 0) {
+        kitchenLines.push(`${getIcon("cook")} …and ${extra} more batch${extra === 1 ? "" : "es"}.`);
+      }
+    }
+  }
+
+  const forageList = forageEntries
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+    .slice(0, 10)
+    .map(([id, qty]) => `• ${displayItemName(id)}: **${qty}**`)
+    .join("\n") || "_No forageables yet._";
+  const hiddenCount = Math.max(0, forageEntries.length - 10);
+  const forageFooter = hiddenCount > 0 ? `\n…and ${hiddenCount} more.` : "";
+
+  const descriptionParts = [banner, pendingMessages.length ? pendingMessages.join("\n") : null, ...kitchenLines].filter(Boolean);
+  const embed = buildMenuEmbed({
+    title: `${getIcon("cook")} Kitchen`,
+    description: descriptionParts.join("\n\n"),
+    user
+  });
+
+  embed.addFields(
+    {
+      name: "Forageables Available",
+      value: `${getIcon("basket")} **${totalForage}** in stash (craft up to **${craftable}** broth${craftable === 1 ? "" : "s"}).\n${forageList}${forageFooter}`,
+      inline: false
+    },
+    {
+      name: "Capacity",
+      value: `${getIcon("status_ready")} ${batches.length}/${capacity} simmering · ${remainingSlots} slot${remainingSlots === 1 ? "" : "s"} open`,
+      inline: false
+    }
+  );
+
+  const options = brothItems.map((item) => ({
+    label: `${item?.name ?? item?.item_id ?? "Unknown"}`.slice(0, 100),
+    value: item?.item_id ?? "unknown",
+    description: `${(item?.tier ?? "" ) ? `${item.tier} ` : ""}Broth — cost ${KITCHEN_FORAGE_PER_BROTH} forageables`.slice(0, 100)
+  })).slice(0, 25);
+
+  const components = [];
+  const selectRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`noodle:kitchen:start:${userId}`)
+      .setPlaceholder(`Select a broth to simmer (${KITCHEN_FORAGE_PER_BROTH} forageables)${!kitchenUnlocked ? " — locked" : remainingSlots <= 0 ? " — slots full" : ""}`)
+      .setMinValues(1)
+      .setMaxValues(1)
+      .setDisabled(!kitchenUnlocked || remainingSlots <= 0 || craftable <= 0 || options.length === 0)
+      .addOptions(options.length ? options : [{ label: "No broths available", value: "none", description: "Missing broth data" }])
+  );
+  components.push(selectRow);
+
+  if (readyBatches.length > 0) {
+    const collectRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:kitchen:collect:${userId}`)
+        .setLabel(`Collect ${readyBatches.length} Ready`)
+        .setEmoji(getButtonEmoji("cook"))
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(false)
+    );
+    components.push(collectRow);
+  }
+
+  components.push(noodleRecipesMenuRow(userId, { kitchenUnlocked }), noodleMainMenuRow(userId));
+
+  return { content: " ", embeds: [embed], components };
 }
 
 function getLimitedTimeWindowSeconds(player, baseSeconds) {
@@ -2720,6 +2870,7 @@ if (sub === "pantry") {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
     const gardenUnlocked = isGardenUnlocked(p);
+    const kitchenUnlocked = isKitchenUnlocked(p);
     const now = nowTs();
     const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
@@ -2829,8 +2980,13 @@ if (sub === "pantry") {
       upsertServer(db, serverId, s, null);
     }
 
+    const kitchenLine = kitchenUnlocked
+      ? `${getIcon("cook")} Kitchen unlocked! Simmer broths with forageables in the Kitchen.`
+      : `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`;
+
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
+      kitchenLine,
       "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage.",
       categoryBlocks.length ? categoryBlocks.join("\n\n") : "No ingredients yet.",
       bowlsBlock
@@ -2853,9 +3009,266 @@ if (sub === "pantry") {
       components: [
         noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
         noodleMainMenuRowNoPantry(userId),
-        noodleRecipesMenuRow(userId)
+        noodleRecipesMenuRow(userId, { kitchenUnlocked })
       ]
     });
+  });
+}
+
+/* ---------------- KITCHEN ---------------- */
+if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  }
+
+  return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+    const p = ensurePlayer(serverId, userId);
+    const s = ensureServer(serverId);
+    const now = nowTs();
+    const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+    const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
+
+    const set = buildSettingsMap(settingsCatalog, s.settings);
+    s.season = computeActiveSeason(set);
+
+    const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
+    const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
+    if (spoilageMessages.length > 0) {
+      if (!p.notifications) {
+        p.notifications = {
+          pending_pantry_messages: [],
+          dm_reminders_opt_out: false,
+          last_daily_reminder_day: null,
+          last_noodle_channel_id: null,
+          last_noodle_guild_id: null
+        };
+      }
+      if (!Array.isArray(p.notifications.pending_pantry_messages)) {
+        p.notifications.pending_pantry_messages = [];
+      }
+      p.notifications.pending_pantry_messages.push(...spoilageMessages);
+    }
+
+    const kitchenUnlocked = isKitchenUnlocked(p);
+    const capacity = getKitchenCapacity(p, combinedEffects);
+    const pendingMessages = p.notifications?.pending_pantry_messages ?? [];
+    if (pendingMessages.length > 0) {
+      p.notifications.pending_pantry_messages = [];
+    }
+
+    const finalize = (payload) => {
+      if (db) {
+        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+        upsertServer(db, serverId, s, null);
+      }
+      return commit({ ...payload });
+    };
+
+    if (!kitchenUnlocked && sub !== "kitchen") {
+      const viewLocked = buildKitchenViewPayload({
+        player: p,
+        user: interaction.member ?? interaction.user,
+        userId,
+        pendingMessages,
+        now,
+        kitchenUnlocked,
+        effects: combinedEffects
+      });
+      return finalize({ ...viewLocked, content: `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`, ephemeral: true });
+    }
+
+    if (sub === "kitchen_start") {
+      const brothIdRaw = opt.getString("broth_id") || opt.getString("broth") || opt.getString("item") || "";
+      const brothId = String(brothIdRaw || "").trim();
+      const batches = getKitchenBatches(p, now);
+      if (!brothId || brothId === "none") {
+        const view = buildKitchenViewPayload({
+          player: p,
+          user: interaction.member ?? interaction.user,
+          userId,
+          pendingMessages,
+          now,
+          kitchenUnlocked,
+          effects: combinedEffects,
+          banner: `${getIcon("info")} Select a broth to start simmering.`
+        });
+        return finalize({ ...view, ephemeral: true });
+      }
+
+      const brothItem = content.items?.[brothId];
+      if (!brothItem || String(brothItem.category).toLowerCase() !== "broth") {
+        const view = buildKitchenViewPayload({
+          player: p,
+          user: interaction.member ?? interaction.user,
+          userId,
+          pendingMessages,
+          now,
+          kitchenUnlocked,
+          effects: combinedEffects,
+          banner: `${getIcon("warning")} That isn't a broth you can simmer.`
+        });
+        return finalize({ ...view, ephemeral: true });
+      }
+
+      if (batches.length >= capacity) {
+        const view = buildKitchenViewPayload({
+          player: p,
+          user: interaction.member ?? interaction.user,
+          userId,
+          pendingMessages,
+          now,
+          kitchenUnlocked,
+          effects: combinedEffects,
+          banner: `${getIcon("hourglass")} All ${capacity} kitchen slot${capacity === 1 ? "" : "s"} are simmering.`
+        });
+        return finalize({ ...view, ephemeral: true });
+      }
+
+      const plan = planKitchenIngredients(p, KITCHEN_FORAGE_PER_BROTH);
+      if (!plan.ok) {
+        const view = buildKitchenViewPayload({
+          player: p,
+          user: interaction.member ?? interaction.user,
+          userId,
+          pendingMessages,
+          now,
+          kitchenUnlocked,
+          effects: combinedEffects,
+          banner: `${getIcon("warning")} Not enough forageables to simmer a broth (${KITCHEN_FORAGE_PER_BROTH} needed).`
+        });
+        return finalize({ ...view, ephemeral: true });
+      }
+
+      const removal = removeIngredientsFromInventory(p, plan.used);
+      if (!removal.success) {
+        const view = buildKitchenViewPayload({
+          player: p,
+          user: interaction.member ?? interaction.user,
+          userId,
+          pendingMessages,
+          now,
+          kitchenUnlocked,
+          effects: combinedEffects,
+          banner: `${getIcon("warning")} Pantry changed — not enough forageables right now.`
+        });
+        return finalize({ ...view, ephemeral: true });
+      }
+
+      const kitchen = ensureKitchenState(p);
+      const batchId = `kb_${now}_${Math.floor(Math.random() * 10000)}`;
+      if (!Array.isArray(kitchen.active_batches)) kitchen.active_batches = [];
+      kitchen.active_batches.push({
+        id: batchId,
+        broth_id: brothId,
+        started_at: now,
+        ready_at: now + KITCHEN_SIMMER_MS,
+        ingredients: plan.used
+      });
+
+      const usedLine = Object.entries(plan.used)
+        .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
+        .join(" · ");
+
+      const view = buildKitchenViewPayload({
+        player: p,
+        user: interaction.member ?? interaction.user,
+        userId,
+        pendingMessages,
+        now,
+        kitchenUnlocked,
+        effects: combinedEffects,
+        banner: `${getIcon("cook")} Simmering **${displayItemName(brothId)}** — used ${usedLine || "forageables"}. Ready in ${formatDurationShort(KITCHEN_SIMMER_MS)}.`
+      });
+      return finalize(view);
+    }
+
+    if (sub === "kitchen_collect") {
+      const kitchen = ensureKitchenState(p);
+      const batches = getKitchenBatches(p, now);
+      const readyBatches = batches.filter((b) => b.ready);
+      if (readyBatches.length === 0) {
+        const view = buildKitchenViewPayload({
+          player: p,
+          user: interaction.member ?? interaction.user,
+          userId,
+          pendingMessages,
+          now,
+          kitchenUnlocked,
+          effects: combinedEffects,
+          banner: `${getIcon("info")} Nothing is simmering right now.`
+        });
+        return finalize({ ...view, ephemeral: true });
+      }
+
+      const drops = readyBatches.reduce((acc, batch) => {
+        acc[batch.broth_id] = (acc[batch.broth_id] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects);
+      const accepted = capacityResult.accepted ?? {};
+      const acceptedTotal = Object.values(accepted).reduce((sum, qty) => sum + qty, 0);
+      if (acceptedTotal < 1) {
+        const view = buildKitchenViewPayload({
+          player: p,
+          user: interaction.member ?? interaction.user,
+          userId,
+          pendingMessages,
+          now,
+          kitchenUnlocked,
+          effects: combinedEffects,
+          banner: `${getIcon("basket")} Pantry full — free broth capacity to collect.`
+        });
+        return finalize({ ...view, ephemeral: true });
+      }
+
+      addIngredientsToInventory(p, accepted, "block");
+
+      const remainingToRemove = { ...accepted };
+      kitchen.active_batches = (kitchen.active_batches ?? []).filter((batch) => {
+        const remaining = remainingToRemove[batch.broth_id] ?? 0;
+        const isReady = (batch.ready_at ?? 0) <= now;
+        if (isReady && remaining > 0) {
+          remainingToRemove[batch.broth_id] = remaining - 1;
+          return false;
+        }
+        return true;
+      });
+
+      const collectedLines = Object.entries(accepted)
+        .map(([id, qty]) => `**${qty}× ${displayItemName(id)}**`)
+        .join(" and ");
+      const rejectedLines = Object.entries(capacityResult.rejected ?? {})
+        .map(([id, qty]) => `${displayItemName(id)} x${qty}`)
+        .join(" · ");
+      const bannerParts = [`${getIcon("status_complete")} Collected ${collectedLines}!`];
+      if (rejectedLines) {
+        bannerParts.push(`${getIcon("basket")} Pantry full for ${rejectedLines}.`);
+      }
+
+      const view = buildKitchenViewPayload({
+        player: p,
+        user: interaction.member ?? interaction.user,
+        userId,
+        pendingMessages,
+        now,
+        kitchenUnlocked,
+        effects: combinedEffects,
+        banner: bannerParts.join(" ")
+      });
+      return finalize(view);
+    }
+
+    const view = buildKitchenViewPayload({
+      player: p,
+      user: interaction.member ?? interaction.user,
+      userId,
+      pendingMessages,
+      now,
+      kitchenUnlocked,
+      effects: combinedEffects
+    });
+    return finalize(view);
   });
 }
 
@@ -5960,6 +6373,31 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
     embeds: [view.embed],
     components,
     targetMessageId: interaction.message?.id
+  });
+}
+
+// Kitchen select to start simmering
+if (kind === "kitchen" && action === "start" && interaction.isSelectMenu?.()) {
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That kitchen isn’t yours.", ephemeral: true });
+  }
+  const brothId = interaction.values?.[0] ?? null;
+  const sourceMessageId = interaction.message?.id ?? null;
+  return runNoodle(interaction, {
+    sub: "kitchen_start",
+    overrides: { strings: { broth_id: brothId }, messageId: sourceMessageId }
+  });
+}
+
+// Kitchen collect button
+if (kind === "kitchen" && action === "collect" && interaction.isButton?.()) {
+  if (ownerId && ownerId !== userId) {
+    return componentCommit(interaction, { content: "That kitchen isn’t yours.", ephemeral: true });
+  }
+  const sourceMessageId = interaction.message?.id ?? null;
+  return runNoodle(interaction, {
+    sub: "kitchen_collect",
+    overrides: { messageId: sourceMessageId }
   });
 }
 

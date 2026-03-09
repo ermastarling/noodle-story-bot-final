@@ -24,6 +24,18 @@
         "ingredient_save_chance": 0.005
       }
     },
+    "u_kitchen_simmer": {
+      "upgrade_id": "u_kitchen_simmer",
+      "name": "Simmer Vats",
+      "category": "kitchen",
+      "description": "Expand simmering capacity, +10 simultaneous broths per level.",
+      "max_level": 10,
+      "base_cost": 5000,
+      "cost_scaling": 1.45,
+      "effects_per_level": {
+        "kitchen_simmer_capacity": 10
+      }
+    },
     "u_ladles": {
       "upgrade_id": "u_ladles",
       "name": "Premium Ladles",

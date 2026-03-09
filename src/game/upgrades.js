@@ -109,7 +109,8 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     staff_effect_multiplier: 0,
     prep_batch_bonus: 0,
     garden_plot_bonus: 0,
-    garden_seed_chance: 0
+    garden_seed_chance: 0,
+    kitchen_simmer_capacity: 0
   };
   
   if (!player.upgrades) return effects;
