@@ -1362,12 +1362,17 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
     .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
     .slice(0, 10)
     .map(([id, qty]) => `• ${displayItemName(id)}: **${qty}**`)
-    .join("\n") || "_No forageables yet._";
+    .join("\n") || "_No forageables yet_.";
   const hiddenCount = Math.max(0, forageEntries.length - 10);
   const forageFooter = hiddenCount > 0 ? `\n…and ${hiddenCount} more.` : "";
   const craftableLine = craftableMax > 0
-    ? `${getIcon("cook")} Craft up to **${craftableMax}** broth${craftableMax === 1 ? "" : "s"}${bestCraftable?.item ? ` (best fit: ${displayItemName(bestCraftable.item.item_id)})` : ""}.`
+    ? null
     : `${getIcon("warning")} Add the listed forageables to start simmering.`;
+  const forageValue = [
+    `${getIcon("basket")} **${totalForage}** in pantry.`,
+    craftableLine,
+    `${forageList}${forageFooter}`
+  ].filter(Boolean).join("\n");
 
   const descriptionParts = [banner, pendingMessages.length ? pendingMessages.join("\n") : null, ...kitchenLines].filter(Boolean);
   const embed = buildMenuEmbed({
@@ -1379,7 +1384,7 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   embed.addFields(
     {
       name: "Forageables Available",
-      value: `${getIcon("basket")} **${totalForage}** in pantry.\n${craftableLine}\n${forageList}${forageFooter}`,
+      value: forageValue,
       inline: false
     }
   );
@@ -1387,8 +1392,7 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   const options = recipePlans.map(({ item, plan, recipe, craftableCount }) => {
     const tokens = (recipe ?? []).map((ing) => {
       const need = Math.max(1, Number(ing?.qty ?? 0));
-      const have = Math.max(0, Number(player?.inv_ingredients?.[ing?.item_id] ?? 0));
-      return `${displayItemName(ing.item_id)} ${need}/${have}`;
+      return `${displayItemName(ing.item_id)} x${need}`;
     });
     const maxCraft = Math.max(0, craftableCount ?? 0);
     const descRaw = [tokens.join(" · ") || "Needs forageables", `Max ${maxCraft}`]
