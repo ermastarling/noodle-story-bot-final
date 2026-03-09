@@ -3161,7 +3161,7 @@ if (sub === "pantry") {
         name: " ",
         value: "· · · · · · ·",
         inline: false
-      }
+      },
       {
         name: "Bowl Quality",
         value: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
