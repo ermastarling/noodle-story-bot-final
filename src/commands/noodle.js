@@ -2162,6 +2162,26 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
   const hasAcceptedOrders = accepted.length > 0;
   const canServeAll = action === "serve" ? canServeAllOrders(p) : false;
 
+  // Summarize missing bowls for accepted orders
+  const neededByRecipe = {};
+  if (action === "serve" && hasAcceptedOrders) {
+    accepted.forEach(([, entry]) => {
+      const recipeId = entry?.order?.recipe_id;
+      if (!recipeId) return;
+      neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+    });
+  }
+
+  const missingLines = Object.entries(neededByRecipe)
+    .map(([recipeId, need]) => {
+      const ready = getTotalBowlsForRecipe(p, recipeId);
+      if (ready >= need) return null;
+      const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+      const short = need - ready;
+      return `• ${rName} — need **${need}**, ready **${ready}** (cook **${short}** more)`;
+    })
+    .filter(Boolean);
+
   const opts = accepted.slice(0, 25).map(([oid, entry]) => {
     const snap = entry?.order ?? null;
     const rName = snap ? (content.recipes[snap.recipe_id]?.name ?? snap.recipe_id) : "Unknown Recipe";
@@ -2190,7 +2210,11 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
   const actionDesc = action === "serve"
     ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
     : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
-  const actionEmbed = buildMenuEmbed({ title: actionTitle, description: actionDesc, user: ownerUser });
+  const descWithMissing = missingLines.length
+    ? `${actionDesc}\n\n${getIcon("basket")} Missing bowls\n${missingLines.join("\n")}`
+    : actionDesc;
+
+  const actionEmbed = buildMenuEmbed({ title: actionTitle, description: descWithMissing, user: ownerUser });
   const tutorialOnlyServeMenu = action === "serve" && isTutorialStep(p, "intro_serve");
 
   return {
