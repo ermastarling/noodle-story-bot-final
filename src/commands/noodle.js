@@ -1335,11 +1335,11 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   if (!kitchenUnlocked) {
     kitchenLines.push(`${getIcon("lock")} Reach shop level ${KITCHEN_UNLOCK_LEVEL} to unlock the kitchen.`);
   } else {
-    const summaryLine = `${getIcon("cook")} Simmering **${batches.length}/${capacity}** batches${readyBatches.length ? ` — ${readyBatches.length} ready` : ""}${!readyBatches.length && nextReadyMs != null ? ` — next ready ${nextReadyTs ? `<t:${nextReadyTs}:R>` : `in ${formatDurationShort(nextReadyMs)}`}` : ""}`;
+    const summaryLine = `${getIcon("cook")} Simmering **${batches.length}/${capacity}** broths${readyBatches.length ? ` — ${readyBatches.length} ready` : ""}${!readyBatches.length && nextReadyMs != null ? ` — next ready ${nextReadyTs ? `<t:${nextReadyTs}:R>` : `in ${formatDurationShort(nextReadyMs)}`}` : ""}`;
     kitchenLines.push(summaryLine);
 
     if (batches.length === 0) {
-      kitchenLines.push(`${getIcon("cook")} No broth is simmering. Select a broth below to start — each broth lists its forageables.`);
+      kitchenLines.push(`${getIcon("cook")} No broth is simmering. Select a broth below to start.`);
     } else {
       const batchLines = batches.slice(0, 5).map((batch) => {
         const readyText = batch.ready
@@ -1366,7 +1366,7 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
   const hiddenCount = Math.max(0, forageEntries.length - 10);
   const forageFooter = hiddenCount > 0 ? `\n…and ${hiddenCount} more.` : "";
   const craftableLine = craftableMax > 0
-    ? `${getIcon("cook")} Craft up to **${craftableMax}** batch${craftableMax === 1 ? "" : "es"}${bestCraftable?.item ? ` (best fit: ${displayItemName(bestCraftable.item.item_id)})` : ""}.`
+    ? `${getIcon("cook")} Craft up to **${craftableMax}** broth${craftableMax === 1 ? "" : "s"}${bestCraftable?.item ? ` (best fit: ${displayItemName(bestCraftable.item.item_id)})` : ""}.`
     : `${getIcon("warning")} Add the listed forageables to start simmering.`;
 
   const descriptionParts = [banner, pendingMessages.length ? pendingMessages.join("\n") : null, ...kitchenLines].filter(Boolean);
@@ -1384,18 +1384,28 @@ function buildKitchenViewPayload({ player, user, userId, pendingMessages = [], b
     }
   );
 
-  const options = recipePlans.map(({ item, plan, recipeLine, missingLine }) => ({
-    label: `${item?.name ?? item?.item_id ?? "Unknown"}`.slice(0, 100),
-    value: item?.item_id ?? "unknown",
-    description: (plan?.ok ? `Needs ${recipeLine}` : `Missing ${missingLine || recipeLine}`).slice(0, 100)
-  })).slice(0, 25);
+  const options = recipePlans.map(({ item, plan, recipe, craftableCount }) => {
+    const tokens = (recipe ?? []).map((ing) => {
+      const need = Math.max(1, Number(ing?.qty ?? 0));
+      const have = Math.max(0, Number(player?.inv_ingredients?.[ing?.item_id] ?? 0));
+      return `${displayItemName(ing.item_id)} ${need}/${have}`;
+    });
+    const maxCraft = Math.max(0, craftableCount ?? 0);
+    const descRaw = [tokens.join(" · ") || "Needs forageables", `Max ${maxCraft}`]
+      .filter(Boolean)
+      .join(" | ");
+
+    return {
+      label: `${item?.name ?? item?.item_id ?? "Unknown"}`.slice(0, 100),
+      value: item?.item_id ?? "unknown",
+      description: descRaw.slice(0, 100)
+    };
+  }).slice(0, 25);
 
   const components = [];
   const selectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`noodle:kitchen:start:${userId}`)
-      .setPlaceholder(`Select a broth to simmer (see requirements)${!kitchenUnlocked ? " — locked" : remainingSlots <= 0 ? " — slots full" : craftableMax <= 0 ? " — need ingredients" : ""}`)
-      .setMinValues(1)
       .setMaxValues(1)
       .setDisabled(!kitchenUnlocked || remainingSlots <= 0 || craftableMax <= 0 || options.length === 0)
       .addOptions(options.length ? options : [{ label: "No broths available", value: "none", description: "Missing broth data" }])
