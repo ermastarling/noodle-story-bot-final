@@ -2088,19 +2088,21 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   let pageData = loadPage(safePage);
 
-  // When earlier pages are fully consumed, jump to the first page with available orders
+  // If the requested page is empty but there are still available orders, jump to the nearest page with orders
   if (!pageData.orders.length && availableCount > 0) {
-    let firstAvailableIndex = 0;
+    let firstAvailableIndex = null;
     for (let i = 0; i < totalCount; i++) {
       if (!consumedSet.has(i)) {
         firstAvailableIndex = i;
         break;
       }
     }
-    const fallbackPage = Math.floor(firstAvailableIndex / pageSize);
-    if (fallbackPage !== safePage) {
-      safePage = fallbackPage;
-      pageData = loadPage(safePage);
+    if (firstAvailableIndex !== null) {
+      const fallbackPage = Math.floor(firstAvailableIndex / pageSize);
+      if (fallbackPage !== safePage) {
+        safePage = fallbackPage;
+        pageData = loadPage(safePage);
+      }
     }
   }
 

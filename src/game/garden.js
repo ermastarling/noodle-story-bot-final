@@ -181,7 +181,9 @@ export function addSeeds(player, seedDrops) {
 }
 
 export function stashSpoiledIngredient(player, itemId, qty) {
+  // Don’t stash spoiled items until the garden feature is unlocked
   if (!qty || qty <= 0) return 0;
+  if (!isGardenUnlocked(player)) return 0;
   const garden = ensureGardenState(player);
   const key = SPOILED_STASH_KEY;
   garden.spoiled[key] = (garden.spoiled[key] || 0) + qty;
