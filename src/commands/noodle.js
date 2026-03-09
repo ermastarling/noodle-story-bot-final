@@ -6214,6 +6214,23 @@ if (action === "serveall") {
 
   const p = ensurePlayer(serverId, userId);
   if (!canServeAllOrders(p)) {
+    const neededByRecipe = {};
+    Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+      const recipeId = entry?.order?.recipe_id;
+      if (!recipeId) return;
+      neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+    });
+
+    const missingLines = Object.entries(neededByRecipe)
+      .map(([recipeId, need]) => {
+        const ready = getTotalBowlsForRecipe(p, recipeId);
+        if (ready >= need) return null;
+        const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+        const short = need - ready;
+        return `• ${rName} — need **${need}**, ready **${ready}** (cook **${short}** more)`;
+      })
+      .filter(Boolean);
+
     const payload = buildCancelServePickerPayload({
       action: "serve",
       userId,
@@ -6223,7 +6240,9 @@ if (action === "serveall") {
 
     return componentCommit(interaction, {
       ...payload,
-      content: `${getIcon("warning")} Not all accepted orders are ready to serve.`,
+      content: missingLines.length
+        ? `${getIcon("warning")} Not all accepted orders are ready to serve.\n${missingLines.join("\n")}`
+        : `${getIcon("warning")} Not all accepted orders are ready to serve.`,
       ephemeral: payload.ephemeral ?? false
     });
   }
