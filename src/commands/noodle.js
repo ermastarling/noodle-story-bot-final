@@ -2927,20 +2927,21 @@ if (group === "dev" && sub === "wipe_user") {
   if (!isDevAdmin(userId)) {
     return commit({ content: "You don’t have access to that command.", ephemeral: true });
   }
-  const target = opt.getUser("user");
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim();
   const targetServerId = opt.getString("server_id")?.trim() || serverId;
-  if (!target) {
-    return commit({ content: "Pick a user to wipe.", ephemeral: true });
+  if (!targetUserId) {
+    return commit({ content: "Provide a user or user ID to wipe.", ephemeral: true });
   }
   if (!db) {
     return commit({ content: "Database unavailable in this environment.", ephemeral: true });
   }
 
-  const lockKey = `lock:user:${targetServerId}:${target.id}`;
+  const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(targetServerId, target.id);
+    const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(targetServerId, targetUserId);
     const deleted = result?.changes ?? 0;
-    const mention = `<@${target.id}>`;
+    const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
       return commit({ content: `${getIcon("info")} No profile found for ${mention} on server ${targetServerId}.`, ephemeral: true });
     }
@@ -7960,6 +7961,12 @@ if (includeDevCommands) {
             .setName("wipe_user")
             .setDescription("Delete a user’s profile from the DB.")
             .addUserOption((o) => o.setName("user").setDescription("User to wipe").setRequired(true))
+            .addStringOption((o) =>
+              o
+                .setName("user_id")
+                .setDescription("User ID (use if the user left the server)")
+                .setRequired(false)
+            )
             .addStringOption((o) =>
               o
                 .setName("server_id")
