@@ -1743,10 +1743,13 @@ function applySeasonRolloverReward(player, currentSeason) {
   const eventRecipeSet = new Set(eventRecipeIds);
   const invBowls = player.inv_bowls ?? {};
   let bowlCount = 0;
+  const clearedKeys = [];
 
-  for (const bowl of Object.values(invBowls)) {
+  for (const [key, bowl] of Object.entries(invBowls)) {
     if (eventRecipeSet.has(bowl?.recipe_id)) {
-      bowlCount += Math.max(0, Number(bowl?.qty || 0));
+      const qty = Math.max(0, Number(bowl?.qty || 0));
+      bowlCount += qty;
+      clearedKeys.push(key);
     }
   }
 
@@ -1754,6 +1757,11 @@ function applySeasonRolloverReward(player, currentSeason) {
   player.seasons.last_rewarded_from = previousSeason;
 
   if (bowlCount <= 0) return null;
+
+  // Clear event bowls from inventory now that they've been rewarded.
+  for (const key of clearedKeys) {
+    delete invBowls[key];
+  }
 
   const coins = bowlCount * 5 + 10;
   const rep = Math.max(1, Math.ceil(bowlCount / 3) + 10);
@@ -1772,7 +1780,7 @@ function applySeasonRolloverReward(player, currentSeason) {
   const friendlySeason = previousSeason.charAt(0).toUpperCase() + previousSeason.slice(1);
   const message = `${getIcon("season")} As ${friendlySeason} wrapped up, your event bowls found cozy homes. Reward: **${coins}c**, **${rep} REP**, **${sxp} SXP**.`;
 
-  return { message, leveled };
+  return { message, leveled, cleared: clearedKeys.length, bowlsCleared: bowlCount };
 }
 
 function isTutorialStep(player, stepId) {
@@ -3144,6 +3152,9 @@ if (player) {
 }
 
 seasonRolloverNotice = player ? applySeasonRolloverReward(player, server.season) : null;
+if (seasonRolloverNotice?.cleared && db) {
+  upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+}
 
 /* ---------------- START ---------------- */
 if (sub === "start") {
@@ -3446,7 +3457,7 @@ if (sub === "pantry") {
         pantryPageRow(userId, safePage, totalPages, ingredientPages),
         noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
         noodleMainMenuRowNoPantry(userId),
-        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, active: "kitchen" })
+        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
       ]
     });
   });

@@ -51,6 +51,76 @@ import { getIcon } from "./ui/icons.js";
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
   const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
 
+  const MAX_FIELD = 1024;
+  const SAFE_SLICE = 900;
+  const MAX_DESC = 4000;
+
+  const chunkTextByLength = (text, maxLen = SAFE_SLICE) => {
+    if (!text) return [];
+    const lines = String(text).split("\n");
+    const chunks = [];
+    let buf = "";
+    for (const line of lines) {
+      const next = buf ? `${buf}\n${line}` : line;
+      if (next.length > maxLen && buf) {
+        chunks.push(buf);
+        buf = line;
+      } else if (next.length > maxLen) {
+        chunks.push(next.slice(0, maxLen));
+        buf = next.slice(maxLen);
+      } else {
+        buf = next;
+      }
+    }
+    if (buf) chunks.push(buf);
+    return chunks.filter(Boolean);
+  };
+
+  const sanitizeEmbedsForDiscord = (embeds) => {
+    if (!Array.isArray(embeds)) return embeds;
+
+    const chunkField = (field) => {
+      const name = field?.name ?? " ";
+      const inline = field?.inline ?? false;
+      const value = field?.value ?? "";
+      if (!value || String(value).length <= MAX_FIELD) return [{ name, value, inline }];
+      const parts = chunkTextByLength(String(value), SAFE_SLICE);
+      return parts.map((part, idx) => ({
+        name: idx === 0 ? name : `${name} (cont.)`,
+        value: part,
+        inline
+      }));
+    };
+
+    return embeds.map((embed) => {
+      if (!embed) return embed;
+      const safe = embed.toJSON ? new Discord.EmbedBuilder(embed) : embed;
+      const fields = safe?.data?.fields || safe?.fields || [];
+      if (fields.length) {
+        const newFields = fields.flatMap((f) => chunkField(f));
+        if (safe.spliceFields) safe.spliceFields(0, safe.fields?.length ?? fields.length, ...newFields);
+        else safe.fields = newFields;
+      }
+
+      const desc = safe?.data?.description ?? safe?.description ?? "";
+      if (desc && desc.length > MAX_DESC && safe.setDescription) {
+        const truncated = desc.slice(0, MAX_DESC);
+        safe.setDescription(`${truncated}\n\n(Description truncated)`);
+      }
+
+      return safe;
+    });
+  };
+
+  const sanitizeResultEmbeds = (payload) => {
+    if (!payload) return payload;
+    const next = { ...payload };
+    if (next.embeds) {
+      next.embeds = sanitizeEmbedsForDiscord(next.embeds);
+    }
+    return next;
+  };
+
   /* ------------------------------------------------------------------ */
   /*  Boot + diagnostics                                                 */
   /* ------------------------------------------------------------------ */
@@ -973,7 +1043,7 @@ import { getIcon } from "./ui/icons.js";
           return await noodleSocialCommand.handleComponent(interaction);
         }
         if (id.startsWith("noodle-staff:")) {
-          const result = await noodleStaffInteractionHandler(interaction);
+          const result = sanitizeResultEmbeds(await noodleStaffInteractionHandler(interaction));
           if (result) {
             if (result.ephemeral) {
               if (interaction.replied || interaction.deferred) {
@@ -988,7 +1058,7 @@ import { getIcon } from "./ui/icons.js";
           }
         }
         if (id.startsWith("noodle-upgrades:")) {
-          const result = await noodleUpgradesInteractionHandler(interaction);
+          const result = sanitizeResultEmbeds(await noodleUpgradesInteractionHandler(interaction));
           if (result) {
             if (result.ephemeral) {
               if (interaction.replied || interaction.deferred) {
