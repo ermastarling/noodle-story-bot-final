@@ -2060,9 +2060,16 @@ function normalizeComponents(rows) {
     if (!row) continue;
     const baseRow = row.toJSON?.() ?? row;
     const rawComponents = baseRow.components ?? row.components ?? [];
+    const seenIds = new Set();
     const mapped = (rawComponents || [])
       .map((comp) => comp?.toJSON?.() ?? comp)
-      .filter(Boolean);
+      .filter((comp) => {
+        if (!comp) return false;
+        const cid = comp.custom_id ?? comp.customId ?? null;
+        if (cid && seenIds.has(cid)) return false;
+        if (cid) seenIds.add(cid);
+        return true;
+      });
     if (!mapped.length) continue;
     normalized.push({ type: 1, components: mapped });
   }
