@@ -337,26 +337,6 @@ function buildUpgradesManagementEmbed(player, user) {
     .filter(Boolean);
   embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("upgrades")} Upgrades: **${leveledEntries.length}/${totalUpgrades}**`);
 
-  if (leveledEntries.length > 0) {
-    const upgradeLines = leveledEntries.map(({ upgrade, level }) => {
-      const category = upgradesContent.upgrade_categories?.[upgrade.category] ?? {};
-      const icon = resolveIcon(category.icon, "");
-      const iconPrefix = icon ? `${icon} ` : "";
-      return `${iconPrefix}**${upgrade.name}** — Lv${level}/${upgrade.max_level}`;
-    });
-    embed.addFields({
-      name: "Your Upgrades",
-      value: upgradeLines.join("\n"),
-      inline: false
-    });
-  } else {
-    embed.addFields({
-      name: "Your Upgrades",
-      value: "_No upgrades purchased yet._",
-      inline: false
-    });
-  }
-
   const formatUpgradeEffectValue = (upgrade, level, effectKey, perLevel) => {
     const total = perLevel * level;
     if (effectKey === "ingredient_save_chance") return `+${(total * 100).toFixed(2)}% ingredient save`;
@@ -381,23 +361,23 @@ function buildUpgradesManagementEmbed(player, user) {
     return null;
   };
 
-  const effectLines = [];
-  for (const { upgrade, level } of leveledEntries) {
+  const upgradeLines = leveledEntries.map(({ upgrade, level }) => {
+    const category = upgradesContent.upgrade_categories?.[upgrade.category] ?? {};
+    const icon = resolveIcon(category.icon, "");
+    const iconPrefix = icon ? `${icon} ` : "";
     const effectsPerLevel = upgrade.effects_per_level ?? {};
-    for (const [effectKey, perLevel] of Object.entries(effectsPerLevel)) {
-      const formatted = formatUpgradeEffectValue(upgrade, level, effectKey, perLevel);
-      if (!formatted) continue;
-      effectLines.push(`**${upgrade.name}** — ${formatted}`);
-    }
-  }
+    const perUpgradeEffects = Object.entries(effectsPerLevel)
+      .map(([effectKey, perLevel]) => formatUpgradeEffectValue(upgrade, level, effectKey, perLevel))
+      .filter(Boolean);
+    const bonusText = perUpgradeEffects.length ? ` — ${perUpgradeEffects.join(", ")}` : "";
+    return `${iconPrefix}**${upgrade.name}** — Lv${level}/${upgrade.max_level}${bonusText}`;
+  });
 
-  if (effectLines.length > 0) {
-    embed.addFields({
-      name: "\nActive Bonuses",
-      value: effectLines.join("\n"),
-      inline: false
-    });
-  }
+  embed.addFields({
+    name: "Your Upgrades",
+    value: upgradeLines.length ? upgradeLines.join("\n") : "_No upgrades purchased yet._",
+    inline: false
+  });
 
   applyOwnerFooter(embed, user);
   return embed;

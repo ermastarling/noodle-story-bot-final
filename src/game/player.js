@@ -57,6 +57,12 @@ export function newPlayerProfile(userId) {
 
     collections: { completed: [], progress: {} },
 
+    seasons: {
+      last_seen: null,
+      last_rewarded_from: null,
+      last_rewarded_at: null
+    },
+
     tutorial: { active: true, queue: [...TUTORIAL_QUESTS], completed: [] },
 
     lifetime: {

@@ -211,8 +211,10 @@ const collectionsContent = loadCollectionsContent();
 const specializationsContent = loadSpecializationsContent();
 const decorContent = loadDecorContent();
 const decorSetsContent = loadDecorSetsContent();
+import { getActiveEvent, getActiveEventEffects, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
 const eventsContent = loadEventsContent();
 const content = withEventRecipes(baseContent, eventsContent);
+const eventRecipeSeasonIndex = buildEventRecipeSeasonMap(eventsContent);
 const db = openDb();
 
 const HERALD_BADGE_ID = "seasonal_herald";
@@ -672,11 +674,12 @@ function noodleForageGardenRow(userId, {
     const kitchenStyle = !kitchenUnlocked
       ? ButtonStyle.Secondary
       : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
+    const kitchenEmoji = kitchenPrimary ? getButtonEmoji("refresh") : getButtonEmoji("cook");
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:kitchen:${userId}`)
         .setLabel("Kitchen")
-        .setEmoji(getButtonEmoji("cook"))
+        .setEmoji(kitchenEmoji)
         .setStyle(kitchenPrimary ? ButtonStyle.Success : kitchenStyle)
         .setDisabled(!kitchenUnlocked)
     );
@@ -743,6 +746,100 @@ function gardenPageRow(userId, page = 0) {
       .setCustomId(`noodle:nav:garden:${userId}:1`)
       .setLabel("Seeds / Compost")
       .setStyle(page === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+}
+
+function chunkTextByLength(text, maxLen = 900) {
+  if (!text) return [];
+  const lines = String(text).split("\n");
+  const chunks = [];
+  let buf = "";
+  for (const line of lines) {
+    const next = buf ? `${buf}\n${line}` : line;
+    if (next.length > maxLen && buf) {
+      chunks.push(buf);
+      buf = line;
+    } else if (next.length > maxLen) {
+      chunks.push(next.slice(0, maxLen));
+      buf = next.slice(maxLen);
+    } else {
+      buf = next;
+    }
+  }
+  if (buf) chunks.push(buf);
+  return chunks.filter(Boolean);
+}
+
+function sanitizeEmbedsForDiscord(embeds) {
+  if (!Array.isArray(embeds)) return embeds;
+
+  const MAX_FIELD = 1024;
+  const SAFE_SLICE = 900;
+  const MAX_DESC = 4000; // Leave headroom for suffixes
+
+  const chunkField = (field) => {
+    const name = field?.name ?? " ";
+    const inline = field?.inline ?? false;
+    const value = field?.value ?? "";
+    if (!value || String(value).length <= MAX_FIELD) return [{ name, value, inline }];
+    const parts = chunkTextByLength(String(value), SAFE_SLICE);
+    return parts.map((part, idx) => ({
+      name: idx === 0 ? name : `${name} (cont.)`,
+      value: part,
+      inline
+    }));
+  };
+
+  return embeds.map((embed) => {
+    if (!embed) return embed;
+    const safe = embed.toJSON ? new EmbedBuilder(embed) : embed; // clone if builder
+    const fields = safe?.data?.fields || safe?.fields || [];
+    if (fields.length) {
+      const newFields = fields.flatMap((f) => chunkField(f));
+      if (safe.spliceFields) safe.spliceFields(0, safe.fields?.length ?? fields.length, ...newFields);
+      else safe.fields = newFields;
+    }
+
+    const desc = safe?.data?.description ?? safe?.description ?? "";
+    if (desc && desc.length > MAX_DESC && safe.setDescription) {
+      const truncated = desc.slice(0, MAX_DESC);
+      safe.setDescription(`${truncated}\n\n(Description truncated)`);
+    }
+
+    return safe;
+  });
+}
+
+function pantryPageRow(userId, page = 0, totalPages = 1, ingredientPages = 1) {
+  const clampedTotal = Math.max(1, totalPages);
+  const safePage = Math.min(Math.max(page, 0), clampedTotal - 1);
+  const ingredientsPageCount = Math.max(1, ingredientPages);
+  const bowlsStartPage = ingredientsPageCount;
+  const viewingIngredients = safePage < ingredientsPageCount;
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:pantry:${userId}:${Math.max(0, safePage - 1)}`)
+      .setLabel("Prev")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage <= 0),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:pantry:${userId}:0`)
+      .setLabel("Ingredients")
+      .setEmoji(getButtonEmoji("basket"))
+      .setStyle(viewingIngredients ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:pantry:${userId}:${bowlsStartPage}`)
+      .setLabel("Cooked Bowls")
+      .setEmoji(getButtonEmoji("cook"))
+      .setStyle(viewingIngredients ? ButtonStyle.Secondary : ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:pantry:${userId}:${Math.min(clampedTotal - 1, safePage + 1)}`)
+      .setLabel("Next")
+      .setEmoji(getButtonEmoji("next"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage >= clampedTotal - 1)
   );
 }
 
@@ -922,17 +1019,18 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 );
 }
 
-function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false } = {}) {
+function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false, active = null } = {}) {
   const kitchenStyle = !kitchenUnlocked
     ? ButtonStyle.Secondary
     : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
+  const kitchenEmoji = active === "kitchen" ? getButtonEmoji("refresh") : getButtonEmoji("cook");
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:kitchen:${userId}`)
       .setLabel("Kitchen")
-      .setEmoji(getButtonEmoji("cook"))
+      .setEmoji(kitchenEmoji)
       .setStyle(kitchenStyle)
       .setDisabled(!kitchenUnlocked)
   );
@@ -1541,7 +1639,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     components.push(collectRow);
   }
 
-  components.push(noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked }), noodleMainMenuRow(userId));
+  components.push(noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, active: "kitchen" }), noodleMainMenuRow(userId));
 
   return { content: " ", embeds: [embed], components };
 }
@@ -1620,7 +1718,62 @@ function ensurePlayer(serverId, userId) {
   grantEventBadgesForKnownRecipes(p, content, badgesContent);
   ensureCollectionsState(p);
   ensureSpecializationState(p);
+  if (!p.seasons) {
+    p.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
+  }
   return p;
+}
+
+function applySeasonRolloverReward(player, currentSeason) {
+  if (!player || !currentSeason) return null;
+  if (!player.seasons) {
+    player.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
+  }
+
+  const previousSeason = player.seasons.last_seen ?? null;
+  player.seasons.last_seen = currentSeason;
+
+  if (!previousSeason || previousSeason === currentSeason) return null;
+
+  const eventRecipeIds = Object.entries(eventRecipeSeasonIndex || {})
+    .filter(([, season]) => season === previousSeason)
+    .map(([id]) => id);
+
+  if (!eventRecipeIds.length) return null;
+
+  const eventRecipeSet = new Set(eventRecipeIds);
+  const invBowls = player.inv_bowls ?? {};
+  let bowlCount = 0;
+
+  for (const bowl of Object.values(invBowls)) {
+    if (eventRecipeSet.has(bowl?.recipe_id)) {
+      bowlCount += Math.max(0, Number(bowl?.qty || 0));
+    }
+  }
+
+  // Record that we checked this rollover even if no bowls were found.
+  player.seasons.last_rewarded_from = previousSeason;
+
+  if (bowlCount <= 0) return null;
+
+  const coins = bowlCount * 5 + 10;
+  const rep = Math.max(1, Math.ceil(bowlCount / 3) + 10);
+  const sxp = bowlCount * 2 + 10;
+
+  player.coins = (player.coins || 0) + coins;
+  player.rep = (player.rep || 0) + rep;
+  player.sxp_total = (player.sxp_total || 0) + sxp;
+  player.sxp_progress = (player.sxp_progress || 0) + sxp;
+  if (!player.lifetime) player.lifetime = {};
+  player.lifetime.coins_earned = (player.lifetime.coins_earned || 0) + coins;
+  const leveled = applySxpLevelUp(player);
+
+  player.seasons.last_rewarded_at = nowTs();
+
+  const friendlySeason = previousSeason.charAt(0).toUpperCase() + previousSeason.slice(1);
+  const message = `${getIcon("season")} As ${friendlySeason} wrapped up, your event bowls found cozy homes. Reward: **${coins}c**, **${rep} REP**, **${sxp} SXP**.`;
+
+  return { message, leveled };
 }
 
 function isTutorialStep(player, stepId) {
@@ -1920,6 +2073,10 @@ function normalizeComponents(rows) {
 async function componentCommit(interaction, payload) {
 const { ephemeral, targetMessageId, ...rest } = payload ?? {};
 
+if (rest.embeds) {
+  rest.embeds = sanitizeEmbedsForDiscord(rest.embeds);
+}
+
 // Force ephemeral responses for modal submits when requested
 if (interaction.isModalSubmit?.() && ephemeral === true) {
   if (interaction.deferred || interaction.replied) {
@@ -1948,6 +2105,9 @@ if (targetMessageId && !ephemeral) {
       if (editPayload.components) {
         editPayload.components = normalizeComponents(editPayload.components);
       }
+      if (editPayload.embeds) {
+        editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
+      }
       // Dismiss the modal response only for modal submits
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
@@ -1969,6 +2129,9 @@ if (targetMessageId && !ephemeral) {
 const hasComponents = Array.isArray(rest.components) ? rest.components.length > 0 : Boolean(rest.components);
 const shouldBeEphemeral = ephemeral === true && !hasComponents;
 const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...rest };
+if (options.embeds) {
+  options.embeds = sanitizeEmbedsForDiscord(options.embeds);
+}
 if (options.components) {
   options.components = normalizeComponents(options.components);
 }
@@ -2222,18 +2385,24 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     })
     .filter((s) => s.short > 0);
 
+  const shoppingShortages = shortages.filter(
+    (s) => MARKET_ITEM_IDS.includes(s.id) && !FORAGE_ITEM_IDS.includes(s.id)
+  );
+
   const showShoppingList = acceptedEntries.length > 0;
   const maxShoppingLines = 8;
-  const shoppingLines = shortages
+  const shoppingLines = shoppingShortages
     .slice(0, maxShoppingLines)
     .map((s) => `• ${displayItemName(s.id, content)} — need **${s.short}**`);
-  const shoppingSummary = shortages.length > maxShoppingLines
-    ? `\n…and **${shortages.length - maxShoppingLines}** more`
+  const shoppingSummary = shoppingShortages.length > maxShoppingLines
+    ? `\n…and **${shoppingShortages.length - maxShoppingLines}** more`
     : "";
   const shoppingList = showShoppingList
-    ? (shortages.length
+    ? (shoppingShortages.length
       ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
-      : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`)
+      : shortages.length
+        ? `${getIcon("basket")} **Shopping List**\n_Forage-only ingredients aren't shown here. Forage to gather what's left._`
+        : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`)
     : null;
 
   const descriptionLines = [
@@ -2827,10 +2996,17 @@ overrides?.users?.[name] ??
 };
 
 const commit = async (payload) => {
+if (seasonRolloverNotice?.message) {
+  const existing = String(payload?.content ?? "").trim();
+  payload = { ...payload, content: existing ? `${seasonRolloverNotice.message}\n\n${existing}` : seasonRolloverNotice.message };
+}
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
 const base = { ...rest };
+if (base.embeds) {
+  base.embeds = sanitizeEmbedsForDiscord(base.embeds);
+}
 if (base.embeds) {
   base.embeds = applyGreenButtonFooter(base.embeds, base.components);
 }
@@ -2959,6 +3135,8 @@ if (player) {
   }
 }
 
+const seasonRolloverNotice = player ? applySeasonRolloverReward(player, server.season) : null;
+
 /* ---------------- START ---------------- */
 if (sub === "start") {
   if (!db) {
@@ -3072,6 +3250,7 @@ if (sub === "pantry") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
+    const rawPage = opt.getInteger("page") ?? overrides?.integers?.page ?? 0;
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const now = nowTs();
@@ -3135,8 +3314,13 @@ if (sub === "pantry") {
       })
       .filter(Boolean);
 
-    const stapleBlocks = [categoryBlocks[0], categoryBlocks[1]].filter(Boolean).join("\n\n") || "No ingredients yet.";
-    const flavorBlocks = [categoryBlocks[2], categoryBlocks[3]].filter(Boolean).join("\n\n") || "No spices or toppings yet.";
+    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1]].filter(Boolean).join("\n\n") || "No ingredients yet.";
+    const flavorBlocksRaw = [categoryBlocks[2], categoryBlocks[3]].filter(Boolean).join("\n\n") || "No spices or toppings yet.";
+    const stapleChunks = chunkTextByLength(stapleBlocksRaw, 900);
+    const flavorChunks = chunkTextByLength(flavorBlocksRaw, 900);
+    if (!stapleChunks.length) stapleChunks.push("No ingredients yet.");
+    if (!flavorChunks.length) flavorChunks.push("No spices or toppings yet.");
+    const ingredientPages = Math.max(stapleChunks.length, flavorChunks.length);
 
     const bowlGroups = new Map();
     for (const [, bowl] of Object.entries(p.inv_bowls ?? {})) {
@@ -3175,6 +3359,12 @@ if (sub === "pantry") {
     const bowlsBlock = bowlLines
     ? `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
     : `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
+    const bowlChunks = chunkTextByLength(bowlsBlock, 900);
+    if (!bowlChunks.length) bowlChunks.push(`**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`);
+    const bowlPages = Math.max(1, bowlChunks.length);
+
+    const totalPages = ingredientPages + bowlPages;
+    const safePage = Math.min(Math.max(rawPage, 0), totalPages - 1);
 
     const pendingPantryMessages = p.notifications?.pending_pantry_messages ?? [];
     if (pendingPantryMessages.length > 0) {
@@ -3196,45 +3386,59 @@ if (sub === "pantry") {
       "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage."
     ].filter(Boolean).join("\n\n");
 
-    const ingredientsValue = stapleBlocks;
-    const flavorValue = flavorBlocks;
-    const bowlsValue = bowlsBlock;
-
     const pantryEmbed = buildMenuEmbed({
       title: `${getIcon("basket")} Pantry`,
       description: pantryDescription,
       user: interaction.member ?? interaction.user
     });
-    pantryEmbed.addFields(
-      {
-        name: " ",
-        value: ingredientsValue,
-        inline: true
-      },
-      {
-        name: " ",
-        value: `· · · · · · ·\n${flavorValue}`,
-        inline: true
-      },
-      {
-        name: " ",
-        value: `· · · · · · ·\n${bowlsValue}`,
-        inline: true
-      },
-      {
-        name: "Bowl Quality",
-        value: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
-        inline: false
-      }
-    );
+
+    if (safePage < ingredientPages) {
+      const ingredientPage = Math.min(safePage, ingredientPages - 1);
+      const stapleValue = stapleChunks[Math.min(ingredientPage, stapleChunks.length - 1)] ?? "No ingredients yet.";
+      const flavorValue = flavorChunks[Math.min(ingredientPage, flavorChunks.length - 1)] ?? "No spices or toppings yet.";
+      pantryEmbed.addFields(
+        {
+          name: " ",
+          value: stapleValue,
+          inline: true
+        },
+        {
+          name: " ",
+          value: `· · · · · · ·\n${flavorValue}`,
+          inline: true
+        }
+      );
+      const pageLabel = `Ingredients ${ingredientPage + 1}/${ingredientPages}`;
+      const existingFooter = pantryEmbed?.data?.footer?.text ?? pantryEmbed?.footer?.text ?? "";
+      pantryEmbed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
+    } else {
+      const bowlPage = Math.min(safePage - ingredientPages, bowlPages - 1);
+      const bowlsValue = bowlChunks[Math.min(bowlPage, bowlChunks.length - 1)] ?? bowlsBlock;
+      pantryEmbed.addFields(
+        {
+          name: "Cooked Bowls",
+          value: bowlsValue,
+          inline: false
+        },
+        {
+          name: "Bowl Quality",
+          value: `${formatQualityLabel("salvage")}:Salvage, ${formatQualityLabel("standard")}:Standard, ${formatQualityLabel("good")}:Good, ${formatQualityLabel("excellent")}:Excellent`,
+          inline: false
+        }
+      );
+      const pageLabel = `Cooked Bowls ${bowlPage + 1}/${bowlPages}`;
+      const existingFooter = pantryEmbed?.data?.footer?.text ?? pantryEmbed?.footer?.text ?? "";
+      pantryEmbed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
+    }
 
     return commit({
       content: " ",
       embeds: [pantryEmbed],
       components: [
+        pantryPageRow(userId, safePage, totalPages, ingredientPages),
         noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
         noodleMainMenuRowNoPantry(userId),
-        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
+        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, active: "kitchen" })
       ]
     });
   });
@@ -3936,6 +4140,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   }
 
   const commitState = async (replyObj) => {
+    if (seasonRolloverNotice?.message) {
+      const existing = String(replyObj?.content ?? "").trim();
+      replyObj.content = existing ? `${seasonRolloverNotice.message}\n\n${existing}` : seasonRolloverNotice.message;
+    }
+
     // Clear temporary recipes if player has coins again (B2)
     const hadTempRecipes = (p.resilience?.temp_recipes?.length || 0) > 0;
     clearTemporaryRecipes(p);
@@ -4019,6 +4228,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         ? (replyObj.components ?? [])
         : (replyObj.components ?? [noodleMainMenuRow(userId)])
     };
+    if (out.embeds) {
+      out.embeds = sanitizeEmbedsForDiscord(out.embeds);
+    }
     if (out.embeds) {
       out.embeds = applyGreenButtonFooter(out.embeds, out.components);
     }
@@ -5602,6 +5814,11 @@ ${lines.join("\n")}`;
         for (const item of allItems) {
           const usedFromInventory = Math.min(item.need, item.have);
           inventoryAvailable[item.itemId] = Math.max(0, (inventoryAvailable[item.itemId] || 0) - usedFromInventory);
+          // Free capacity for this type when we consume from inventory so capacity checks stay accurate for later orders
+          if (usedFromInventory > 0) {
+            const t = item.type;
+            remainingByType[t] = (remainingByType[t] ?? 0) + usedFromInventory;
+          }
         }
 
         for (const needItem of neededItems) {

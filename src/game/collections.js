@@ -1,5 +1,16 @@
 import { nowTs } from "../util/time.js";
 import { applySxpLevelUp } from "./serve.js";
+import { loadEventsContent } from "../content/index.js";
+
+const eventsContentCache = loadEventsContent();
+
+function getEventRecipeIds() {
+  const events = eventsContentCache?.events ?? [];
+  return events
+    .flatMap((evt) => evt?.event_recipes ?? [])
+    .map((r) => r?.recipe_id)
+    .filter(Boolean);
+}
 
 export function ensureCollectionsState(player) {
   if (!player.collections) player.collections = { completed: [], progress: {} };
@@ -28,10 +39,18 @@ function resolveEntries(collection, contentBundle) {
   }
   if (collection.entry_source === "recipes") {
     const tier = collection.tier;
-    return Object.values(contentBundle?.recipes ?? {})
+    const baseIds = Object.values(contentBundle?.recipes ?? {})
       .filter((r) => !tier || r?.tier === tier)
       .map((r) => r.recipe_id)
       .filter(Boolean);
+
+    // Seasonal scrapbook should also count all event recipes.
+    if (collection.collection_id === "recipe_codex_seasonal") {
+      const eventIds = getEventRecipeIds();
+      return Array.from(new Set([...baseIds, ...eventIds]));
+    }
+
+    return baseIds;
   }
   return [];
 }

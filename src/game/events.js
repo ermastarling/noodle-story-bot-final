@@ -83,6 +83,22 @@ export function buildEventRecipesIndex(eventsContent) {
   return index;
 }
 
+export function buildEventRecipeSeasonMap(eventsContent) {
+  const events = eventsContent?.events ?? [];
+  const index = {};
+
+  for (const event of events) {
+    const season = event?.season ?? null;
+    const recipes = event?.event_recipes ?? [];
+    for (const recipe of recipes) {
+      if (!recipe?.recipe_id) continue;
+      index[recipe.recipe_id] = season;
+    }
+  }
+
+  return index;
+}
+
 export function withEventRecipes(content, eventsContent) {
   const eventRecipes = buildEventRecipesIndex(eventsContent);
   if (!Object.keys(eventRecipes).length) return content;

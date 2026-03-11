@@ -49,8 +49,9 @@
           "tier": "common",
           "season": "spring",
           "ingredients": [
-            { "item_id": "broth_ginger", "qty": 1 },
-            { "item_id": "noodles_wheat", "qty": 1 }
+            { "item_id": "broth_herbal", "qty": 1 },
+            { "item_id": "noodles_wheat", "qty": 1 },
+            { "item_id": "scallions", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },

@@ -204,7 +204,6 @@ export async function noodleStaffHandler(interaction) {
 }
 
 export function buildStaffOverviewEmbed(player, server, user) {
-  const leveledStaff = getStaffLevels(player, staffContent);
   const staffCap = getMaxStaffCapacity(player, staffContent);
   const usedSlots = getStaffSlotsUsed(player);
   
@@ -212,30 +211,6 @@ export function buildStaffOverviewEmbed(player, server, user) {
     .setTitle(`${getIcon("staff_management")} Staff Management`)
     .setColor(theme.colors.info);
 
-  // Current staff levels
-  if (leveledStaff.length > 0) {
-    const staffLines = leveledStaff.map(s => {
-      const maxed = s.level >= s.maxLevel;
-      const status = maxed ? "MAX" : `Lv${s.level}/${s.maxLevel}`;
-      const emojiPrefix = [rarityEmoji(s.rarity), categoryEmoji(s.category)].filter(Boolean).join(" ");
-      const prefix = emojiPrefix ? `${emojiPrefix} ` : "";
-      return `${prefix}**${s.name}** — ${status}`;
-    });
-    embed.addFields({
-      name: `Your Staff`,
-      value: staffLines.join("\n"),
-      inline: false
-    });
-  } else {
-    embed.addFields({
-      name: `Your Staff`,
-      value: "_No staff leveled yet._",
-      inline: false
-    });
-  }
-
-  // Effects summary
-  const effectLines = [];
   const upgradeEffects = calculateUpgradeEffects(player, upgradesContent);
   const staffMultiplier = 1 + (upgradeEffects.staff_effect_multiplier || 0);
 
@@ -262,57 +237,53 @@ export function buildStaffOverviewEmbed(player, server, user) {
   const staffLevels = Object.entries(player.staff_levels || {})
     .filter(([, level]) => Number(level) > 0);
 
+  const staffLines = [];
   for (const [staffId, levelRaw] of staffLevels) {
     const staff = staffContent.staff_members?.[staffId];
     if (!staff) continue;
     const level = Math.max(0, Number(levelRaw || 0));
     if (level <= 0) continue;
 
-    if (staffId === "prep_chef") {
-      effectLines.push(`**${staff.name}** — auto-buys missing non-forage ingredients for up to ${level} orders per accept action`);
-      continue;
-    }
+    const maxed = level >= staff.max_level;
+    const status = maxed ? "MAX" : `Lv${level}/${staff.max_level}`;
+    const effectsPerLevel = staff.effects_per_level ?? {};
+    let effectSummary = "";
 
-    if (staffId === "sommelier") {
-      const effectsPerLevel = staff.effects_per_level ?? {};
+    if (staffId === "prep_chef") {
+      effectSummary = `auto-buys missing non-forage ingredients for up to ${level} orders per accept action`;
+    } else if (staffId === "sommelier") {
       const failPerLevel = Number(effectsPerLevel.rare_epic_fail_reduction ?? 0);
       const qualityPerLevel = Number(effectsPerLevel.rare_epic_quality_bonus ?? 0);
       const failTotal = failPerLevel * level * staffMultiplier;
       const qualityTotal = qualityPerLevel * level * staffMultiplier;
-      effectLines.push(
-        `**${staff.name}** — -${(failTotal * 100).toFixed(0)}% rare/epic cook fail, +${(qualityTotal * 100).toFixed(0)}% rare/epic cook quality`
-      );
-      continue;
-    }
-
-    if (staffId === "forager") {
-      const effectsPerLevel = staff.effects_per_level ?? {};
+      effectSummary = `-${(failTotal * 100).toFixed(0)}% rare/epic cook fail, +${(qualityTotal * 100).toFixed(0)}% rare/epic cook quality`;
+    } else if (staffId === "forager") {
       const bonusPerLevel = Number(effectsPerLevel.forage_bonus_items ?? 0);
       const seedPerLevel = Number(effectsPerLevel.forage_seed_chance ?? 0);
       const bonusTotal = bonusPerLevel * level * staffMultiplier;
       const seedTotal = seedPerLevel * level * staffMultiplier;
-      effectLines.push(
-        `**${staff.name}** — +${bonusTotal.toFixed(2)} forage items, +${(seedTotal * 100).toFixed(2)}% seed find chance`
-      );
-      continue;
+      effectSummary = `+${bonusTotal.toFixed(2)} forage items, +${(seedTotal * 100).toFixed(2)}% seed find chance`;
+    } else {
+      const effectPieces = Object.entries(effectsPerLevel)
+        .map(([effectKey, perLevel]) => {
+          const total = perLevel * level * staffMultiplier;
+          return formatStaffEffectValue(effectKey, total);
+        })
+        .filter(Boolean);
+      effectSummary = effectPieces.join(", ");
     }
 
-    const effectsPerLevel = staff.effects_per_level ?? {};
-    for (const [effectKey, perLevel] of Object.entries(effectsPerLevel)) {
-      const total = perLevel * level * staffMultiplier;
-      const formatted = formatStaffEffectValue(effectKey, total);
-      if (!formatted) continue;
-      effectLines.push(`**${staff.name}** — ${formatted}`);
-    }
+    const emojiPrefix = [rarityEmoji(staff.rarity), categoryEmoji(staff.category)].filter(Boolean).join(" ");
+    const prefix = emojiPrefix ? `${emojiPrefix} ` : "";
+    const bonusPart = effectSummary ? ` — ${effectSummary}` : "";
+    staffLines.push(`${prefix}**${staff.name}** — ${status}${bonusPart}`);
   }
 
-  if (effectLines.length > 0) {
-    embed.addFields({
-      name: "\nActive Bonuses",
-      value: effectLines.join("\n"),
-      inline: false
-    });
-  }
+  embed.addFields({
+    name: `Your Staff`,
+    value: staffLines.length ? staffLines.join("\n") : "_No staff leveled yet._",
+    inline: false
+  });
 
   embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${usedSlots}/${staffCap}**`);
   applyOwnerFooter(embed, user);
