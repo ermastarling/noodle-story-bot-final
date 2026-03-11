@@ -2963,6 +2963,8 @@ ephemeral: true
 
 const userId = interaction.user.id;
 
+let seasonRolloverNotice = null;
+
 // Check if this is the status command (which needs ephemeral defer)
 const subCmd = interaction.options?.getSubcommand?.();
 const isStatusCmd = subCmd === "status";
@@ -3134,7 +3136,7 @@ if (player) {
   }
 }
 
-const seasonRolloverNotice = player ? applySeasonRolloverReward(player, server.season) : null;
+seasonRolloverNotice = player ? applySeasonRolloverReward(player, server.season) : null;
 
 /* ---------------- START ---------------- */
 if (sub === "start") {
