@@ -92,9 +92,11 @@ import { getIcon } from "./ui/icons.js";
       }));
     };
 
+    const EmbedCtor = Discord.EmbedBuilder || Discord.MessageEmbed || null;
+
     return embeds.map((embed) => {
       if (!embed) return embed;
-      const safe = embed.toJSON ? new Discord.EmbedBuilder(embed) : embed;
+      const safe = embed.toJSON && EmbedCtor ? new EmbedCtor(embed) : embed;
       const fields = safe?.data?.fields || safe?.fields || [];
       if (fields.length) {
         const newFields = fields.flatMap((f) => chunkField(f));
