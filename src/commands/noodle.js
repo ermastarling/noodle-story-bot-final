@@ -70,7 +70,7 @@ import {
   updateFailStreak
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
-import { getActiveEvent, getActiveEventEffects, getEventWindow, withEventRecipes } from "../game/events.js";
+import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
 import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
@@ -211,7 +211,6 @@ const collectionsContent = loadCollectionsContent();
 const specializationsContent = loadSpecializationsContent();
 const decorContent = loadDecorContent();
 const decorSetsContent = loadDecorSetsContent();
-import { getActiveEvent, getActiveEventEffects, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
 const eventsContent = loadEventsContent();
 const content = withEventRecipes(baseContent, eventsContent);
 const eventRecipeSeasonIndex = buildEventRecipeSeasonMap(eventsContent);
