@@ -213,3 +213,44 @@ export function getCollectionsSummary(player, collectionsContent, contentBundle,
 
   return summary;
 }
+
+// One-time migration: mark recipe collections with any recipes the player already knows/has cooked, including event recipes.
+export function backfillRecipeCollections(player, collectionsContent, contentBundle) {
+  if (!player) return;
+  const collections = ensureCollectionsState(player);
+  if (collections.backfill_event_recipe_progress_done) return;
+
+  const ownedRecipeIds = new Set();
+  (player.known_recipes || []).forEach((id) => id && ownedRecipeIds.add(id));
+
+  // Capture any recipe ids from bowl inventory snapshots too.
+  Object.entries(player.inv_bowls || {}).forEach(([key, bowl]) => {
+    if (key) ownedRecipeIds.add(key);
+    const recipeId = bowl?.recipe_id;
+    if (recipeId) ownedRecipeIds.add(recipeId);
+  });
+
+  const collectionsList = collectionsContent?.collections ?? [];
+  for (const collection of collectionsList) {
+    if (collection.type !== "recipe") continue;
+    const entries = resolveCollectionEntries(collection, contentBundle);
+    const progress = ensureCollectionProgress(collections, collection.collection_id);
+
+    // Ensure all owned recipes are marked complete for this collection.
+    for (const recipeId of entries) {
+      if (ownedRecipeIds.has(recipeId) && !progress.completed_entries.includes(recipeId)) {
+        progress.completed_entries.push(recipeId);
+      }
+    }
+
+    const total = entries.length;
+    if (total > 0 && progress.completed_entries.length >= total) {
+      if (!collections.completed.includes(collection.collection_id)) {
+        collections.completed.push(collection.collection_id);
+      }
+      if (!progress.completed_at) progress.completed_at = nowTs();
+    }
+  }
+
+  collections.backfill_event_recipe_progress_done = true;
+}

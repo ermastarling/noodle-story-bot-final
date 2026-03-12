@@ -82,7 +82,8 @@ import {
   ensureCollectionsState,
   ensureCollectionProgress,
   getCollectionsSummary,
-  resolveCollectionEntries
+  resolveCollectionEntries,
+  backfillRecipeCollections
 } from "../game/collections.js";
 import {
   canSelectSpecialization,
@@ -1718,6 +1719,7 @@ function ensurePlayer(serverId, userId) {
   ensureBadgeState(p);
   grantEventBadgesForKnownRecipes(p, content, badgesContent);
   ensureCollectionsState(p);
+  backfillRecipeCollections(p, collectionsContent, content);
   ensureSpecializationState(p);
   if (!p.seasons) {
     p.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
