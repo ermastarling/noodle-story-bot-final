@@ -254,3 +254,34 @@ export function backfillRecipeCollections(player, collectionsContent, contentBun
 
   collections.backfill_event_recipe_progress_done = true;
 }
+
+// Revalidate collections when content changes (e.g., new regulars/recipes).
+// If new entries were added after a player completed a collection, remove the completion
+// so they must fill the new entries too.
+export function revalidateCollections(player, collectionsContent, contentBundle) {
+  if (!player) return;
+  const collections = ensureCollectionsState(player);
+  const collectionsList = collectionsContent?.collections ?? [];
+
+  for (const collection of collectionsList) {
+    const progress = ensureCollectionProgress(collections, collection.collection_id);
+    const entries = resolveCollectionEntries(collection, contentBundle);
+
+    // Drop any stale entries no longer in the collection definition.
+    progress.completed_entries = progress.completed_entries.filter((entry) => entries.includes(entry));
+
+    const total = entries.length;
+    const isComplete = total > 0 && progress.completed_entries.length >= total;
+
+    if (isComplete) {
+      if (!collections.completed.includes(collection.collection_id)) {
+        collections.completed.push(collection.collection_id);
+      }
+      if (!progress.completed_at) progress.completed_at = nowTs();
+    } else {
+      // Remove completion if new entries were added.
+      collections.completed = collections.completed.filter((id) => id !== collection.collection_id);
+      progress.completed_at = null;
+    }
+  }
+}

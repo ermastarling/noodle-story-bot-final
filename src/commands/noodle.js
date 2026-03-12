@@ -83,7 +83,8 @@ import {
   ensureCollectionProgress,
   getCollectionsSummary,
   resolveCollectionEntries,
-  backfillRecipeCollections
+  backfillRecipeCollections,
+  revalidateCollections
 } from "../game/collections.js";
 import {
   canSelectSpecialization,
@@ -1721,6 +1722,7 @@ function ensurePlayer(serverId, userId) {
   grantEventBadgesForKnownRecipes(p, content, badgesContent);
   ensureCollectionsState(p);
   backfillRecipeCollections(p, collectionsContent, content);
+  revalidateCollections(p, collectionsContent, content);
   ensureSpecializationState(p);
   if (!p.seasons) {
     p.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
@@ -3763,8 +3765,10 @@ if (sub === "recipes") {
   const recipesPerPage = 5;
   const recipePages = Math.max(1, Math.ceil((knownLines.length || 0) / recipesPerPage));
   const totalPages = recipePages + 1; // recipe pages + clues page
+
   const rawPageInput = opt.getInteger("page");
-  const rawPageParam = parts[4];
+  const navParts = interaction.customId?.split?.(":") ?? [];
+  const rawPageParam = navParts[4];
   const isClueNav = rawPageParam === "clues";
   const rawPage = Number.isInteger(rawPageInput) ? rawPageInput : Number(rawPageParam);
   const page = isClueNav

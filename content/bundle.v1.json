@@ -1272,6 +1272,146 @@
         "scroll_drop_chance_small": 0.01
       }
     },
+    "mossy_mason": {
+      "npc_id": "mossy_mason",
+      "name": "Mossy Mason",
+      "rarity": "common",
+      "flavor": "Shoulders dusted with lime, they warm their hands on the bowl before heading back to the scaffolds.",
+      "bonuses": {}
+    },
+    "window_scribe": {
+      "npc_id": "window_scribe",
+      "name": "Window Scribe",
+      "rarity": "common",
+      "flavor": "Paints chalk lettering for shopfronts, studying the steam for brushstroke ideas.",
+      "bonuses": {}
+    },
+    "matchbox_peddler": {
+      "npc_id": "matchbox_peddler",
+      "name": "Matchbox Peddler",
+      "rarity": "common",
+      "flavor": "Coat pockets clink with flint tins; they count sparks in the rising steam before moving on.",
+      "bonuses": {}
+    },
+    "lantern_storyteller": {
+      "npc_id": "lantern_storyteller",
+      "name": "Lantern Storyteller",
+      "rarity": "uncommon",
+      "flavor": "Sets tiny lanterns on the counter and trades folktales for extra napkins.",
+      "bonuses": {}
+    },
+    "canal_boat_hand": {
+      "npc_id": "canal_boat_hand",
+      "name": "Canal Boat Hand",
+      "rarity": "uncommon",
+      "flavor": "Smells of rope and river mist, eating quickly before the next mooring call.",
+      "bonuses": {}
+    },
+    "ember_glassblower": {
+      "npc_id": "ember_glassblower",
+      "name": "Ember Glassblower",
+      "rarity": "uncommon",
+      "flavor": "Palms still warm from the furnace, they study the glaze on bowls like another piece of glass.",
+      "bonuses": {}
+    },
+    "stormwatch_lookout": {
+      "npc_id": "stormwatch_lookout",
+      "name": "Stormwatch Lookout",
+      "rarity": "rare",
+      "flavor": "Keeps one ear on distant thunder and favors broth that cuts through rain-soaked chill.",
+      "bonuses": {}
+    },
+    "skyrail_conductor": {
+      "npc_id": "skyrail_conductor",
+      "name": "Skyrail Conductor",
+      "rarity": "rare",
+      "flavor": "Uniform pressed, clockwork whistle dangling, timing every sip between departures.",
+      "bonuses": {}
+    },
+    "moon_festival_tailor": {
+      "npc_id": "moon_festival_tailor",
+      "name": "Moon Festival Tailor",
+      "rarity": "rare",
+      "flavor": "Hands stained with dye, they hunt for textures and colors to mirror in fabric patterns.",
+      "bonuses": {}
+    },
+    "archive_caretaker": {
+      "npc_id": "archive_caretaker",
+      "name": "Archive Caretaker",
+      "rarity": "epic",
+      "flavor": "Smells of paper and cedar oil; notes every spice like a record to shelve later.",
+      "bonuses": {}
+    },
+    "stone_bridge_musician": {
+      "npc_id": "stone_bridge_musician",
+      "name": "Stone-Bridge Musician",
+      "rarity": "common",
+      "flavor": "Plays for passing boats, warming fingers between songs with a quick bowl.",
+      "bonuses": {}
+    },
+    "harbor_cartographer": {
+      "npc_id": "harbor_cartographer",
+      "name": "Harbor Cartographer",
+      "rarity": "rare",
+      "flavor": "Charts tides and alleyways alike, annotating maps with broth stains.",
+      "bonuses": {}
+    },
+    "cherry_blossom_vendor": {
+      "npc_id": "cherry_blossom_vendor",
+      "name": "Cherry Blossom Vendor",
+      "rarity": "uncommon",
+      "flavor": "Petals in their apron pocket, they chase gentle flavors before the crowds arrive.",
+      "bonuses": {}
+    },
+    "rooftop_gardener": {
+      "npc_id": "rooftop_gardener",
+      "name": "Rooftop Gardener",
+      "rarity": "common",
+      "flavor": "Smells of fresh soil and morning dew, collecting steam as weather notes for seedlings.",
+      "bonuses": {}
+    },
+    "candle_dipper": {
+      "npc_id": "candle_dipper",
+      "name": "Candle Dipper",
+      "rarity": "common",
+      "flavor": "Wax on sleeves, soot on cheeks, savoring broth while wicks cool.",
+      "bonuses": {}
+    },
+    "bell_tower_keeper": {
+      "npc_id": "bell_tower_keeper",
+      "name": "Bell-Tower Keeper",
+      "rarity": "uncommon",
+      "flavor": "Hears the city’s heartbeat through bronze; times their visit between chimes.",
+      "bonuses": {}
+    },
+    "spice_market_sampler": {
+      "npc_id": "spice_market_sampler",
+      "name": "Spice Market Sampler",
+      "rarity": "rare",
+      "flavor": "Pockets full of test sachets, hunting for broths that balance the day’s finds.",
+      "bonuses": {}
+    },
+    "midnight_poet": {
+      "npc_id": "midnight_poet",
+      "name": "Midnight Poet",
+      "rarity": "epic",
+      "flavor": "Writes by lanternlight, tasting lines and noodles until the verse feels right.",
+      "bonuses": {}
+    },
+    "sky_patrol_scout": {
+      "npc_id": "sky_patrol_scout",
+      "name": "Sky Patrol Scout",
+      "rarity": "uncommon",
+      "flavor": "Wind-bitten and alert, they refuel before the next glide along the city rails.",
+      "bonuses": {}
+    },
+    "sand_golem_courier": {
+      "npc_id": "sand_golem_courier",
+      "name": "Sand Golem Courier",
+      "rarity": "rare",
+      "flavor": "Grains fall from their satchel, footprints crisp; they favor broths that cut the dust.",
+      "bonuses": {}
+    },
     "seasonal_herald": {
       "npc_id": "seasonal_herald",
       "name": "Seasonal Herald",
