@@ -39,22 +39,29 @@ function resolveEntries(collection, contentBundle) {
   }
   if (collection.entry_source === "recipes") {
     const tier = collection.tier;
-    const baseIds = Object.values(contentBundle?.recipes ?? {})
-      .filter((r) => !tier || r?.tier === tier)
-      .map((r) => r.recipe_id)
-      .filter(Boolean);
 
-    // Seasonal scrapbook should also count all event recipes.
+    // Seasonal scrapbook: include every seasonal-tagged or event-only recipe across all seasons.
     if (collection.collection_id === "recipe_codex_seasonal") {
       const seasonalAndEventIds = Object.values(contentBundle?.recipes ?? {})
         .filter((r) => r?.recipe_id)
         .filter((r) => r.tier === "seasonal" || r.event_id || r.is_event_recipe || r.season)
         .map((r) => r.recipe_id);
       const eventIds = getEventRecipeIds();
-      return Array.from(new Set([...baseIds, ...seasonalAndEventIds, ...eventIds]));
+      return Array.from(new Set([...seasonalAndEventIds, ...eventIds]));
     }
 
-    return baseIds;
+    const allRecipes = Object.values(contentBundle?.recipes ?? {}).filter((r) => r?.recipe_id);
+    const baseIds = allRecipes
+      .filter((r) => !tier || r?.tier === tier)
+      .map((r) => r.recipe_id);
+
+    // Ensure tiered collections also count all event recipes of that tier (across all seasons).
+    const eventTierIds = allRecipes
+      .filter((r) => r.event_id || r.is_event_recipe)
+      .filter((r) => !tier || r?.tier === tier)
+      .map((r) => r.recipe_id);
+
+    return Array.from(new Set([...baseIds, ...eventTierIds]));
   }
   return [];
 }

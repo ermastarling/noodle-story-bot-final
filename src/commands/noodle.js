@@ -3018,11 +3018,32 @@ overrides?.users?.[name] ??
 (interaction.options?.getUser ? interaction.options.getUser(name) : null)
 };
 
+const withSeasonNotice = (payload = {}) => {
+  if (payload?.__seasonNoticeApplied) return payload;
+  if (!seasonRolloverNotice?.message) return payload;
+  const updated = { ...payload };
+  const notice = seasonRolloverNotice.message;
+
+  const noticeEmbed = buildMenuEmbed({
+    title: `${getIcon("season")} Season Update`,
+    description: notice,
+    user: interaction.member ?? interaction.user
+  });
+
+  if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
+    updated.embeds = [...updated.embeds, noticeEmbed];
+  } else {
+    updated.embeds = [noticeEmbed];
+    if (updated.content === undefined) updated.content = " ";
+  }
+
+  Object.defineProperty(updated, "__seasonNoticeApplied", { value: true, enumerable: false });
+
+  return updated;
+};
+
 const commit = async (payload) => {
-if (seasonRolloverNotice?.message) {
-  const existing = String(payload?.content ?? "").trim();
-  payload = { ...payload, content: existing ? `${seasonRolloverNotice.message}\n\n${existing}` : seasonRolloverNotice.message };
-}
+payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
@@ -4171,10 +4192,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   }
 
   const commitState = async (replyObj) => {
-    if (seasonRolloverNotice?.message) {
-      const existing = String(replyObj?.content ?? "").trim();
-      replyObj.content = existing ? `${seasonRolloverNotice.message}\n\n${existing}` : seasonRolloverNotice.message;
-    }
 
     // Clear temporary recipes if player has coins again (B2)
     const hadTempRecipes = (p.resilience?.temp_recipes?.length || 0) > 0;
@@ -4210,7 +4227,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     // Prepend time catch-up and resilience messages
     let finalContent = replyObj.content || "";
-    let finalEmbeds = replyObj.embeds ? [...replyObj.embeds] : undefined;
+    let finalEmbeds = replyObj.embeds ? [...replyObj.embeds] : [];
 
     const spoilageSet = new Set(spoilageMessages);
     const catchupMsgs = timeCatchup.messages.filter((msg) => !spoilageSet.has(msg));
@@ -4221,14 +4238,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const banner = [catchupMsg].filter(Boolean).join("\n\n");
 
     if (banner) {
-      if (finalEmbeds && finalEmbeds.length > 0) {
-        const first = { ...finalEmbeds[0] };
-        const existing = first.description || "";
-        first.description = existing ? `${banner}\n\n${existing}` : banner;
-        finalEmbeds[0] = first;
-      } else {
-        finalContent = finalContent ? `${banner}\n\n${finalContent}` : banner;
-      }
+      const bannerEmbed = buildMenuEmbed({
+        title: `${getIcon("time")} Update`,
+        description: banner,
+        user: interaction.member ?? interaction.user
+      });
+      finalEmbeds = [bannerEmbed, ...(finalEmbeds ?? [])];
     }
 
     const rescueEmbeds = [];
@@ -4250,14 +4265,20 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       finalEmbeds = [...rescueEmbeds, ...(finalEmbeds ?? [])];
     }
 
+    if (!finalEmbeds || finalEmbeds.length === 0) {
+      finalEmbeds = undefined;
+    }
+
+    const noticeApplied = withSeasonNotice({ ...replyObj, content: finalContent, embeds: finalEmbeds ?? replyObj.embeds });
+
     const out = {
-      ...replyObj,
-      content: finalContent,
-      embeds: finalEmbeds ?? replyObj.embeds,
-      ephemeral: replyObj.ephemeral ?? false,
-      components: replyObj.ephemeral
-        ? (replyObj.components ?? [])
-        : (replyObj.components ?? [noodleMainMenuRow(userId)])
+      ...noticeApplied,
+      content: noticeApplied.content,
+      embeds: noticeApplied.embeds,
+      ephemeral: noticeApplied.ephemeral ?? false,
+      components: noticeApplied.ephemeral
+        ? (noticeApplied.components ?? [])
+        : (noticeApplied.components ?? [noodleMainMenuRow(userId)])
     };
     if (out.embeds) {
       out.embeds = sanitizeEmbedsForDiscord(out.embeds);
