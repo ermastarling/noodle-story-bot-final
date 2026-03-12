@@ -80,7 +80,9 @@ import {
   applyCollectionProgressOnServe,
   applyCollectionProgressOnCook,
   ensureCollectionsState,
-  getCollectionsSummary
+  ensureCollectionProgress,
+  getCollectionsSummary,
+  resolveCollectionEntries
 } from "../game/collections.js";
 import {
   canSelectSpecialization,
@@ -4581,14 +4583,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const collectionsList = collectionsContent?.collections ?? [];
     const lines = collectionsList.map((collection) => {
-      const progress = p.collections?.progress?.[collection.collection_id] ?? { completed_entries: [] };
-      const totalEntries = Array.isArray(collection.entries) && collection.entries.length > 0
-        ? collection.entries.length
-        : (collection.entry_source === "npcs"
-          ? Object.keys(content.npcs ?? {}).length
-          : (collection.entry_source === "recipes"
-            ? Object.values(content.recipes ?? {}).filter((r) => !collection.tier || r?.tier === collection.tier).length
-            : 0));
+      const progress = ensureCollectionProgress(p.collections, collection.collection_id);
+      const entries = resolveCollectionEntries(collection, content);
+      const totalEntries = entries.length;
       const completed = progress.completed_entries?.length ?? 0;
       const percent = totalEntries > 0 ? Math.floor((completed / totalEntries) * 100) : 0;
       const status = percent >= 100 ? getIcon("status_complete") : getIcon("status_incomplete");

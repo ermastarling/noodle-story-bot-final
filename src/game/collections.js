@@ -27,7 +27,7 @@ export function ensureCollectionsState(player) {
   return player.collections;
 }
 
-function ensureCollectionProgress(collections, collectionId) {
+export function ensureCollectionProgress(collections, collectionId) {
   if (!collections.progress[collectionId]) {
     collections.progress[collectionId] = { completed_entries: [], counters: {}, completed_at: null };
   }
@@ -40,7 +40,7 @@ function ensureCollectionProgress(collections, collectionId) {
   return collections.progress[collectionId];
 }
 
-function resolveEntries(collection, contentBundle) {
+export function resolveCollectionEntries(collection, contentBundle) {
   if (Array.isArray(collection.entries) && collection.entries.length > 0) return collection.entries;
   if (collection.entry_source === "npcs") {
     return Object.keys(contentBundle?.npcs ?? {}).filter(Boolean);
@@ -122,7 +122,7 @@ export function applyCollectionProgressOnServe(player, collectionsContent, conte
 
   for (const collection of collectionsList) {
     const progress = ensureCollectionProgress(collections, collection.collection_id);
-    const entries = resolveEntries(collection, contentBundle);
+    const entries = resolveCollectionEntries(collection, contentBundle);
 
     if (collection.type === "npc" && event?.npcArchetype) {
       if (entries.includes(event.npcArchetype) && !progress.completed_entries.includes(event.npcArchetype)) {
@@ -158,7 +158,7 @@ export function applyCollectionProgressOnCook(player, collectionsContent, conten
 
   for (const collection of collectionsList) {
     const progress = ensureCollectionProgress(collections, collection.collection_id);
-    const entries = resolveEntries(collection, contentBundle);
+    const entries = resolveCollectionEntries(collection, contentBundle);
 
     if (collection.type === "recipe" && event?.recipeId) {
       if (entries.includes(event.recipeId) && !progress.completed_entries.includes(event.recipeId)) {
@@ -193,7 +193,7 @@ export function getCollectionsSummary(player, collectionsContent, contentBundle,
 
   const progressList = collectionsList.map((collection) => {
     const progress = ensureCollectionProgress(collections, collection.collection_id);
-    const entries = resolveEntries(collection, contentBundle);
+    const entries = resolveCollectionEntries(collection, contentBundle);
     const totalEntries = entries.length;
     const completedEntries = progress.completed_entries.length;
     const percent = totalEntries > 0 ? Math.floor((completedEntries / totalEntries) * 100) : 0;
