@@ -36,11 +36,12 @@ import { getIcon } from "./ui/icons.js";
     loadDecorSetsContent,
     loadEventsContent
   } = await import("./content/index.js");
-  const { openDb, getPlayer, withPlayerCache, upsertPlayer, getLatestServerIdForUser } = await import("./db/index.js");
+  const { openDb, getPlayer, getPlayerLite, withPlayerCache, upsertPlayer, getLatestServerIdForUser } = await import("./db/index.js");
   const { checkRateLimit } = await import("./infra/rateLimit.js");
   const { emitTelemetry } = await import("./infra/telemetry.js");
   const { getIdempotentResult, putIdempotentResult } = await import("./infra/idempotency.js");
   const { newPlayerProfile } = await import("./game/player.js");
+  const { STARTER_PROFILE } = await import("./constants.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
   const { getKitchenUnlockState, KITCHEN_BROTH_RECIPES } = await import("./game/kitchen.js");
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
@@ -289,6 +290,18 @@ import { getIcon } from "./ui/icons.js";
     }
 
     return out;
+  }
+
+  function getPlayerLiteOrDefault(serverId, userId) {
+    const lite = getPlayerLite(db, serverId, userId);
+    if (lite) return lite;
+    return {
+      user_id: userId,
+      known_recipes: [...(STARTER_PROFILE.known_recipes ?? [])],
+      resilience: {},
+      profile: { badges: [] },
+      shop_level: STARTER_PROFILE.shop_level ?? 1
+    };
   }
 
   async function getKnownServerIds() {
@@ -881,7 +894,7 @@ import { getIcon } from "./ui/icons.js";
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
 
-          const p = getPlayer(db, serverId, userId) ?? newPlayerProfile(userId);
+          const p = getPlayerLiteOrDefault(serverId, userId);
           // Include temporary recipes from resilience
           const permanent = p.known_recipes || [];
           const temporary = p.resilience?.temp_recipes || [];
@@ -912,7 +925,7 @@ import { getIcon } from "./ui/icons.js";
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
 
-          const p = getPlayer(db, serverId, userId) ?? newPlayerProfile(userId);
+          const p = getPlayerLiteOrDefault(serverId, userId);
           const owned = Array.isArray(p.profile?.badges) ? p.profile.badges : [];
           const results = owned
             .map((id) => {
@@ -954,7 +967,7 @@ import { getIcon } from "./ui/icons.js";
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
 
-          const p = getPlayer(db, serverId, userId) ?? newPlayerProfile(userId);
+          const p = getPlayerLiteOrDefault(serverId, userId);
           const allowed = getUnlockedIngredientIds(p, content);
 
           const results = Object.values(content.items ?? {})
@@ -976,7 +989,7 @@ import { getIcon } from "./ui/icons.js";
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
 
-          const p = getPlayer(db, serverId, userId) ?? newPlayerProfile(userId);
+          const p = getPlayerLiteOrDefault(serverId, userId);
           const allowed = getUnlockedIngredientIds(p, content);
           const allowedForage = (FORAGE_ITEM_IDS ?? []).filter(id => allowed.has(id));
 

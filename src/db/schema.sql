@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS players (
   PRIMARY KEY (server_id, user_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_players_user_last_active ON players(user_id, last_active_at);
+
 CREATE TABLE IF NOT EXISTS servers (
   server_id TEXT PRIMARY KEY,
   state_rev INTEGER NOT NULL,
