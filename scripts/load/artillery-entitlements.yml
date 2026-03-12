@@ -1,0 +1,30 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 30
+      arrivalRate: 20
+      rampTo: 100
+      name: ramp
+  defaults:
+    headers:
+      content-type: application/json
+scenarios:
+  - name: discord-entitlements
+    flow:
+      - post:
+          url: "{{ basePath }}/discord/entitlements"
+          json:
+            type: "ENTITLEMENT_CREATE"
+            sku_id: "test_sku"
+            user_id: "{{ userId }}"
+            guild_id: "{{ guildId }}"
+            entitlement_id: "ent-{{ $randomString() }}"
+          headers:
+            x-signature-ed25519: "{{ signature }}"
+            x-signature-timestamp: "{{ timestamp }}"
+    variables:
+      basePath: ""
+      userId: "user-{{ $randomNumber(1,10000) }}"
+      guildId: "guild-{{ $randomNumber(1,1000) }}"
+      signature: ""
+      timestamp: "{{ $timestamp }}"

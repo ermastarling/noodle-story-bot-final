@@ -1026,8 +1026,9 @@ function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlo
     ? ButtonStyle.Secondary
     : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
   const kitchenEmoji = active === "kitchen" ? getButtonEmoji("refresh") : getButtonEmoji("cook");
+  const recipesStyle = active === "recipes" ? ButtonStyle.Primary : ButtonStyle.Secondary;
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(recipesStyle),
     new ButtonBuilder().setCustomId(`noodle:nav:regulars:${userId}`).setLabel("Regulars").setEmoji(getButtonEmoji("chef")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:kitchen:${userId}`)
@@ -3705,8 +3706,12 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 /* ---------------- RECIPES ---------------- */
 if (sub === "recipes") {
   const p = ensurePlayer(serverId, userId);
+  const allRecipes = Object.values(content.recipes ?? {});
+  const totalRecipes = allRecipes.length;
+
   const knownIds = getAvailableRecipes(p);
   const knownSet = new Set(knownIds);
+  const unlockedTotal = (p.known_recipes || []).filter((id) => content.recipes?.[id]).length;
   const rarityOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
   const knownRecipes = knownIds
     .map((id) => content.recipes?.[id])
@@ -3720,7 +3725,13 @@ if (sub === "recipes") {
 
   const knownLines = knownRecipes.map((r) => {
     const tier = r.tier ? ` (${r.tier})` : "";
-    const eventTag = r.event_id ? ` ${getIcon("event")} Event` : "";
+    let eventTag = "";
+    if (r.event_id) {
+      const evt = eventsContent?.events?.find((e) => e.event_id === r.event_id);
+      const badgeIcon = evt?.badge_id ? getIcon(evt.badge_id, getIcon("event")) : getIcon("event");
+      const seasonLabel = evt?.season ? ` ${evt.season.charAt(0).toUpperCase() + evt.season.slice(1)}` : "Event";
+      eventTag = ` ${badgeIcon} ${seasonLabel}`;
+    }
     const ingredients = (r.ingredients ?? [])
       .map((ing) => formatIngredientLabel(ing))
       .join(", ");
@@ -3746,16 +3757,19 @@ if (sub === "recipes") {
     })
     .sort((a, b) => a.localeCompare(b));
 
-  const baseRecipeCount = Object.values(content.recipes ?? {})
-    .filter((recipe) => !recipe?.event_id).length;
-  const unlockedEventRecipeCount = knownRecipes.filter((recipe) => recipe?.event_id).length;
-  const totalRecipes = baseRecipeCount + unlockedEventRecipeCount;
+  const baseRecipeCount = allRecipes.filter((recipe) => !recipe?.event_id).length;
+  const unlockedEventRecipeCount = (p.known_recipes || []).filter((id) => content.recipes?.[id]?.event_id).length;
 
   const recipesPerPage = 5;
   const recipePages = Math.max(1, Math.ceil((knownLines.length || 0) / recipesPerPage));
   const totalPages = recipePages + 1; // recipe pages + clues page
-  const rawPage = opt.getInteger("page") ?? 0;
-  const page = Math.min(Math.max(rawPage, 0), totalPages - 1);
+  const rawPageInput = opt.getInteger("page");
+  const rawPageParam = parts[4];
+  const isClueNav = rawPageParam === "clues";
+  const rawPage = Number.isInteger(rawPageInput) ? rawPageInput : Number(rawPageParam);
+  const page = isClueNav
+    ? totalPages - 1
+    : Math.min(Math.max(Number.isFinite(rawPage) ? rawPage : 0, 0), totalPages - 1);
 
   const isCluePage = page >= recipePages;
   const recipePageIndex = Math.min(page, recipePages - 1);
@@ -3763,7 +3777,7 @@ if (sub === "recipes") {
   const recipeSlice = knownLines.slice(recipeStart, recipeStart + recipesPerPage);
 
   const pageTitle = !isCluePage
-    ? `**Unlocked Recipes (${knownRecipes.length}/${totalRecipes})**${recipePages > 1 ? ` — Page ${recipePageIndex + 1}/${recipePages}` : ""}`
+    ? `**Unlocked Recipes (${unlockedTotal}/${totalRecipes})**${recipePages > 1 ? ` — Page ${recipePageIndex + 1}/${recipePages}` : ""}`
     : `**Clues Collected (${clueEntries.length})**`;
 
   const pageBody = !isCluePage
@@ -3795,7 +3809,12 @@ if (sub === "recipes") {
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page >= totalPages - 1)
+      .setDisabled(page >= totalPages - 1),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:recipes:${userId}:clues`)
+      .setLabel("Clues")
+      .setEmoji(getButtonEmoji("scroll"))
+      .setStyle(isCluePage ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 
   return commit({

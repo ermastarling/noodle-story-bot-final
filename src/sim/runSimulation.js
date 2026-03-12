@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+import { performance } from "perf_hooks";
 import { loadBadgesContent, loadContentBundle, loadSettingsCatalog, loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import { newServerState } from "../game/server.js";
@@ -21,6 +22,7 @@ import { dayKeyUTC } from "../util/time.js";
 const DEFAULTS = {
   days: 30,
   players: 100,
+  guilds: 5,
   ordersPerDay: 8,
   seed: 1337,
   startDate: "2026-01-01",
@@ -38,6 +40,7 @@ function parseArgs(argv) {
     const name = key.slice(2);
     if (name === "days") out.days = Number(value);
     if (name === "players") out.players = Number(value);
+    if (name === "guilds") out.guilds = Number(value);
     if (name === "orders-per-day") out.ordersPerDay = Number(value);
     if (name === "seed") out.seed = Number(value);
     if (name === "start") out.startDate = String(value);
@@ -56,6 +59,38 @@ function buildPlayer(id) {
   const player = newPlayerProfile(id);
   if (!player.lifetime) player.lifetime = {};
   return player;
+}
+
+function createMetrics() {
+  return new Map();
+}
+
+function recordMetric(metrics, name, durationMs) {
+  const entry = metrics.get(name) ?? { count: 0, totalMs: 0, maxMs: 0 };
+  entry.count += 1;
+  entry.totalMs += durationMs;
+  entry.maxMs = Math.max(entry.maxMs, durationMs);
+  metrics.set(name, entry);
+}
+
+function timeSection(metrics, name, fn) {
+  const start = performance.now();
+  const result = fn();
+  const durationMs = performance.now() - start;
+  recordMetric(metrics, name, durationMs);
+  return result;
+}
+
+function summarizeMetrics(metrics) {
+  const out = {};
+  for (const [name, entry] of metrics.entries()) {
+    out[name] = {
+      count: entry.count,
+      avgMs: entry.count ? entry.totalMs / entry.count : 0,
+      maxMs: entry.maxMs
+    };
+  }
+  return out;
 }
 
 function pickOrders(rng, board, count) {
@@ -101,7 +136,7 @@ function serveOrder({ order, player, content, combinedEffects, dayTs, rng, onTim
     effects: combinedEffects
   });
 
-  const quality = rollCookQuality(rng, player, combinedEffects, null, tier);
+  const quality = rollCookQuality(rng, player, combinedEffects, null, order.tier);
   const qualityMult = getQualityMultiplier(quality);
   rewards.coins = Math.floor(rewards.coins * qualityMult);
   rewards.rep = Math.floor(rewards.rep * qualityMult);
@@ -192,30 +227,33 @@ function simulateDay({
   onTimeChance,
   upgradeSpendFraction,
   upgradesContent,
-  staffContent
+  staffContent,
+  metrics
 }) {
   const dayKey = dayKeyUTC(dayTs);
   const season = computeActiveSeason(settings, dayTs);
 
-  for (const player of players) {
+  for (const { player, serverId } of players) {
     const availableRecipes = new Set(getAvailableRecipes(player));
     if (!availableRecipes.size) continue;
 
-    const board = generateOrderBoard({
-      serverId: "sim-server",
-      dayKey,
-      settings,
-      content,
-      activeSeason: season,
-      playerRecipePool: availableRecipes,
-      player
-    });
+    const board = timeSection(metrics, "order_board", () =>
+      generateOrderBoard({
+        serverId,
+        dayKey,
+        settings,
+        content,
+        activeSeason: season,
+        playerRecipePool: availableRecipes,
+        player
+      })
+    );
 
     const playerRng = makeStreamRng({
       mode: "seeded",
       seed: dayIndex + 1,
       streamName: "sim-orders",
-      serverId: "sim-server",
+      serverId,
       dayKey,
       userId: player.user_id
     });
@@ -226,26 +264,30 @@ function simulateDay({
     const combinedEffects = calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
 
     for (const order of picks) {
-      serveOrder({
-        order,
-        player,
-        content,
-        combinedEffects,
-        dayTs,
-        rng: playerRng,
-        onTimeChance,
-        activeSeason: season,
-        simSeed: dayIndex + 1
-      });
+      timeSection(metrics, "serve_order", () =>
+        serveOrder({
+          order,
+          player,
+          content,
+          combinedEffects,
+          dayTs,
+          rng: playerRng,
+          onTimeChance,
+          activeSeason: season,
+          simSeed: dayIndex + 1
+        })
+      );
     }
 
-    unlockBadges(player, badgesContent);
-    purchaseUpgrades({
-      player,
-      upgradesContent,
-      rng: playerRng,
-      spendFraction: upgradeSpendFraction
-    });
+    timeSection(metrics, "unlock_badges", () => unlockBadges(player, badgesContent));
+    timeSection(metrics, "purchase_upgrades", () =>
+      purchaseUpgrades({
+        player,
+        upgradesContent,
+        rng: playerRng,
+        spendFraction: upgradeSpendFraction
+      })
+    );
   }
 
   return { dayKey, season };
@@ -289,13 +331,21 @@ function main() {
   const badgesContent = loadBadgesContent();
   const upgradesContent = loadUpgradesContent();
   const staffContent = loadStaffContent();
+  const metrics = createMetrics();
 
-  const serverState = newServerState("sim-server");
-  serverState.settings = settings;
+  const guildCount = Math.max(1, Number(config.guilds) || DEFAULTS.guilds);
+  const guildIds = Array.from({ length: guildCount }, (_, i) => `sim-guild-${i + 1}`);
+  const serverStates = new Map();
+  for (const gid of guildIds) {
+    const serverState = newServerState(gid);
+    serverState.settings = settings;
+    serverStates.set(gid, serverState);
+  }
 
   const players = [];
   for (let i = 0; i < config.players; i += 1) {
-    players.push(buildPlayer(`sim-user-${i + 1}`));
+    const serverId = guildIds[i % guildIds.length];
+    players.push({ player: buildPlayer(`sim-user-${i + 1}`), serverId });
   }
 
   const startTs = Date.parse(config.startDate + "T00:00:00Z");
@@ -316,7 +366,8 @@ function main() {
       onTimeChance: config.onTimeChance,
       upgradeSpendFraction: config.upgradeSpendFraction,
       upgradesContent,
-      staffContent
+      staffContent,
+      metrics
     });
     dayResults.push(result);
   }
@@ -325,13 +376,15 @@ function main() {
   const output = {
     config,
     days: dayResults,
-    summary
+    summary,
+    metrics: summarizeMetrics(metrics)
   };
 
   const outPath = path.resolve(process.cwd(), config.output);
   fs.writeFileSync(outPath, JSON.stringify(output, null, 2));
   console.log(`Simulation complete. Wrote ${outPath}`);
   console.log(`Avg coins: ${summary.coins.avg.toFixed(2)} | Avg level: ${summary.level.avg.toFixed(2)} | Avg rep: ${summary.rep.avg.toFixed(2)}`);
+  console.log(`Metrics (avg ms):`, Object.fromEntries(Object.entries(output.metrics).map(([k, v]) => [k, v.avgMs.toFixed(3)])));
 }
 
 main();
