@@ -8,6 +8,7 @@ import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
 import { noodleMainMenuRow } from "./noodle.js";
 import { buildStaffOverviewEmbed } from "./noodleStaff.js";
 import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../game/kitchen.js";
+import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "../game/garden.js";
 import {
   purchaseUpgrade,
   calculateUpgradeCost,
@@ -147,7 +148,7 @@ function staffCategoryIconId(category) {
   return "category_default";
 }
 
-function buildCategoryButtonsRows(userId, activeCategory = null, source = null) {
+function buildCategoryButtonsRows(userId, activeCategory = null, source = null, { disabled = new Set() } = {}) {
   const categories = [
     { id: "staff", label: "Staff", icon: "staff_management" },
     { id: "kitchen", label: "Kitchen", icon: "category_kitchen" },
@@ -167,6 +168,7 @@ function buildCategoryButtonsRows(userId, activeCategory = null, source = null) 
         .setLabel(cat.label)
         .setEmoji(getButtonEmoji(cat.icon))
       .setStyle(cat.id === activeCategory ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setDisabled(disabled.has(cat.id))
   );
 
   const rows = [];
@@ -264,6 +266,7 @@ function buildUpgradesOverviewEmbed(player, user) {
   const effects = calculateUpgradeEffects(player, upgradesContent);
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
   const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
+  const gardenUnlocked = isGardenUnlocked(player);
   
   const embed = new EmbedBuilder()
     .setTitle(`${getIcon("upgrades")} Shop Upgrades`)
@@ -500,8 +503,12 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
 
 function buildUpgradesComponents(userId, player, { categoryId = null, staffRarity = "common", source = null } = {}) {
   const rows = [];
+  const gardenUnlocked = isGardenUnlocked(player);
+  const disabledCats = new Set();
+  if (!gardenUnlocked) disabledCats.add("garden");
+
   if (categoryId !== "staff") {
-    rows.push(...buildCategoryButtonsRows(userId, categoryId, source));
+    rows.push(...buildCategoryButtonsRows(userId, categoryId, source, { disabled: disabledCats }));
   }
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
   const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
@@ -562,6 +569,7 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
     : Object.entries(upgradesByCategory);
 
   for (const [catId, categoryData] of categoryEntries) {
+    if (catId === "garden" && !gardenUnlocked) continue;
     if (!categoryData?.upgrades) continue;
     for (const upgrade of categoryData.upgrades || []) {
       const isBrothUpgrade = KITCHEN_BROTH_UPGRADE_IDS.has(upgrade.upgradeId);
