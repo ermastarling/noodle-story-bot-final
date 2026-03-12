@@ -12,6 +12,14 @@ function getEventRecipeIds() {
     .filter(Boolean);
 }
 
+function getEventRecipeIdsByTier(tier) {
+  const events = eventsContentCache?.events ?? [];
+  return events
+    .flatMap((evt) => evt?.event_recipes ?? [])
+    .filter((r) => r?.recipe_id && (!tier || r?.tier === tier))
+    .map((r) => r.recipe_id);
+}
+
 export function ensureCollectionsState(player) {
   if (!player.collections) player.collections = { completed: [], progress: {} };
   if (!Array.isArray(player.collections.completed)) player.collections.completed = [];
@@ -61,7 +69,10 @@ function resolveEntries(collection, contentBundle) {
       .filter((r) => !tier || r?.tier === tier)
       .map((r) => r.recipe_id);
 
-    return Array.from(new Set([...baseIds, ...eventTierIds]));
+    // Add any event recipes from events content in case the content bundle omitted them.
+    const eventTierIdsFromEvents = getEventRecipeIdsByTier(tier);
+
+    return Array.from(new Set([...baseIds, ...eventTierIds, ...eventTierIdsFromEvents]));
   }
   return [];
 }

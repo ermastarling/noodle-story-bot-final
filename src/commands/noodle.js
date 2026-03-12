@@ -3427,6 +3427,14 @@ if (sub === "pantry") {
       ? `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`
       : (kitchenJustUnlocked ? `${getIcon("cook")} Kitchen unlocked! Simmer broths with forageables in the Kitchen.` : null);
 
+    const gardenLine = !gardenUnlocked
+      ? `${getIcon("tree")} Garden unlocks at shop level ${GARDEN_UNLOCK_LEVEL}.`
+      : null;
+
+    const unlockLine = !kitchenUnlocked
+      ? [gardenLine, `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`].filter(Boolean).join("\n")
+      : (gardenUnlocked ? null : gardenLine);
+
     const viewingIngredients = safePage < ingredientPages;
     const spoilageNotice = viewingIngredients
       ? "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage."
@@ -3434,7 +3442,7 @@ if (sub === "pantry") {
 
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
-      kitchenLine,
+      unlockLine ?? kitchenLine,
       spoilageNotice
     ].filter(Boolean).join("\n\n");
 
@@ -3468,7 +3476,7 @@ if (sub === "pantry") {
       const bowlsValue = bowlChunks[Math.min(bowlPage, bowlChunks.length - 1)] ?? bowlsBlock;
       pantryEmbed.addFields(
         {
-          name: "Cooked Bowls",
+          name: " ",
           value: bowlsValue,
           inline: false
         },
