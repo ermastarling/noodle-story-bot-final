@@ -46,8 +46,12 @@ function resolveEntries(collection, contentBundle) {
 
     // Seasonal scrapbook should also count all event recipes.
     if (collection.collection_id === "recipe_codex_seasonal") {
+      const seasonalAndEventIds = Object.values(contentBundle?.recipes ?? {})
+        .filter((r) => r?.recipe_id)
+        .filter((r) => r.tier === "seasonal" || r.event_id || r.is_event_recipe || r.season)
+        .map((r) => r.recipe_id);
       const eventIds = getEventRecipeIds();
-      return Array.from(new Set([...baseIds, ...eventIds]));
+      return Array.from(new Set([...baseIds, ...seasonalAndEventIds, ...eventIds]));
     }
 
     return baseIds;

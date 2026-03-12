@@ -1730,31 +1730,34 @@ function applySeasonRolloverReward(player, currentSeason) {
   }
 
   const previousSeason = player.seasons.last_seen ?? null;
+  const seasonChanged = previousSeason && previousSeason !== currentSeason;
   player.seasons.last_seen = currentSeason;
 
-  if (!previousSeason || previousSeason === currentSeason) return null;
-
-  const eventRecipeIds = Object.entries(eventRecipeSeasonIndex || {})
-    .filter(([, season]) => season === previousSeason)
-    .map(([id]) => id);
-
-  if (!eventRecipeIds.length) return null;
-
-  const eventRecipeSet = new Set(eventRecipeIds);
   const invBowls = player.inv_bowls ?? {};
+  const getRecipeSeason = (recipeId) => eventRecipeSeasonIndex?.[recipeId] ?? content?.recipes?.[recipeId]?.season ?? null;
+
   let bowlCount = 0;
   const clearedKeys = [];
+  let fromSeason = previousSeason;
 
+  // Clear any cooked bowls tied to a season that is no longer active.
   for (const [key, bowl] of Object.entries(invBowls)) {
-    if (eventRecipeSet.has(bowl?.recipe_id)) {
-      const qty = Math.max(0, Number(bowl?.qty || 0));
-      bowlCount += qty;
-      clearedKeys.push(key);
-    }
+    const recipeSeason = getRecipeSeason(bowl?.recipe_id);
+    if (!recipeSeason) continue;
+    if (recipeSeason === currentSeason) continue;
+
+    const qty = Math.max(0, Number(bowl?.qty || 0));
+    if (!qty) continue;
+
+    bowlCount += qty;
+    clearedKeys.push(key);
+    fromSeason = fromSeason ?? recipeSeason;
   }
 
-  // Record that we checked this rollover even if no bowls were found.
-  player.seasons.last_rewarded_from = previousSeason;
+  const rewardFromSeason = fromSeason ?? (seasonChanged ? previousSeason : null);
+  if (rewardFromSeason) {
+    player.seasons.last_rewarded_from = rewardFromSeason;
+  }
 
   if (bowlCount <= 0) return null;
 
@@ -1777,8 +1780,12 @@ function applySeasonRolloverReward(player, currentSeason) {
 
   player.seasons.last_rewarded_at = nowTs();
 
-  const friendlySeason = previousSeason.charAt(0).toUpperCase() + previousSeason.slice(1);
-  const message = `${getIcon("season")} As ${friendlySeason} wrapped up, your event bowls found cozy homes. Reward: **${coins}c**, **${rep} REP**, **${sxp} SXP**.`;
+  const friendlyFrom = rewardFromSeason
+    ? rewardFromSeason.charAt(0).toUpperCase() + rewardFromSeason.slice(1)
+    : "Last season";
+  const friendlyCurrent = currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1);
+  const bowlLabel = `Cleared ${bowlCount} bowl${bowlCount === 1 ? "" : "s"}.`;
+  const message = `${getIcon("season")} As ${friendlyFrom} hands the ladle to ${friendlyCurrent}, your event bowls found cozy homes. ${bowlLabel} Reward: **${coins}c**, **${rep} REP**, **${sxp} SXP**.`;
 
   return { message, leveled, cleared: clearedKeys.length, bowlsCleared: bowlCount };
 }
@@ -3399,10 +3406,15 @@ if (sub === "pantry") {
       ? `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`
       : (kitchenJustUnlocked ? `${getIcon("cook")} Kitchen unlocked! Simmer broths with forageables in the Kitchen.` : null);
 
+    const viewingIngredients = safePage < ingredientPages;
+    const spoilageNotice = viewingIngredients
+      ? "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage."
+      : null;
+
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
       kitchenLine,
-      "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage."
+      spoilageNotice
     ].filter(Boolean).join("\n\n");
 
     const pantryEmbed = buildMenuEmbed({
