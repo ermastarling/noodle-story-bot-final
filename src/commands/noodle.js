@@ -1561,17 +1561,9 @@ function getKitchenBrothItems(player) {
   const marketBroths = brothItems.filter((item) => String(item?.acquisition ?? "").toLowerCase() === "market");
   const kitchenBroths = brothItems.filter((item) => String(item?.acquisition ?? "").toLowerCase() === "kitchen");
 
-  const eligibleKitchenIds = new Set();
-  if (player?.inv_ingredients) {
-    for (const [brothId, recipe] of Object.entries(KITCHEN_BROTH_RECIPES ?? {})) {
-      const needs = (recipe ?? []).map((ing) => ing?.item_id).filter(Boolean);
-      const hasIngredient = needs.some((id) => (player.inv_ingredients?.[id] ?? 0) > 0);
-      if (hasIngredient) eligibleKitchenIds.add(brothId);
-    }
-  }
-
-  const eligibleKitchenBroths = kitchenBroths.filter((item) => eligibleKitchenIds.has(item?.item_id));
-  return [...marketBroths, ...eligibleKitchenBroths].sort(byTierThenName);
+  // Show all kitchen broths the player can potentially simmer, even if they don't yet have ingredients on hand.
+  // The craftability check later will indicate if they can actually start it.
+  return [...marketBroths, ...kitchenBroths].sort(byTierThenName);
 }
 
 function formatDurationShort(ms) {
@@ -2136,14 +2128,22 @@ function getUnlockedIngredientIds(player, contentBundle) {
   const out = new Set();
   // Use getAvailableRecipes to include both permanent and temporary recipes
   const known = getAvailableRecipes(player);
+  const knownSet = new Set(known);
 
-  for (const recipeId of known) {
+  const addRecipeIngredients = (recipeId) => {
     const r = contentBundle.recipes?.[recipeId];
-    if (!r) continue;
-
+    if (!r) return;
     for (const ing of r.ingredients ?? []) {
       if (ing?.item_id) out.add(ing.item_id);
     }
+  };
+
+  // All known recipes
+  for (const recipeId of knownSet) addRecipeIngredients(recipeId);
+
+  // Ensure fishing recipes that just unlocked contribute their forageables immediately
+  for (const recipeId of FISHING_RECIPE_IDS) {
+    if (knownSet.has(recipeId)) addRecipeIngredients(recipeId);
   }
 
   // If the kitchen is unlocked, also expose forageables needed for unlocked broths

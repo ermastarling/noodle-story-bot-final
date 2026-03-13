@@ -267,14 +267,20 @@ import { getIcon } from "./ui/icons.js";
   function getUnlockedIngredientIds(player, content) {
     const out = new Set();
     const known = Array.isArray(player?.known_recipes) ? player.known_recipes : [];
+    const knownSet = new Set(known);
 
-    for (const recipeId of known) {
+    const addRecipeIngredients = (recipeId) => {
       const r = content.recipes?.[recipeId];
-      if (!r) continue;
-
+      if (!r) return;
       for (const ing of (r.ingredients ?? [])) {
         if (ing?.item_id) out.add(ing.item_id);
       }
+    };
+
+    for (const recipeId of knownSet) addRecipeIngredients(recipeId);
+
+    for (const recipeId of FISHING_RECIPE_IDS) {
+      if (knownSet.has(recipeId)) addRecipeIngredients(recipeId);
     }
 
     // If the kitchen is unlocked, also expose forageables needed for unlocked broths
