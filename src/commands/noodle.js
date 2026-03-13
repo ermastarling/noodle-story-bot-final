@@ -1587,7 +1587,7 @@ function formatDurationShort(ms) {
   return `${seconds}s`;
 }
 
-function buildKitchenViewPayload({ player, user, userId, server = null, pendingMessages = [], banner = null, now = nowTs(), kitchenUnlocked = false, kitchenJustUnlocked = false, effects = {} }) {
+function buildKitchenViewPayload({ player, user, userId, server = null, pendingMessages = [], banner = null, now = nowTs(), kitchenUnlocked = false, kitchenJustUnlocked = false, effects = {}, page = 0 }) {
   ensureKitchenState(player);
   const status = getKitchenStatus(player, now);
   const batches = status.batches ?? [];
@@ -1710,7 +1710,13 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     }
   );
 
-  const options = recipePlans.map(({ item, plan, recipe, craftableCount }) => {
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(recipePlans.length / pageSize));
+  const safePage = Math.min(Math.max(Number(page ?? 0), 0), totalPages - 1);
+
+  const pagePlans = recipePlans.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  const options = pagePlans.map(({ item, plan, recipe, craftableCount }) => {
     const ingTokens = (recipe ?? []).map((ing) => {
       const have = Math.max(0, Number(player?.inv_ingredients?.[ing.item_id] ?? 0));
       const name = displayItemName(ing.item_id);
@@ -1738,7 +1744,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     }
 
     return option;
-  }).slice(0, 25);
+  });
 
   const components = [];
   const selectRow = new ActionRowBuilder().addComponents(
@@ -1749,6 +1755,24 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
       .addOptions(options.length ? options : [{ label: "No broths available", value: "none", description: "Missing broth data" }])
   );
   components.push(selectRow);
+
+  if (totalPages > 1) {
+    const navRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:kitchen:${userId}:${safePage - 1}`)
+        .setLabel("Prev")
+        .setEmoji(getButtonEmoji("back"))
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage <= 0),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:kitchen:${userId}:${safePage + 1}`)
+        .setLabel("Next")
+        .setEmoji(getButtonEmoji("next"))
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage >= totalPages - 1)
+    );
+    components.push(navRow);
+  }
 
   if (readyBatches.length > 0) {
     const collectRow = new ActionRowBuilder().addComponents(
@@ -1763,6 +1787,12 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   }
 
   components.push(noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, active: "kitchen" }), noodleMainMenuRow(userId));
+
+  if (totalPages > 1) {
+    const pageLabel = `Broths ${safePage + 1}/${totalPages}`;
+    const existingFooter = embed?.data?.footer?.text ?? embed?.footer?.text ?? "";
+    embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
+  }
 
   return { content: " ", embeds: [embed], components };
 }
@@ -3172,8 +3202,11 @@ const withSeasonNotice = (payload = {}) => {
 };
 
 const commit = async (payload) => {
-payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user);
-payload = withSeasonNotice(payload);
+  const unlockApplied = payload?.__unlockNoticeApplied;
+  if (!unlockApplied) {
+    payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user);
+  }
+  payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
@@ -3660,6 +3693,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     const s = ensureServer(serverId);
     unlockNoticePlayer = p;
     const now = nowTs();
+    const page = opt.getInteger("page") ?? 0;
     const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
 
@@ -3708,6 +3742,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       kitchenUnlocked,
       kitchenJustUnlocked,
       effects: combinedEffects,
+      page,
       ...overrides
     });
 
@@ -4375,6 +4410,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   const commitState = async (replyObj) => {
 
+    const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user);
+    if (replyWithUnlock && typeof replyWithUnlock === "object") {
+      Object.defineProperty(replyWithUnlock, "__unlockNoticeApplied", { value: true, enumerable: false });
+    }
+
     // Clear temporary recipes if player has coins again (B2)
     const hadTempRecipes = (p.resilience?.temp_recipes?.length || 0) > 0;
     clearTemporaryRecipes(p);
@@ -4408,8 +4448,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     // Prepend time catch-up and resilience messages
-    let finalContent = replyObj.content || "";
-    let finalEmbeds = replyObj.embeds ? [...replyObj.embeds] : [];
+    let finalContent = replyWithUnlock.content || "";
+    let finalEmbeds = replyWithUnlock.embeds ? [...replyWithUnlock.embeds] : [];
 
     const spoilageSet = new Set(spoilageMessages);
     const catchupMsgs = timeCatchup.messages.filter((msg) => !spoilageSet.has(msg));
@@ -4451,7 +4491,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       finalEmbeds = undefined;
     }
 
-    const noticeApplied = withSeasonNotice({ ...replyObj, content: finalContent, embeds: finalEmbeds ?? replyObj.embeds });
+    const noticeApplied = withSeasonNotice({ ...replyWithUnlock, content: finalContent, embeds: finalEmbeds ?? replyWithUnlock.embeds });
 
     const out = {
       ...noticeApplied,
@@ -4469,9 +4509,6 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       out.embeds = applyGreenButtonFooter(out.embeds, out.components);
     }
 
-    if (db) {
-      putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
-    }
     if (db) {
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
     }
@@ -5019,7 +5056,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (rejectedText) description += rejectedText;
     const forageEmbed = buildMenuEmbed({
       title: `${getIcon("forage")} Forage`,
-      description: `${header}${lines.join("\n")}${rejectedText}${tutorialSuffix(p)}`,
+      description: `${header}${bodyLines.join("\n\n")}${rejectedText}${tutorialSuffix(p)}`,
       user: interaction.member ?? interaction.user,
       color: theme.colors.success
     });
