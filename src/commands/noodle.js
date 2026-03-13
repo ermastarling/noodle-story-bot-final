@@ -3891,6 +3891,9 @@ if (sub === "recipes") {
   const allRecipeIds = new Set(Object.keys(content.recipes ?? {}));
   for (const rid of FISHING_RECIPE_IDS) allRecipeIds.add(rid);
   const totalRecipes = allRecipeIds.size;
+  const allRecipes = [...allRecipeIds]
+    .map((id) => content.recipes?.[id])
+    .filter(Boolean);
 
   const knownIds = getAvailableRecipes(p);
   const knownSet = new Set(knownIds);
@@ -5001,7 +5004,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const groupedLines = [
       fishLines.length ? `**Fish**\n${fishLines.join("\n")}` : null,
       seafoodLines.length ? `**Seafood**\n${seafoodLines.join("\n")}` : null,
-      otherLines.length ? `**Other**\n${otherLines.join("\n")}` : null
+      otherLines.length ? `${otherLines.join("\n")}` : null
     ].filter(Boolean);
 
     const header = itemId
