@@ -32,6 +32,8 @@ export const MARKET_ITEM_IDS = [
   "broth_chilled_citrus",
   "broth_pumpkin",
   "broth_creamy_hearth",
+  "broth_fish_clear",
+  "broth_seafood_hearty",
 
   // Noodles
   "noodles_wheat",
