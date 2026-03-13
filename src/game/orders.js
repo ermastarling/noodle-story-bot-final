@@ -197,6 +197,36 @@ function getPlayerRecipePool(playerState) {
   return new Set(tempRecipes.length > 0 ? tempRecipes : [...permanentRecipes, ...tempRecipes]);
 }
 
+export function generateOrderBoard({
+  serverId,
+  dayKey,
+  settings,
+  content,
+  activeSeason,
+  playerRecipePool,
+  player,
+  activeEventId = null
+}) {
+  const combinedEffects = player
+    ? calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects)
+    : null;
+  const totalCount = computeOrderCount(settings, combinedEffects);
+
+  const { orders } = generateOrdersStream({
+    serverId,
+    dayKey,
+    settings,
+    content,
+    activeSeason,
+    playerRecipePool,
+    player,
+    activeEventId,
+    totalCount
+  });
+
+  return orders;
+}
+
 export function ensureDailyOrders(serverState, settings, content, playerRecipePool, serverId, activeEventId = null) {
   const dayKey = dayKeyUTC();
   if (serverState.orders_day === dayKey && Array.isArray(serverState.order_board)) return serverState;

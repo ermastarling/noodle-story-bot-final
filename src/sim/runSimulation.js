@@ -3,7 +3,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { performance } from "perf_hooks";
-import { loadBadgesContent, loadContentBundle, loadSettingsCatalog, loadStaffContent, loadUpgradesContent } from "../content/index.js";
+import {
+  loadBadgesContent,
+  loadContentBundle,
+  loadEventsContent,
+  loadQuestsContent,
+  loadSettingsCatalog,
+  loadStaffContent,
+  loadUpgradesContent
+} from "../content/index.js";
+import { withEventRecipes } from "../game/events.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import { newServerState } from "../game/server.js";
 import { newPlayerProfile } from "../game/player.js";
@@ -16,6 +25,9 @@ import { calculateStaffEffects } from "../game/staff.js";
 import { getQualityMultiplier, rollCookQuality } from "../game/cooking.js";
 import { unlockBadges } from "../game/badges.js";
 import { applyDiscovery, applyNpcDiscoveryBuff, rollRecipeDiscovery } from "../game/discovery.js";
+import { rollForageDrops, applyDropsToInventory } from "../game/forage.js";
+import { rollMarket, rollPlayerMarketStock } from "../game/market.js";
+import { ensureQuests, applyQuestProgress, claimCompletedQuests } from "../game/quests.js";
 import { makeStreamRng, rngBetween } from "../util/rng.js";
 import { dayKeyUTC } from "../util/time.js";
 
@@ -23,12 +35,14 @@ const DEFAULTS = {
   days: 30,
   players: 100,
   guilds: 5,
-  ordersPerDay: 8,
+  ordersPerDay: 150,
   seed: 1337,
   startDate: "2026-01-01",
   output: "sim-output.json",
   onTimeChance: 0.7,
-  upgradeSpendFraction: 0.8
+  upgradeSpendFraction: 1.0,
+  includeEvents: 1,
+  seasonMode: "rolling_days"
 };
 
 function parseArgs(argv) {
@@ -47,6 +61,8 @@ function parseArgs(argv) {
     if (name === "output") out.output = String(value);
     if (name === "on-time") out.onTimeChance = Math.max(0, Math.min(1, Number(value)));
     if (name === "upgrade-spend") out.upgradeSpendFraction = Math.max(0, Math.min(1, Number(value)));
+    if (name === "include-events") out.includeEvents = Number(value) ? 1 : 0;
+    if (name === "season-mode") out.seasonMode = String(value);
   }
   return out;
 }
@@ -104,7 +120,7 @@ function pickOrders(rng, board, count) {
   return picks;
 }
 
-function serveOrder({ order, player, content, combinedEffects, dayTs, rng, onTimeChance, activeSeason, simSeed }) {
+function serveOrder({ order, player, content, combinedEffects, dayTs, rng, onTimeChance, activeSeason, activeEventId, simSeed }) {
   const recipe = content.recipes?.[order.recipe_id];
   const isLimited = Boolean(order.is_limited_time);
   const speedWindowSeconds = order.speed_window_seconds ?? 120;
@@ -173,11 +189,12 @@ function serveOrder({ order, player, content, combinedEffects, dayTs, rng, onTim
       npcArchetype: order.npc_archetype,
       tier: order.tier,
       rng: discoveryRng,
-      activeSeason
+      activeSeason,
+      activeEventId
     });
 
     for (const discovery of discoveries ?? []) {
-      applyDiscovery(player, discovery, content, discoveryRng);
+        applyDiscovery(player, discovery, content, discoveryRng);
     }
   }
 }
@@ -201,15 +218,19 @@ function findAffordableUpgrades(player, upgradesContent, budget) {
 function purchaseUpgrades({ player, upgradesContent, rng, spendFraction }) {
   const budget = Math.floor((player.coins ?? 0) * spendFraction);
   let remaining = Math.min(player.coins ?? 0, budget);
+  const tried = new Set();
 
   while (remaining > 0) {
-    const options = findAffordableUpgrades(player, upgradesContent, remaining);
+    const options = findAffordableUpgrades(player, upgradesContent, remaining).filter(opt => !tried.has(opt.upgradeId));
     if (!options.length) break;
 
     const cheapest = options.filter((opt) => opt.cost === options[0].cost);
     const pick = cheapest[Math.floor(rng() * cheapest.length)];
     const result = purchaseUpgrade(player, pick.upgradeId, upgradesContent);
-    if (!result?.success) break;
+    if (!result?.success) {
+      tried.add(pick.upgradeId);
+      continue;
+    }
 
     remaining = Math.max(0, remaining - result.cost);
   }
@@ -221,6 +242,7 @@ function simulateDay({
   settings,
   content,
   badgesContent,
+  questsContent,
   players,
   rng,
   ordersPerDay,
@@ -228,14 +250,57 @@ function simulateDay({
   upgradeSpendFraction,
   upgradesContent,
   staffContent,
-  metrics
+  metrics,
+  serverStates
 }) {
   const dayKey = dayKeyUTC(dayTs);
   const season = computeActiveSeason(settings, dayTs);
 
+  for (const [serverId, serverState] of serverStates.entries()) {
+    timeSection(metrics, "market_roll", () => rollMarket({ serverId, content, serverState, eventEffects: null }));
+  }
+
   for (const { player, serverId } of players) {
     const availableRecipes = new Set(getAvailableRecipes(player));
     if (!availableRecipes.size) continue;
+
+    const serverState = serverStates?.get(serverId) || null;
+    const activeEventId = serverState?.active_event_id ?? null;
+
+    timeSection(metrics, "quests_assign", () => ensureQuests(player, questsContent, player.user_id, dayTs));
+
+    const forageDrops = timeSection(metrics, "forage", () =>
+      rollForageDrops({ serverId, userId: player.user_id, picks: 2 })
+    );
+    timeSection(metrics, "forage_apply", () => applyDropsToInventory(player, forageDrops));
+    applyQuestProgress(player, questsContent, player.user_id, { type: "forage", amount: 1 }, dayTs);
+
+    timeSection(metrics, "market_stock", () =>
+      rollPlayerMarketStock({
+        userId: player.user_id,
+        serverId,
+        content,
+        playerState: player,
+        eventEffects: null,
+        orderCountHint: ordersPerDay,
+        baseOrders: 100
+      })
+    );
+
+    const prices = serverState?.market_prices || {};
+    const affordable = Object.entries(prices)
+      .filter(([itemId, price]) => (player.market_stock?.[itemId] ?? 0) > 0 && price > 0 && (player.coins ?? 0) >= price)
+      .sort((a, b) => a[1] - b[1]);
+
+    if (affordable.length) {
+      const [buyItemId, price] = affordable[0];
+      const purchaseResult = applyDropsToInventory(player, { [buyItemId]: 1 });
+      if (purchaseResult?.status !== "blocked") {
+        player.coins = Math.max(0, (player.coins ?? 0) - price);
+        player.market_stock[buyItemId] = Math.max(0, (player.market_stock[buyItemId] ?? 0) - 1);
+        applyQuestProgress(player, questsContent, player.user_id, { type: "buy", amount: 1 }, dayTs);
+      }
+    }
 
     const board = timeSection(metrics, "order_board", () =>
       generateOrderBoard({
@@ -245,7 +310,8 @@ function simulateDay({
         content,
         activeSeason: season,
         playerRecipePool: availableRecipes,
-        player
+        player,
+        activeEventId
       })
     );
 
@@ -274,9 +340,11 @@ function simulateDay({
           rng: playerRng,
           onTimeChance,
           activeSeason: season,
+          activeEventId,
           simSeed: dayIndex + 1
         })
       );
+      applyQuestProgress(player, questsContent, player.user_id, { type: "serve", amount: 1 }, dayTs);
     }
 
     timeSection(metrics, "unlock_badges", () => unlockBadges(player, badgesContent));
@@ -288,13 +356,15 @@ function simulateDay({
         spendFraction: upgradeSpendFraction
       })
     );
+
+    claimCompletedQuests(player);
   }
 
   return { dayKey, season };
 }
 
 function summarizePlayers(players) {
-  const stats = players.map((player) => ({
+  const stats = players.map(({ player }) => ({
     userId: player.user_id,
     coins: player.coins ?? 0,
     rep: player.rep ?? 0,
@@ -325,12 +395,16 @@ function summarizePlayers(players) {
 
 function main() {
   const config = parseArgs(process.argv);
-  const content = loadContentBundle(1);
+  const baseContent = loadContentBundle(1);
+  const eventsContent = loadEventsContent();
+  const content = config.includeEvents ? withEventRecipes(baseContent, eventsContent) : baseContent;
   const settingsCatalog = loadSettingsCatalog();
   const settings = buildSettingsMap(settingsCatalog, {});
+  settings.SEASON_MODE = config.seasonMode || settings.SEASON_MODE;
   const badgesContent = loadBadgesContent();
   const upgradesContent = loadUpgradesContent();
   const staffContent = loadStaffContent();
+  const questsContent = loadQuestsContent();
   const metrics = createMetrics();
 
   const guildCount = Math.max(1, Number(config.guilds) || DEFAULTS.guilds);
@@ -339,6 +413,9 @@ function main() {
   for (const gid of guildIds) {
     const serverState = newServerState(gid);
     serverState.settings = settings;
+    if (config.includeEvents && eventsContent?.events?.length) {
+      serverState.active_event_id = eventsContent.events[0]?.event_id ?? null;
+    }
     serverStates.set(gid, serverState);
   }
 
@@ -360,6 +437,7 @@ function main() {
       settings,
       content,
       badgesContent,
+      questsContent,
       players,
       rng,
       ordersPerDay: config.ordersPerDay,
@@ -367,7 +445,8 @@ function main() {
       upgradeSpendFraction: config.upgradeSpendFraction,
       upgradesContent,
       staffContent,
-      metrics
+      metrics,
+      serverStates
     });
     dayResults.push(result);
   }
@@ -381,7 +460,7 @@ function main() {
   };
 
   const outPath = path.resolve(process.cwd(), config.output);
-  fs.writeFileSync(outPath, JSON.stringify(output, null, 2));
+  timeSection(metrics, "output_write", () => fs.writeFileSync(outPath, JSON.stringify(output, null, 2)));
   console.log(`Simulation complete. Wrote ${outPath}`);
   console.log(`Avg coins: ${summary.coins.avg.toFixed(2)} | Avg level: ${summary.level.avg.toFixed(2)} | Avg rep: ${summary.rep.avg.toFixed(2)}`);
   console.log(`Metrics (avg ms):`, Object.fromEntries(Object.entries(output.metrics).map(([k, v]) => [k, v.avgMs.toFixed(3)])));

@@ -1,0 +1,5464 @@
+{
+  "config": {
+    "days": 90,
+    "players": 500,
+    "guilds": 20,
+    "ordersPerDay": 500,
+    "seed": 1337,
+    "startDate": "2026-01-01",
+    "output": "sim-output.json",
+    "onTimeChance": 0.7,
+    "upgradeSpendFraction": 1,
+    "includeEvents": 1,
+    "seasonMode": "rolling_days"
+  },
+  "days": [
+    {
+      "dayKey": "2026-01-01",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-02",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-03",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-04",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-05",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-06",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-07",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-08",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-09",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-10",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-11",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-12",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-13",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-14",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-15",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-16",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-17",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-18",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-19",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-20",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-21",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-22",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-23",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-24",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-25",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-26",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-27",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-28",
+      "season": "spring"
+    },
+    {
+      "dayKey": "2026-01-29",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-01-30",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-01-31",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-01",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-02",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-03",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-04",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-05",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-06",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-07",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-08",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-09",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-10",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-11",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-12",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-13",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-14",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-15",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-16",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-17",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-18",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-19",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-20",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-21",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-22",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-23",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-24",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-25",
+      "season": "summer"
+    },
+    {
+      "dayKey": "2026-02-26",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-02-27",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-02-28",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-01",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-02",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-03",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-04",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-05",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-06",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-07",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-08",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-09",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-10",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-11",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-12",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-13",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-14",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-15",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-16",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-17",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-18",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-19",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-20",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-21",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-22",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-23",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-24",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-25",
+      "season": "autumn"
+    },
+    {
+      "dayKey": "2026-03-26",
+      "season": "winter"
+    },
+    {
+      "dayKey": "2026-03-27",
+      "season": "winter"
+    },
+    {
+      "dayKey": "2026-03-28",
+      "season": "winter"
+    },
+    {
+      "dayKey": "2026-03-29",
+      "season": "winter"
+    },
+    {
+      "dayKey": "2026-03-30",
+      "season": "winter"
+    },
+    {
+      "dayKey": "2026-03-31",
+      "season": "winter"
+    }
+  ],
+  "summary": {
+    "count": 500,
+    "coins": {
+      "avg": 17082.074,
+      "min": 14,
+      "max": 39225
+    },
+    "rep": {
+      "avg": 283368.36,
+      "min": 275304,
+      "max": 288090
+    },
+    "level": {
+      "avg": 307.892,
+      "min": 304,
+      "max": 310
+    },
+    "sxpTotal": {
+      "avg": 1215672.228,
+      "min": 1185641,
+      "max": 1233782
+    },
+    "bowlsServed": {
+      "avg": 37816.2,
+      "min": 37000,
+      "max": 38300
+    },
+    "recipesKnown": {
+      "avg": 29,
+      "min": 29,
+      "max": 29
+    },
+    "upgradesTotal": {
+      "avg": 251.64,
+      "min": 250,
+      "max": 252
+    },
+    "players": [
+      {
+        "userId": "sim-user-1",
+        "coins": 7535,
+        "rep": 283758,
+        "level": 308,
+        "sxpTotal": 1219897,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-2",
+        "coins": 24267,
+        "rep": 281095,
+        "level": 307,
+        "sxpTotal": 1205442,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-3",
+        "coins": 4487,
+        "rep": 282907,
+        "level": 308,
+        "sxpTotal": 1217039,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-4",
+        "coins": 25284,
+        "rep": 280951,
+        "level": 307,
+        "sxpTotal": 1207487,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-5",
+        "coins": 13497,
+        "rep": 285054,
+        "level": 309,
+        "sxpTotal": 1221685,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-6",
+        "coins": 27169,
+        "rep": 286814,
+        "level": 310,
+        "sxpTotal": 1229179,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-7",
+        "coins": 33011,
+        "rep": 281870,
+        "level": 307,
+        "sxpTotal": 1207755,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-8",
+        "coins": 10183,
+        "rep": 277284,
+        "level": 305,
+        "sxpTotal": 1195069,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-9",
+        "coins": 3827,
+        "rep": 283938,
+        "level": 308,
+        "sxpTotal": 1218073,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-10",
+        "coins": 11248,
+        "rep": 284840,
+        "level": 309,
+        "sxpTotal": 1220609,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-11",
+        "coins": 12298,
+        "rep": 278417,
+        "level": 305,
+        "sxpTotal": 1193139,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-12",
+        "coins": 29389,
+        "rep": 281335,
+        "level": 307,
+        "sxpTotal": 1209918,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-13",
+        "coins": 20856,
+        "rep": 285433,
+        "level": 309,
+        "sxpTotal": 1222857,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-14",
+        "coins": 653,
+        "rep": 284262,
+        "level": 308,
+        "sxpTotal": 1218400,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-15",
+        "coins": 6385,
+        "rep": 283774,
+        "level": 308,
+        "sxpTotal": 1218955,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-16",
+        "coins": 39188,
+        "rep": 283182,
+        "level": 308,
+        "sxpTotal": 1213291,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-17",
+        "coins": 8588,
+        "rep": 284642,
+        "level": 309,
+        "sxpTotal": 1220464,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-18",
+        "coins": 22021,
+        "rep": 286312,
+        "level": 309,
+        "sxpTotal": 1226948,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-19",
+        "coins": 5695,
+        "rep": 283029,
+        "level": 308,
+        "sxpTotal": 1215903,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-20",
+        "coins": 37537,
+        "rep": 283301,
+        "level": 308,
+        "sxpTotal": 1214640,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-21",
+        "coins": 4862,
+        "rep": 283627,
+        "level": 308,
+        "sxpTotal": 1218879,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-22",
+        "coins": 29325,
+        "rep": 281476,
+        "level": 307,
+        "sxpTotal": 1207672,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-23",
+        "coins": 6765,
+        "rep": 282958,
+        "level": 308,
+        "sxpTotal": 1217746,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-24",
+        "coins": 25458,
+        "rep": 281101,
+        "level": 307,
+        "sxpTotal": 1207264,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-25",
+        "coins": 11286,
+        "rep": 284604,
+        "level": 308,
+        "sxpTotal": 1220392,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-26",
+        "coins": 14556,
+        "rep": 285554,
+        "level": 309,
+        "sxpTotal": 1222885,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-27",
+        "coins": 36956,
+        "rep": 282124,
+        "level": 307,
+        "sxpTotal": 1209173,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-28",
+        "coins": 35595,
+        "rep": 282738,
+        "level": 308,
+        "sxpTotal": 1214328,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-29",
+        "coins": 6600,
+        "rep": 284085,
+        "level": 308,
+        "sxpTotal": 1218984,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-30",
+        "coins": 21387,
+        "rep": 286037,
+        "level": 309,
+        "sxpTotal": 1226475,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-31",
+        "coins": 14340,
+        "rep": 278318,
+        "level": 305,
+        "sxpTotal": 1193580,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-32",
+        "coins": 6861,
+        "rep": 283482,
+        "level": 308,
+        "sxpTotal": 1218513,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-33",
+        "coins": 23021,
+        "rep": 285641,
+        "level": 309,
+        "sxpTotal": 1223617,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-34",
+        "coins": 3127,
+        "rep": 284504,
+        "level": 308,
+        "sxpTotal": 1219668,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-35",
+        "coins": 14027,
+        "rep": 284797,
+        "level": 309,
+        "sxpTotal": 1223793,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-36",
+        "coins": 33549,
+        "rep": 282472,
+        "level": 307,
+        "sxpTotal": 1210196,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-37",
+        "coins": 2037,
+        "rep": 283762,
+        "level": 308,
+        "sxpTotal": 1217049,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-38",
+        "coins": 11809,
+        "rep": 284656,
+        "level": 309,
+        "sxpTotal": 1221305,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-39",
+        "coins": 10637,
+        "rep": 283193,
+        "level": 308,
+        "sxpTotal": 1217591,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-40",
+        "coins": 36450,
+        "rep": 283464,
+        "level": 308,
+        "sxpTotal": 1214622,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-41",
+        "coins": 4415,
+        "rep": 283803,
+        "level": 308,
+        "sxpTotal": 1218534,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-42",
+        "coins": 24635,
+        "rep": 281085,
+        "level": 307,
+        "sxpTotal": 1205380,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-43",
+        "coins": 4912,
+        "rep": 283088,
+        "level": 308,
+        "sxpTotal": 1216867,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-44",
+        "coins": 26786,
+        "rep": 281240,
+        "level": 307,
+        "sxpTotal": 1207806,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-45",
+        "coins": 15127,
+        "rep": 285144,
+        "level": 309,
+        "sxpTotal": 1221975,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-46",
+        "coins": 17196,
+        "rep": 285961,
+        "level": 309,
+        "sxpTotal": 1224347,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-47",
+        "coins": 39225,
+        "rep": 282664,
+        "level": 307,
+        "sxpTotal": 1211199,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-48",
+        "coins": 11963,
+        "rep": 285012,
+        "level": 309,
+        "sxpTotal": 1223303,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-49",
+        "coins": 1648,
+        "rep": 283693,
+        "level": 308,
+        "sxpTotal": 1216973,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-50",
+        "coins": 23603,
+        "rep": 286575,
+        "level": 309,
+        "sxpTotal": 1227996,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-51",
+        "coins": 23927,
+        "rep": 280117,
+        "level": 306,
+        "sxpTotal": 1200571,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-52",
+        "coins": 12158,
+        "rep": 283713,
+        "level": 308,
+        "sxpTotal": 1219960,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-53",
+        "coins": 19620,
+        "rep": 285462,
+        "level": 309,
+        "sxpTotal": 1222370,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-54",
+        "coins": 3331,
+        "rep": 284476,
+        "level": 308,
+        "sxpTotal": 1219696,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-55",
+        "coins": 5860,
+        "rep": 283873,
+        "level": 308,
+        "sxpTotal": 1218696,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-56",
+        "coins": 36030,
+        "rep": 282506,
+        "level": 307,
+        "sxpTotal": 1211163,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-57",
+        "coins": 23469,
+        "rep": 286553,
+        "level": 310,
+        "sxpTotal": 1228421,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-58",
+        "coins": 11645,
+        "rep": 284757,
+        "level": 309,
+        "sxpTotal": 1221161,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-59",
+        "coins": 5588,
+        "rep": 282567,
+        "level": 308,
+        "sxpTotal": 1214972,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-60",
+        "coins": 38075,
+        "rep": 283604,
+        "level": 308,
+        "sxpTotal": 1214519,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-61",
+        "coins": 9840,
+        "rep": 284975,
+        "level": 309,
+        "sxpTotal": 1223247,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-62",
+        "coins": 29528,
+        "rep": 281513,
+        "level": 307,
+        "sxpTotal": 1207270,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-63",
+        "coins": 4027,
+        "rep": 283062,
+        "level": 308,
+        "sxpTotal": 1216740,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-64",
+        "coins": 26456,
+        "rep": 281136,
+        "level": 307,
+        "sxpTotal": 1207039,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-65",
+        "coins": 10322,
+        "rep": 284865,
+        "level": 309,
+        "sxpTotal": 1220712,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-66",
+        "coins": 19206,
+        "rep": 285941,
+        "level": 309,
+        "sxpTotal": 1224772,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-67",
+        "coins": 32138,
+        "rep": 281277,
+        "level": 307,
+        "sxpTotal": 1205692,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-68",
+        "coins": 9752,
+        "rep": 285041,
+        "level": 309,
+        "sxpTotal": 1222593,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-69",
+        "coins": 14,
+        "rep": 283576,
+        "level": 308,
+        "sxpTotal": 1215963,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-70",
+        "coins": 12634,
+        "rep": 284754,
+        "level": 309,
+        "sxpTotal": 1220625,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-71",
+        "coins": 30256,
+        "rep": 280566,
+        "level": 306,
+        "sxpTotal": 1202336,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-72",
+        "coins": 3832,
+        "rep": 282632,
+        "level": 308,
+        "sxpTotal": 1215871,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-73",
+        "coins": 10369,
+        "rep": 284287,
+        "level": 308,
+        "sxpTotal": 1218102,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-74",
+        "coins": 968,
+        "rep": 283934,
+        "level": 308,
+        "sxpTotal": 1217286,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-75",
+        "coins": 9694,
+        "rep": 284226,
+        "level": 309,
+        "sxpTotal": 1220577,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-76",
+        "coins": 37348,
+        "rep": 282416,
+        "level": 307,
+        "sxpTotal": 1211374,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-77",
+        "coins": 7041,
+        "rep": 284679,
+        "level": 308,
+        "sxpTotal": 1220007,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-78",
+        "coins": 23899,
+        "rep": 286490,
+        "level": 310,
+        "sxpTotal": 1228681,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-79",
+        "coins": 8963,
+        "rep": 283152,
+        "level": 308,
+        "sxpTotal": 1216993,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-80",
+        "coins": 6127,
+        "rep": 284205,
+        "level": 308,
+        "sxpTotal": 1218653,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-81",
+        "coins": 2012,
+        "rep": 283689,
+        "level": 308,
+        "sxpTotal": 1218028,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-82",
+        "coins": 27693,
+        "rep": 281427,
+        "level": 307,
+        "sxpTotal": 1206502,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-83",
+        "coins": 1979,
+        "rep": 282740,
+        "level": 308,
+        "sxpTotal": 1215575,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-84",
+        "coins": 21658,
+        "rep": 280686,
+        "level": 307,
+        "sxpTotal": 1205461,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-85",
+        "coins": 13537,
+        "rep": 285056,
+        "level": 309,
+        "sxpTotal": 1221438,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-86",
+        "coins": 28025,
+        "rep": 287013,
+        "level": 310,
+        "sxpTotal": 1229378,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-87",
+        "coins": 6214,
+        "rep": 283295,
+        "level": 308,
+        "sxpTotal": 1213630,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-88",
+        "coins": 12989,
+        "rep": 285171,
+        "level": 309,
+        "sxpTotal": 1224074,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-89",
+        "coins": 31429,
+        "rep": 282471,
+        "level": 307,
+        "sxpTotal": 1211926,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-90",
+        "coins": 7956,
+        "rep": 284256,
+        "level": 308,
+        "sxpTotal": 1217970,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-91",
+        "coins": 10484,
+        "rep": 278229,
+        "level": 305,
+        "sxpTotal": 1192464,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-92",
+        "coins": 9661,
+        "rep": 283640,
+        "level": 308,
+        "sxpTotal": 1219468,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-93",
+        "coins": 18709,
+        "rep": 285409,
+        "level": 309,
+        "sxpTotal": 1221883,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-94",
+        "coins": 3453,
+        "rep": 284397,
+        "level": 308,
+        "sxpTotal": 1220082,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-95",
+        "coins": 5245,
+        "rep": 283644,
+        "level": 308,
+        "sxpTotal": 1218246,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-96",
+        "coins": 35393,
+        "rep": 282426,
+        "level": 307,
+        "sxpTotal": 1210432,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-97",
+        "coins": 11105,
+        "rep": 285105,
+        "level": 309,
+        "sxpTotal": 1221607,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-98",
+        "coins": 7324,
+        "rep": 283807,
+        "level": 308,
+        "sxpTotal": 1218356,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-99",
+        "coins": 5249,
+        "rep": 283043,
+        "level": 308,
+        "sxpTotal": 1215687,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-100",
+        "coins": 34300,
+        "rep": 283145,
+        "level": 308,
+        "sxpTotal": 1213360,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-101",
+        "coins": 15015,
+        "rep": 285185,
+        "level": 309,
+        "sxpTotal": 1225256,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-102",
+        "coins": 25983,
+        "rep": 281296,
+        "level": 307,
+        "sxpTotal": 1206057,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-103",
+        "coins": 5088,
+        "rep": 282911,
+        "level": 308,
+        "sxpTotal": 1216835,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-104",
+        "coins": 774,
+        "rep": 282970,
+        "level": 308,
+        "sxpTotal": 1214883,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-105",
+        "coins": 2920,
+        "rep": 283390,
+        "level": 308,
+        "sxpTotal": 1214798,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-106",
+        "coins": 14285,
+        "rep": 285584,
+        "level": 309,
+        "sxpTotal": 1222856,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-107",
+        "coins": 1795,
+        "rep": 282380,
+        "level": 307,
+        "sxpTotal": 1210814,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-108",
+        "coins": 36003,
+        "rep": 282759,
+        "level": 308,
+        "sxpTotal": 1214213,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-109",
+        "coins": 2596,
+        "rep": 283846,
+        "level": 308,
+        "sxpTotal": 1217283,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-110",
+        "coins": 13815,
+        "rep": 285088,
+        "level": 309,
+        "sxpTotal": 1221436,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-111",
+        "coins": 26560,
+        "rep": 280333,
+        "level": 306,
+        "sxpTotal": 1200767,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-112",
+        "coins": 460,
+        "rep": 282463,
+        "level": 308,
+        "sxpTotal": 1215044,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-113",
+        "coins": 7807,
+        "rep": 283991,
+        "level": 308,
+        "sxpTotal": 1216355,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-114",
+        "coins": 6600,
+        "rep": 284814,
+        "level": 309,
+        "sxpTotal": 1221065,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-115",
+        "coins": 12825,
+        "rep": 285081,
+        "level": 309,
+        "sxpTotal": 1224246,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-116",
+        "coins": 38833,
+        "rep": 283345,
+        "level": 308,
+        "sxpTotal": 1213550,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-117",
+        "coins": 8184,
+        "rep": 284584,
+        "level": 308,
+        "sxpTotal": 1220306,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-118",
+        "coins": 3055,
+        "rep": 283335,
+        "level": 308,
+        "sxpTotal": 1216372,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-119",
+        "coins": 1863,
+        "rep": 282210,
+        "level": 308,
+        "sxpTotal": 1213099,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-120",
+        "coins": 8492,
+        "rep": 284455,
+        "level": 308,
+        "sxpTotal": 1219446,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-121",
+        "coins": 6878,
+        "rep": 283791,
+        "level": 308,
+        "sxpTotal": 1219488,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-122",
+        "coins": 23223,
+        "rep": 281124,
+        "level": 307,
+        "sxpTotal": 1204921,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-123",
+        "coins": 9146,
+        "rep": 283339,
+        "level": 308,
+        "sxpTotal": 1218554,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-124",
+        "coins": 24435,
+        "rep": 281089,
+        "level": 307,
+        "sxpTotal": 1207040,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-125",
+        "coins": 17864,
+        "rep": 285328,
+        "level": 309,
+        "sxpTotal": 1223252,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-126",
+        "coins": 18068,
+        "rep": 285775,
+        "level": 309,
+        "sxpTotal": 1224522,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-127",
+        "coins": 31582,
+        "rep": 281309,
+        "level": 307,
+        "sxpTotal": 1205108,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-128",
+        "coins": 3994,
+        "rep": 276766,
+        "level": 305,
+        "sxpTotal": 1192106,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-129",
+        "coins": 6358,
+        "rep": 284323,
+        "level": 308,
+        "sxpTotal": 1219020,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-130",
+        "coins": 4177,
+        "rep": 284004,
+        "level": 308,
+        "sxpTotal": 1216861,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-131",
+        "coins": 25375,
+        "rep": 280111,
+        "level": 306,
+        "sxpTotal": 1201034,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-132",
+        "coins": 31349,
+        "rep": 281338,
+        "level": 307,
+        "sxpTotal": 1210035,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-133",
+        "coins": 18432,
+        "rep": 285386,
+        "level": 309,
+        "sxpTotal": 1222299,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-134",
+        "coins": 4564,
+        "rep": 284570,
+        "level": 308,
+        "sxpTotal": 1220206,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-135",
+        "coins": 9342,
+        "rep": 284140,
+        "level": 308,
+        "sxpTotal": 1220296,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-136",
+        "coins": 35542,
+        "rep": 282506,
+        "level": 307,
+        "sxpTotal": 1210897,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-137",
+        "coins": 3774,
+        "rep": 284390,
+        "level": 308,
+        "sxpTotal": 1219219,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-138",
+        "coins": 34257,
+        "rep": 282557,
+        "level": 307,
+        "sxpTotal": 1212344,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-139",
+        "coins": 38254,
+        "rep": 281628,
+        "level": 307,
+        "sxpTotal": 1210199,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-140",
+        "coins": 10848,
+        "rep": 284799,
+        "level": 309,
+        "sxpTotal": 1220519,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-141",
+        "coins": 18577,
+        "rep": 285923,
+        "level": 309,
+        "sxpTotal": 1227255,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-142",
+        "coins": 25869,
+        "rep": 281400,
+        "level": 307,
+        "sxpTotal": 1206128,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-143",
+        "coins": 7959,
+        "rep": 283152,
+        "level": 308,
+        "sxpTotal": 1218200,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-144",
+        "coins": 24738,
+        "rep": 280978,
+        "level": 307,
+        "sxpTotal": 1206771,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-145",
+        "coins": 12380,
+        "rep": 284955,
+        "level": 309,
+        "sxpTotal": 1220965,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-146",
+        "coins": 23678,
+        "rep": 286762,
+        "level": 309,
+        "sxpTotal": 1228037,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-147",
+        "coins": 30635,
+        "rep": 281192,
+        "level": 307,
+        "sxpTotal": 1205294,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-148",
+        "coins": 26008,
+        "rep": 286629,
+        "level": 310,
+        "sxpTotal": 1230455,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-149",
+        "coins": 36210,
+        "rep": 283506,
+        "level": 308,
+        "sxpTotal": 1215146,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-150",
+        "coins": 12977,
+        "rep": 284983,
+        "level": 309,
+        "sxpTotal": 1221437,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-151",
+        "coins": 17561,
+        "rep": 278610,
+        "level": 305,
+        "sxpTotal": 1195343,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-152",
+        "coins": 2606,
+        "rep": 282598,
+        "level": 308,
+        "sxpTotal": 1215302,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-153",
+        "coins": 34840,
+        "rep": 287516,
+        "level": 310,
+        "sxpTotal": 1230552,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-154",
+        "coins": 8842,
+        "rep": 285082,
+        "level": 309,
+        "sxpTotal": 1222372,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-155",
+        "coins": 30920,
+        "rep": 287236,
+        "level": 310,
+        "sxpTotal": 1233782,
+        "bowlsServed": 38300,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-156",
+        "coins": 32777,
+        "rep": 282198,
+        "level": 307,
+        "sxpTotal": 1209844,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-157",
+        "coins": 21727,
+        "rep": 286774,
+        "level": 309,
+        "sxpTotal": 1227913,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-158",
+        "coins": 19613,
+        "rep": 286200,
+        "level": 309,
+        "sxpTotal": 1225910,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-159",
+        "coins": 9451,
+        "rep": 283082,
+        "level": 308,
+        "sxpTotal": 1216951,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-160",
+        "coins": 5734,
+        "rep": 284371,
+        "level": 308,
+        "sxpTotal": 1218382,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-161",
+        "coins": 20302,
+        "rep": 286125,
+        "level": 309,
+        "sxpTotal": 1228098,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-162",
+        "coins": 22533,
+        "rep": 280807,
+        "level": 307,
+        "sxpTotal": 1204939,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-163",
+        "coins": 933,
+        "rep": 282555,
+        "level": 308,
+        "sxpTotal": 1215471,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-164",
+        "coins": 31376,
+        "rep": 281540,
+        "level": 307,
+        "sxpTotal": 1209067,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-165",
+        "coins": 14910,
+        "rep": 285000,
+        "level": 309,
+        "sxpTotal": 1222017,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-166",
+        "coins": 14557,
+        "rep": 285566,
+        "level": 309,
+        "sxpTotal": 1223682,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-167",
+        "coins": 38234,
+        "rep": 282282,
+        "level": 307,
+        "sxpTotal": 1209098,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-168",
+        "coins": 4973,
+        "rep": 277072,
+        "level": 305,
+        "sxpTotal": 1192941,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-169",
+        "coins": 2690,
+        "rep": 284061,
+        "level": 308,
+        "sxpTotal": 1217274,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-170",
+        "coins": 12689,
+        "rep": 285015,
+        "level": 309,
+        "sxpTotal": 1221019,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-171",
+        "coins": 15216,
+        "rep": 278515,
+        "level": 305,
+        "sxpTotal": 1193847,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-172",
+        "coins": 7352,
+        "rep": 283118,
+        "level": 308,
+        "sxpTotal": 1218568,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-173",
+        "coins": 33282,
+        "rep": 287098,
+        "level": 310,
+        "sxpTotal": 1230183,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-174",
+        "coins": 3869,
+        "rep": 284577,
+        "level": 308,
+        "sxpTotal": 1220047,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-175",
+        "coins": 18993,
+        "rep": 285572,
+        "level": 309,
+        "sxpTotal": 1226598,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-176",
+        "coins": 1120,
+        "rep": 283367,
+        "level": 308,
+        "sxpTotal": 1213536,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-177",
+        "coins": 5261,
+        "rep": 284482,
+        "level": 308,
+        "sxpTotal": 1219938,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-178",
+        "coins": 20452,
+        "rep": 286189,
+        "level": 309,
+        "sxpTotal": 1226588,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-179",
+        "coins": 9856,
+        "rep": 283268,
+        "level": 308,
+        "sxpTotal": 1217111,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-180",
+        "coins": 34933,
+        "rep": 283163,
+        "level": 308,
+        "sxpTotal": 1213148,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-181",
+        "coins": 20711,
+        "rep": 286107,
+        "level": 310,
+        "sxpTotal": 1228428,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-182",
+        "coins": 28156,
+        "rep": 281496,
+        "level": 307,
+        "sxpTotal": 1206821,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-183",
+        "coins": 2774,
+        "rep": 282698,
+        "level": 308,
+        "sxpTotal": 1216391,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-184",
+        "coins": 26843,
+        "rep": 281040,
+        "level": 307,
+        "sxpTotal": 1207099,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-185",
+        "coins": 17344,
+        "rep": 285239,
+        "level": 309,
+        "sxpTotal": 1223098,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-186",
+        "coins": 15434,
+        "rep": 285524,
+        "level": 309,
+        "sxpTotal": 1223096,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-187",
+        "coins": 37042,
+        "rep": 282097,
+        "level": 307,
+        "sxpTotal": 1209177,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-188",
+        "coins": 28734,
+        "rep": 281401,
+        "level": 307,
+        "sxpTotal": 1208897,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-189",
+        "coins": 5967,
+        "rep": 283805,
+        "level": 308,
+        "sxpTotal": 1218098,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-190",
+        "coins": 27265,
+        "rep": 287262,
+        "level": 310,
+        "sxpTotal": 1229884,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-191",
+        "coins": 1644,
+        "rep": 276724,
+        "level": 304,
+        "sxpTotal": 1186175,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-192",
+        "coins": 6744,
+        "rep": 277436,
+        "level": 305,
+        "sxpTotal": 1195218,
+        "bowlsServed": 37300,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-193",
+        "coins": 6807,
+        "rep": 284256,
+        "level": 308,
+        "sxpTotal": 1216515,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-194",
+        "coins": 34818,
+        "rep": 283466,
+        "level": 308,
+        "sxpTotal": 1215431,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-195",
+        "coins": 19518,
+        "rep": 285954,
+        "level": 309,
+        "sxpTotal": 1226903,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-196",
+        "coins": 31454,
+        "rep": 281640,
+        "level": 307,
+        "sxpTotal": 1207614,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-197",
+        "coins": 8114,
+        "rep": 284629,
+        "level": 308,
+        "sxpTotal": 1220325,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-198",
+        "coins": 25475,
+        "rep": 286264,
+        "level": 310,
+        "sxpTotal": 1228301,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-199",
+        "coins": 8798,
+        "rep": 283312,
+        "level": 308,
+        "sxpTotal": 1216889,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-200",
+        "coins": 6650,
+        "rep": 284465,
+        "level": 308,
+        "sxpTotal": 1218782,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-201",
+        "coins": 793,
+        "rep": 283413,
+        "level": 308,
+        "sxpTotal": 1217418,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-202",
+        "coins": 29004,
+        "rep": 281527,
+        "level": 307,
+        "sxpTotal": 1206512,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-203",
+        "coins": 2879,
+        "rep": 282898,
+        "level": 308,
+        "sxpTotal": 1216430,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-204",
+        "coins": 1312,
+        "rep": 283248,
+        "level": 308,
+        "sxpTotal": 1215424,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-205",
+        "coins": 15279,
+        "rep": 285116,
+        "level": 309,
+        "sxpTotal": 1222063,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-206",
+        "coins": 8314,
+        "rep": 284655,
+        "level": 308,
+        "sxpTotal": 1219660,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-207",
+        "coins": 39138,
+        "rep": 282220,
+        "level": 307,
+        "sxpTotal": 1209678,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-208",
+        "coins": 9429,
+        "rep": 284592,
+        "level": 309,
+        "sxpTotal": 1221761,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-209",
+        "coins": 1139,
+        "rep": 283691,
+        "level": 308,
+        "sxpTotal": 1216601,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-210",
+        "coins": 16826,
+        "rep": 285288,
+        "level": 309,
+        "sxpTotal": 1222876,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-211",
+        "coins": 18511,
+        "rep": 279081,
+        "level": 305,
+        "sxpTotal": 1196023,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-212",
+        "coins": 10276,
+        "rep": 283535,
+        "level": 308,
+        "sxpTotal": 1218962,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-213",
+        "coins": 23618,
+        "rep": 285505,
+        "level": 309,
+        "sxpTotal": 1223300,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-214",
+        "coins": 38910,
+        "rep": 283829,
+        "level": 308,
+        "sxpTotal": 1217152,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-215",
+        "coins": 17519,
+        "rep": 285659,
+        "level": 309,
+        "sxpTotal": 1226158,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-216",
+        "coins": 37406,
+        "rep": 282458,
+        "level": 307,
+        "sxpTotal": 1211574,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-217",
+        "coins": 5256,
+        "rep": 284446,
+        "level": 308,
+        "sxpTotal": 1219354,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-218",
+        "coins": 12904,
+        "rep": 284547,
+        "level": 309,
+        "sxpTotal": 1220848,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-219",
+        "coins": 2962,
+        "rep": 282420,
+        "level": 308,
+        "sxpTotal": 1213765,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-220",
+        "coins": 37236,
+        "rep": 283448,
+        "level": 308,
+        "sxpTotal": 1214511,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-221",
+        "coins": 3438,
+        "rep": 283577,
+        "level": 308,
+        "sxpTotal": 1218508,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-222",
+        "coins": 22977,
+        "rep": 280832,
+        "level": 306,
+        "sxpTotal": 1204587,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-223",
+        "coins": 27141,
+        "rep": 280807,
+        "level": 307,
+        "sxpTotal": 1208125,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-224",
+        "coins": 27287,
+        "rep": 281294,
+        "level": 307,
+        "sxpTotal": 1207594,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-225",
+        "coins": 15635,
+        "rep": 285106,
+        "level": 309,
+        "sxpTotal": 1222016,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-226",
+        "coins": 26761,
+        "rep": 286814,
+        "level": 310,
+        "sxpTotal": 1228940,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-227",
+        "coins": 37940,
+        "rep": 282352,
+        "level": 307,
+        "sxpTotal": 1209369,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-228",
+        "coins": 8903,
+        "rep": 284654,
+        "level": 309,
+        "sxpTotal": 1222141,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-229",
+        "coins": 3121,
+        "rep": 283893,
+        "level": 308,
+        "sxpTotal": 1217988,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-230",
+        "coins": 22662,
+        "rep": 286188,
+        "level": 309,
+        "sxpTotal": 1225840,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-231",
+        "coins": 28344,
+        "rep": 280484,
+        "level": 306,
+        "sxpTotal": 1202605,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-232",
+        "coins": 9772,
+        "rep": 277425,
+        "level": 305,
+        "sxpTotal": 1195885,
+        "bowlsServed": 37300,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-233",
+        "coins": 21348,
+        "rep": 285551,
+        "level": 309,
+        "sxpTotal": 1222698,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-234",
+        "coins": 6449,
+        "rep": 284655,
+        "level": 309,
+        "sxpTotal": 1220665,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-235",
+        "coins": 27577,
+        "rep": 286641,
+        "level": 310,
+        "sxpTotal": 1231099,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-236",
+        "coins": 34434,
+        "rep": 282474,
+        "level": 307,
+        "sxpTotal": 1210732,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-237",
+        "coins": 4655,
+        "rep": 284673,
+        "level": 308,
+        "sxpTotal": 1219813,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-238",
+        "coins": 5060,
+        "rep": 283588,
+        "level": 308,
+        "sxpTotal": 1217035,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-239",
+        "coins": 10365,
+        "rep": 283311,
+        "level": 308,
+        "sxpTotal": 1217380,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-240",
+        "coins": 5575,
+        "rep": 284162,
+        "level": 308,
+        "sxpTotal": 1218475,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-241",
+        "coins": 27585,
+        "rep": 286406,
+        "level": 310,
+        "sxpTotal": 1230606,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-242",
+        "coins": 24053,
+        "rep": 280873,
+        "level": 307,
+        "sxpTotal": 1205248,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-243",
+        "coins": 5282,
+        "rep": 282983,
+        "level": 308,
+        "sxpTotal": 1217086,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-244",
+        "coins": 37992,
+        "rep": 282885,
+        "level": 308,
+        "sxpTotal": 1214812,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-245",
+        "coins": 14325,
+        "rep": 285012,
+        "level": 309,
+        "sxpTotal": 1221679,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-246",
+        "coins": 12728,
+        "rep": 285124,
+        "level": 309,
+        "sxpTotal": 1221441,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-247",
+        "coins": 38011,
+        "rep": 282116,
+        "level": 307,
+        "sxpTotal": 1209143,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-248",
+        "coins": 9166,
+        "rep": 277188,
+        "level": 305,
+        "sxpTotal": 1194398,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-249",
+        "coins": 38785,
+        "rep": 283646,
+        "level": 308,
+        "sxpTotal": 1216486,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-250",
+        "coins": 6561,
+        "rep": 284053,
+        "level": 308,
+        "sxpTotal": 1217948,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-251",
+        "coins": 678,
+        "rep": 276485,
+        "level": 304,
+        "sxpTotal": 1185968,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-252",
+        "coins": 10990,
+        "rep": 277775,
+        "level": 305,
+        "sxpTotal": 1196674,
+        "bowlsServed": 37300,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-253",
+        "coins": 20536,
+        "rep": 285311,
+        "level": 309,
+        "sxpTotal": 1222561,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-254",
+        "coins": 35585,
+        "rep": 283671,
+        "level": 308,
+        "sxpTotal": 1215574,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-255",
+        "coins": 16628,
+        "rep": 285484,
+        "level": 309,
+        "sxpTotal": 1225521,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-256",
+        "coins": 30895,
+        "rep": 282235,
+        "level": 307,
+        "sxpTotal": 1208784,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-257",
+        "coins": 6855,
+        "rep": 284710,
+        "level": 308,
+        "sxpTotal": 1220098,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-258",
+        "coins": 39192,
+        "rep": 282760,
+        "level": 308,
+        "sxpTotal": 1213699,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-259",
+        "coins": 9001,
+        "rep": 283189,
+        "level": 308,
+        "sxpTotal": 1216980,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-260",
+        "coins": 35159,
+        "rep": 283119,
+        "level": 308,
+        "sxpTotal": 1213299,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-261",
+        "coins": 20524,
+        "rep": 286110,
+        "level": 310,
+        "sxpTotal": 1228670,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-262",
+        "coins": 23154,
+        "rep": 281147,
+        "level": 306,
+        "sxpTotal": 1204722,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-263",
+        "coins": 4758,
+        "rep": 282882,
+        "level": 308,
+        "sxpTotal": 1216789,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-264",
+        "coins": 26243,
+        "rep": 281073,
+        "level": 307,
+        "sxpTotal": 1206802,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-265",
+        "coins": 3543,
+        "rep": 283530,
+        "level": 308,
+        "sxpTotal": 1215100,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-266",
+        "coins": 14440,
+        "rep": 285667,
+        "level": 309,
+        "sxpTotal": 1223208,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-267",
+        "coins": 38805,
+        "rep": 282248,
+        "level": 307,
+        "sxpTotal": 1209687,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-268",
+        "coins": 3795,
+        "rep": 276997,
+        "level": 305,
+        "sxpTotal": 1192895,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-269",
+        "coins": 785,
+        "rep": 283508,
+        "level": 308,
+        "sxpTotal": 1216510,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-270",
+        "coins": 10755,
+        "rep": 284935,
+        "level": 308,
+        "sxpTotal": 1220355,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-271",
+        "coins": 705,
+        "rep": 276560,
+        "level": 304,
+        "sxpTotal": 1185899,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-272",
+        "coins": 5521,
+        "rep": 283429,
+        "level": 308,
+        "sxpTotal": 1217838,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-273",
+        "coins": 18260,
+        "rep": 285291,
+        "level": 309,
+        "sxpTotal": 1222285,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-274",
+        "coins": 201,
+        "rep": 284310,
+        "level": 308,
+        "sxpTotal": 1219032,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-275",
+        "coins": 27828,
+        "rep": 287066,
+        "level": 310,
+        "sxpTotal": 1232787,
+        "bowlsServed": 38300,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-276",
+        "coins": 33185,
+        "rep": 282204,
+        "level": 307,
+        "sxpTotal": 1209807,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-277",
+        "coins": 1459,
+        "rep": 284181,
+        "level": 308,
+        "sxpTotal": 1217970,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-278",
+        "coins": 5834,
+        "rep": 284583,
+        "level": 308,
+        "sxpTotal": 1219757,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-279",
+        "coins": 3703,
+        "rep": 282664,
+        "level": 308,
+        "sxpTotal": 1214526,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-280",
+        "coins": 32767,
+        "rep": 283142,
+        "level": 307,
+        "sxpTotal": 1212479,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-281",
+        "coins": 3945,
+        "rep": 283558,
+        "level": 308,
+        "sxpTotal": 1218316,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-282",
+        "coins": 23599,
+        "rep": 280900,
+        "level": 307,
+        "sxpTotal": 1205100,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-283",
+        "coins": 35526,
+        "rep": 281760,
+        "level": 307,
+        "sxpTotal": 1212369,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-284",
+        "coins": 28158,
+        "rep": 281377,
+        "level": 307,
+        "sxpTotal": 1208182,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-285",
+        "coins": 2119,
+        "rep": 283065,
+        "level": 308,
+        "sxpTotal": 1214630,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-286",
+        "coins": 14156,
+        "rep": 285583,
+        "level": 309,
+        "sxpTotal": 1223147,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-287",
+        "coins": 37327,
+        "rep": 282153,
+        "level": 307,
+        "sxpTotal": 1209036,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-288",
+        "coins": 3391,
+        "rep": 283268,
+        "level": 308,
+        "sxpTotal": 1217231,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-289",
+        "coins": 35392,
+        "rep": 283246,
+        "level": 308,
+        "sxpTotal": 1214698,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-290",
+        "coins": 14723,
+        "rep": 285009,
+        "level": 309,
+        "sxpTotal": 1221995,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-291",
+        "coins": 27442,
+        "rep": 280329,
+        "level": 306,
+        "sxpTotal": 1201705,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-292",
+        "coins": 11680,
+        "rep": 277845,
+        "level": 305,
+        "sxpTotal": 1196987,
+        "bowlsServed": 37300,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-293",
+        "coins": 15894,
+        "rep": 285404,
+        "level": 309,
+        "sxpTotal": 1221159,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-294",
+        "coins": 5264,
+        "rep": 284846,
+        "level": 308,
+        "sxpTotal": 1220314,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-295",
+        "coins": 2245,
+        "rep": 283607,
+        "level": 308,
+        "sxpTotal": 1217747,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-296",
+        "coins": 37722,
+        "rep": 282586,
+        "level": 307,
+        "sxpTotal": 1211331,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-297",
+        "coins": 10849,
+        "rep": 284919,
+        "level": 309,
+        "sxpTotal": 1221674,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-298",
+        "coins": 7281,
+        "rep": 284116,
+        "level": 308,
+        "sxpTotal": 1218250,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-299",
+        "coins": 7583,
+        "rep": 282975,
+        "level": 308,
+        "sxpTotal": 1216247,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-300",
+        "coins": 2194,
+        "rep": 283605,
+        "level": 308,
+        "sxpTotal": 1215525,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-301",
+        "coins": 4556,
+        "rep": 283598,
+        "level": 308,
+        "sxpTotal": 1218742,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-302",
+        "coins": 25510,
+        "rep": 281359,
+        "level": 307,
+        "sxpTotal": 1206318,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-303",
+        "coins": 4244,
+        "rep": 282752,
+        "level": 308,
+        "sxpTotal": 1216636,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-304",
+        "coins": 26815,
+        "rep": 281241,
+        "level": 307,
+        "sxpTotal": 1207020,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-305",
+        "coins": 13876,
+        "rep": 285062,
+        "level": 309,
+        "sxpTotal": 1221699,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-306",
+        "coins": 8535,
+        "rep": 284671,
+        "level": 308,
+        "sxpTotal": 1219960,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-307",
+        "coins": 35340,
+        "rep": 281992,
+        "level": 307,
+        "sxpTotal": 1208320,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-308",
+        "coins": 18359,
+        "rep": 279246,
+        "level": 306,
+        "sxpTotal": 1201538,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-309",
+        "coins": 38442,
+        "rep": 283733,
+        "level": 308,
+        "sxpTotal": 1215896,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-310",
+        "coins": 9433,
+        "rep": 284827,
+        "level": 308,
+        "sxpTotal": 1220005,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-311",
+        "coins": 7626,
+        "rep": 277218,
+        "level": 304,
+        "sxpTotal": 1188973,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-312",
+        "coins": 38063,
+        "rep": 282241,
+        "level": 308,
+        "sxpTotal": 1214520,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-313",
+        "coins": 29233,
+        "rep": 286924,
+        "level": 310,
+        "sxpTotal": 1228640,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-314",
+        "coins": 36762,
+        "rep": 283727,
+        "level": 308,
+        "sxpTotal": 1216138,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-315",
+        "coins": 20447,
+        "rep": 285706,
+        "level": 309,
+        "sxpTotal": 1227041,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-316",
+        "coins": 34786,
+        "rep": 282549,
+        "level": 307,
+        "sxpTotal": 1210655,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-317",
+        "coins": 17312,
+        "rep": 286248,
+        "level": 309,
+        "sxpTotal": 1225969,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-318",
+        "coins": 5616,
+        "rep": 283408,
+        "level": 308,
+        "sxpTotal": 1217259,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-319",
+        "coins": 15153,
+        "rep": 283901,
+        "level": 308,
+        "sxpTotal": 1219606,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-320",
+        "coins": 36465,
+        "rep": 283263,
+        "level": 308,
+        "sxpTotal": 1214016,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-321",
+        "coins": 16651,
+        "rep": 285581,
+        "level": 309,
+        "sxpTotal": 1226373,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-322",
+        "coins": 24276,
+        "rep": 281087,
+        "level": 307,
+        "sxpTotal": 1205636,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-323",
+        "coins": 5451,
+        "rep": 283085,
+        "level": 308,
+        "sxpTotal": 1216729,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-324",
+        "coins": 27130,
+        "rep": 281272,
+        "level": 307,
+        "sxpTotal": 1207670,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-325",
+        "coins": 15051,
+        "rep": 285088,
+        "level": 309,
+        "sxpTotal": 1221831,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-326",
+        "coins": 19486,
+        "rep": 285795,
+        "level": 309,
+        "sxpTotal": 1224538,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-327",
+        "coins": 34035,
+        "rep": 281472,
+        "level": 307,
+        "sxpTotal": 1206589,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-328",
+        "coins": 11035,
+        "rep": 284928,
+        "level": 309,
+        "sxpTotal": 1222237,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-329",
+        "coins": 763,
+        "rep": 283684,
+        "level": 308,
+        "sxpTotal": 1216610,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-330",
+        "coins": 4730,
+        "rep": 284066,
+        "level": 308,
+        "sxpTotal": 1217060,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-331",
+        "coins": 639,
+        "rep": 276602,
+        "level": 304,
+        "sxpTotal": 1185641,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-332",
+        "coins": 17506,
+        "rep": 278490,
+        "level": 306,
+        "sxpTotal": 1200068,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-333",
+        "coins": 21423,
+        "rep": 285666,
+        "level": 309,
+        "sxpTotal": 1223275,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-334",
+        "coins": 35951,
+        "rep": 283740,
+        "level": 308,
+        "sxpTotal": 1215590,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-335",
+        "coins": 20122,
+        "rep": 285838,
+        "level": 309,
+        "sxpTotal": 1227014,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-336",
+        "coins": 3779,
+        "rep": 283507,
+        "level": 308,
+        "sxpTotal": 1214282,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-337",
+        "coins": 8588,
+        "rep": 284778,
+        "level": 308,
+        "sxpTotal": 1220258,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-338",
+        "coins": 27346,
+        "rep": 286576,
+        "level": 310,
+        "sxpTotal": 1228915,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-339",
+        "coins": 8664,
+        "rep": 283307,
+        "level": 308,
+        "sxpTotal": 1217157,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-340",
+        "coins": 37597,
+        "rep": 283473,
+        "level": 308,
+        "sxpTotal": 1214446,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-341",
+        "coins": 23005,
+        "rep": 286504,
+        "level": 310,
+        "sxpTotal": 1229800,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-342",
+        "coins": 25070,
+        "rep": 281135,
+        "level": 307,
+        "sxpTotal": 1205533,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-343",
+        "coins": 33784,
+        "rep": 281816,
+        "level": 307,
+        "sxpTotal": 1211643,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-344",
+        "coins": 25657,
+        "rep": 281085,
+        "level": 307,
+        "sxpTotal": 1206749,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-345",
+        "coins": 14173,
+        "rep": 285127,
+        "level": 309,
+        "sxpTotal": 1222022,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-346",
+        "coins": 22933,
+        "rep": 286533,
+        "level": 309,
+        "sxpTotal": 1228133,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-347",
+        "coins": 9741,
+        "rep": 283854,
+        "level": 308,
+        "sxpTotal": 1216667,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-348",
+        "coins": 26296,
+        "rep": 286727,
+        "level": 310,
+        "sxpTotal": 1230791,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-349",
+        "coins": 1296,
+        "rep": 283831,
+        "level": 308,
+        "sxpTotal": 1217221,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-350",
+        "coins": 37341,
+        "rep": 283565,
+        "level": 308,
+        "sxpTotal": 1214006,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-351",
+        "coins": 26144,
+        "rep": 280236,
+        "level": 306,
+        "sxpTotal": 1201886,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-352",
+        "coins": 35842,
+        "rep": 282337,
+        "level": 308,
+        "sxpTotal": 1213318,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-353",
+        "coins": 22402,
+        "rep": 285340,
+        "level": 309,
+        "sxpTotal": 1223217,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-354",
+        "coins": 2210,
+        "rep": 284184,
+        "level": 308,
+        "sxpTotal": 1218281,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-355",
+        "coins": 6973,
+        "rep": 284059,
+        "level": 308,
+        "sxpTotal": 1219111,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-356",
+        "coins": 32612,
+        "rep": 282397,
+        "level": 307,
+        "sxpTotal": 1209929,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-357",
+        "coins": 2603,
+        "rep": 284219,
+        "level": 308,
+        "sxpTotal": 1218133,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-358",
+        "coins": 4382,
+        "rep": 283529,
+        "level": 308,
+        "sxpTotal": 1217025,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-359",
+        "coins": 14413,
+        "rep": 283847,
+        "level": 308,
+        "sxpTotal": 1219767,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-360",
+        "coins": 35138,
+        "rep": 283095,
+        "level": 308,
+        "sxpTotal": 1213487,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-361",
+        "coins": 20990,
+        "rep": 286204,
+        "level": 310,
+        "sxpTotal": 1228398,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-362",
+        "coins": 27418,
+        "rep": 281467,
+        "level": 307,
+        "sxpTotal": 1206660,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-363",
+        "coins": 4881,
+        "rep": 283050,
+        "level": 308,
+        "sxpTotal": 1217481,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-364",
+        "coins": 22680,
+        "rep": 280666,
+        "level": 307,
+        "sxpTotal": 1205518,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-365",
+        "coins": 14817,
+        "rep": 285175,
+        "level": 309,
+        "sxpTotal": 1222014,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-366",
+        "coins": 14003,
+        "rep": 285606,
+        "level": 309,
+        "sxpTotal": 1223258,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-367",
+        "coins": 38530,
+        "rep": 282223,
+        "level": 307,
+        "sxpTotal": 1209718,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-368",
+        "coins": 5817,
+        "rep": 277106,
+        "level": 305,
+        "sxpTotal": 1193306,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-369",
+        "coins": 38773,
+        "rep": 283802,
+        "level": 308,
+        "sxpTotal": 1216339,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-370",
+        "coins": 8508,
+        "rep": 284586,
+        "level": 308,
+        "sxpTotal": 1219829,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-371",
+        "coins": 22798,
+        "rep": 280137,
+        "level": 306,
+        "sxpTotal": 1200242,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-372",
+        "coins": 33611,
+        "rep": 281678,
+        "level": 307,
+        "sxpTotal": 1211715,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-373",
+        "coins": 24119,
+        "rep": 285714,
+        "level": 309,
+        "sxpTotal": 1224292,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-374",
+        "coins": 34357,
+        "rep": 283830,
+        "level": 308,
+        "sxpTotal": 1216840,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-375",
+        "coins": 8591,
+        "rep": 284239,
+        "level": 308,
+        "sxpTotal": 1219719,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-376",
+        "coins": 122,
+        "rep": 283050,
+        "level": 308,
+        "sxpTotal": 1213070,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-377",
+        "coins": 3907,
+        "rep": 284178,
+        "level": 308,
+        "sxpTotal": 1219044,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-378",
+        "coins": 16343,
+        "rep": 285928,
+        "level": 309,
+        "sxpTotal": 1225665,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-379",
+        "coins": 13068,
+        "rep": 283659,
+        "level": 308,
+        "sxpTotal": 1219028,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-380",
+        "coins": 245,
+        "rep": 283573,
+        "level": 308,
+        "sxpTotal": 1215098,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-381",
+        "coins": 24500,
+        "rep": 286421,
+        "level": 310,
+        "sxpTotal": 1230073,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-382",
+        "coins": 24866,
+        "rep": 281284,
+        "level": 307,
+        "sxpTotal": 1205180,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-383",
+        "coins": 28744,
+        "rep": 280902,
+        "level": 307,
+        "sxpTotal": 1208458,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-384",
+        "coins": 27963,
+        "rep": 281353,
+        "level": 307,
+        "sxpTotal": 1207810,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-385",
+        "coins": 27573,
+        "rep": 287292,
+        "level": 310,
+        "sxpTotal": 1229905,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-386",
+        "coins": 15644,
+        "rep": 285687,
+        "level": 309,
+        "sxpTotal": 1223477,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-387",
+        "coins": 27603,
+        "rep": 280877,
+        "level": 306,
+        "sxpTotal": 1203635,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-388",
+        "coins": 8069,
+        "rep": 284840,
+        "level": 309,
+        "sxpTotal": 1222350,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-389",
+        "coins": 6325,
+        "rep": 284006,
+        "level": 308,
+        "sxpTotal": 1218506,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-390",
+        "coins": 16261,
+        "rep": 285745,
+        "level": 309,
+        "sxpTotal": 1224208,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-391",
+        "coins": 24163,
+        "rep": 280121,
+        "level": 306,
+        "sxpTotal": 1200011,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-392",
+        "coins": 4887,
+        "rep": 283128,
+        "level": 308,
+        "sxpTotal": 1217604,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-393",
+        "coins": 20046,
+        "rep": 285563,
+        "level": 309,
+        "sxpTotal": 1222667,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-394",
+        "coins": 4112,
+        "rep": 284267,
+        "level": 308,
+        "sxpTotal": 1218843,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-395",
+        "coins": 4200,
+        "rep": 283850,
+        "level": 308,
+        "sxpTotal": 1218726,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-396",
+        "coins": 29070,
+        "rep": 281602,
+        "level": 307,
+        "sxpTotal": 1206947,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-397",
+        "coins": 2434,
+        "rep": 284030,
+        "level": 308,
+        "sxpTotal": 1217167,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-398",
+        "coins": 27014,
+        "rep": 286855,
+        "level": 310,
+        "sxpTotal": 1229258,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-399",
+        "coins": 16752,
+        "rep": 284397,
+        "level": 309,
+        "sxpTotal": 1221276,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-400",
+        "coins": 5374,
+        "rep": 284351,
+        "level": 308,
+        "sxpTotal": 1218070,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-401",
+        "coins": 18506,
+        "rep": 285850,
+        "level": 309,
+        "sxpTotal": 1227553,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-402",
+        "coins": 22027,
+        "rep": 281064,
+        "level": 306,
+        "sxpTotal": 1204461,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-403",
+        "coins": 5969,
+        "rep": 283232,
+        "level": 308,
+        "sxpTotal": 1217557,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-404",
+        "coins": 25781,
+        "rep": 281067,
+        "level": 307,
+        "sxpTotal": 1207161,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-405",
+        "coins": 38304,
+        "rep": 282622,
+        "level": 307,
+        "sxpTotal": 1212082,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-406",
+        "coins": 8310,
+        "rep": 284873,
+        "level": 308,
+        "sxpTotal": 1220053,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-407",
+        "coins": 35000,
+        "rep": 281994,
+        "level": 307,
+        "sxpTotal": 1208278,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-408",
+        "coins": 8652,
+        "rep": 277216,
+        "level": 305,
+        "sxpTotal": 1194246,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-409",
+        "coins": 3643,
+        "rep": 283818,
+        "level": 308,
+        "sxpTotal": 1217907,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-410",
+        "coins": 17380,
+        "rep": 285757,
+        "level": 309,
+        "sxpTotal": 1225164,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-411",
+        "coins": 4395,
+        "rep": 276890,
+        "level": 304,
+        "sxpTotal": 1187180,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-412",
+        "coins": 29891,
+        "rep": 279737,
+        "level": 307,
+        "sxpTotal": 1206092,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-413",
+        "coins": 17439,
+        "rep": 285276,
+        "level": 309,
+        "sxpTotal": 1221439,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-414",
+        "coins": 9730,
+        "rep": 284993,
+        "level": 309,
+        "sxpTotal": 1222288,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-415",
+        "coins": 24331,
+        "rep": 286324,
+        "level": 310,
+        "sxpTotal": 1228848,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-416",
+        "coins": 4453,
+        "rep": 283640,
+        "level": 308,
+        "sxpTotal": 1215281,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-417",
+        "coins": 7793,
+        "rep": 284595,
+        "level": 308,
+        "sxpTotal": 1220104,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-418",
+        "coins": 10534,
+        "rep": 284638,
+        "level": 309,
+        "sxpTotal": 1220568,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-419",
+        "coins": 11515,
+        "rep": 283358,
+        "level": 308,
+        "sxpTotal": 1217979,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-420",
+        "coins": 5606,
+        "rep": 284163,
+        "level": 308,
+        "sxpTotal": 1218321,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-421",
+        "coins": 38849,
+        "rep": 283445,
+        "level": 308,
+        "sxpTotal": 1216681,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-422",
+        "coins": 20548,
+        "rep": 280717,
+        "level": 306,
+        "sxpTotal": 1204122,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-423",
+        "coins": 2607,
+        "rep": 282882,
+        "level": 308,
+        "sxpTotal": 1215683,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-424",
+        "coins": 24050,
+        "rep": 280900,
+        "level": 307,
+        "sxpTotal": 1206607,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-425",
+        "coins": 3702,
+        "rep": 283472,
+        "level": 308,
+        "sxpTotal": 1215442,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-426",
+        "coins": 12022,
+        "rep": 285364,
+        "level": 309,
+        "sxpTotal": 1222549,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-427",
+        "coins": 30842,
+        "rep": 281376,
+        "level": 307,
+        "sxpTotal": 1205409,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-428",
+        "coins": 1587,
+        "rep": 283407,
+        "level": 308,
+        "sxpTotal": 1216102,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-429",
+        "coins": 2409,
+        "rep": 283742,
+        "level": 308,
+        "sxpTotal": 1216596,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-430",
+        "coins": 10244,
+        "rep": 284853,
+        "level": 309,
+        "sxpTotal": 1220523,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-431",
+        "coins": 4022,
+        "rep": 276885,
+        "level": 304,
+        "sxpTotal": 1187677,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-432",
+        "coins": 16145,
+        "rep": 277987,
+        "level": 306,
+        "sxpTotal": 1198762,
+        "bowlsServed": 37300,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-433",
+        "coins": 37026,
+        "rep": 288090,
+        "level": 310,
+        "sxpTotal": 1232736,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-434",
+        "coins": 5139,
+        "rep": 284836,
+        "level": 308,
+        "sxpTotal": 1220404,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-435",
+        "coins": 13019,
+        "rep": 285390,
+        "level": 309,
+        "sxpTotal": 1224231,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-436",
+        "coins": 34238,
+        "rep": 282411,
+        "level": 307,
+        "sxpTotal": 1209817,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-437",
+        "coins": 25277,
+        "rep": 287250,
+        "level": 310,
+        "sxpTotal": 1230720,
+        "bowlsServed": 38300,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-438",
+        "coins": 1238,
+        "rep": 283274,
+        "level": 308,
+        "sxpTotal": 1215620,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-439",
+        "coins": 13997,
+        "rep": 283777,
+        "level": 308,
+        "sxpTotal": 1219164,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-440",
+        "coins": 4818,
+        "rep": 284034,
+        "level": 308,
+        "sxpTotal": 1218013,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-441",
+        "coins": 19515,
+        "rep": 286026,
+        "level": 309,
+        "sxpTotal": 1228041,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-442",
+        "coins": 27702,
+        "rep": 281389,
+        "level": 307,
+        "sxpTotal": 1207056,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-443",
+        "coins": 3380,
+        "rep": 282821,
+        "level": 308,
+        "sxpTotal": 1216256,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-444",
+        "coins": 27900,
+        "rep": 281228,
+        "level": 307,
+        "sxpTotal": 1208084,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-445",
+        "coins": 14317,
+        "rep": 285022,
+        "level": 309,
+        "sxpTotal": 1221867,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-446",
+        "coins": 16725,
+        "rep": 285766,
+        "level": 309,
+        "sxpTotal": 1223893,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-447",
+        "coins": 9461,
+        "rep": 284033,
+        "level": 308,
+        "sxpTotal": 1216399,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-448",
+        "coins": 36585,
+        "rep": 282998,
+        "level": 308,
+        "sxpTotal": 1214246,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-449",
+        "coins": 180,
+        "rep": 283868,
+        "level": 308,
+        "sxpTotal": 1216285,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-450",
+        "coins": 11286,
+        "rep": 284748,
+        "level": 309,
+        "sxpTotal": 1220691,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-451",
+        "coins": 10550,
+        "rep": 278314,
+        "level": 305,
+        "sxpTotal": 1192546,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-452",
+        "coins": 31943,
+        "rep": 281295,
+        "level": 307,
+        "sxpTotal": 1210226,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-453",
+        "coins": 22755,
+        "rep": 285512,
+        "level": 309,
+        "sxpTotal": 1223137,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-454",
+        "coins": 2336,
+        "rep": 284335,
+        "level": 308,
+        "sxpTotal": 1219343,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-455",
+        "coins": 14328,
+        "rep": 285523,
+        "level": 309,
+        "sxpTotal": 1225020,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-456",
+        "coins": 6500,
+        "rep": 283622,
+        "level": 308,
+        "sxpTotal": 1215701,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-457",
+        "coins": 4332,
+        "rep": 284544,
+        "level": 308,
+        "sxpTotal": 1219124,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-458",
+        "coins": 23355,
+        "rep": 286400,
+        "level": 309,
+        "sxpTotal": 1227473,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-459",
+        "coins": 13452,
+        "rep": 283680,
+        "level": 308,
+        "sxpTotal": 1219017,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-460",
+        "coins": 35507,
+        "rep": 283047,
+        "level": 308,
+        "sxpTotal": 1214003,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-461",
+        "coins": 16815,
+        "rep": 285200,
+        "level": 309,
+        "sxpTotal": 1225553,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-462",
+        "coins": 26039,
+        "rep": 281341,
+        "level": 307,
+        "sxpTotal": 1205798,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-463",
+        "coins": 5043,
+        "rep": 283206,
+        "level": 308,
+        "sxpTotal": 1217094,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-464",
+        "coins": 10695,
+        "rep": 279085,
+        "level": 306,
+        "sxpTotal": 1197976,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-465",
+        "coins": 10974,
+        "rep": 284846,
+        "level": 308,
+        "sxpTotal": 1220426,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-466",
+        "coins": 24417,
+        "rep": 286764,
+        "level": 309,
+        "sxpTotal": 1228188,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-467",
+        "coins": 33572,
+        "rep": 281949,
+        "level": 307,
+        "sxpTotal": 1208063,
+        "bowlsServed": 37500,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-468",
+        "coins": 3566,
+        "rep": 276917,
+        "level": 305,
+        "sxpTotal": 1192153,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-469",
+        "coins": 39029,
+        "rep": 283509,
+        "level": 308,
+        "sxpTotal": 1216604,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-470",
+        "coins": 12829,
+        "rep": 284885,
+        "level": 309,
+        "sxpTotal": 1220944,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-471",
+        "coins": 14784,
+        "rep": 278539,
+        "level": 305,
+        "sxpTotal": 1194753,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-472",
+        "coins": 9140,
+        "rep": 283695,
+        "level": 308,
+        "sxpTotal": 1219169,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-473",
+        "coins": 14653,
+        "rep": 285167,
+        "level": 308,
+        "sxpTotal": 1220302,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-474",
+        "coins": 38105,
+        "rep": 284125,
+        "level": 308,
+        "sxpTotal": 1218406,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-475",
+        "coins": 14817,
+        "rep": 285349,
+        "level": 309,
+        "sxpTotal": 1224650,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-476",
+        "coins": 2317,
+        "rep": 283393,
+        "level": 308,
+        "sxpTotal": 1214501,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-477",
+        "coins": 29872,
+        "rep": 287642,
+        "level": 310,
+        "sxpTotal": 1232347,
+        "bowlsServed": 38300,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-478",
+        "coins": 14803,
+        "rep": 284720,
+        "level": 309,
+        "sxpTotal": 1222268,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-479",
+        "coins": 6985,
+        "rep": 283091,
+        "level": 308,
+        "sxpTotal": 1216120,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-480",
+        "coins": 39211,
+        "rep": 283809,
+        "level": 308,
+        "sxpTotal": 1216189,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-481",
+        "coins": 2933,
+        "rep": 283563,
+        "level": 308,
+        "sxpTotal": 1217891,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-482",
+        "coins": 22820,
+        "rep": 280837,
+        "level": 306,
+        "sxpTotal": 1204572,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-483",
+        "coins": 4083,
+        "rep": 282924,
+        "level": 308,
+        "sxpTotal": 1216178,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-484",
+        "coins": 35700,
+        "rep": 282609,
+        "level": 308,
+        "sxpTotal": 1213525,
+        "bowlsServed": 37800,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-485",
+        "coins": 11972,
+        "rep": 284919,
+        "level": 308,
+        "sxpTotal": 1220168,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-486",
+        "coins": 23433,
+        "rep": 286639,
+        "level": 309,
+        "sxpTotal": 1227755,
+        "bowlsServed": 38200,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-487",
+        "coins": 5866,
+        "rep": 283135,
+        "level": 308,
+        "sxpTotal": 1213649,
+        "bowlsServed": 37600,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-488",
+        "coins": 32794,
+        "rep": 275304,
+        "level": 304,
+        "sxpTotal": 1186379,
+        "bowlsServed": 37000,
+        "recipesKnown": 29,
+        "upgradesTotal": 250
+      },
+      {
+        "userId": "sim-user-489",
+        "coins": 37326,
+        "rep": 283634,
+        "level": 308,
+        "sxpTotal": 1215459,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-490",
+        "coins": 18070,
+        "rep": 285857,
+        "level": 309,
+        "sxpTotal": 1224861,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-491",
+        "coins": 16488,
+        "rep": 278460,
+        "level": 305,
+        "sxpTotal": 1194745,
+        "bowlsServed": 37200,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-492",
+        "coins": 22257,
+        "rep": 278832,
+        "level": 306,
+        "sxpTotal": 1202011,
+        "bowlsServed": 37400,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-493",
+        "coins": 20007,
+        "rep": 285472,
+        "level": 309,
+        "sxpTotal": 1222649,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-494",
+        "coins": 36012,
+        "rep": 283532,
+        "level": 308,
+        "sxpTotal": 1215781,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-495",
+        "coins": 15398,
+        "rep": 285288,
+        "level": 309,
+        "sxpTotal": 1224844,
+        "bowlsServed": 38100,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-496",
+        "coins": 37212,
+        "rep": 282687,
+        "level": 307,
+        "sxpTotal": 1211162,
+        "bowlsServed": 37700,
+        "recipesKnown": 29,
+        "upgradesTotal": 251
+      },
+      {
+        "userId": "sim-user-497",
+        "coins": 1147,
+        "rep": 284242,
+        "level": 308,
+        "sxpTotal": 1217772,
+        "bowlsServed": 38000,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-498",
+        "coins": 5812,
+        "rep": 284007,
+        "level": 308,
+        "sxpTotal": 1218070,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-499",
+        "coins": 8980,
+        "rep": 283323,
+        "level": 308,
+        "sxpTotal": 1217348,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      },
+      {
+        "userId": "sim-user-500",
+        "coins": 7860,
+        "rep": 284304,
+        "level": 308,
+        "sxpTotal": 1219195,
+        "bowlsServed": 37900,
+        "recipesKnown": 29,
+        "upgradesTotal": 252
+      }
+    ]
+  },
+  "metrics": {
+    "market_roll": {
+      "count": 1800,
+      "avgMs": 0.004779568889015909,
+      "maxMs": 2.95129
+    },
+    "quests_assign": {
+      "count": 45000,
+      "avgMs": 0.02961260255552051,
+      "maxMs": 10.339880000000008
+    },
+    "forage": {
+      "count": 45000,
+      "avgMs": 0.006335089199968202,
+      "maxMs": 3.1655099999916274
+    },
+    "forage_apply": {
+      "count": 45000,
+      "avgMs": 0.0019830742222244195,
+      "maxMs": 2.0727829999814276
+    },
+    "market_stock": {
+      "count": 45000,
+      "avgMs": 0.00900625837781251,
+      "maxMs": 9.273733000000007
+    },
+    "order_board": {
+      "count": 45000,
+      "avgMs": 2.4718471014442693,
+      "maxMs": 50.989686000000006
+    },
+    "serve_order": {
+      "count": 18908100,
+      "avgMs": 0.010373302243799912,
+      "maxMs": 36.433268999971915
+    },
+    "unlock_badges": {
+      "count": 45000,
+      "avgMs": 0.0025639438889213774,
+      "maxMs": 2.0585660000069765
+    },
+    "purchase_upgrades": {
+      "count": 45000,
+      "avgMs": 0.017453869444456885,
+      "maxMs": 6.3977430000013555
+    }
+  }
+}
