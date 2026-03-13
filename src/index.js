@@ -47,6 +47,7 @@ import { getIcon } from "./ui/icons.js";
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
   const { ensureSpecializationState, getSpecializationById } = await import("./game/specialization.js");
+  const { getAvailableRecipes } = await import("./game/resilience.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
@@ -266,8 +267,7 @@ import { getIcon } from "./ui/icons.js";
 
   function getUnlockedIngredientIds(player, content) {
     const out = new Set();
-    const known = Array.isArray(player?.known_recipes) ? player.known_recipes : [];
-    const knownSet = new Set(known);
+    const knownSet = new Set(getAvailableRecipes(player));
 
     const addRecipeIngredients = (recipeId) => {
       const r = content.recipes?.[recipeId];

@@ -69,13 +69,8 @@ function rngInt(rng, min, max) {
 
 export function rollMarket({ serverId, content, serverState, eventEffects = null }) {
   const dayKey = dayKeyUTC();
-  if (
-  serverState.market_day === dayKey &&
-  serverState.market_prices
-) return serverState;
-
   const rng = makeStreamRng({ mode:"seeded", seed:12345, streamName:"market", serverId, dayKey });
-  const prices = {};
+  const prices = serverState.market_day === dayKey ? { ...(serverState.market_prices ?? {}) } : {};
 
   // ✅ Roll only the explicitly-allowed market items
   const priceMultRaw = Number(eventEffects?.market?.price_mult ?? 1);
@@ -114,13 +109,9 @@ export function rollPlayerMarketStock({
 }) {
   const dayKey = dayKeyUTC();
   const hasStock = playerState.market_stock && Object.values(playerState.market_stock).some((qty) => Number(qty) > 0);
-  
-  if (playerState.market_stock_day === dayKey && hasStock) {
-    return playerState;
-  }
 
   const rng = makeStreamRng({ mode:"seeded", seed:54321, streamName:"player_market", serverId, userId, dayKey });
-  const stock = {};
+  const stock = playerState.market_stock_day === dayKey ? { ...(playerState.market_stock ?? {}) } : {};
 
   const stockMultRaw = Number(eventEffects?.market?.stock_mult ?? 1);
   const stockMult = Number.isFinite(stockMultRaw) ? stockMultRaw : 1;
