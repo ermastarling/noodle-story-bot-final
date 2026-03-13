@@ -71,16 +71,20 @@ function rngInt(rng, min, max) {
   return min + Math.floor(rng() * (max - min + 1));
 }
 
-function getEffectiveWeight(entry) {
-  const base = entry.weight ?? 1;
+function getEffectiveWeight(entry, effects = {}) {
+  let base = entry.weight ?? 1;
+  const rareBoost = Number(effects.fishing_rare_weight_bonus || 0);
+  if (rareBoost > 0 && (entry.weight ?? 0) <= 20) {
+    base = base * (1 + rareBoost);
+  }
   return Math.max(1, Math.round(base));
 }
 
-function weightedPick(rng, table) {
-  const total = table.reduce((sum, e) => sum + getEffectiveWeight(e), 0);
+function weightedPick(rng, table, effects = {}) {
+  const total = table.reduce((sum, e) => sum + getEffectiveWeight(e, effects), 0);
   let roll = rngInt(rng, 1, total);
   for (const entry of table) {
-    roll -= getEffectiveWeight(entry);
+    roll -= getEffectiveWeight(entry, effects);
     if (roll <= 0) return entry;
   }
   return table[table.length - 1];
@@ -97,7 +101,7 @@ export function setFishingCooldown(player, nowMs) {
   player.cooldowns.fishing_last_ms = nowMs;
 }
 
-export function rollFishingDrops({ serverId, userId, picks = 2, itemId = null, quantity = 1, allowedItemIds = null }) {
+export function rollFishingDrops({ serverId, userId, picks = 2, itemId = null, quantity = 1, allowedItemIds = null, effects = {} }) {
   const dayKey = dayKeyUTC();
   const rng = makeStreamRng({
     mode: "seeded",
@@ -126,7 +130,7 @@ export function rollFishingDrops({ serverId, userId, picks = 2, itemId = null, q
 
   const drops = {};
   for (let i = 0; i < picks; i++) {
-    const entry = weightedPick(rng, table);
+    const entry = weightedPick(rng, table, effects);
     const qty = rngInt(rng, entry.min ?? 1, entry.max ?? 1);
     drops[entry.item_id] = (drops[entry.item_id] ?? 0) + qty;
   }

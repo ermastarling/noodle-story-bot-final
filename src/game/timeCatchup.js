@@ -11,6 +11,7 @@ import { makeStreamRng } from "../util/rng.js";
 import { getIcon } from "../ui/icons.js";
 import { getForageMaxForItem } from "./forage.js";
 import { isGardenUnlocked, stashSpoiledIngredient } from "./garden.js";
+import { isFishingUnlocked } from "./fishing.js";
 
 // Inactivity thresholds (in milliseconds)
 const INACTIVE_7D_MS = 7 * 24 * 60 * 60 * 1000;
@@ -56,6 +57,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
   const maxCatchupTicks = settings.SPOILAGE_MAX_CATCHUP_TICKS ?? 24;
   const baseChance = settings.SPOILAGE_BASE_CHANCE ?? 0.05;
   const reduction = Math.max(0, Math.min(0.95, effects?.spoilage_reduction || 0));
+  const fishingUnlocked = isFishingUnlocked(player);
 
   // Calculate elapsed time and number of ticks
   const elapsedMs = now - lastActiveAt;
@@ -79,7 +81,10 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
     const spoilableItems = Object.entries(inventory).filter(([itemId, qty]) => {
       if (qty <= 0) return false;
       const item = content.items?.[itemId];
-      return item?.spoilable === true && item?.acquisition === "forage";
+      if (!item || item.spoilable !== true) return false;
+      if (item.acquisition === "forage") return true;
+      if (item.acquisition === "fishing" && fishingUnlocked) return true;
+      return false;
     });
 
     // Evaluate spoilage for each item
@@ -88,7 +93,7 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
       if (!item) continue;
 
       // Get spoilage reduction from upgrades and tier
-      const { reduction, tierMultiplier } = getSpoilageReduction(item, effects);
+      const { reduction, tierMultiplier } = getSpoilageReduction(item, effects, fishingUnlocked);
 
       // Calculate effective spoilage chance
       // Formula: baseChance * tierMultiplier * (1 - coldStorageReduction)
@@ -146,10 +151,16 @@ export function getSpoilageAmount(itemId, qty, effects, tierMultiplier) {
   return Math.min(qty, scaled);
 }
 
-function getSpoilageReduction(item, effects) {
+function getSpoilageReduction(item, effects, fishingUnlocked = false) {
   let reduction = 0;
   const effectReduction = Math.max(0, Math.min(0.95, effects?.spoilage_reduction || 0));
-  if (item.tags?.includes("fresh")) {
+
+  const eligibleForColdStorage =
+    item.acquisition === "forage" ||
+    (item.acquisition === "fishing" && fishingUnlocked) ||
+    item.tags?.includes("fresh");
+
+  if (eligibleForColdStorage) {
     reduction = effectReduction;
   }
 

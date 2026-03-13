@@ -122,6 +122,9 @@ function formatEffects(effects) {
     else if (key === "garden_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
     else if (key === "kitchen_simmer_capacity") lines.push(`+${formatTwoDecimals(value)} kitchen slots`);
     else if (key === "kitchen_simmer_time_reduction") lines.push(`-${(value * 100).toFixed(2)}% simmer time`);
+    else if (key === "fishing_cooldown_reduction") lines.push(`-${(value * 100).toFixed(2)}% fishing cooldown`);
+    else if (key === "fishing_rare_weight_bonus") lines.push(`+${(value * 100).toFixed(2)}% rare catch weight`);
+    else if (key === "fishing_bonus_items") lines.push(`+${formatTwoDecimals(value)} bonus catch per trip`);
   }
   return lines.join(", ");
 }
@@ -155,7 +158,8 @@ function buildCategoryButtonsRows(userId, activeCategory = null, source = null, 
     { id: "storage", label: "Storage", icon: "category_storage" },
     { id: "ambience", label: "Ambiance", icon: "category_ambience" },
     { id: "service", label: "Service", icon: "category_service" },
-    { id: "garden", label: "Garden", icon: "tree" }
+    { id: "garden", label: "Garden", icon: "tree" },
+    { id: "fishing", label: "Fishing", icon: "fishing" }
   ];
 
   const buttons = categories.map((cat) =>
@@ -361,6 +365,9 @@ function buildUpgradesManagementEmbed(player, user) {
     }
     if (effectKey === "kitchen_simmer_capacity") return `+${formatTwoDecimals(total)} kitchen slots`;
     if (effectKey === "kitchen_simmer_time_reduction") return `-${(total * 100).toFixed(2)}% simmer time`;
+    if (effectKey === "fishing_cooldown_reduction") return `-${(total * 100).toFixed(2)}% fishing cooldown`;
+    if (effectKey === "fishing_rare_weight_bonus") return `+${(total * 100).toFixed(2)}% rare catch weight`;
+    if (effectKey === "fishing_bonus_items") return `+${formatTwoDecimals(total)} bonus catch per trip`;
     return null;
   };
 

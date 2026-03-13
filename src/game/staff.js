@@ -132,6 +132,7 @@ export function calculateStaffEffects(player, staffContent) {
     garden_autoharvest: 0,
     garden_harvest_seed_chance: 0,
     harvest_cooldown_reduction: 0,
+    fishing_bonus_items: 0,
     market_discount: 0,
     sxp_bonus_percent: 0,
     rare_epic_rep_bonus: 0,

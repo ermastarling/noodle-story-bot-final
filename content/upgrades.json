@@ -182,6 +182,30 @@
       "effects_per_level": {
         "garden_plot_bonus": 1
       }
+    },
+    "u_fishing_cooldown": {
+      "upgrade_id": "u_fishing_cooldown",
+      "name": "Light Reels",
+      "category": "fishing",
+      "description": "Streamlined gear shortens downtime between casts, -1% fishing cooldown per level.",
+      "max_level": 20,
+      "base_cost": 100,
+      "cost_scaling": 1.22,
+      "effects_per_level": {
+        "fishing_cooldown_reduction": 0.01
+      }
+    },
+    "u_fishing_rare": {
+      "upgrade_id": "u_fishing_rare",
+      "name": "Bait Mastery",
+      "category": "fishing",
+      "description": "Premium bait and technique tilt odds toward rarer catches, +0.2% rare catch weight per level.",
+      "max_level": 50,
+      "base_cost": 150,
+      "cost_scaling": 1.22,
+      "effects_per_level": {
+        "fishing_rare_weight_bonus": 0.002
+      }
     }
   },
   "upgrade_categories": {
@@ -214,6 +238,11 @@
       "display_name": "Garden",
       "icon": "tree",
       "description": "Grow seeds, make compost, and expand your plots"
+    },
+    "fishing": {
+      "display_name": "Fishing",
+      "icon": "fishing",
+      "description": "Cast faster, find rarer catches, and hire crews to bring in more fish"
     }
   }
 }

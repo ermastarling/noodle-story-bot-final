@@ -125,6 +125,7 @@ function formatEffects(effects) {
     else if (key === "cooldown_reduction") lines.push(`-${(value * 100).toFixed(0)}% cooldowns`);
     else if (key === "bowl_capacity_bonus") lines.push(`+${formatTwoDecimals(value)} bowl capacity`);
     else if (key === "forage_bonus_items") lines.push(`+${Number(value).toFixed(2)} forage items`);
+    else if (key === "fishing_bonus_items") lines.push(`+${Number(value).toFixed(2)} bonus catches per trip`);
     else if (key === "forage_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
     else if (key === "garden_autoharvest") lines.push(`Auto-harvest garden plots`);
     else if (key === "garden_harvest_seed_chance") lines.push(`+${(value * 100).toFixed(0)}% harvest seed chance`);
@@ -222,6 +223,7 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (key === "bowl_capacity_bonus") return `+${formatTwoDecimals(value)} bowl capacity`;
     if (key === "cooldown_reduction") return `-${(value * 100).toFixed(0)}% cooldowns`;
     if (key === "forage_bonus_items") return `+${Number(value).toFixed(2)} forage items`;
+    if (key === "fishing_bonus_items") return `+${Number(value).toFixed(2)} bonus catches per trip`;
     if (key === "forage_seed_chance") return `+${(value * 100).toFixed(2)}% seed find chance`;
     if (key === "garden_autoharvest") return `Auto-harvests garden plots`;
     if (key === "garden_harvest_seed_chance") return `+${(value * 100).toFixed(0)}% seed chance on harvest`;

@@ -3398,7 +3398,7 @@ if (sub === "pantry") {
 
     const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
     const countsByType = getIngredientCountsByType(p);
-    const typeOrder = ["broth", "noodles", "protein", "spice", "topping"];
+    const typeOrder = ["broth", "noodles", "topping", "protein", "spice"];
     const typeLabels = {
       broth: "Broth",
       noodles: "Noodles",
@@ -3420,12 +3420,12 @@ if (sub === "pantry") {
       })
       .filter(Boolean);
 
-    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1], categoryBlocks[2]].filter(Boolean).join("\n\n") || "No ingredients yet.";
-    const flavorBlocksRaw = [categoryBlocks[3], categoryBlocks[4]].filter(Boolean).join("\n\n") || "No spices or toppings yet.";
+    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1], categoryBlocks[2], categoryBlocks[3]].filter(Boolean).join("\n\n") || "No ingredients yet.";
+    const flavorBlocksRaw = [categoryBlocks[4]].filter(Boolean).join("\n\n") || "No spices yet.";
     const stapleChunks = chunkTextByLength(stapleBlocksRaw, 900);
     const flavorChunks = chunkTextByLength(flavorBlocksRaw, 900);
     if (!stapleChunks.length) stapleChunks.push("No ingredients yet.");
-    if (!flavorChunks.length) flavorChunks.push("No spices or toppings yet.");
+    if (!flavorChunks.length) flavorChunks.push("No spices yet.");
     const ingredientPages = Math.max(stapleChunks.length, flavorChunks.length);
 
     const bowlGroups = new Map();
@@ -3499,7 +3499,9 @@ if (sub === "pantry") {
 
     const viewingIngredients = safePage < ingredientPages;
     const spoilageNotice = viewingIngredients
-      ? "Forageable items spoil over time.\nTip: Cold Cellar upgrades reduce spoilage."
+      ? (combinedEffects.spoilage_reduction > 0
+        ? null
+        : "Forageables & seafood spoil over time.\nTip: Cold Cellar upgrades reduce spoilage.")
       : null;
 
     const pantryDescription = [
@@ -3517,7 +3519,7 @@ if (sub === "pantry") {
     if (safePage < ingredientPages) {
       const ingredientPage = Math.min(safePage, ingredientPages - 1);
       const stapleValue = stapleChunks[Math.min(ingredientPage, stapleChunks.length - 1)] ?? "No ingredients yet.";
-      const flavorValue = flavorChunks[Math.min(ingredientPage, flavorChunks.length - 1)] ?? "No spices or toppings yet.";
+      const flavorValue = flavorChunks[Math.min(ingredientPage, flavorChunks.length - 1)] ?? "No spices yet.";
       pantryEmbed.addFields(
         {
           name: " ",
@@ -4983,7 +4985,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const baseCooldownMs = applyCooldownReduction(FISHING_BASE_COOLDOWN_MS, combinedEffects);
-    const chk = canFish(p, now, baseCooldownMs);
+    const fishingCooldownMs = Math.floor(
+      baseCooldownMs * (1 - Math.min(0.8, Math.max(0, combinedEffects.fishing_cooldown_reduction || 0)))
+    );
+    const chk = canFish(p, now, fishingCooldownMs);
     if (!chk.ok) {
       const nextAtTs = Math.floor(chk.nextAt / 1000);
       const cooldownEmbed = buildMenuEmbed({
@@ -5001,7 +5006,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       drops = rollFishingDrops({
         serverId,
         userId: interaction.user.id,
-        picks: 2 + bonusItems
+        picks: 2 + bonusItems,
+        effects: combinedEffects
       });
     } catch (err) {
       return commitState({
@@ -5076,9 +5082,34 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
     }
 
-    const lines = Object.entries(inventoryResult.added).map(
-      ([id, q]) => `• **${q}×** ${displayItemName(id)}`
-    );
+    const fishLines = [];
+    const seafoodLines = [];
+    const otherLines = [];
+
+    for (const [id, q] of Object.entries(inventoryResult.added)) {
+      const name = displayItemName(id);
+      const tags = Array.isArray(content.items?.[id]?.tags)
+        ? content.items[id].tags.map((t) => String(t).toLowerCase())
+        : [];
+      const line = `• **${q}×** ${name}`;
+      if (tags.includes("fish")) {
+        fishLines.push(line);
+      } else if (tags.includes("seafood")) {
+        seafoodLines.push(line);
+      } else {
+        otherLines.push(line);
+      }
+    }
+
+    const groupedLines = [
+      fishLines.length ? `**Fish**\n${fishLines.join("\n")}` : null,
+      seafoodLines.length ? `**Seafood**\n${seafoodLines.join("\n")}` : null,
+      otherLines.length ? `**Other**\n${otherLines.join("\n")}` : null
+    ].filter(Boolean);
+
+    const groupedLinesText = groupedLines.length
+      ? groupedLines.join("\n\n")
+      : [...fishLines, ...seafoodLines, ...otherLines].join("\n");
 
     const rejectedText = Object.keys(rejected || {}).length
       ? `\n\n${getIcon("basket")} Pantry full — left behind ${Object.entries(rejected)
@@ -5088,7 +5119,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const fishingEmbed = buildMenuEmbed({
       title: `${getIcon("fishing")} Fishing`,
-      description: `${getIcon("fishing")} You cast your line and reel in:\n${groupedLines.join("\n\n")}${rejectedText}`,
+      description: `${getIcon("fishing")} You cast your line and reel in:\n${groupedLinesText}${rejectedText}`,
       user: interaction.member ?? interaction.user,
       color: theme.colors.success
     });

@@ -118,6 +118,19 @@
         "garden_harvest_seed_chance": 0.05
       }
     },
+    "fisher_crew": {
+      "staff_id": "fisher_crew",
+      "name": "Fisher Crew",
+      "description": "Keeps lines in the water so you bring home more fish, +5 bonus catches per trip per level.",
+      "category": "support",
+      "rarity": "epic",
+      "max_level": 10,
+      "base_cost": 3200,
+      "cost_scaling": 1.55,
+      "effects_per_level": {
+        "fishing_bonus_items": 5
+      }
+    },
     "merchant": {
       "staff_id": "merchant",
       "name": "Merchant",

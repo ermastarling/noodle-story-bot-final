@@ -111,7 +111,10 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     garden_plot_bonus: 0,
     garden_seed_chance: 0,
     kitchen_simmer_capacity: 0,
-    kitchen_simmer_time_reduction: 0
+    kitchen_simmer_time_reduction: 0,
+    fishing_cooldown_reduction: 0,
+    fishing_rare_weight_bonus: 0,
+    fishing_bonus_items: 0
   };
   
   if (!player.upgrades) return effects;
