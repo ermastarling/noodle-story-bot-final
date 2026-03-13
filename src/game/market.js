@@ -50,6 +50,9 @@ export const MARKET_ITEM_IDS = [
   "topping_chili_flakes",
   "topping_extra_broth",
   "topping_roasted_pork",
+  "topping_grilled_chicken",
+  "topping_braised_tofu",
+  "topping_brisket",
 
   // Spices
   "spice_sesame_oil",
