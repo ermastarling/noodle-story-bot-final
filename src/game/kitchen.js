@@ -201,9 +201,10 @@ export function getKitchenUnlockState(player) {
   const level = Number(player?.shop_level ?? 1);
   const unlocked = isKitchenUnlocked(player);
   const state = ensureKitchenState(player);
+  const fallback = Math.min(level, KITCHEN_UNLOCK_LEVEL - 1);
   const seenLevel = Number.isFinite(state.unlock_seen_level)
     ? state.unlock_seen_level
-    : level;
+    : fallback;
   const justUnlocked = unlocked && seenLevel < KITCHEN_UNLOCK_LEVEL;
 
   state.unlock_seen_level = Math.max(seenLevel, level);

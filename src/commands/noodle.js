@@ -120,6 +120,7 @@ import { calculateStaffEffects } from "../game/staff.js";
 import {
   ensureGardenState,
   isGardenUnlocked,
+  getGardenUnlockState,
   addSeeds,
   getCompostCap,
   getGardenPlotCount,
@@ -149,6 +150,8 @@ import {
   ensureFishingState,
   getFishingUnlockState,
   applyFishingDrops,
+  FISHING_RECIPE_IDS,
+  unlockFishingRecipesFromDrops,
   FISHING_BASE_COOLDOWN_MS,
   FISHING_UNLOCK_LEVEL,
   RARE_FISHING_ITEM_IDS
@@ -201,6 +204,58 @@ function fishingUnlockLine(prevLevel, newLevel) {
     return `\n${getIcon("fishing")} Fishing unlocked! Head out through the Pantry to start fishing.`;
   }
   return "";
+}
+
+function buildUnlockEmbed(kind, user) {
+  const copy = {
+    garden: {
+      title: `${getIcon("tree")} Garden Unlocked!`,
+      description: `${getIcon("sparkle")} Grow forageables in the Garden and collect seeds from future forage trips.`
+    },
+    kitchen: {
+      title: `${getIcon("cook")} Kitchen Unlocked!`,
+      description: `${getIcon("sparkle")} Simmer broths to boost your ramen lineup and store bowls for orders.`
+    },
+    fishing: {
+      title: `${getIcon("fishing")} Fishing Unlocked!`,
+      description: `${getIcon("sparkle")} Cast lines to catch seafood, unlock new ramen recipes, and refresh today’s order board when new recipes appear.`
+    }
+  };
+  const entry = copy[kind];
+  if (!entry) return null;
+  return buildMenuEmbed({
+    title: entry.title,
+    description: entry.description,
+    user,
+    color: theme.colors.success
+  });
+}
+
+function applyUnlockNoticeEmbeds(payload, player, user) {
+  if (!player) return payload;
+
+  const garden = getGardenUnlockState(player);
+  const kitchen = getKitchenUnlockState(player);
+  const fishing = getFishingUnlockState(player);
+
+  const notices = [];
+  if (garden.justUnlocked) notices.push(buildUnlockEmbed("garden", user));
+  if (kitchen.justUnlocked) notices.push(buildUnlockEmbed("kitchen", user));
+  if (fishing.justUnlocked) notices.push(buildUnlockEmbed("fishing", user));
+
+  const cleanNotices = notices.filter(Boolean);
+  if (!cleanNotices.length) return payload;
+
+  const existingEmbeds = Array.isArray(payload?.embeds) ? [...payload.embeds] : [];
+  const existingTitles = new Set(existingEmbeds.map((e) => e?.title ?? e?.data?.title ?? ""));
+
+  for (const notice of cleanNotices) {
+    const title = notice?.title ?? notice?.data?.title ?? "";
+    if (title && existingTitles.has(title)) continue;
+    existingEmbeds.push(notice);
+  }
+
+  return { ...payload, embeds: existingEmbeds, content: payload?.content ?? " " };
 }
 
 // Aliases for v14+ compatibility in code
@@ -932,7 +987,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
   ].join("\n");
 
-  const description = [`${getIcon("tree")} Manage your garden.`, plotSummary].join("\n\n");
+  const description = [`Manage your garden.`, plotSummary].join("\n\n");
 
   const seedOptions = Object.entries(garden.seeds || {})
     .filter(([, qty]) => qty > 0)
@@ -1493,16 +1548,30 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
   return { accepted, rejected, current, capacity, remainingByType };
 }
 
-function getKitchenBrothItems() {
-  return Object.values(content.items ?? {})
-    .filter((item) => String(item?.category ?? "").toLowerCase() === "broth" && String(item?.acquisition ?? "").toLowerCase() === "market")
-    .sort((a, b) => {
-      const tierOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
-      const aTier = tierOrder[String(a?.tier ?? "common").toLowerCase()] ?? 99;
-      const bTier = tierOrder[String(b?.tier ?? "common").toLowerCase()] ?? 99;
-      if (aTier !== bTier) return aTier - bTier;
-      return String(a?.name ?? a?.item_id ?? "").localeCompare(String(b?.name ?? b?.item_id ?? ""));
-    });
+function getKitchenBrothItems(player) {
+  const tierOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
+  const byTierThenName = (a, b) => {
+    const aTier = tierOrder[String(a?.tier ?? "common").toLowerCase()] ?? 99;
+    const bTier = tierOrder[String(b?.tier ?? "common").toLowerCase()] ?? 99;
+    if (aTier !== bTier) return aTier - bTier;
+    return String(a?.name ?? a?.item_id ?? "").localeCompare(String(b?.name ?? b?.item_id ?? ""));
+  };
+
+  const brothItems = Object.values(content.items ?? {}).filter((item) => String(item?.category ?? "").toLowerCase() === "broth");
+  const marketBroths = brothItems.filter((item) => String(item?.acquisition ?? "").toLowerCase() === "market");
+  const kitchenBroths = brothItems.filter((item) => String(item?.acquisition ?? "").toLowerCase() === "kitchen");
+
+  const eligibleKitchenIds = new Set();
+  if (player?.inv_ingredients) {
+    for (const [brothId, recipe] of Object.entries(KITCHEN_BROTH_RECIPES ?? {})) {
+      const needs = (recipe ?? []).map((ing) => ing?.item_id).filter(Boolean);
+      const hasIngredient = needs.some((id) => (player.inv_ingredients?.[id] ?? 0) > 0);
+      if (hasIngredient) eligibleKitchenIds.add(brothId);
+    }
+  }
+
+  const eligibleKitchenBroths = kitchenBroths.filter((item) => eligibleKitchenIds.has(item?.item_id));
+  return [...marketBroths, ...eligibleKitchenBroths].sort(byTierThenName);
 }
 
 function formatDurationShort(ms) {
@@ -1550,7 +1619,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     });
   });
 
-  const brothItems = getKitchenBrothItems().filter((item) => {
+  const brothItems = getKitchenBrothItems(player).filter((item) => {
     if (unlockedBrothIds.size === 0) return true;
     return unlockedBrothIds.has(item?.item_id);
   });
@@ -3042,6 +3111,9 @@ ephemeral: true
 
 const userId = interaction.user.id;
 
+// Track the active player state for unlock notices so all replies can surface unlock banners wherever they happen.
+let unlockNoticePlayer = null;
+
 let seasonRolloverNotice = null;
 
 // Check if this is the status command (which needs ephemeral defer)
@@ -3100,6 +3172,7 @@ const withSeasonNotice = (payload = {}) => {
 };
 
 const commit = async (payload) => {
+payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user);
 payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
@@ -3354,6 +3427,7 @@ if (sub === "pantry") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
+    unlockNoticePlayer = p;
     const rawPage = opt.getInteger("page") ?? overrides?.integers?.page ?? 0;
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
@@ -3584,6 +3658,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
+    unlockNoticePlayer = p;
     const now = nowTs();
     const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
@@ -3735,6 +3810,13 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 
       addIngredientsToInventory(p, accepted, "block");
 
+      const totalBroths = Object.values(accepted).reduce((sum, qty) => sum + (qty || 0), 0);
+      if (totalBroths > 0) {
+        if (!p.lifetime) p.lifetime = {};
+        p.lifetime.broths_collected = (p.lifetime.broths_collected || 0) + totalBroths;
+        applyQuestProgress(p, questsContent, userId, { type: "broth_collect", amount: totalBroths }, now);
+      }
+
       const remainingToRemove = { ...accepted };
       kitchen.active_batches = (kitchen.active_batches ?? []).filter((batch) => {
         const remaining = remainingToRemove[batch.broth_id] ?? 0;
@@ -3771,12 +3853,13 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 /* ---------------- RECIPES ---------------- */
 if (sub === "recipes") {
   const p = ensurePlayer(serverId, userId);
-  const allRecipes = Object.values(content.recipes ?? {});
-  const totalRecipes = allRecipes.length;
+  const allRecipeIds = new Set(Object.keys(content.recipes ?? {}));
+  for (const rid of FISHING_RECIPE_IDS) allRecipeIds.add(rid);
+  const totalRecipes = allRecipeIds.size;
 
   const knownIds = getAvailableRecipes(p);
   const knownSet = new Set(knownIds);
-  const unlockedTotal = (p.known_recipes || []).filter((id) => content.recipes?.[id]).length;
+  const unlockedTotal = (p.known_recipes || []).filter((id) => allRecipeIds.has(id)).length;
   const rarityOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
   const knownRecipes = knownIds
     .map((id) => content.recipes?.[id])
@@ -4224,6 +4307,7 @@ if (!db) {
 return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let p = ensurePlayer(serverId, userId);
   let s = ensureServer(serverId);
+  unlockNoticePlayer = p;
 
   const now = nowTs();
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
@@ -4953,9 +5037,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   /* ---------------- FISHING ---------------- */
   if (sub === "fishing") {
     ensureFishingState(p);
+    unlockNoticePlayer = p;
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    const now = nowTs();
 
     const navRows = [
       noodleForageGardenRow(userId, {
@@ -4972,6 +5058,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       }),
       noodleMainMenuRow(userId)
     ];
+
+    if (fishingUnlocked && !p.fishing.first_visit_ack) {
+      p.fishing.first_visit_ack = true;
+    }
 
     if (!fishingUnlocked) {
       const lockedEmbed = buildMenuEmbed({
@@ -5063,6 +5153,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const inventoryResult = applyFishingDrops(p, accepted);
+    const newlyUnlockedRecipes = unlockFishingRecipesFromDrops(p, inventoryResult.added);
     setFishingCooldown(p, now);
 
     if (!Object.keys(inventoryResult.added).length) {
@@ -5081,8 +5172,25 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
     }
 
+    const totalCaught = Object.values(inventoryResult.added).reduce((sum, qty) => sum + (qty || 0), 0);
+    if (totalCaught > 0) {
+      if (!p.lifetime) p.lifetime = {};
+      p.lifetime.fish_caught = (p.lifetime.fish_caught || 0) + totalCaught;
+      applyQuestProgress(p, questsContent, userId, { type: "fishing_catch", amount: totalCaught }, now);
+    }
+
     const catchLines = Object.entries(inventoryResult.added).map(([id, q]) => `• **${q}×** ${displayItemName(id)}`);
     const groupedLinesText = catchLines.length ? catchLines.join("\n") : "_Nothing caught._";
+
+    const unlockLines = [];
+    if (newlyUnlockedRecipes.length) {
+      const recipeNames = newlyUnlockedRecipes.map((rid) => content.recipes?.[rid]?.name ?? rid).join(" · ");
+      unlockLines.push(`${getIcon("sparkle")} New recipes unlocked: ${recipeNames}.`);
+      delete p.orders_day; // force regenerate pool for new recipes
+      const activeEventId = s.active_event_id ?? null;
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+      unlockLines.push(`${getIcon("orders")} Fresh orders are now on today’s board.`);
+    }
 
     const rejectedText = Object.keys(rejected || {}).length
       ? `\n\n${getIcon("basket")} Pantry full — left behind ${Object.entries(rejected)
@@ -5092,7 +5200,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const fishingEmbed = buildMenuEmbed({
       title: `${getIcon("fishing")} Fishing`,
-      description: `You cast your line and reel in:\n${groupedLinesText}${rejectedText}`,
+      description: [`You cast your line and reel in:\n${groupedLinesText}${rejectedText}`, unlockLines.join("\n")].filter(Boolean).join("\n\n"),
       user: interaction.member ?? interaction.user,
       color: theme.colors.success
     });

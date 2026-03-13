@@ -41,6 +41,28 @@
       "reward": { "coins": 30, "sxp": 6, "rep": 1 }
     },
     {
+      "quest_id": "fishing_catch_daily",
+      "name": "Catch 5 fish",
+      "description": "Head out fishing and haul in your catch.",
+      "cadence": "daily",
+      "type": "fishing_catch",
+      "target": 5,
+      "weight": 1,
+      "min_shop_level": 65,
+      "reward": { "coins": 45, "sxp": 14, "rep": 2 }
+    },
+    {
+      "quest_id": "broth_collect_daily",
+      "name": "Collect 3 broths",
+      "description": "Collect simmered broths from your kitchen.",
+      "cadence": "daily",
+      "type": "broth_collect",
+      "target": 3,
+      "weight": 1,
+      "min_shop_level": 45,
+      "reward": { "coins": 40, "sxp": 12, "rep": 1 }
+    },
+    {
       "quest_id": "garden_compost_daily",
       "name": "Pack 5 compost bags",
       "description": "Turn scraps into compost for your garden.",
@@ -143,6 +165,28 @@
       "target": 35,
       "weight": 1,
       "reward": { "coins": 200, "sxp": 70, "rep": 12 }
+    },
+    {
+      "quest_id": "fishing_catch_weekly",
+      "name": "Catch 40 fish",
+      "description": "Keep casting and reel in a big weekly haul.",
+      "cadence": "weekly",
+      "type": "fishing_catch",
+      "target": 40,
+      "weight": 1,
+      "min_shop_level": 65,
+      "reward": { "coins": 260, "sxp": 90, "rep": 15 }
+    },
+    {
+      "quest_id": "broth_collect_weekly",
+      "name": "Collect 20 broths",
+      "description": "Keep your simmer stations running all week.",
+      "cadence": "weekly",
+      "type": "broth_collect",
+      "target": 20,
+      "weight": 1,
+      "min_shop_level": 45,
+      "reward": { "coins": 240, "sxp": 80, "rep": 14 }
     },
     {
       "quest_id": "serve_200",

@@ -36,6 +36,35 @@ const FISHING_TABLE = [
 export const FISHING_ITEM_IDS = FISHING_TABLE.map((e) => e.item_id);
 export const RARE_FISHING_ITEM_IDS = FISHING_TABLE.filter((e) => e.weight <= 20).map((e) => e.item_id);
 
+const FISH_RECIPE_UNLOCKS = {
+  catfish: "catfish_shore_ramen",
+  salmon: "salmon_ocean_udon",
+  grouper: "grouper_miso_bowl",
+  tuna: "tuna_eel_deluxe",
+  eel: "tuna_eel_deluxe",
+  crab: "harbor_crab_ramen"
+};
+
+export function unlockFishingRecipesFromDrops(player, drops = {}) {
+  if (!player) return [];
+  const ids = Object.keys(drops || {});
+  if (!ids.length) return [];
+
+  const known = new Set(player.known_recipes || []);
+  const newlyUnlocked = [];
+  for (const id of ids) {
+    const recipeId = FISH_RECIPE_UNLOCKS[id];
+    if (recipeId && !known.has(recipeId)) {
+      newlyUnlocked.push(recipeId);
+      known.add(recipeId);
+    }
+  }
+  if (newlyUnlocked.length) {
+    player.known_recipes = [...known];
+  }
+  return newlyUnlocked;
+}
+
 export function isFishingUnlocked(player) {
   return (player?.shop_level ?? 0) >= FISHING_UNLOCK_LEVEL;
 }
@@ -46,6 +75,10 @@ export function ensureFishingState(player) {
   }
   const seenLevelRaw = Number(player.fishing.unlock_seen_level ?? player?.shop_level ?? 1);
   player.fishing.unlock_seen_level = Number.isFinite(seenLevelRaw) ? seenLevelRaw : (player?.shop_level ?? 1);
+  // Players who were already unlocked before this flag was added should not see new unlock highlights.
+  if (typeof player.fishing.first_visit_ack !== "boolean") {
+    player.fishing.first_visit_ack = isFishingUnlocked(player);
+  }
   return player.fishing;
 }
 
@@ -54,15 +87,8 @@ export function getFishingUnlockState(player) {
   const unlocked = isFishingUnlocked(player);
   const state = ensureFishingState(player);
   const seenLevel = Number.isFinite(state.unlock_seen_level) ? state.unlock_seen_level : level;
-  const justUnlocked = unlocked && seenLevel < FISHING_UNLOCK_LEVEL;
+  const justUnlocked = unlocked && (!state.first_visit_ack || seenLevel < FISHING_UNLOCK_LEVEL);
   state.unlock_seen_level = Math.max(seenLevel, level);
-  if (justUnlocked) {
-    const known = new Set(player.known_recipes || []);
-    for (const recipeId of FISHING_RECIPE_IDS) {
-      known.add(recipeId);
-    }
-    player.known_recipes = [...known];
-  }
   return { unlocked, justUnlocked, seenLevel: state.unlock_seen_level };
 }
 

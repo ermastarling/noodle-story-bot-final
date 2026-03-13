@@ -80,6 +80,17 @@ export function ensureGardenState(player) {
   return player.garden;
 }
 
+export function getGardenUnlockState(player) {
+  const level = Number(player?.shop_level ?? 1);
+  const unlocked = isGardenUnlocked(player);
+  const garden = ensureGardenState(player);
+  const fallback = Math.min(level, GARDEN_UNLOCK_LEVEL - 1);
+  const seenLevel = Number.isFinite(garden.unlock_seen_level) ? garden.unlock_seen_level : fallback;
+  const justUnlocked = unlocked && seenLevel < GARDEN_UNLOCK_LEVEL;
+  garden.unlock_seen_level = Math.max(seenLevel, level);
+  return { unlocked, justUnlocked, seenLevel: garden.unlock_seen_level };
+}
+
 export function ensureGardenPlots(player, effects = {}) {
   const garden = ensureGardenState(player);
   const target = Math.max(0, getGardenPlotCount(player, effects));
