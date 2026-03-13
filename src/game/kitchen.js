@@ -33,7 +33,7 @@ export const KITCHEN_BROTH_RECIPES = {
   broth_chicken: [
     { item_id: "root_vegetables", qty: 2 },
     { item_id: "carrots", qty: 2 },
-    { item_id: "wild_greens", qty: 1 }
+    { item_id: "topping_grilled_chicken", qty: 1 }
   ],
   broth_rich_stock: [
     { item_id: "forest_mushrooms", qty: 2 },
@@ -56,7 +56,7 @@ export const KITCHEN_BROTH_RECIPES = {
   broth_beef: [
     { item_id: "forest_mushrooms", qty: 2 },
     { item_id: "root_vegetables", qty: 2 },
-    { item_id: "carrots", qty: 1 }
+    { item_id: "topping_brisket", qty: 1 }
   ],
   broth_mixed: [
     { item_id: "wild_greens", qty: 1 },
@@ -74,7 +74,7 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "forest_mushrooms", qty: 1 },
     { item_id: "root_vegetables", qty: 2 },
     { item_id: "dew_greens", qty: 1 },
-    { item_id: "scallions", qty: 1 }
+    { item_id: "topping_braised_tofu", qty: 1 }
   ],
   broth_black_garlic: [
     { item_id: "black_garlic", qty: 1 },

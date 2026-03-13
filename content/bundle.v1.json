@@ -727,6 +727,42 @@
       "stock_min": 100,
       "stock_max": 150
     },
+    "topping_grilled_chicken": {
+      "item_id": "topping_grilled_chicken",
+      "name": "Grilled Chicken",
+      "category": "topping",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 14,
+      "stock_min": 100,
+      "stock_max": 150,
+      "tags": ["protein", "meat", "smoky"]
+    },
+    "topping_braised_tofu": {
+      "item_id": "topping_braised_tofu",
+      "name": "Braised Tofu",
+      "category": "topping",
+      "acquisition": "market",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 11,
+      "stock_min": 100,
+      "stock_max": 150,
+      "tags": ["protein", "tofu", "braised"]
+    },
+    "topping_brisket": {
+      "item_id": "topping_brisket",
+      "name": "Brisket",
+      "category": "topping",
+      "acquisition": "market",
+      "tier": "rare",
+      "spoilable": false,
+      "base_price": 18,
+      "stock_min": 80,
+      "stock_max": 120,
+      "tags": ["protein", "beef", "rich"]
+    },
     "spice_sesame_oil": {
       "item_id": "spice_sesame_oil",
       "name": "Sesame Oil",
@@ -757,18 +793,9 @@
       "tier": "common",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_soy",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_wheat",
-          "qty": 1
-        },
-        {
-          "item_id": "scallions",
-          "qty": 1
-        }
+        {"item_id": "broth_soy", "qty": 1},
+        {"item_id": "noodles_wheat", "qty": 1},
+        {"item_id": "scallions", "qty": 1}
       ]
     },
     "simple_broth": {
@@ -777,10 +804,7 @@
       "tier": "common",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "scallions",
-          "qty": 3
-        }
+        {"item_id": "scallions", "qty": 3}
       ]
     },
     "ginger_soft_noodles": {
@@ -789,18 +813,9 @@
       "tier": "uncommon",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_ginger",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_soft",
-          "qty": 1
-        },
-        {
-          "item_id": "spice_sesame_oil",
-          "qty": 1
-        }
+        {"item_id": "broth_ginger", "qty": 1},
+        {"item_id": "noodles_soft", "qty": 1},
+        {"item_id": "spice_sesame_oil", "qty": 1}
       ]
     },
     "catfish_shore_ramen": {
@@ -809,9 +824,9 @@
       "tier": "uncommon",
       "season": null,
       "ingredients": [
-        { "item_id": "broth_fish_clear", "qty": 1 },
-        { "item_id": "noodles_wheat", "qty": 1 },
-        { "item_id": "catfish", "qty": 1 }
+        {"item_id": "broth_fish_clear", "qty": 1},
+        {"item_id": "noodles_wheat", "qty": 1},
+        {"item_id": "catfish", "qty": 1}
       ]
     },
     "salmon_ocean_udon": {
@@ -820,9 +835,9 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        { "item_id": "broth_seafood_hearty", "qty": 1 },
-        { "item_id": "noodles_udon", "qty": 1 },
-        { "item_id": "salmon", "qty": 1 }
+        {"item_id": "broth_seafood_hearty", "qty": 1},
+        {"item_id": "noodles_udon", "qty": 1},
+        {"item_id": "salmon", "qty": 1}
       ]
     },
     "grouper_miso_bowl": {
@@ -831,10 +846,10 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        { "item_id": "broth_fish_clear", "qty": 1 },
-        { "item_id": "noodles_thick", "qty": 1 },
-        { "item_id": "grouper", "qty": 1 },
-        { "item_id": "dew_greens", "qty": 1 }
+        {"item_id": "broth_fish_clear", "qty": 1},
+        {"item_id": "noodles_thick", "qty": 1},
+        {"item_id": "grouper", "qty": 1},
+        {"item_id": "dew_greens", "qty": 1}
       ]
     },
     "tuna_eel_deluxe": {
@@ -843,10 +858,10 @@
       "tier": "epic",
       "season": null,
       "ingredients": [
-        { "item_id": "broth_seafood_hearty", "qty": 1 },
-        { "item_id": "noodles_ramen", "qty": 1 },
-        { "item_id": "tuna", "qty": 1 },
-        { "item_id": "eel", "qty": 1 }
+        {"item_id": "broth_seafood_hearty", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "tuna", "qty": 1},
+        {"item_id": "eel", "qty": 1}
       ]
     },
     "harbor_crab_ramen": {
@@ -855,10 +870,10 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        { "item_id": "broth_seafood_hearty", "qty": 1 },
-        { "item_id": "noodles_ramen", "qty": 1 },
-        { "item_id": "crab", "qty": 1 },
-        { "item_id": "topping_chili_flakes", "qty": 1 }
+        {"item_id": "broth_seafood_hearty", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "crab", "qty": 1},
+        {"item_id": "topping_chili_flakes", "qty": 1}
       ]
     },
     "butter_noodles": {
@@ -867,14 +882,8 @@
       "tier": "common",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_butter",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_wheat",
-          "qty": 1
-        }
+        {"item_id": "broth_butter", "qty": 1},
+        {"item_id": "noodles_wheat", "qty": 1}
       ]
     },
     "sweet_soy_broth": {
@@ -883,14 +892,8 @@
       "tier": "uncommon",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_sweet_soy",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_thin",
-          "qty": 1
-        }
+        {"item_id": "broth_sweet_soy", "qty": 1},
+        {"item_id": "noodles_thin", "qty": 1}
       ]
     },
     "home_style_chicken_noodle": {
@@ -899,18 +902,10 @@
       "tier": "uncommon",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_chicken",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_egg",
-          "qty": 1
-        },
-        {
-          "item_id": "carrots",
-          "qty": 1
-        }
+        {"item_id": "broth_chicken", "qty": 1},
+        {"item_id": "noodles_egg", "qty": 1},
+        {"item_id": "carrots", "qty": 1},
+        {"item_id": "topping_grilled_chicken", "qty": 1}
       ]
     },
     "slow_simmered_broth": {
@@ -919,14 +914,8 @@
       "tier": "uncommon",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_rich_stock",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_thick",
-          "qty": 1
-        }
+        {"item_id": "broth_rich_stock", "qty": 1},
+        {"item_id": "noodles_thick", "qty": 1}
       ]
     },
     "hot_pepper_ramen": {
@@ -935,18 +924,9 @@
       "tier": "common",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_chili",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_ramen",
-          "qty": 1
-        },
-        {
-          "item_id": "topping_chili_flakes",
-          "qty": 1
-        }
+        {"item_id": "broth_chili", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "topping_chili_flakes", "qty": 1}
       ]
     },
     "extra_broth_udon": {
@@ -955,18 +935,9 @@
       "tier": "uncommon",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_light",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_udon",
-          "qty": 1
-        },
-        {
-          "item_id": "topping_extra_broth",
-          "qty": 1
-        }
+        {"item_id": "broth_light", "qty": 1},
+        {"item_id": "noodles_udon", "qty": 1},
+        {"item_id": "topping_extra_broth", "qty": 1}
       ]
     },
     "beef_broth_ramen": {
@@ -975,18 +946,10 @@
       "tier": "common",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_beef",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_ramen",
-          "qty": 1
-        },
-        {
-          "item_id": "scallions",
-          "qty": 1
-        }
+        {"item_id": "broth_beef", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "scallions", "qty": 1},
+        {"item_id": "topping_brisket", "qty": 1}
       ]
     },
     "hearty_noodle_stew": {
@@ -995,18 +958,9 @@
       "tier": "uncommon",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_mixed",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_chunky",
-          "qty": 1
-        },
-        {
-          "item_id": "carrots",
-          "qty": 1
-        }
+        {"item_id": "broth_mixed", "qty": 1},
+        {"item_id": "noodles_chunky", "qty": 1},
+        {"item_id": "carrots", "qty": 1}
       ]
     },
     "herb_hill_udon": {
@@ -1015,18 +969,9 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_herbal",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_udon",
-          "qty": 1
-        },
-        {
-          "item_id": "wild_greens",
-          "qty": 1
-        }
+        {"item_id": "broth_herbal", "qty": 1},
+        {"item_id": "noodles_udon", "qty": 1},
+        {"item_id": "wild_greens", "qty": 1}
       ]
     },
     "mushroom_miso": {
@@ -1035,18 +980,10 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_miso",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_wheat",
-          "qty": 1
-        },
-        {
-          "item_id": "forest_mushrooms",
-          "qty": 1
-        }
+        {"item_id": "broth_miso", "qty": 1},
+        {"item_id": "noodles_wheat", "qty": 1},
+        {"item_id": "forest_mushrooms", "qty": 1},
+        {"item_id": "topping_braised_tofu", "qty": 1}
       ]
     },
     "spicy_black_garlic_ramen": {
@@ -1055,22 +992,10 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_black_garlic",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_ramen",
-          "qty": 1
-        },
-        {
-          "item_id": "spice_chili_oil",
-          "qty": 1
-        },
-        {
-          "item_id": "black_garlic",
-          "qty": 1
-        }
+        {"item_id": "broth_black_garlic", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "spice_chili_oil", "qty": 1},
+        {"item_id": "black_garlic", "qty": 1}
       ]
     },
     "charred_pork_noodles": {
@@ -1079,18 +1004,45 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_soy",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_wheat",
-          "qty": 1
-        },
-        {
-          "item_id": "topping_roasted_pork",
-          "qty": 1
-        }
+        {"item_id": "broth_soy", "qty": 1},
+        {"item_id": "noodles_wheat", "qty": 1},
+        {"item_id": "topping_roasted_pork", "qty": 1}
+      ]
+    },
+    "grilled_chicken_ramen": {
+      "recipe_id": "grilled_chicken_ramen",
+      "name": "Grilled Chicken Ramen",
+      "tier": "uncommon",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_chicken", "qty": 1},
+        {"item_id": "noodles_egg", "qty": 1},
+        {"item_id": "topping_grilled_chicken", "qty": 1},
+        {"item_id": "carrots", "qty": 1}
+      ]
+    },
+    "braised_tofu_miso": {
+      "recipe_id": "braised_tofu_miso",
+      "name": "Braised Tofu Miso",
+      "tier": "uncommon",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_miso", "qty": 1},
+        {"item_id": "noodles_soft", "qty": 1},
+        {"item_id": "topping_braised_tofu", "qty": 1},
+        {"item_id": "dew_greens", "qty": 1}
+      ]
+    },
+    "brisket_rich_ramen": {
+      "recipe_id": "brisket_rich_ramen",
+      "name": "Brisket Rich Ramen",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_rich_stock", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "topping_brisket", "qty": 1},
+        {"item_id": "scallions", "qty": 1}
       ]
     },
     "clear_shio_bowl": {
@@ -1099,18 +1051,9 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_shio",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_thin",
-          "qty": 1
-        },
-        {
-          "item_id": "citrus_peels",
-          "qty": 1
-        }
+        {"item_id": "broth_shio", "qty": 1},
+        {"item_id": "noodles_thin", "qty": 1},
+        {"item_id": "citrus_peels", "qty": 1}
       ]
     },
     "citrus_broth_thin_noodles": {
@@ -1119,18 +1062,9 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_citrus_infused",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_thin",
-          "qty": 1
-        },
-        {
-          "item_id": "citrus_peels",
-          "qty": 1
-        }
+        {"item_id": "broth_citrus_infused", "qty": 1},
+        {"item_id": "noodles_thin", "qty": 1},
+        {"item_id": "citrus_peels", "qty": 1}
       ]
     },
     "citrus_shio_bowl": {
@@ -1139,18 +1073,9 @@
       "tier": "rare",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_shio",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_fine",
-          "qty": 1
-        },
-        {
-          "item_id": "citrus_slices",
-          "qty": 1
-        }
+        {"item_id": "broth_shio", "qty": 1},
+        {"item_id": "noodles_fine", "qty": 1},
+        {"item_id": "citrus_slices", "qty": 1}
       ]
     },
     "moonlit_miso": {
@@ -1159,18 +1084,9 @@
       "tier": "epic",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_glowing_miso",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_hand_pulled",
-          "qty": 1
-        },
-        {
-          "item_id": "night_herbs",
-          "qty": 1
-        }
+        {"item_id": "broth_glowing_miso", "qty": 1},
+        {"item_id": "noodles_hand_pulled", "qty": 1},
+        {"item_id": "night_herbs", "qty": 1}
       ]
     },
     "ember_spice_ramen": {
@@ -1179,18 +1095,9 @@
       "tier": "epic",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_fire",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_spiced",
-          "qty": 1
-        },
-        {
-          "item_id": "ember_peppers",
-          "qty": 1
-        }
+        {"item_id": "broth_fire", "qty": 1},
+        {"item_id": "noodles_spiced", "qty": 1},
+        {"item_id": "ember_peppers", "qty": 1}
       ]
     },
     "mist_garden_udon": {
@@ -1199,18 +1106,9 @@
       "tier": "epic",
       "season": null,
       "ingredients": [
-        {
-          "item_id": "broth_floral",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_udon",
-          "qty": 1
-        },
-        {
-          "item_id": "dew_greens",
-          "qty": 1
-        }
+        {"item_id": "broth_floral", "qty": 1},
+        {"item_id": "noodles_udon", "qty": 1},
+        {"item_id": "dew_greens", "qty": 1}
       ]
     },
     "cherry_blossom_udon": {
@@ -1219,18 +1117,9 @@
       "tier": "seasonal",
       "season": "spring",
       "ingredients": [
-        {
-          "item_id": "broth_sakura",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_udon",
-          "qty": 1
-        },
-        {
-          "item_id": "petal_garnish",
-          "qty": 1
-        }
+        {"item_id": "broth_sakura", "qty": 1},
+        {"item_id": "noodles_udon", "qty": 1},
+        {"item_id": "petal_garnish", "qty": 1}
       ]
     },
     "summer_night_market_ramen": {
@@ -1239,18 +1128,9 @@
       "tier": "seasonal",
       "season": "summer",
       "ingredients": [
-        {
-          "item_id": "broth_chilled_citrus",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_ramen",
-          "qty": 1
-        },
-        {
-          "item_id": "night_spices",
-          "qty": 1
-        }
+        {"item_id": "broth_chilled_citrus", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "night_spices", "qty": 1}
       ]
     },
     "autumn_harvest_ramen": {
@@ -1259,18 +1139,9 @@
       "tier": "seasonal",
       "season": "autumn",
       "ingredients": [
-        {
-          "item_id": "broth_pumpkin",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_thick",
-          "qty": 1
-        },
-        {
-          "item_id": "roasted_roots",
-          "qty": 1
-        }
+        {"item_id": "broth_pumpkin", "qty": 1},
+        {"item_id": "noodles_thick", "qty": 1},
+        {"item_id": "roasted_roots", "qty": 1}
       ]
     },
     "winter_hearth_noodles": {
@@ -1279,18 +1150,9 @@
       "tier": "seasonal",
       "season": "winter",
       "ingredients": [
-        {
-          "item_id": "broth_creamy_hearth",
-          "qty": 1
-        },
-        {
-          "item_id": "noodles_wheat",
-          "qty": 1
-        },
-        {
-          "item_id": "star_anise",
-          "qty": 1
-        }
+        {"item_id": "broth_creamy_hearth", "qty": 1},
+        {"item_id": "noodles_wheat", "qty": 1},
+        {"item_id": "star_anise", "qty": 1}
       ]
     }
   },

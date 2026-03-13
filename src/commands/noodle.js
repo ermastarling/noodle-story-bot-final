@@ -198,7 +198,7 @@ function gardenUnlockLine(prevLevel, newLevel) {
 
 function fishingUnlockLine(prevLevel, newLevel) {
   if ((prevLevel ?? 0) < FISHING_UNLOCK_LEVEL && (newLevel ?? 0) >= FISHING_UNLOCK_LEVEL) {
-    return `\n${getIcon("fishing")} Fishing unlocked! Cast lines from the Pantry.`;
+    return `\n${getIcon("fishing")} Fishing unlocked! Head out through the Pantry to start fishing.`;
   }
   return "";
 }
@@ -221,6 +221,13 @@ const TextInputStyle = {
   Short: Constants?.TextInputStyles?.SHORT ?? 1,
   Paragraph: Constants?.TextInputStyles?.PARAGRAPH ?? 2
 };
+
+const PROTEIN_ITEM_IDS = new Set([
+  "topping_roasted_pork",
+  "topping_grilled_chicken",
+  "topping_braised_tofu",
+  "topping_brisket"
+]);
 
 const baseContent = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();
@@ -670,7 +677,9 @@ function noodleForageGardenRow(userId, {
   fishingJustUnlocked = false,
   canCompost = false,
   canHarvest = false,
-  showGardenActions = false
+  showGardenActions = false,
+  gardenStyleOverride = null,
+  fishingStyleOverride = null
 } = {}) {
   const foragePrimary = active === "forage";
   const row = new ActionRowBuilder().addComponents(
@@ -683,27 +692,29 @@ function noodleForageGardenRow(userId, {
   if (includeGardenButton) {
     const gardenPrimary = active === "garden";
     const gardenUnlocked = !gardenLocked;
-    const gardenStyle = gardenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary;
+    const gardenStyleBase = gardenStyleOverride ?? (gardenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
+    const gardenStyle = gardenPrimary ? (gardenStyleOverride ?? ButtonStyle.Success) : gardenStyleBase;
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:garden:${userId}`)
         .setLabel("Garden").setEmoji(getButtonEmoji("tree"))
-        .setStyle(gardenPrimary ? ButtonStyle.Success : gardenStyle)
+        .setStyle(gardenStyle)
         .setDisabled(gardenLocked)
     );
   }
 
   if (includeFishingButton) {
     const fishingPrimary = active === "fishing";
-    const fishingStyle = !fishingUnlocked
+    const fishingStyleBase = fishingStyleOverride ?? (!fishingUnlocked
       ? ButtonStyle.Secondary
-      : (fishingJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
+      : (fishingJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary));
+    const fishingStyle = fishingPrimary ? (fishingStyleOverride ?? ButtonStyle.Success) : fishingStyleBase;
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:fishing:${userId}`)
         .setLabel("Fishing")
         .setEmoji(getButtonEmoji("fishing"))
-        .setStyle(fishingPrimary ? ButtonStyle.Success : fishingStyle)
+        .setStyle(fishingStyle)
         .setDisabled(!fishingUnlocked)
     );
   }
@@ -1274,15 +1285,17 @@ function formatBonusLabel(key) {
 
 function normalizeIngredientType(itemId) {
   const raw = String(content.items?.[itemId]?.category ?? "").toLowerCase();
+  const tags = Array.isArray(content.items?.[itemId]?.tags) ? content.items[itemId].tags.map((t) => String(t).toLowerCase()) : [];
   if (raw === "broth") return "broth";
   if (raw === "noodles" || raw === "noodle") return "noodles";
   if (raw === "spice" || raw === "aromatic") return "spice";
+  if (tags.includes("fish") || tags.includes("seafood") || tags.includes("protein") || tags.includes("meat") || PROTEIN_ITEM_IDS.has(itemId)) return "protein";
   if (raw === "topping") return "topping";
   return "topping";
 }
 
 function getIngredientCountsByType(player) {
-  const counts = { broth: 0, noodles: 0, spice: 0, topping: 0 };
+  const counts = { broth: 0, noodles: 0, spice: 0, topping: 0, protein: 0 };
   for (const [id, qtyRaw] of Object.entries(player?.inv_ingredients ?? {})) {
     const qty = Math.max(0, Number(qtyRaw) || 0);
     if (!qty) continue;
@@ -1417,7 +1430,8 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
     broth: Math.max(0, capacity - (current.broth ?? 0)),
     noodles: Math.max(0, capacity - (current.noodles ?? 0)),
     spice: Math.max(0, capacity - (current.spice ?? 0)),
-    topping: Math.max(0, capacity - (current.topping ?? 0))
+    topping: Math.max(0, capacity - (current.topping ?? 0)),
+    protein: Math.max(0, capacity - (current.protein ?? 0))
   };
 
   const accepted = {};
@@ -3384,10 +3398,11 @@ if (sub === "pantry") {
 
     const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
     const countsByType = getIngredientCountsByType(p);
-    const typeOrder = ["broth", "noodles", "spice", "topping"];
+    const typeOrder = ["broth", "noodles", "protein", "spice", "topping"];
     const typeLabels = {
       broth: "Broth",
       noodles: "Noodles",
+      protein: "Protein",
       spice: "Spice",
       topping: "Topping"
     };
@@ -3405,8 +3420,8 @@ if (sub === "pantry") {
       })
       .filter(Boolean);
 
-    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1]].filter(Boolean).join("\n\n") || "No ingredients yet.";
-    const flavorBlocksRaw = [categoryBlocks[2], categoryBlocks[3]].filter(Boolean).join("\n\n") || "No spices or toppings yet.";
+    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1], categoryBlocks[2]].filter(Boolean).join("\n\n") || "No ingredients yet.";
+    const flavorBlocksRaw = [categoryBlocks[3], categoryBlocks[4]].filter(Boolean).join("\n\n") || "No spices or toppings yet.";
     const stapleChunks = chunkTextByLength(stapleBlocksRaw, 900);
     const flavorChunks = chunkTextByLength(flavorBlocksRaw, 900);
     if (!stapleChunks.length) stapleChunks.push("No ingredients yet.");
@@ -3479,7 +3494,7 @@ if (sub === "pantry") {
       ? `${getIcon("fishing")} Fishing unlocks at shop level ${FISHING_UNLOCK_LEVEL}.`
       : (fishingJustUnlocked ? `${getIcon("fishing")} Fishing unlocked! Cast lines from the Pantry.` : null);
 
-    const unlockMessages = [gardenLine, fishingLine, kitchenLine].filter(Boolean);
+    const unlockMessages = [gardenLine, kitchenLine, fishingLine].filter(Boolean);
     const unlockLine = unlockMessages.length ? unlockMessages.join("\n") : null;
 
     const viewingIngredients = safePage < ingredientPages;
@@ -3548,7 +3563,8 @@ if (sub === "pantry") {
           gardenLocked: !gardenUnlocked,
           includeFishingButton: true,
           fishingUnlocked,
-          fishingJustUnlocked
+          fishingJustUnlocked,
+          fishingStyleOverride: ButtonStyle.Primary
         }),
         noodleMainMenuRowNoPantry(userId),
         noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
@@ -3597,7 +3613,8 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     if (pendingMessages.length > 0) {
       p.notifications.pending_pantry_messages = [];
     }
-
+      const gardenStyleBase = gardenStyleOverride ?? (gardenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
+      const gardenStyle = gardenPrimary ? (gardenStyleOverride ?? ButtonStyle.Success) : gardenStyleBase;
     const finalize = (payload) => {
       if (db) {
         upsertPlayer(db, serverId, userId, p, null, p.schema_version);
@@ -4841,9 +4858,30 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     advanceTutorial(p, "forage");
     applyQuestProgress(p, questsContent, userId, { type: "forage", amount: 1 }, now);
 
-    const lines = Object.entries(inventoryResult.added).map(
-      ([id, q]) => `• **${q}×** ${displayItemName(id)}`
-    );
+    const fishLines = [];
+    const seafoodLines = [];
+    const otherLines = [];
+
+    for (const [id, q] of Object.entries(inventoryResult.added)) {
+      const name = displayItemName(id);
+      const tags = Array.isArray(content.items?.[id]?.tags)
+        ? content.items[id].tags.map((t) => String(t).toLowerCase())
+        : [];
+      const line = `• **${q}×** ${name}`;
+      if (tags.includes("fish")) {
+        fishLines.push(line);
+      } else if (tags.includes("seafood")) {
+        seafoodLines.push(line);
+      } else {
+        otherLines.push(line);
+      }
+    }
+
+    const groupedLines = [
+      fishLines.length ? `**Fish**\n${fishLines.join("\n")}` : null,
+      seafoodLines.length ? `**Seafood**\n${seafoodLines.join("\n")}` : null,
+      otherLines.length ? `**Other**\n${otherLines.join("\n")}` : null
+    ].filter(Boolean);
 
     const header = itemId
       ? `You search carefully and gather:\n`
@@ -4927,7 +4965,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         kitchenJustUnlocked,
         includeFishingButton: true,
         fishingUnlocked,
-        fishingJustUnlocked
+        fishingJustUnlocked,
+        gardenStyleOverride: ButtonStyle.Secondary,
+        fishingStyleOverride: ButtonStyle.Primary
       }),
       noodleMainMenuRow(userId)
     ];
@@ -5048,7 +5088,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const fishingEmbed = buildMenuEmbed({
       title: `${getIcon("fishing")} Fishing`,
-      description: `${getIcon("fishing")} You cast your line and reel in:\n${lines.join("\n")}${rejectedText}`,
+      description: `${getIcon("fishing")} You cast your line and reel in:\n${groupedLines.join("\n\n")}${rejectedText}`,
       user: interaction.member ?? interaction.user,
       color: theme.colors.success
     });
@@ -5997,7 +6037,8 @@ ${lines.join("\n")}`;
         broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
         noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
         spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
-        topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0))
+        topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0)),
+        protein: Math.max(0, perTypeCap - (countsByType.protein ?? 0))
       };
       const bowlsRemaining = {};
       const coinsStart = Number(p.coins || 0);
@@ -7958,7 +7999,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
           noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
           spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
-          topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0))
+          topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0)),
+          protein: Math.max(0, perTypeCap - (countsByType.protein ?? 0))
         };
 
         const want = {};
