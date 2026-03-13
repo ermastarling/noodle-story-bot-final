@@ -140,6 +140,20 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "black_garlic", qty: 1 },
     { item_id: "carrots", qty: 1 },
     { item_id: "root_vegetables", qty: 1 }
+  ],
+  broth_fish_clear: [
+    { item_id: "tilapia", qty: 1 },
+    { item_id: "seabass", qty: 1 },
+    { item_id: "flounder", qty: 1 },
+    { item_id: "basa", qty: 1 },
+    { item_id: "mackerel", qty: 1 }
+  ],
+  broth_seafood_hearty: [
+    { item_id: "shrimp", qty: 1 },
+    { item_id: "clams", qty: 1 },
+    { item_id: "squid", qty: 1 },
+    { item_id: "crab", qty: 1 },
+    { item_id: "oysters", qty: 1 }
   ]
 };
 

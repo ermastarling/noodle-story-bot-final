@@ -143,6 +143,17 @@ import {
   SPOILED_STASH_KEY
 } from "../game/garden.js";
 import {
+  canFish,
+  rollFishingDrops,
+  setFishingCooldown,
+  ensureFishingState,
+  getFishingUnlockState,
+  applyFishingDrops,
+  FISHING_BASE_COOLDOWN_MS,
+  FISHING_UNLOCK_LEVEL,
+  RARE_FISHING_ITEM_IDS
+} from "../game/fishing.js";
+import {
   ensureKitchenState,
   getKitchenStatus,
   getKitchenBatches,
@@ -181,6 +192,13 @@ const compostSelectionCache = new Map();
 function gardenUnlockLine(prevLevel, newLevel) {
   if ((prevLevel ?? 0) < GARDEN_UNLOCK_LEVEL && (newLevel ?? 0) >= GARDEN_UNLOCK_LEVEL) {
     return `\n${getIcon("tree")} Garden unlocked! Find it in Forage or Pantry.`;
+  }
+  return "";
+}
+
+function fishingUnlockLine(prevLevel, newLevel) {
+  if ((prevLevel ?? 0) < FISHING_UNLOCK_LEVEL && (newLevel ?? 0) >= FISHING_UNLOCK_LEVEL) {
+    return `\n${getIcon("fishing")} Fishing unlocked! Cast lines from the Pantry.`;
   }
   return "";
 }
@@ -644,9 +662,12 @@ function noodleForageGardenRow(userId, {
   active = "forage",
   gardenLocked = false,
   includeGardenButton = true,
+  includeFishingButton = false,
   includeKitchenButton = false,
   kitchenUnlocked = false,
   kitchenJustUnlocked = false,
+  fishingUnlocked = false,
+  fishingJustUnlocked = false,
   canCompost = false,
   canHarvest = false,
   showGardenActions = false
@@ -669,6 +690,21 @@ function noodleForageGardenRow(userId, {
         .setLabel("Garden").setEmoji(getButtonEmoji("tree"))
         .setStyle(gardenPrimary ? ButtonStyle.Success : gardenStyle)
         .setDisabled(gardenLocked)
+    );
+  }
+
+  if (includeFishingButton) {
+    const fishingPrimary = active === "fishing";
+    const fishingStyle = !fishingUnlocked
+      ? ButtonStyle.Secondary
+      : (fishingJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:fishing:${userId}`)
+        .setLabel("Fishing")
+        .setEmoji(getButtonEmoji("fishing"))
+        .setStyle(fishingPrimary ? ButtonStyle.Success : fishingStyle)
+        .setDisabled(!fishingUnlocked)
     );
   }
 
@@ -3307,6 +3343,7 @@ if (sub === "pantry") {
     const rawPage = opt.getInteger("page") ?? overrides?.integers?.page ?? 0;
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const now = nowTs();
     const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
@@ -3438,9 +3475,12 @@ if (sub === "pantry") {
       ? `${getIcon("tree")} Garden unlocks at shop level ${GARDEN_UNLOCK_LEVEL}.`
       : null;
 
-    const unlockLine = !kitchenUnlocked
-      ? [gardenLine, `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`].filter(Boolean).join("\n")
-      : (gardenUnlocked ? null : gardenLine);
+    const fishingLine = !fishingUnlocked
+      ? `${getIcon("fishing")} Fishing unlocks at shop level ${FISHING_UNLOCK_LEVEL}.`
+      : (fishingJustUnlocked ? `${getIcon("fishing")} Fishing unlocked! Cast lines from the Pantry.` : null);
+
+    const unlockMessages = [gardenLine, fishingLine, kitchenLine].filter(Boolean);
+    const unlockLine = unlockMessages.length ? unlockMessages.join("\n") : null;
 
     const viewingIngredients = safePage < ingredientPages;
     const spoilageNotice = viewingIngredients
@@ -3449,7 +3489,7 @@ if (sub === "pantry") {
 
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
-      unlockLine ?? kitchenLine,
+      unlockLine,
       spoilageNotice
     ].filter(Boolean).join("\n\n");
 
@@ -3503,7 +3543,13 @@ if (sub === "pantry") {
       embeds: [pantryEmbed],
       components: [
         pantryPageRow(userId, safePage, totalPages, ingredientPages),
-        noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked }),
+        noodleForageGardenRow(userId, {
+          active: "forage",
+          gardenLocked: !gardenUnlocked,
+          includeFishingButton: true,
+          fishingUnlocked,
+          fishingJustUnlocked
+        }),
         noodleMainMenuRowNoPantry(userId),
         noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
       ]
@@ -4413,9 +4459,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
+    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
     const embed = buildMenuEmbed({
       title: `${getIcon("daily_reward")} Daily Reward`,
-      description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")} ${levelLine}${gardenLine}`,
+      description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")} ${levelLine}${gardenLine}${fishingLine}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -4448,9 +4495,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
+    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
     const embed = buildMenuEmbed({
       title: `${getIcon("status_complete")} Quest Rewards`,
-      description: `${lines.join("\n")}${levelLine}${gardenLine}`,
+      description: `${lines.join("\n")}${levelLine}${gardenLine}${fishingLine}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -4861,6 +4909,151 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       embeds: [forageEmbed],
       components
     });
+  }
+
+  /* ---------------- FISHING ---------------- */
+  if (sub === "fishing") {
+    ensureFishingState(p);
+    const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
+    const gardenUnlocked = isGardenUnlocked(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+
+    const navRows = [
+      noodleForageGardenRow(userId, {
+        active: "fishing",
+        gardenLocked: !gardenUnlocked,
+        includeKitchenButton: true,
+        kitchenUnlocked,
+        kitchenJustUnlocked,
+        includeFishingButton: true,
+        fishingUnlocked,
+        fishingJustUnlocked
+      }),
+      noodleMainMenuRow(userId)
+    ];
+
+    if (!fishingUnlocked) {
+      const lockedEmbed = buildMenuEmbed({
+        title: `${getIcon("fishing")} Fishing`,
+        description: `${getIcon("lock")} Reach shop level ${FISHING_UNLOCK_LEVEL} to unlock fishing and reel in fresh catches.`,
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+      return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
+    }
+
+    const baseCooldownMs = applyCooldownReduction(FISHING_BASE_COOLDOWN_MS, combinedEffects);
+    const chk = canFish(p, now, baseCooldownMs);
+    if (!chk.ok) {
+      const nextAtTs = Math.floor(chk.nextAt / 1000);
+      const cooldownEmbed = buildMenuEmbed({
+        title: `${getIcon("cooldown")} Fishing Cooldown`,
+        description: `You just finished fishing. Try again at <t:${nextAtTs}:t>, <t:${nextAtTs}:R>.`,
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+      return commitState({ content: " ", embeds: [cooldownEmbed], components: navRows });
+    }
+
+    const bonusItems = Math.max(0, Math.floor(combinedEffects.fishing_bonus_items || 0));
+    let drops;
+    try {
+      drops = rollFishingDrops({
+        serverId,
+        userId: interaction.user.id,
+        picks: 2 + bonusItems
+      });
+    } catch (err) {
+      return commitState({
+        content: `${getIcon("error")} Fishing isn’t available right now.`,
+        components: navRows,
+        ephemeral: true
+      });
+    }
+
+    if (bonusItems > 0) {
+      const ids = Object.keys(drops);
+      if (ids.length) {
+        const first = ids[0];
+        drops[first] = (drops[first] ?? 0) + bonusItems;
+      }
+    }
+
+    const allowedRare = RARE_FISHING_ITEM_IDS ?? [];
+    if (allowedRare.length) {
+      const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
+      if (hasRareDrop) {
+        p.fishing_pity_rare_count = 0;
+      } else {
+        p.fishing_pity_rare_count = (p.fishing_pity_rare_count || 0) + 1;
+        if (p.fishing_pity_rare_count >= 10) {
+          const pityRng = makeStreamRng({
+            mode: "seeded",
+            seed: 13579,
+            streamName: "fishing_pity",
+            serverId,
+            dayKey: dayKeyUTC(),
+            userId: interaction.user.id
+          });
+          const pickIdx = Math.floor(pityRng() * allowedRare.length);
+          const pityItem = allowedRare[Math.max(0, Math.min(allowedRare.length - 1, pickIdx))];
+          drops[pityItem] = (drops[pityItem] ?? 0) + 1;
+          p.fishing_pity_rare_count = 0;
+        }
+      }
+    }
+
+    const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects);
+    const { accepted, rejected } = capacityResult;
+
+    if (!Object.keys(accepted).length) {
+      setFishingCooldown(p, now);
+      const fullEmbed = buildMenuEmbed({
+        title: `${getIcon("fishing")} Fishing`,
+        description: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+      return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
+    }
+
+    const inventoryResult = applyFishingDrops(p, accepted);
+    setFishingCooldown(p, now);
+
+    if (!Object.keys(inventoryResult.added).length) {
+      const blockedLines = Object.entries(inventoryResult.blocked ?? {}).map(
+        ([id, q]) => `**${q}×** ${displayItemName(id)}`
+      );
+      const blockedText = blockedLines.length
+        ? ` Could not collect: ${blockedLines.join(", ")}.`
+        : "";
+      const fullEmbed = buildMenuEmbed({
+        title: `${getIcon("fishing")} Fishing`,
+        description: `${getIcon("basket")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`,
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+      return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
+    }
+
+    const lines = Object.entries(inventoryResult.added).map(
+      ([id, q]) => `• **${q}×** ${displayItemName(id)}`
+    );
+
+    const rejectedText = Object.keys(rejected || {}).length
+      ? `\n\n${getIcon("basket")} Pantry full — left behind ${Object.entries(rejected)
+        .map(([id, q]) => `**${q}×** ${displayItemName(id)}`)
+        .join(", ")}.`
+      : "";
+
+    const fishingEmbed = buildMenuEmbed({
+      title: `${getIcon("fishing")} Fishing`,
+      description: `${getIcon("fishing")} You cast your line and reel in:\n${lines.join("\n")}${rejectedText}`,
+      user: interaction.member ?? interaction.user,
+      color: theme.colors.success
+    });
+
+    return commitState({ content: " ", embeds: [fishingEmbed], components: navRows });
   }
 
   /* ---------------- GARDEN ---------------- */
@@ -6416,6 +6609,7 @@ ${lines.join("\n")}`;
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
     const levelLine = leveledUp ? `\n${getIcon("level_up")} Level up! You're now **Level ${p.shop_level}**.` : "";
     const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
+    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
     const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.join("\n")}` : "";
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
@@ -6431,7 +6625,7 @@ ${lines.join("\n")}`;
 
     const serveLines = [results.join("\n")];
     if (missingBlock) serveLines.push("", missingBlock);
-    serveLines.push("", `${summary}${levelLine}${gardenLine}${discoveryLine}${suffix}`);
+  serveLines.push("", `${summary}${levelLine}${gardenLine}${fishingLine}${discoveryLine}${suffix}`);
 
     const serveEmbed = buildMenuEmbed({
       title: `${getIcon("serve")} Orders Served`,
@@ -8180,6 +8374,7 @@ const noodleCommandData = new SlashCommandBuilder()
   )
   .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
   .addSubcommand((sc) => sc.setName("pantry").setDescription("View your ingredient pantry."))
+  .addSubcommand((sc) => sc.setName("fishing").setDescription("Cast a line for fresh catches."))
   .addSubcommand((sc) => sc.setName("recipes").setDescription("View your unlocked recipes and clues."))
   .addSubcommand((sc) => sc.setName("regulars").setDescription("View regular NPCs and their bonuses."))
   .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))

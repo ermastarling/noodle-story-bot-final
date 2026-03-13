@@ -81,6 +81,141 @@
         "umami"
       ]
     },
+    "tilapia": {
+      "item_id": "tilapia",
+      "name": "Tilapia",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "common",
+      "spoilable": true,
+      "tags": ["fish", "mild"]
+    },
+    "seabass": {
+      "item_id": "seabass",
+      "name": "Seabass",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": ["fish", "buttery"]
+    },
+    "grouper": {
+      "item_id": "grouper",
+      "name": "Grouper",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": ["fish", "rich"]
+    },
+    "catfish": {
+      "item_id": "catfish",
+      "name": "Catfish",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "common",
+      "spoilable": true,
+      "tags": ["fish", "earthy"]
+    },
+    "flounder": {
+      "item_id": "flounder",
+      "name": "Flounder",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": ["fish", "delicate"]
+    },
+    "basa": {
+      "item_id": "basa",
+      "name": "Basa",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "common",
+      "spoilable": true,
+      "tags": ["fish", "mild"]
+    },
+    "salmon": {
+      "item_id": "salmon",
+      "name": "Salmon",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": ["fish", "rich"]
+    },
+    "mackerel": {
+      "item_id": "mackerel",
+      "name": "Mackerel",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": ["fish", "oily"]
+    },
+    "eel": {
+      "item_id": "eel",
+      "name": "Eel",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": ["fish", "rich"]
+    },
+    "tuna": {
+      "item_id": "tuna",
+      "name": "Tuna",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": ["fish", "firm"]
+    },
+    "shrimp": {
+      "item_id": "shrimp",
+      "name": "Shrimp",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "common",
+      "spoilable": true,
+      "tags": ["seafood", "sweet"]
+    },
+    "squid": {
+      "item_id": "squid",
+      "name": "Squid",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": ["seafood", "chewy"]
+    },
+    "clams": {
+      "item_id": "clams",
+      "name": "Clams",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "common",
+      "spoilable": true,
+      "tags": ["seafood", "briny"]
+    },
+    "crab": {
+      "item_id": "crab",
+      "name": "Crab",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "rare",
+      "spoilable": true,
+      "tags": ["seafood", "sweet"]
+    },
+    "oysters": {
+      "item_id": "oysters",
+      "name": "Oysters",
+      "category": "topping",
+      "acquisition": "fishing",
+      "tier": "uncommon",
+      "spoilable": true,
+      "tags": ["seafood", "briny"]
+    },
     "night_herbs": {
       "item_id": "night_herbs",
       "name": "Night Herbs",
@@ -416,6 +551,28 @@
       "stock_min": 100,
       "stock_max": 150
     },
+    "broth_fish_clear": {
+      "item_id": "broth_fish_clear",
+      "name": "Clear Fish Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 18,
+      "stock_min": 80,
+      "stock_max": 120
+    },
+    "broth_seafood_hearty": {
+      "item_id": "broth_seafood_hearty",
+      "name": "Hearty Seafood Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "rare",
+      "spoilable": false,
+      "base_price": 24,
+      "stock_min": 60,
+      "stock_max": 90
+    },
     "noodles_wheat": {
       "item_id": "noodles_wheat",
       "name": "Wheat Noodles",
@@ -644,6 +801,64 @@
           "item_id": "spice_sesame_oil",
           "qty": 1
         }
+      ]
+    },
+    "catfish_shore_ramen": {
+      "recipe_id": "catfish_shore_ramen",
+      "name": "Catfish Shore Ramen",
+      "tier": "uncommon",
+      "season": null,
+      "ingredients": [
+        { "item_id": "broth_fish_clear", "qty": 1 },
+        { "item_id": "noodles_wheat", "qty": 1 },
+        { "item_id": "catfish", "qty": 1 }
+      ]
+    },
+    "salmon_ocean_udon": {
+      "recipe_id": "salmon_ocean_udon",
+      "name": "Salmon Ocean Udon",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        { "item_id": "broth_seafood_hearty", "qty": 1 },
+        { "item_id": "noodles_udon", "qty": 1 },
+        { "item_id": "salmon", "qty": 1 }
+      ]
+    },
+    "grouper_miso_bowl": {
+      "recipe_id": "grouper_miso_bowl",
+      "name": "Grouper Miso Bowl",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        { "item_id": "broth_fish_clear", "qty": 1 },
+        { "item_id": "noodles_thick", "qty": 1 },
+        { "item_id": "grouper", "qty": 1 },
+        { "item_id": "dew_greens", "qty": 1 }
+      ]
+    },
+    "tuna_eel_deluxe": {
+      "recipe_id": "tuna_eel_deluxe",
+      "name": "Tuna & Eel Deluxe",
+      "tier": "epic",
+      "season": null,
+      "ingredients": [
+        { "item_id": "broth_seafood_hearty", "qty": 1 },
+        { "item_id": "noodles_ramen", "qty": 1 },
+        { "item_id": "tuna", "qty": 1 },
+        { "item_id": "eel", "qty": 1 }
+      ]
+    },
+    "harbor_crab_ramen": {
+      "recipe_id": "harbor_crab_ramen",
+      "name": "Harbor Crab Ramen",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        { "item_id": "broth_seafood_hearty", "qty": 1 },
+        { "item_id": "noodles_ramen", "qty": 1 },
+        { "item_id": "crab", "qty": 1 },
+        { "item_id": "topping_chili_flakes", "qty": 1 }
       ]
     },
     "butter_noodles": {
