@@ -3398,7 +3398,7 @@ if (sub === "pantry") {
 
     const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
     const countsByType = getIngredientCountsByType(p);
-    const typeOrder = ["broth", "noodles", "topping", "protein", "spice"];
+    const typeOrder = ["broth", "noodles", "spice", "topping", "protein"];
     const typeLabels = {
       broth: "Broth",
       noodles: "Noodles",
@@ -3420,8 +3420,8 @@ if (sub === "pantry") {
       })
       .filter(Boolean);
 
-    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1], categoryBlocks[2], categoryBlocks[3]].filter(Boolean).join("\n\n") || "No ingredients yet.";
-    const flavorBlocksRaw = [categoryBlocks[4]].filter(Boolean).join("\n\n") || "No spices yet.";
+    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1]].filter(Boolean).join("\n\n") || "No ingredients yet.";
+    const flavorBlocksRaw = [categoryBlocks[2], categoryBlocks[3], categoryBlocks[4]].filter(Boolean).join("\n\n") || "No spices yet.";
     const stapleChunks = chunkTextByLength(stapleBlocksRaw, 900);
     const flavorChunks = chunkTextByLength(flavorBlocksRaw, 900);
     if (!stapleChunks.length) stapleChunks.push("No ingredients yet.");
@@ -3615,8 +3615,6 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     if (pendingMessages.length > 0) {
       p.notifications.pending_pantry_messages = [];
     }
-      const gardenStyleBase = gardenStyleOverride ?? (gardenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
-      const gardenStyle = gardenPrimary ? (gardenStyleOverride ?? ButtonStyle.Success) : gardenStyleBase;
     const finalize = (payload) => {
       if (db) {
         upsertPlayer(db, serverId, userId, p, null, p.schema_version);
@@ -4889,7 +4887,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ? `You search carefully and gather:\n`
       : `You wander into the nearby grove and return with:\n`;
 
-    let description = `${header}${lines.join("\n")}`;
+    const bodyLines = groupedLines.length ? groupedLines : ["_Nothing found._"];
+    let description = `${header}${bodyLines.join("\n\n")}`;
 
     const seedDrops = {};
     if (gardenUnlocked) {
@@ -5082,34 +5081,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
     }
 
-    const fishLines = [];
-    const seafoodLines = [];
-    const otherLines = [];
-
-    for (const [id, q] of Object.entries(inventoryResult.added)) {
-      const name = displayItemName(id);
-      const tags = Array.isArray(content.items?.[id]?.tags)
-        ? content.items[id].tags.map((t) => String(t).toLowerCase())
-        : [];
-      const line = `• **${q}×** ${name}`;
-      if (tags.includes("fish")) {
-        fishLines.push(line);
-      } else if (tags.includes("seafood")) {
-        seafoodLines.push(line);
-      } else {
-        otherLines.push(line);
-      }
-    }
-
-    const groupedLines = [
-      fishLines.length ? `**Fish**\n${fishLines.join("\n")}` : null,
-      seafoodLines.length ? `**Seafood**\n${seafoodLines.join("\n")}` : null,
-      otherLines.length ? `**Other**\n${otherLines.join("\n")}` : null
-    ].filter(Boolean);
-
-    const groupedLinesText = groupedLines.length
-      ? groupedLines.join("\n\n")
-      : [...fishLines, ...seafoodLines, ...otherLines].join("\n");
+    const catchLines = Object.entries(inventoryResult.added).map(([id, q]) => `• **${q}×** ${displayItemName(id)}`);
+    const groupedLinesText = catchLines.length ? catchLines.join("\n") : "_Nothing caught._";
 
     const rejectedText = Object.keys(rejected || {}).length
       ? `\n\n${getIcon("basket")} Pantry full — left behind ${Object.entries(rejected)
@@ -5119,7 +5092,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const fishingEmbed = buildMenuEmbed({
       title: `${getIcon("fishing")} Fishing`,
-      description: `${getIcon("fishing")} You cast your line and reel in:\n${groupedLinesText}${rejectedText}`,
+      description: `You cast your line and reel in:\n${groupedLinesText}${rejectedText}`,
       user: interaction.member ?? interaction.user,
       color: theme.colors.success
     });
