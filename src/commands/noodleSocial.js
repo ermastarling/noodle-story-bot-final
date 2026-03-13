@@ -411,8 +411,15 @@ function sharedOrderActionRow(userId, hasActiveOrder, isPartyLeader, canComplete
       components.push(
         new ButtonBuilder()
           .setCustomId(`noodle-social:action:shared_order_cancel:${userId}`)
-            .setLabel("Cancel Order").setEmoji(getButtonEmoji("broom"))
+          .setLabel("Cancel Order").setEmoji(getButtonEmoji("broom"))
           .setStyle(ButtonStyle.Danger)
+      );
+
+      components.push(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:shared_order_refresh:${userId}`)
+          .setEmoji(getButtonEmoji("refresh"))
+          .setStyle(ButtonStyle.Secondary)
       );
 
       if (canComplete) {
@@ -2412,6 +2419,83 @@ async function handleComponent(interaction) {
       }
 
       return componentCommit(interaction, replyObj);
+    }
+
+    if (action === "shared_order_refresh") {
+      const party = getUserActiveParty(db, userId);
+      if (!party) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} You're not in a party.`,
+          ephemeral: true
+        });
+      }
+
+      if (party.leader_user_id !== userId) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} Only the party leader can refresh the shared order.`,
+          ephemeral: true
+        });
+      }
+
+      const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
+      if (!sharedOrder) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} No active shared order.`,
+          ephemeral: true
+        });
+      }
+
+      const recipe = content.recipes[sharedOrder.order_id];
+      if (!recipe) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} Recipe not found.`,
+          ephemeral: true
+        });
+      }
+
+      const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+      const progress = buildSharedOrderProgress({
+        recipe,
+        servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+        contributions
+      });
+      const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
+      const canComplete = progress.isComplete && hasOtherContributor;
+
+      const ingredientLines = progress.items.map((item) => {
+        const itemData = content.items[item.ingredientId];
+        const itemName = itemData?.name || `Item #${item.ingredientId}`;
+        const bar = item.remaining > 0
+          ? `[${item.contributed}/${item.required}]`
+          : `${getIcon("status_complete")} [${item.required}/${item.required}]`;
+        return `${itemName} ${bar}`;
+      }).join("\n");
+
+      const embed = new EmbedBuilder()
+        .setTitle(`${getIcon("serve")} ${recipe.name}`)
+        .setDescription(`**Servings**: ${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
+        .addFields(
+          {
+            name: `${getIcon("ingredient_capacity")} Ingredients`,
+            value: ingredientLines || "No ingredients",
+            inline: false
+          },
+          {
+            name: "Status",
+            value: canComplete ? `${getIcon("status_complete")} Ready to complete!` : `${getIcon("hourglass")} In progress...`,
+            inline: false
+          }
+        )
+        .setColor(canComplete ? theme.colors.success : theme.colors.warning)
+        .setFooter({ text: ownerFooterText(interaction.member ?? interaction.user) });
+
+      const targetMessageId = interaction.message?.id ?? null;
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [sharedOrderActionRow(userId, true, true, canComplete), socialMainMenuRow(userId)],
+        targetMessageId
+      });
     }
 
     if (action === "shared_order_create") {

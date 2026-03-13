@@ -53,14 +53,14 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function buildReminderEmbed({ guildName, channelLine, user }) {
+function buildReminderEmbed({ guildName, channelLine, claimLine, user }) {
   return new EmbedBuilder()
-    .setTitle(`${getIcon("mail")} Daily Reward Ready`)
+    .setTitle(`Daily Reward Ready ${getIcon("mail")}`)
     .setDescription([
       `Your daily reward is ready in **${guildName}**!`,
       `${getIcon("orders")} New orders are on the board today, come back to serve your regulars!`,
-      "",
-      channelLine,
+      channelLine ? `\n${channelLine}` : null,
+      claimLine,
       "\nDisable reminders below."
     ].filter(Boolean).join("\n"))
     .setColor(theme.colors.primary)
@@ -127,9 +127,10 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
           ? `https://discord.com/channels/${lastGuildId}/${channelId}`
           : null;
         const channelLine = channelId
-          ? `Last kitchen: [Open channel](${channelUrl}).`
+          ? `Last kitchen: <#${channelId}>`
           : null;
-        const embed = buildReminderEmbed({ guildName: lastGuildName, channelLine, user });
+        const claimLine = `Use /noodle quests_daily to claim your daily reward.`;
+        const embed = buildReminderEmbed({ guildName: lastGuildName, channelLine, claimLine, user });
         const components = buildDmReminderComponents({
           userId: row.user_id,
           serverId,
