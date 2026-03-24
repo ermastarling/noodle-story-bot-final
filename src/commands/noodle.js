@@ -10,11 +10,11 @@ import {
 } from "../game/forage.js";
 import { addIngredientsToInventory, removeIngredientsFromInventory } from "../game/inventory.js";
 import {
-advanceTutorial,
-ensureTutorial,
-getCurrentTutorialStep,
-formatTutorialMessage,
-formatTutorialCompletionMessage
+  advanceTutorial,
+  ensureTutorial,
+  getCurrentTutorialStep,
+  formatTutorialMessage,
+  formatTutorialCompletionMessage
 } from "../game/tutorial.js";
 import {
   loadContentBundle,
@@ -515,53 +515,80 @@ function isDevAdmin(userId) {
 function buildHelpPage({ page, userId, user }) {
   const pages = [
     {
-        title: `${getIcon("help")} Help`,
+      title: `${getIcon("help")} Help`,
       description: [
         "**Hello chef! Begin the tutorial with `/noodle start`, you can play exclusively with buttons.**",
         "\n**When you've completed the tutorial, you will only need to use `/noodle orders` any time you want to access all play commands.**",
         "",
-        "Error messages are sent only to you.\n\nTip: Copy/paste the '/noodle start' or '/noodle orders' text into a message on this channel and send!"
-      ].join("\n")
+        `Error messages are sent only to you.\n${getIcon("help")} If you need further help, screenshot your error & head over to the ⁠support server! [Join here](https://discord.gg/uue7K92pwj)\nTip: Copy/paste the '/noodle start' or '/noodle orders' text into a message on this channel and send!`
+      ].join("\n"),
+      supportUrl: "https://discord.gg/uue7K92pwj"
     },
     {
       title: `${getIcon("help")} Help — Buttons`,
-      description: [
-        "**Main Menu**",
-        "• `/noodle orders` — View today's orders.",
-        "• `/noodle buy` — Buy ingredients (multi-buy).",
-        "• `/noodle forage` — Forage for ingredients.",
-        "• `/noodle pantry` — View your pantry.",
-        "• `/noodle profile` — View your profile.",
-        "",
-        "**Orders Menu**",
-        "• `/noodle accept` — Accept an order.",
-        "• `/noodle cook` — Cook a recipe.",
-        "• `/noodle serve` — Serve accepted orders.",
-        "• `/noodle cancel` — Cancel an accepted order.",
-        "",
-        "**Profile / Customize**",
-        "• `/noodle specialize` — Choose a shop specialization.",
-        "• `/noodle recipes` — View your recipes and clues.",
-        "• `/noodle regulars` — View your shop regulars.",
-        "• `/noodle season` — View the current season.",
-        "• `/noodle event` — View the current event.",
-        "",
-        "**Quests Menu**",
-        "• `/noodle quests` — View quests.",
-        "• `/noodle quests_daily` — Claim your daily reward.",
-        "• `/noodle quests_claim` — Claim your quest rewards.",
-        "",
-        "**Party Menu**",
-        "• `/noodle-social party` — Manage your party.",
-        "• `/noodle-social tip` — Tip another player.",
-        "• `/noodle-social visit` — Bless another player's shop.",
-        "• `/noodle-social leaderboard` — View leaderboard.",
-        "• `/noodle-social stats` — View your social stats.",
-        "",
-        "**Upgrades Menu**",
-        "• `/noodle-upgrades` — View your shop upgrades.",
-        "• `/noodle-staff` — Manage your staff."
-      ].join("\n")
+      description: "Commands you can play with buttons.",
+      fields: [
+        {
+          name: "Main Menu",
+          value: [
+            "• `/noodle orders` — View today's orders.",
+            "• `/noodle buy` — Buy ingredients (multi-buy).",
+            "• `/noodle profile` — View your profile.",
+            "• `/noodle pantry` — View your pantry."
+          ].join("\n"),
+          inline: true
+        },
+        {
+          name: "Orders Menu",
+          value: [
+            "• `/noodle accept` — Accept an order.",
+            "• `/noodle cook` — Cook a recipe.",
+            "• `/noodle serve` — Serve accepted orders.",
+            "• `/noodle cancel` — Cancel an accepted order."
+          ].join("\n"),
+          inline: true
+        },
+        {
+          name: "Pantry & Gathering",
+          value: [
+            "• `/noodle pantry` — View your pantry.",
+            "• `/noodle forage` — Forage for ingredients.",
+            `• \`/noodle garden\` — Tend your garden. ${getIcon("lock")} Unlocks at shop level ${GARDEN_UNLOCK_LEVEL}.`,
+            `• \`/noodle kitchen\` — Simmer broths and bowls. ${getIcon("lock")} Unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`,
+            `• \`/noodle fishing\` — Cast a line for fresh catches. ${getIcon("lock")} Unlocks at shop level ${FISHING_UNLOCK_LEVEL}.`
+          ].join("\n"),
+          inline: true
+        },
+        {
+          name: "Profile & Customize",
+          value: [
+            "• `/noodle recipes` — View your recipes and clues.",
+            "• `/noodle regulars` — View your shop regulars.",
+            "• `/noodle specialize` — Choose a shop specialization.",
+            "• `/noodle profile` — Edit shop name/tagline.",
+            "• Store button — Opens the decor/cosmetics store."
+          ].join("\n"),
+          inline: true
+        },
+        {
+          name: "Quests & Events",
+          value: [
+            "• `/noodle quests` — View quests.",
+            "• `/noodle quests_daily` — Claim your daily reward.",
+            "• `/noodle quests_claim` — Claim your quest rewards.",
+            "• `/noodle season` — View the current season.",
+            "• `/noodle event` — View the current event."
+          ].join("\n"),
+          inline: true
+        },
+        {
+          name: "Social & Support",
+          value: [
+            "• Support button — Join the support server for support!"
+          ].join("\n"),
+          inline: true
+        }
+      ]
     },
     {
       title: `${getIcon("help")} Help — Slash Commands Only`,
@@ -587,6 +614,9 @@ function buildHelpPage({ page, userId, user }) {
     description: current.description,
     user
   });
+  if (current.fields) {
+    embed.setFields(current.fields);
+  }
   const ownerText = user ? ownerFooterText(user) : null;
   const footerText = ownerText
     ? `Page ${safePage + 1}/${pages.length} • ${ownerText}`
@@ -608,7 +638,18 @@ function buildHelpPage({ page, userId, user }) {
       .setDisabled(safePage >= pages.length - 1)
   );
 
-  return { embed, components: [row] };
+  const rows = [row];
+  if (current.supportUrl) {
+    const supportRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Join Support Server")
+        .setStyle(ButtonStyle.Link)
+        .setURL(current.supportUrl)
+    );
+    rows.unshift(supportRow);
+  }
+
+  return { embed, components: rows };
 }
 
 function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
