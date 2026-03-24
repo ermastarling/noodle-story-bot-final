@@ -1740,6 +1740,10 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   const forageEntries = Object.entries(foragePool).filter(([, qty]) => qty > 0);
   const totalForage = forageEntries.reduce((sum, [, qty]) => sum + qty, 0);
 
+  const proteinEntries = Object.entries(player.inv_ingredients ?? {})
+    .filter(([id, qty]) => qty > 0 && normalizeIngredientType(id) === "protein");
+  const totalProtein = proteinEntries.reduce((sum, [, qty]) => sum + qty, 0);
+
   const kitchenLines = [];
   if (!kitchenUnlocked) {
     kitchenLines.push(`${getIcon("lock")} Reach shop level ${KITCHEN_UNLOCK_LEVEL} to unlock the kitchen.`);
@@ -1803,6 +1807,19 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     `${forageList}${forageFooter}`
   ].filter(Boolean).join("\n");
 
+  const proteinList = proteinEntries
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+    .slice(0, 10)
+    .map(([id, qty]) => `• ${displayItemName(id)}: **${qty}**`)
+    .join("\n") || "_No proteins yet_.";
+  const proteinHiddenCount = Math.max(0, proteinEntries.length - 10);
+  const proteinFooter = proteinHiddenCount > 0 ? `\n…and ${proteinHiddenCount} more.` : "";
+  const proteinValue = [
+    `${getIcon("fish")} **${totalProtein}** in pantry.`,
+    " ",
+    `${proteinList}${proteinFooter}`
+  ].filter(Boolean).join("\n");
+
   const kitchenStatusValue = kitchenLines.join("\n\n") || `${getIcon("cook")} Select a broth below to start.`;
   const descriptionParts = [banner, pendingMessages.length ? pendingMessages.join("\n") : null].filter(Boolean);
   const embed = buildMenuEmbed({
@@ -1815,6 +1832,12 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     {
       name: "Forageables Available",
       value: forageValue,
+      inline: true
+    },
+    { name: " ", value: "· · · · · · ·", inline: true },
+    {
+      name: "Proteins Available",
+      value: proteinValue,
       inline: true
     },
     { name: " ", value: "· · · · · · ·", inline: true },
@@ -2629,7 +2652,8 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
       return { label, value: id };
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 
   const pageSize = 25;
   const totalPages = Math.max(1, Math.ceil(allOpts.length / pageSize));
@@ -2776,9 +2800,45 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   };
 }
 
+function buildSellQuantityRow(userId, selectedIds, page) {
+  const ids = (selectedIds ?? []).filter(Boolean).slice(0, 5);
+  const safePage = Number.isFinite(page) ? Number(page) : 0;
+  const joined = ids.join(",");
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:sell:sell1:${userId}:${safePage}:${joined}`)
+      .setLabel("Sell 1 each")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`noodle:sell:sell5:${userId}:${safePage}:${joined}`)
+      .setLabel("Sell 5 each")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:sell:sell10:${userId}:${safePage}:${joined}`)
+      .setLabel("Sell 10 each")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:sell:${userId}:${safePage}`)
+      .setLabel("Clear")
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
 function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const ownedItems = Object.entries(p.inv_ingredients ?? {})
-    .filter(([id, q]) => q > 0 && SELLABLE_ITEM_IDS.has(id));
+    .filter(([id, q]) => q > 0 && SELLABLE_ITEM_IDS.has(id))
+    .map(([id, ownedQty]) => {
+      const it = content.items?.[id];
+      if (!it) return null;
+
+      const price = sellPrice(s, id);
+      if (price <= 0) return null;
+
+      return { id, ownedQty, name: it.name || id, price };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   if (!ownedItems.length) {
     return {
@@ -2792,13 +2852,8 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const safePage = Math.min(Math.max(page, 0), totalPages - 1);
   const ownedPage = ownedItems.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
-  const opts = ownedPage.map(([id, ownedQty]) => {
-    const it = content.items?.[id];
-    if (!it) return null;
-
-    const price = sellPrice(s, id);
-    if (price <= 0) return null;
-    const labelRaw = `${it.name} — ${price}c each (you have ${ownedQty})`;
+  const opts = ownedPage.map(({ id, ownedQty, name, price }) => {
+    const labelRaw = `${name} — ${price}c each (you have ${ownedQty})`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
 
     return { label, value: id };
@@ -2812,7 +2867,7 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   }
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:sell:select:${userId}`)
+    .setCustomId(`noodle:sell:select:${userId}:${safePage}`)
     .setPlaceholder("Select items to sell")
     .setMinValues(1)
     .setMaxValues(Math.min(5, opts.length))
@@ -8522,7 +8577,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   }
   /* ---------------- SELL SELECT MENU ---------------- */
   if (interaction.isSelectMenu?.() && interaction.customId.startsWith("noodle:sell:select:")) {
-    const owner = interaction.customId.split(":")[3];
+    const idParts = interaction.customId.split(":");
+    const owner = idParts[3];
+    const page = Number(idParts[4] ?? 0);
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That menu isn't for you.", ephemeral: true });
     }
@@ -8535,24 +8592,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     const pickedNames = picked.map((id) => displayItemName(id));
     
     const sourceMessageId = interaction.message?.id ?? "none";
-    const btnRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`noodle:sell:sell1:${interaction.user.id}:${picked.join(",")}`)
-        .setLabel("Sell 1 each")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`noodle:sell:sell5:${interaction.user.id}:${picked.join(",")}`)
-        .setLabel("Sell 5 each")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`noodle:sell:sell10:${interaction.user.id}:${picked.join(",")}`)
-        .setLabel("Sell 10 each")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-        .setLabel("Clear")
-        .setStyle(ButtonStyle.Danger)
-    );
+    const btnRow = buildSellQuantityRow(interaction.user.id, picked, page);
 
     const sellEmbed = buildMenuEmbed({
       title: `${getIcon("coins")} Sell Items`,
@@ -8574,10 +8614,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     // noodle:sell:<mode>:<ownerId>:<messageId?>:<id1,id2,...>
     const mode = parts2[2];
     const owner = parts2[3];
-    const maybeMessageId = parts2[4] && parts2[4] !== "none" ? parts2[4] : null;
-    const hasMessageId = Boolean(maybeMessageId) && parts2.length > 5;
-    const messageId = hasMessageId ? maybeMessageId : null;
-    const idsPart = hasMessageId ? parts2.slice(5).join(":") : parts2.slice(4).join(":");
+    const maybePage = Number(parts2[4]);
+    const hasPage = Number.isFinite(maybePage);
+    const page = hasPage ? maybePage : 0;
+    const idsPart = parts2.slice(hasPage ? 5 : 4).join(":");
     const selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
 
     if (owner && owner !== interaction.user.id) {
@@ -8590,24 +8630,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
     if (mode === "qty") {
       const pickedNames = selectedIds.map((id) => displayItemName(id));
-      const btnRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`noodle:sell:sell1:${interaction.user.id}:${selectedIds.join(",")}`)
-          .setLabel("Sell 1 each")
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`noodle:sell:sell5:${interaction.user.id}:${selectedIds.join(",")}`)
-          .setLabel("Sell 5 each")
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`noodle:sell:sell10:${interaction.user.id}:${selectedIds.join(",")}`)
-          .setLabel("Sell 10 each")
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
-          .setLabel("Clear")
-          .setStyle(ButtonStyle.Danger)
-      );
+      const btnRow = buildSellQuantityRow(interaction.user.id, selectedIds, page);
 
       const sellEmbed = buildMenuEmbed({
         title: `${getIcon("coins")} Sell Items`,
@@ -8684,7 +8707,8 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           userId,
           p: p2,
           s,
-          ownerUser: interaction.member ?? interaction.user
+          ownerUser: interaction.member ?? interaction.user,
+          page
         });
 
         const baseEmbed = pickerPayload.embeds?.[0] ?? null;
@@ -8708,9 +8732,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         const replyObj = {
           content: pickerPayload.content ?? " ",
           embeds: [sellEmbed],
-          components: (pickerPayload.components ?? []).length
-            ? pickerPayload.components
-            : [noodleMainMenuRow(userId)],
+          components: pickerPayload.ephemeral
+            ? (pickerPayload.components ?? [])
+            : [buildSellQuantityRow(userId, selectedIds, page), ...(pickerPayload.components ?? [noodleMainMenuRow(userId)])],
           targetMessageId: pickerPayload.ephemeral ? undefined : (interaction.message?.id ?? null),
           ephemeral: pickerPayload.ephemeral
         };
