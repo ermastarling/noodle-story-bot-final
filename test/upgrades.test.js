@@ -30,7 +30,8 @@ function makeTestPlayer() {
       u_lantern: 0,
       u_decor: 0,
       u_staff_quarters: 0,
-      u_manuals: 0
+      u_manuals: 0,
+      u_fishing_protein_storage: 0
     }
   };
 }
@@ -230,4 +231,13 @@ test("Upgrades: staff upgrades affect multipliers", () => {
   
   assert.ok(effects.staff_capacity > 0);
   assert.ok(effects.staff_effect_multiplier > 0);
+});
+
+test("Upgrades: fishing protein storage boosts protein capacity", () => {
+  const player = makeTestPlayer();
+  player.upgrades.u_fishing_protein_storage = 3;
+
+  const effects = calculateUpgradeEffects(player, upgradesContent);
+
+  assert.strictEqual(effects.protein_capacity_bonus, 30);
 });

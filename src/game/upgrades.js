@@ -98,6 +98,7 @@ export function calculateUpgradeEffects(player, upgradesContent) {
     ingredient_save_chance: 0,
     bowl_capacity_bonus: 0,
     ingredient_capacity: 0,
+    protein_capacity_bonus: 0,
     spoilage_reduction: 0,
     bowl_storage_capacity: 0,
     rep_bonus_flat: 0,

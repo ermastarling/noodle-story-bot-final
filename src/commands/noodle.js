@@ -1370,9 +1370,20 @@ function getIngredientCountForType(player, type) {
   return getIngredientCountsByType(player)[type] ?? 0;
 }
 
-function getIngredientCapacityPerType(_player, effects) {
+function getIngredientCapacityPerType(_player, effects, type = null) {
   const bonus = Math.floor(effects?.ingredient_capacity || 0);
-  return Math.max(0, INGREDIENT_CAPACITY_BASE + bonus);
+  const proteinBonus = (type === "protein") ? Math.floor(effects?.protein_capacity_bonus || 0) : 0;
+  return Math.max(0, INGREDIENT_CAPACITY_BASE + bonus + proteinBonus);
+}
+
+function getIngredientCapacitiesByType(player, effects) {
+  return {
+    broth: getIngredientCapacityPerType(player, effects, "broth"),
+    noodles: getIngredientCapacityPerType(player, effects, "noodles"),
+    spice: getIngredientCapacityPerType(player, effects, "spice"),
+    topping: getIngredientCapacityPerType(player, effects, "topping"),
+    protein: getIngredientCapacityPerType(player, effects, "protein")
+  };
 }
 
 function getBowlCount(player) {
@@ -1486,14 +1497,14 @@ function addBowlsWithQuality(player, recipeId, tier, quality, qty) {
 
 function applyIngredientCapacityToDrops(drops, player, effects, options = {}) {
   const { allowDisplacingInventory = false } = options;
-  const capacity = getIngredientCapacityPerType(player, effects);
+  const capacityByType = getIngredientCapacitiesByType(player, effects);
   const current = getIngredientCountsByType(player);
   const remainingByType = {
-    broth: Math.max(0, capacity - (current.broth ?? 0)),
-    noodles: Math.max(0, capacity - (current.noodles ?? 0)),
-    spice: Math.max(0, capacity - (current.spice ?? 0)),
-    topping: Math.max(0, capacity - (current.topping ?? 0)),
-    protein: Math.max(0, capacity - (current.protein ?? 0))
+    broth: Math.max(0, (capacityByType.broth ?? 0) - (current.broth ?? 0)),
+    noodles: Math.max(0, (capacityByType.noodles ?? 0) - (current.noodles ?? 0)),
+    spice: Math.max(0, (capacityByType.spice ?? 0) - (current.spice ?? 0)),
+    topping: Math.max(0, (capacityByType.topping ?? 0) - (current.topping ?? 0)),
+    protein: Math.max(0, (capacityByType.protein ?? 0) - (current.protein ?? 0))
   };
 
   const accepted = {};
@@ -1539,7 +1550,7 @@ function applyIngredientCapacityToDrops(drops, player, effects, options = {}) {
   }
 
   for (const [type, entries] of entriesByType.entries()) {
-    const capacityForType = capacity;
+    const capacityForType = capacityByType[type] ?? capacityByType.topping ?? INGREDIENT_CAPACITY_BASE;
     const sorted = [...entries].sort((a, b) => {
       if (b.rarityScore !== a.rarityScore) return b.rarityScore - a.rarityScore;
       return String(a.id).localeCompare(String(b.id));
@@ -1574,7 +1585,7 @@ function applyIngredientCapacityToDrops(drops, player, effects, options = {}) {
     remainingByType[type] = Math.max(0, remainingSlots);
   }
 
-  return { accepted, rejected, evicted, current, capacity, remainingByType };
+  return { accepted, rejected, evicted, current, capacity: capacityByType, remainingByType };
 }
 
 function getKitchenBrothItems(player) {
@@ -1640,6 +1651,10 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     });
   });
 
+  const unlockedBrothKey = [...unlockedBrothIds].sort().join(",");
+  const lastNoticeKey = player?.kitchen?.broth_notice_key ?? "";
+  const showNewBrothNotice = unlockedBrothKey && unlockedBrothKey !== lastNoticeKey;
+
   const unlockedBrothLabels = [...unlockedBrothIds]
     .map((bid) => displayItemName(bid))
     .sort((a, b) => String(a).localeCompare(String(b)))
@@ -1681,16 +1696,20 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     const summaryLine = `${getIcon("cook")} Simmering **${batches.length}/${capacity}** broths${readyBatches.length ? ` — ${readyBatches.length} ready` : ""}${!readyBatches.length && nextReadyMs != null ? ` — next ready ${nextReadyTs ? `<t:${nextReadyTs}:R>` : `in ${formatDurationShort(nextReadyMs)}`}` : ""}`;
     kitchenLines.push(summaryLine);
 
-    if (unlockedBrothLabels.length > 0) {
+    if (showNewBrothNotice && unlockedBrothLabels.length > 0) {
       const list = unlockedBrothLabels.join(" · ");
       const suffix = unlockedBrothIds.size > unlockedBrothLabels.length ? " …" : "";
       kitchenLines.push(`${getIcon("sparkle")} New broths unlocked from recipes: ${list}${suffix}`);
     }
 
     if (batches.length === 0) {
-      kitchenLines.push(`${getIcon("cook")} Select a broth below to start.`);
-      if (craftableMax === 0) {
-        kitchenLines.push(`${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
+      if (!recipePlans.length) {
+        kitchenLines.push(`${getIcon("info")} No broths are available to simmer yet — unlock broth recipes by progressing and discovering more dishes.`);
+      } else {
+        kitchenLines.push(`${getIcon("cook")} Select a broth below to start.`);
+        if (craftableMax === 0) {
+          kitchenLines.push(`${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
+        }
       }
     } else {
       const batchLines = batches.slice(0, 5).map((batch) => {
@@ -1706,6 +1725,9 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
       kitchenLines.push(`**What’s simmering (by broth)**\n${batchBlock}`);
     }
   }
+
+  if (!player.kitchen) player.kitchen = {};
+  player.kitchen.broth_notice_key = unlockedBrothKey;
 
   const forageList = forageEntries
     .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
@@ -3561,7 +3583,7 @@ if (sub === "pantry") {
       grouped.set(category, catMap);
     }
 
-    const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
+    const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
     const countsByType = getIngredientCountsByType(p);
     const typeOrder = ["broth", "noodles", "spice", "topping", "protein"];
     const typeLabels = {
@@ -3580,7 +3602,8 @@ if (sub === "pantry") {
           .map(({ name, qty }) => `• ${name}: **${qty}**`)
           .join("\n");
         const have = countsByType[category] ?? 0;
-        const title = `${typeLabels[category]} (${have}/${perTypeCap})`;
+        const cap = perTypeCap[category] ?? perTypeCap.topping ?? 0;
+        const title = `${typeLabels[category]} (${have}/${cap})`;
         return lines ? `**${title}**\n${lines}` : `**${title}**\n_None yet._`;
       })
       .filter(Boolean);
@@ -5686,8 +5709,8 @@ ${lines.join("\n")}`;
     const price = applyMarketDiscount(basePrice, combinedEffects);
     const stock = p.market_stock?.[itemId] ?? 0;
     const type = normalizeIngredientType(itemId);
-    const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
-    const remaining = perTypeCap - getIngredientCountForType(p, type);
+    const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
+    const remaining = (perTypeCap[type] ?? perTypeCap.topping ?? 0) - getIngredientCountForType(p, type);
     if (remaining <= 0) {
       const label = type.charAt(0).toUpperCase() + type.slice(1);
       return commitState({
@@ -5972,24 +5995,28 @@ ${lines.join("\n")}`;
     const sweep2 = sweepExpiredAcceptedOrders(p, s, content, now2);
 
     const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
-    
-    // Aggregate ingredients needed across all accepted orders
-    const allNeeded = {};
-    acceptedEntries.forEach(([fullId, a]) => {
-      const snap = a?.order ?? null;
-      const order = snap;
-      
-      if (order && order.recipe_id) {
-        const recipe = content.recipes[order.recipe_id];
-        if (recipe?.ingredients) {
-          recipe.ingredients.forEach((ing) => {
-            allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + ing.qty;
-          });
-        }
-      }
+
+    // Aggregate ingredients needed across all accepted orders, subtracting bowls already cooked
+    const neededCountsByRecipe = {};
+    acceptedEntries.forEach(([, a]) => {
+      const recipeId = a?.order?.recipe_id;
+      if (!recipeId) return;
+      neededCountsByRecipe[recipeId] = (neededCountsByRecipe[recipeId] ?? 0) + 1;
     });
-    
-    // Calculate shortages
+
+    const allNeeded = {};
+    for (const [recipeId, neededOrders] of Object.entries(neededCountsByRecipe)) {
+      const recipe = content.recipes[recipeId];
+      if (!recipe?.ingredients) continue;
+      const ready = getTotalBowlsForRecipe(p, recipeId);
+      const remainingOrders = Math.max(0, neededOrders - ready);
+      if (remainingOrders <= 0) continue;
+      for (const ing of recipe.ingredients) {
+        allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (ing.qty * remainingOrders);
+      }
+    }
+
+    // Calculate shortages (only for orders that still need cooking)
     const shortages = Object.entries(allNeeded)
       .map(([itemId, needed]) => {
         const have = p.inv_ingredients?.[itemId] ?? 0;
@@ -6245,14 +6272,14 @@ ${lines.join("\n")}`;
       const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
       const stockRemaining = { ...(p.market_stock ?? {}) };
       const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-      const perTypeCap = getIngredientCapacityPerType(p, combinedEffects);
+      const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
       const countsByType = getIngredientCountsByType(p);
       const remainingByType = {
-        broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
-        noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
-        spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
-        topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0)),
-        protein: Math.max(0, perTypeCap - (countsByType.protein ?? 0))
+        broth: Math.max(0, (perTypeCap.broth ?? 0) - (countsByType.broth ?? 0)),
+        noodles: Math.max(0, (perTypeCap.noodles ?? 0) - (countsByType.noodles ?? 0)),
+        spice: Math.max(0, (perTypeCap.spice ?? 0) - (countsByType.spice ?? 0)),
+        topping: Math.max(0, (perTypeCap.topping ?? 0) - (countsByType.topping ?? 0)),
+        protein: Math.max(0, (perTypeCap.protein ?? 0) - (countsByType.protein ?? 0))
       };
       const bowlsRemaining = {};
       const coinsStart = Number(p.coins || 0);
@@ -8210,14 +8237,14 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         if (!p2.market_stock) p2.market_stock = {};
 
         const combinedEffects = calculateCombinedEffects(p2, upgradesContent, staffContent, calculateStaffEffects);
-        const perTypeCap = getIngredientCapacityPerType(p2, combinedEffects);
+        const perTypeCap = getIngredientCapacitiesByType(p2, combinedEffects);
         const countsByType = getIngredientCountsByType(p2);
         const remainingByType = {
-          broth: Math.max(0, perTypeCap - (countsByType.broth ?? 0)),
-          noodles: Math.max(0, perTypeCap - (countsByType.noodles ?? 0)),
-          spice: Math.max(0, perTypeCap - (countsByType.spice ?? 0)),
-          topping: Math.max(0, perTypeCap - (countsByType.topping ?? 0)),
-          protein: Math.max(0, perTypeCap - (countsByType.protein ?? 0))
+          broth: Math.max(0, (perTypeCap.broth ?? 0) - (countsByType.broth ?? 0)),
+          noodles: Math.max(0, (perTypeCap.noodles ?? 0) - (countsByType.noodles ?? 0)),
+          spice: Math.max(0, (perTypeCap.spice ?? 0) - (countsByType.spice ?? 0)),
+          topping: Math.max(0, (perTypeCap.topping ?? 0) - (countsByType.topping ?? 0)),
+          protein: Math.max(0, (perTypeCap.protein ?? 0) - (countsByType.protein ?? 0))
         };
 
         const want = {};

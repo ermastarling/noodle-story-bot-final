@@ -195,6 +195,18 @@
         "fishing_cooldown_reduction": 0.01
       }
     },
+    "u_fishing_protein_storage": {
+      "upgrade_id": "u_fishing_protein_storage",
+      "name": "Harbor Cold Storage",
+      "category": "fishing",
+      "description": "Expanded ice lockers to stash the catch, +10 protein capacity per level.",
+      "max_level": 20,
+      "base_cost": 220,
+      "cost_scaling": 1.25,
+      "effects_per_level": {
+        "protein_capacity_bonus": 10
+      }
+    },
     "u_fishing_rare": {
       "upgrade_id": "u_fishing_rare",
       "name": "Bait Mastery",
