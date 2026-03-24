@@ -8,11 +8,13 @@ export function ensureSpecializationState(player) {
       chosen_at: null,
       change_cooldown_expires_at: null,
       unlocked_spec_ids: [],
-      last_seen_shop_level: 0
+      last_seen_shop_level: 0,
+      seen_unlocked_spec_ids: []
     };
   }
   const state = player.profile.specialization;
   if (!Array.isArray(state.unlocked_spec_ids)) state.unlocked_spec_ids = [];
+  if (!Array.isArray(state.seen_unlocked_spec_ids)) state.seen_unlocked_spec_ids = [...state.unlocked_spec_ids];
   if (!Number.isFinite(state.last_seen_shop_level) || state.last_seen_shop_level <= 0) {
     state.last_seen_shop_level = Number(player.shop_level || 1);
   }
@@ -65,6 +67,15 @@ export function meetsSpecializationRequirements(player, requirements, specId) {
   return meetsRequirements(player, requirements, specId);
 }
 
+export function getUnseenHiddenSpecializations(player, specializationsContent) {
+  const state = ensureSpecializationState(player);
+  return (specializationsContent?.specializations ?? []).filter((spec) => {
+    if (!spec?.hidden_until_unlocked) return false;
+    if (!state.unlocked_spec_ids.includes(spec.spec_id)) return false;
+    return !state.seen_unlocked_spec_ids.includes(spec.spec_id);
+  });
+}
+
 export function canSelectSpecialization(player, specializationsContent, specId, now = nowTs()) {
   const state = ensureSpecializationState(player);
   const spec = getSpecializationById(specializationsContent, specId);
@@ -101,9 +112,19 @@ export function hasNewShopLevelSpecialization(player, specializationsContent) {
   });
 }
 
-export function markSpecializationShopLevelSeen(player) {
+export function markSpecializationShopLevelSeen(player, specializationsContent) {
   const state = ensureSpecializationState(player);
   const currentLevel = Number(player.shop_level || 1);
   state.last_seen_shop_level = Math.max(state.last_seen_shop_level || 0, currentLevel);
+
+  const hiddenUnseen = getUnseenHiddenSpecializations(player, specializationsContent);
+  if (hiddenUnseen.length) {
+    for (const spec of hiddenUnseen) {
+      if (!state.seen_unlocked_spec_ids.includes(spec.spec_id)) {
+        state.seen_unlocked_spec_ids.push(spec.spec_id);
+      }
+    }
+  }
+
   return state;
 }

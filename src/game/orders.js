@@ -251,7 +251,7 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
 
 export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, activeEventId = null) {
   const dayKey = dayKeyUTC();
-  const orderSeedVersion = 4; // Increment when seed logic changes
+  const orderSeedVersion = 5; // Increment when seed logic changes
 
   if (playerState.orders_depleted_day && playerState.orders_depleted_day !== dayKey) {
     playerState.orders_depleted_day = null;
@@ -262,12 +262,12 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
   const combinedEffects = calculateCombinedEffects(playerState, upgradesContent, staffContent, calculateStaffEffects);
   const totalCount = computeOrderCount(settings, combinedEffects);
 
-  const seedString = `${serverId}-${userId}-recipes-${poolSig}`;
+  const seedString = `${serverId}-${userId}-day-${dayKey}`; // Keep seed stable within a day
   const dayChanged = playerState.orders_day !== dayKey;
-  const seedChanged = playerState.orders_seed !== seedString || playerState.orders_pool_sig !== poolSig;
   const versionChanged = playerState.order_seed_version !== orderSeedVersion;
+  const seedMissing = !playerState.orders_seed;
 
-  if (dayChanged || seedChanged || versionChanged) {
+  if (dayChanged || versionChanged || seedMissing) {
     playerState.orders_day = dayKey;
     playerState.order_seed_version = orderSeedVersion;
     playerState.orders_seed = seedString;
@@ -276,7 +276,13 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
     playerState.orders_total_count = totalCount;
     delete playerState.order_board; // free memory from legacy storage
   } else {
+    // Keep consumed indices when the recipe pool grows; trim if the max count shrinks.
+    playerState.orders_pool_sig = poolSig;
+    playerState.orders_seed = playerState.orders_seed || seedString;
     playerState.orders_total_count = totalCount;
+    if (Array.isArray(playerState.orders_consumed_indices)) {
+      playerState.orders_consumed_indices = playerState.orders_consumed_indices.filter((i) => i < totalCount);
+    }
   }
 
   return playerState;

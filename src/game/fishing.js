@@ -9,7 +9,14 @@ export const FISHING_RECIPE_IDS = [
   "salmon_ocean_udon",
   "grouper_miso_bowl",
   "tuna_eel_deluxe",
-  "harbor_crab_ramen"
+  "harbor_crab_ramen",
+  "tilapia_ginger_noodles",
+  "basa_market_ramen",
+  "flounder_clear_udon",
+  "mackerel_chili_ramen",
+  "seabass_butter_bowl",
+  "shrimp_miso_udon",
+  "oyster_shio_ramen"
 ];
 
 const FISHING_TABLE = [
@@ -36,13 +43,26 @@ const FISHING_TABLE = [
 export const FISHING_ITEM_IDS = FISHING_TABLE.map((e) => e.item_id);
 export const RARE_FISHING_ITEM_IDS = FISHING_TABLE.filter((e) => e.weight <= 20).map((e) => e.item_id);
 
+export function isFishingIngredientLocked(player, itemId) {
+  if (!itemId) return false;
+  if (!FISHING_ITEM_IDS.includes(itemId)) return false;
+  return !isFishingUnlocked(player);
+}
+
 const FISH_RECIPE_UNLOCKS = {
   catfish: "catfish_shore_ramen",
   salmon: "salmon_ocean_udon",
   grouper: "grouper_miso_bowl",
   tuna: "tuna_eel_deluxe",
   eel: "tuna_eel_deluxe",
-  crab: "harbor_crab_ramen"
+  crab: "harbor_crab_ramen",
+  tilapia: "tilapia_ginger_noodles",
+  basa: "basa_market_ramen",
+  flounder: "flounder_clear_udon",
+  mackerel: "mackerel_chili_ramen",
+  seabass: "seabass_butter_bowl",
+  shrimp: "shrimp_miso_udon",
+  oysters: "oyster_shio_ramen"
 };
 
 export function unlockFishingRecipesFromDrops(player, drops = {}) {

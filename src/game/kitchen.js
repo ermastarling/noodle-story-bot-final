@@ -149,11 +149,44 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "mackerel", qty: 1 }
   ],
   broth_seafood_hearty: [
-    { item_id: "shrimp", qty: 1 },
-    { item_id: "clams", qty: 1 },
+    { item_id: "shrimp", qty: 3 },
+    { item_id: "clams", qty: 2 },
     { item_id: "squid", qty: 1 },
     { item_id: "crab", qty: 1 },
-    { item_id: "oysters", qty: 1 }
+    { item_id: "oysters", qty: 5 }
+  ],
+  broth_tilapia_ginger: [
+    { item_id: "tilapia", qty: 3 },
+    { item_id: "citrus_slices", qty: 1 },
+    { item_id: "root_vegetables", qty: 2 }
+  ],
+  broth_basa_light: [
+    { item_id: "basa", qty: 3 },
+    { item_id: "wild_greens", qty: 1 },
+    { item_id: "citrus_peels", qty: 2 }
+  ],
+  broth_flounder_clear: [
+    { item_id: "flounder", qty: 3 },
+    { item_id: "citrus_slices", qty: 1 },
+    { item_id: "dew_greens", qty: 2 }
+  ],
+  broth_mackerel_chili: [
+    { item_id: "mackerel", qty: 3 },
+    { item_id: "ember_peppers", qty: 2 },
+    { item_id: "spice_chili_oil", qty: 1 }
+  ],
+  broth_seabass_butter: [
+    { item_id: "seabass", qty: 3 },
+    { item_id: "scallions", qty: 1 }
+  ],
+  broth_shrimp_miso: [
+    { item_id: "shrimp", qty: 5 },
+    { item_id: "forest_mushrooms", qty: 3 },
+  ],
+  broth_oyster_shio: [
+    { item_id: "oysters", qty: 10 },
+    { item_id: "citrus_peels", qty: 2 },
+    { item_id: "night_herbs", qty: 1 }
   ]
 };
 

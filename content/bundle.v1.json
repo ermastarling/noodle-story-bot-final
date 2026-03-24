@@ -573,6 +573,83 @@
       "stock_min": 60,
       "stock_max": 90
     },
+    "broth_tilapia_ginger": {
+      "item_id": "broth_tilapia_ginger",
+      "name": "Tilapia Ginger Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 16,
+      "stock_min": 80,
+      "stock_max": 120
+    },
+    "broth_basa_light": {
+      "item_id": "broth_basa_light",
+      "name": "Light Basa Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 15,
+      "stock_min": 80,
+      "stock_max": 120
+    },
+    "broth_flounder_clear": {
+      "item_id": "broth_flounder_clear",
+      "name": "Clear Flounder Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 17,
+      "stock_min": 80,
+      "stock_max": 120
+    },
+    "broth_mackerel_chili": {
+      "item_id": "broth_mackerel_chili",
+      "name": "Chili Mackerel Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 17,
+      "stock_min": 80,
+      "stock_max": 120
+    },
+    "broth_seabass_butter": {
+      "item_id": "broth_seabass_butter",
+      "name": "Butter Seabass Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "rare",
+      "spoilable": false,
+      "base_price": 20,
+      "stock_min": 70,
+      "stock_max": 110
+    },
+    "broth_shrimp_miso": {
+      "item_id": "broth_shrimp_miso",
+      "name": "Shrimp Miso Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "uncommon",
+      "spoilable": false,
+      "base_price": 16,
+      "stock_min": 80,
+      "stock_max": 120
+    },
+    "broth_oyster_shio": {
+      "item_id": "broth_oyster_shio",
+      "name": "Oyster Shio Broth",
+      "category": "broth",
+      "acquisition": "kitchen",
+      "tier": "rare",
+      "spoilable": false,
+      "base_price": 20,
+      "stock_min": 70,
+      "stock_max": 110
+    },
     "noodles_wheat": {
       "item_id": "noodles_wheat",
       "name": "Wheat Noodles",
@@ -872,8 +949,92 @@
       "ingredients": [
         {"item_id": "broth_seafood_hearty", "qty": 1},
         {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "clams", "qty": 1},
         {"item_id": "crab", "qty": 1},
         {"item_id": "topping_chili_flakes", "qty": 1}
+      ]
+    },
+    "tilapia_ginger_noodles": {
+      "recipe_id": "tilapia_ginger_noodles",
+      "name": "Tilapia Ginger Noodles",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_tilapia_ginger", "qty": 1},
+        {"item_id": "noodles_thin", "qty": 1},
+        {"item_id": "tilapia", "qty": 1}
+      ]
+    },
+    "basa_market_ramen": {
+      "recipe_id": "basa_market_ramen",
+      "name": "Basa Market Ramen",
+      "tier": "common",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_basa_light", "qty": 1},
+        {"item_id": "noodles_wheat", "qty": 1},
+        {"item_id": "basa", "qty": 1}
+      ]
+    },
+    "flounder_clear_udon": {
+      "recipe_id": "flounder_clear_udon",
+      "name": "Flounder Clear Udon",
+      "tier": "uncommon",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_flounder_clear", "qty": 1},
+        {"item_id": "noodles_udon", "qty": 1},
+        {"item_id": "flounder", "qty": 1},
+        {"item_id": "citrus_slices", "qty": 1}
+      ]
+    },
+    "mackerel_chili_ramen": {
+      "recipe_id": "mackerel_chili_ramen",
+      "name": "Mackerel Chili Ramen",
+      "tier": "uncommon",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_mackerel_chili", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "mackerel", "qty": 1},
+        {"item_id": "squid", "qty": 1},
+        {"item_id": "spice_chili_oil", "qty": 1}
+      ]
+    },
+    "seabass_butter_bowl": {
+      "recipe_id": "seabass_butter_bowl",
+      "name": "Seabass Butter Bowl",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_seabass_butter", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "seabass", "qty": 1},
+        {"item_id": "dew_greens", "qty": 1}
+      ]
+    },
+    "shrimp_miso_udon": {
+      "recipe_id": "shrimp_miso_udon",
+      "name": "Shrimp Miso Udon",
+      "tier": "uncommon",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_shrimp_miso", "qty": 1},
+        {"item_id": "noodles_udon", "qty": 1},
+        {"item_id": "shrimp", "qty": 1},
+        {"item_id": "dew_greens", "qty": 1}
+      ]
+    },
+    "oyster_shio_ramen": {
+      "recipe_id": "oyster_shio_ramen",
+      "name": "Oyster Shio Ramen",
+      "tier": "rare",
+      "season": null,
+      "ingredients": [
+        {"item_id": "broth_oyster_shio", "qty": 1},
+        {"item_id": "noodles_thin", "qty": 1},
+        {"item_id": "oysters", "qty": 1},
+        {"item_id": "citrus_peels", "qty": 1}
       ]
     },
     "butter_noodles": {
@@ -926,7 +1087,8 @@
       "ingredients": [
         {"item_id": "broth_chili", "qty": 1},
         {"item_id": "noodles_ramen", "qty": 1},
-        {"item_id": "topping_chili_flakes", "qty": 1}
+        {"item_id": "topping_chili_flakes", "qty": 1},
+        {"item_id": "ember_peppers", "qty": 1}
       ]
     },
     "extra_broth_udon": {
@@ -947,7 +1109,7 @@
       "season": null,
       "ingredients": [
         {"item_id": "broth_beef", "qty": 1},
-        {"item_id": "noodles_ramen", "qty": 1},
+        {"item_id": "noodles_thick", "qty": 1},
         {"item_id": "scallions", "qty": 1},
         {"item_id": "topping_brisket", "qty": 1}
       ]
@@ -960,7 +1122,9 @@
       "ingredients": [
         {"item_id": "broth_mixed", "qty": 1},
         {"item_id": "noodles_chunky", "qty": 1},
-        {"item_id": "carrots", "qty": 1}
+        {"item_id": "carrots", "qty": 1},
+        {"item_id": "root_vegetables", "qty": 1},
+        {"item_id": "roasted_roots", "qty": 1}
       ]
     },
     "herb_hill_udon": {
@@ -971,7 +1135,9 @@
       "ingredients": [
         {"item_id": "broth_herbal", "qty": 1},
         {"item_id": "noodles_udon", "qty": 1},
-        {"item_id": "wild_greens", "qty": 1}
+        {"item_id": "wild_greens", "qty": 1},
+        {"item_id": "petal_garnish", "qty": 1},
+        {"item_id": "night_herbs", "qty": 1}
       ]
     },
     "mushroom_miso": {
@@ -983,7 +1149,8 @@
         {"item_id": "broth_miso", "qty": 1},
         {"item_id": "noodles_wheat", "qty": 1},
         {"item_id": "forest_mushrooms", "qty": 1},
-        {"item_id": "topping_braised_tofu", "qty": 1}
+        {"item_id": "topping_braised_tofu", "qty": 1},
+        {"item_id": "black_garlic", "qty": 1}
       ]
     },
     "spicy_black_garlic_ramen": {
@@ -1016,9 +1183,9 @@
       "season": null,
       "ingredients": [
         {"item_id": "broth_chicken", "qty": 1},
-        {"item_id": "noodles_egg", "qty": 1},
+        {"item_id": "noodles_ramen", "qty": 1},
         {"item_id": "topping_grilled_chicken", "qty": 1},
-        {"item_id": "carrots", "qty": 1}
+        {"item_id": "citrus_slices", "qty": 1}
       ]
     },
     "braised_tofu_miso": {
@@ -1041,8 +1208,7 @@
       "ingredients": [
         {"item_id": "broth_rich_stock", "qty": 1},
         {"item_id": "noodles_ramen", "qty": 1},
-        {"item_id": "topping_brisket", "qty": 1},
-        {"item_id": "scallions", "qty": 1}
+        {"item_id": "topping_brisket", "qty": 1}
       ]
     },
     "clear_shio_bowl": {
@@ -1053,7 +1219,8 @@
       "ingredients": [
         {"item_id": "broth_shio", "qty": 1},
         {"item_id": "noodles_thin", "qty": 1},
-        {"item_id": "citrus_peels", "qty": 1}
+        {"item_id": "citrus_peels", "qty": 1},
+        {"item_id": "seabass", "qty": 1}
       ]
     },
     "citrus_broth_thin_noodles": {

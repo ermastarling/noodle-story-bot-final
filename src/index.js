@@ -43,6 +43,7 @@ import { getIcon } from "./ui/icons.js";
   const { newPlayerProfile } = await import("./game/player.js");
   const { STARTER_PROFILE } = await import("./constants.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
+  const { isFishingUnlocked, FISHING_ITEM_IDS } = await import("./game/fishing.js");
   const { getKitchenUnlockState, KITCHEN_BROTH_RECIPES } = await import("./game/kitchen.js");
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
@@ -268,12 +269,15 @@ import { getIcon } from "./ui/icons.js";
   function getUnlockedIngredientIds(player, content) {
     const out = new Set();
     const knownSet = new Set(getAvailableRecipes(player));
+    const fishingUnlocked = isFishingUnlocked(player);
 
     const addRecipeIngredients = (recipeId) => {
       const r = content.recipes?.[recipeId];
       if (!r) return;
       for (const ing of (r.ingredients ?? [])) {
-        if (ing?.item_id) out.add(ing.item_id);
+        if (!ing?.item_id) continue;
+        if (!fishingUnlocked && FISHING_ITEM_IDS.includes(ing.item_id)) continue;
+        out.add(ing.item_id);
       }
     };
 
@@ -290,7 +294,9 @@ import { getIcon } from "./ui/icons.js";
       for (const brothId of brothIds) {
         const recipe = KITCHEN_BROTH_RECIPES[brothId] ?? [];
         for (const ing of recipe) {
-          if (ing?.item_id) out.add(ing.item_id);
+          if (!ing?.item_id) continue;
+          if (!fishingUnlocked && FISHING_ITEM_IDS.includes(ing.item_id)) continue;
+          out.add(ing.item_id);
         }
       }
     }

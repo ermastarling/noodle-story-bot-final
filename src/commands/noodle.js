@@ -92,6 +92,7 @@ import {
   getActiveSpecialization,
   getSpecializationById,
   hasNewShopLevelSpecialization,
+  getUnseenHiddenSpecializations,
   markSpecializationShopLevelSeen,
   meetsSpecializationRequirements,
   selectSpecialization
@@ -154,7 +155,10 @@ import {
   unlockFishingRecipesFromDrops,
   FISHING_BASE_COOLDOWN_MS,
   FISHING_UNLOCK_LEVEL,
-  RARE_FISHING_ITEM_IDS
+  RARE_FISHING_ITEM_IDS,
+  FISHING_ITEM_IDS,
+  isFishingUnlocked,
+  isFishingIngredientLocked
 } from "../game/fishing.js";
 import {
   ensureKitchenState,
@@ -394,6 +398,8 @@ function ownerFooterText(userOrMember) {
 }
 
 function getSpecializationAlert(player) {
+  const hiddenUnseen = getUnseenHiddenSpecializations(player, specializationsContent);
+  if (hiddenUnseen.length) return true;
   return hasNewShopLevelSpecialization(player, specializationsContent);
 }
 
@@ -1478,7 +1484,8 @@ function addBowlsWithQuality(player, recipeId, tier, quality, qty) {
 }
 
 
-function applyIngredientCapacityToDrops(drops, player, effects) {
+function applyIngredientCapacityToDrops(drops, player, effects, options = {}) {
+  const { allowDisplacingInventory = false } = options;
   const capacity = getIngredientCapacityPerType(player, effects);
   const current = getIngredientCountsByType(player);
   const remainingByType = {
@@ -1491,6 +1498,7 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
 
   const accepted = {};
   const rejected = {};
+  const evicted = {};
 
   const rarityRank = {
     seasonal: 5,
@@ -1507,45 +1515,66 @@ function applyIngredientCapacityToDrops(drops, player, effects) {
   };
 
   const entriesByType = new Map();
+
+  // Existing inventory (only used when displacement is allowed)
+  if (allowDisplacingInventory) {
+    for (const [id, qtyRaw] of Object.entries(player?.inv_ingredients ?? {})) {
+      const qty = Math.max(0, Number(qtyRaw) || 0);
+      if (qty <= 0) continue;
+      const type = normalizeIngredientType(id);
+      const list = entriesByType.get(type) ?? [];
+      list.push({ id, qty, rarityScore: getRarityScore(id), source: "existing" });
+      entriesByType.set(type, list);
+    }
+  }
+
+  // Incoming drops
   for (const [id, qtyRaw] of Object.entries(drops ?? {})) {
     const qty = Math.max(0, Number(qtyRaw) || 0);
     if (qty <= 0) continue;
     const type = normalizeIngredientType(id);
     const list = entriesByType.get(type) ?? [];
-    list.push({ id, qty, rarityScore: getRarityScore(id) });
+    list.push({ id, qty, rarityScore: getRarityScore(id), source: "drop" });
     entriesByType.set(type, list);
   }
 
   for (const [type, entries] of entriesByType.entries()) {
-    const remaining = remainingByType[type] ?? 0;
-    if (remaining <= 0) {
-      for (const entry of entries) {
-        rejected[entry.id] = (rejected[entry.id] ?? 0) + entry.qty;
-      }
-      continue;
-    }
-
+    const capacityForType = capacity;
     const sorted = [...entries].sort((a, b) => {
       if (b.rarityScore !== a.rarityScore) return b.rarityScore - a.rarityScore;
       return String(a.id).localeCompare(String(b.id));
     });
 
-    let remainingSlots = remaining;
+    const existingCount = current[type] ?? 0;
+    let remainingSlots = allowDisplacingInventory
+      ? capacityForType
+      : Math.max(0, capacityForType - existingCount);
+
     for (const entry of sorted) {
       if (remainingSlots <= 0) {
-        rejected[entry.id] = (rejected[entry.id] ?? 0) + entry.qty;
+        if (entry.source === "drop") {
+          rejected[entry.id] = (rejected[entry.id] ?? 0) + entry.qty;
+        } else if (allowDisplacingInventory) {
+          evicted[entry.id] = (evicted[entry.id] ?? 0) + entry.qty;
+        }
         continue;
       }
+
       const take = Math.min(entry.qty, remainingSlots);
-      if (take > 0) accepted[entry.id] = (accepted[entry.id] ?? 0) + take;
-      if (take < entry.qty) rejected[entry.id] = (rejected[entry.id] ?? 0) + (entry.qty - take);
+      if (entry.source === "drop") {
+        if (take > 0) accepted[entry.id] = (accepted[entry.id] ?? 0) + take;
+        if (take < entry.qty) rejected[entry.id] = (rejected[entry.id] ?? 0) + (entry.qty - take);
+      } else if (allowDisplacingInventory) {
+        // Keep highest-rarity existing items; anything beyond capacity is marked for eviction above
+        if (take < entry.qty) evicted[entry.id] = (evicted[entry.id] ?? 0) + (entry.qty - take);
+      }
       remainingSlots -= take;
     }
 
-    remainingByType[type] = remainingSlots;
+    remainingByType[type] = Math.max(0, remainingSlots);
   }
 
-  return { accepted, rejected, current, capacity, remainingByType };
+  return { accepted, rejected, evicted, current, capacity, remainingByType };
 }
 
 function getKitchenBrothItems(player) {
@@ -1611,6 +1640,11 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     });
   });
 
+  const unlockedBrothLabels = [...unlockedBrothIds]
+    .map((bid) => displayItemName(bid))
+    .sort((a, b) => String(a).localeCompare(String(b)))
+    .slice(0, 5);
+
   const brothItems = getKitchenBrothItems(player).filter((item) => {
     if (unlockedBrothIds.size === 0) return true;
     return unlockedBrothIds.has(item?.item_id);
@@ -1647,8 +1681,17 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     const summaryLine = `${getIcon("cook")} Simmering **${batches.length}/${capacity}** broths${readyBatches.length ? ` — ${readyBatches.length} ready` : ""}${!readyBatches.length && nextReadyMs != null ? ` — next ready ${nextReadyTs ? `<t:${nextReadyTs}:R>` : `in ${formatDurationShort(nextReadyMs)}`}` : ""}`;
     kitchenLines.push(summaryLine);
 
+    if (unlockedBrothLabels.length > 0) {
+      const list = unlockedBrothLabels.join(" · ");
+      const suffix = unlockedBrothIds.size > unlockedBrothLabels.length ? " …" : "";
+      kitchenLines.push(`${getIcon("sparkle")} New broths unlocked from recipes: ${list}${suffix}`);
+    }
+
     if (batches.length === 0) {
       kitchenLines.push(`${getIcon("cook")} Select a broth below to start.`);
+      if (craftableMax === 0) {
+        kitchenLines.push(`${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
+      }
     } else {
       const batchLines = batches.slice(0, 5).map((batch) => {
         const readyText = batch.ready
@@ -2129,12 +2172,15 @@ function getUnlockedIngredientIds(player, contentBundle) {
   // Use getAvailableRecipes to include both permanent and temporary recipes
   const known = getAvailableRecipes(player);
   const knownSet = new Set(known);
+  const fishingUnlocked = isFishingUnlocked(player);
 
   const addRecipeIngredients = (recipeId) => {
     const r = contentBundle.recipes?.[recipeId];
     if (!r) return;
     for (const ing of r.ingredients ?? []) {
-      if (ing?.item_id) out.add(ing.item_id);
+      if (!ing?.item_id) continue;
+      if (!fishingUnlocked && FISHING_ITEM_IDS.includes(ing.item_id)) continue;
+      out.add(ing.item_id);
     }
   };
 
@@ -2153,7 +2199,9 @@ function getUnlockedIngredientIds(player, contentBundle) {
     for (const brothId of brothIds) {
       const recipe = KITCHEN_BROTH_RECIPES[brothId] ?? [];
       for (const ing of recipe) {
-        if (ing?.item_id) out.add(ing.item_id);
+        if (!ing?.item_id) continue;
+        if (!fishingUnlocked && FISHING_ITEM_IDS.includes(ing.item_id)) continue;
+        out.add(ing.item_id);
       }
     }
   }
@@ -2165,7 +2213,9 @@ function formatRecipeNeeds({ recipeId, content: contentBundle, player }) {
 const r = contentBundle.recipes?.[recipeId];
 if (!r) return "";
 
-  const missing = (r.ingredients ?? [])
+  const relevantIngredients = (r.ingredients ?? []).filter((ing) => !isFishingIngredientLocked(player, ing?.item_id));
+
+  const missing = relevantIngredients
     .filter((ing) => !ing?.optional)
     .map((ing) => {
       const need = ing.qty ?? 0;
@@ -2540,19 +2590,27 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
   const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
   const allNeeded = {};
-  acceptedEntries.forEach(([fullId, a]) => {
-    const snap = a?.order ?? null;
-    const order = snap;
 
-    if (order?.recipe_id) {
-      const recipe = content.recipes[order.recipe_id];
-      if (recipe?.ingredients) {
-        recipe.ingredients.forEach((ing) => {
-          allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + ing.qty;
-        });
-      }
-    }
+  // Account for cooked bowls so shopping list only shows truly missing ingredients
+  const neededCountsByRecipe = {};
+  acceptedEntries.forEach(([, entry]) => {
+    const recipeId = entry?.order?.recipe_id;
+    if (!recipeId) return;
+    neededCountsByRecipe[recipeId] = (neededCountsByRecipe[recipeId] ?? 0) + 1;
   });
+
+  for (const [recipeId, neededCount] of Object.entries(neededCountsByRecipe)) {
+    const recipe = content.recipes[recipeId];
+    if (!recipe?.ingredients) continue;
+
+    const ready = getTotalBowlsForRecipe(p, recipeId);
+    const remaining = Math.max(0, neededCount - ready);
+    if (remaining <= 0) continue;
+
+    recipe.ingredients.forEach((ing) => {
+      allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (ing.qty * remaining);
+    });
+  }
 
   const shortages = Object.entries(allNeeded)
     .map(([id, needed]) => {
@@ -4657,7 +4715,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "specialize") {
     const specId = opt.getString("spec");
     const confirm = opt.getBoolean("confirm");
-    markSpecializationShopLevelSeen(p);
+    markSpecializationShopLevelSeen(p, specializationsContent);
     const specializationsAvailable = getSpecializationAlert(p);
 
     if (!specId) {
@@ -4940,8 +4998,12 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         }
       }
     }
-    const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects);
-    const { accepted, rejected } = capacityResult;
+    const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects, { allowDisplacingInventory: true });
+    const { accepted, rejected, evicted } = capacityResult;
+
+    if (evicted && Object.keys(evicted).length) {
+      removeIngredientsFromInventory(p, evicted);
+    }
 
     if (!Object.keys(accepted).length) {
       setForageCooldown(p, now);
@@ -6785,7 +6847,7 @@ ${lines.join("\n")}`;
         state.unlocked_spec_ids.push(spec.spec_id);
       }
       const unlockLines = newlyUnlockedSpecs.map((spec) => {
-        const icon = spec.icon ?? getIcon("sparkle");
+        const icon = resolveIcon(spec.icon, getIcon("sparkle"));
         return `${icon} **Specialization unlocked:** ${spec.name}`;
       });
       results.push(...unlockLines);
@@ -7026,6 +7088,7 @@ if (kind === "profile" && (action === "edit_shop_name" || action === "edit_tagli
 
 if (kind === "profile" && action === "specialize_select") {
   const p = ensurePlayer(serverId, userId);
+  markSpecializationShopLevelSeen(p, specializationsContent);
   const now = nowTs();
   const specializationsAvailable = getSpecializationAlert(p);
   const specs = (specializationsContent?.specializations ?? []).filter((spec) => {
@@ -7072,6 +7135,7 @@ if (kind === "profile" && action === "specialize_select") {
 
 if (kind === "profile" && action === "specialize_cancel") {
   const p = ensurePlayer(serverId, userId);
+  markSpecializationShopLevelSeen(p, specializationsContent);
   const specializationsAvailable = getSpecializationAlert(p);
   const { embed, page, totalPages } = buildSpecializationListEmbed(p, interaction.member ?? interaction.user, nowTs(), 0, 5);
   const components = [];
@@ -7107,6 +7171,7 @@ if (kind === "profile" && action === "specialize_cancel") {
 if (kind === "profile" && action === "specialize_confirm") {
   const specId = parts[4] ?? "";
   const p = ensurePlayer(serverId, userId);
+  markSpecializationShopLevelSeen(p, specializationsContent);
   const now = nowTs();
   const specializationsAvailable = getSpecializationAlert(p);
   const spec = getSpecializationById(specializationsContent, specId);
