@@ -62,6 +62,7 @@ export const MARKET_ITEM_IDS = [
   "topping_grilled_chicken",
   "topping_braised_tofu",
   "topping_brisket",
+  "roasted_roots",
 
   // Spices
   "spice_sesame_oil",

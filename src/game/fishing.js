@@ -149,9 +149,8 @@ export function setFishingCooldown(player, nowMs) {
 
 export function rollFishingDrops({ serverId, userId, picks = 2, itemId = null, quantity = 1, allowedItemIds = null, effects = {} }) {
   const dayKey = dayKeyUTC();
+  // Use secure, non-seeded RNG so each cast varies; pity flow below remains deterministic.
   const rng = makeStreamRng({
-    mode: "seeded",
-    seed: 24680,
     streamName: "fishing",
     serverId,
     dayKey,

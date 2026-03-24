@@ -1704,11 +1704,11 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
 
     if (batches.length === 0) {
       if (!recipePlans.length) {
-        kitchenLines.push(`${getIcon("info")} No broths are available to simmer yet — unlock broth recipes by progressing and discovering more dishes.`);
+        kitchenLines.push(`${getIcon("warning")} No broths are available to simmer yet — unlock broth recipes by progressing and discovering more dishes.`);
       } else {
         kitchenLines.push(`${getIcon("cook")} Select a broth below to start.`);
         if (craftableMax === 0) {
-          kitchenLines.push(`${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
+          kitchenLines.push(`${getIcon("warning")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
         }
       }
     } else {
@@ -1732,7 +1732,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   if (kitchenUnlocked && batches.length === 0 && craftableMax === 0) {
     const hasEmptyMessage = kitchenLines.some((line) => typeof line === "string" && line.toLowerCase().includes("no broths"));
     if (!hasEmptyMessage) {
-      kitchenLines.push(`${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
+      kitchenLines.push(`${getIcon("warning")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
     }
   }
 
@@ -1787,7 +1787,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     if (!alreadyNoted) {
       const reason = remainingSlots <= 0
         ? `${getIcon("cook")} All simmer slots are full — collect broths to open space.`
-        : `${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`;
+        : `${getIcon("warning")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`;
       kitchenLines.push(reason);
     }
   }
@@ -2825,7 +2825,8 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   const pageSize = 25;
   const { totalCount, consumedSet, availableCount } = getOrdersMeta(p);
   const totalPages = Math.max(1, Math.ceil(Math.max(0, totalCount) / pageSize));
-  const requestedPage = Math.max(0, page);
+  const rawPage = Number.isFinite(page) ? page : 0;
+  const requestedPage = rawPage < 0 ? totalPages - 1 : Math.max(0, rawPage);
   let safePage = Math.min(requestedPage, totalPages - 1);
 
   const loadPage = (pageNumber) => generateOrderPageForPlayer({
@@ -2889,15 +2890,17 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   const navRow = new ActionRowBuilder();
   if (totalPages > 1) {
+    const prevTarget = (safePage - 1 + totalPages) % totalPages;
+    const nextTarget = Math.min(totalPages - 1, safePage + 1);
     navRow.addComponents(
       new ButtonBuilder()
-        .setCustomId(`noodle:pick:accept:${userId}:${safePage - 1}`)
+        .setCustomId(`noodle:pick:accept:${userId}:${prevTarget}`)
         .setLabel("Prev")
         .setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage <= 0),
+        .setDisabled(totalPages <= 1),
       new ButtonBuilder()
-        .setCustomId(`noodle:pick:accept:${userId}:${safePage + 1}`)
+        .setCustomId(`noodle:pick:accept:${userId}:${nextTarget}`)
         .setLabel("Next")
         .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)

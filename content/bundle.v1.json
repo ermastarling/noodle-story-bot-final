@@ -265,9 +265,12 @@
       "item_id": "roasted_roots",
       "name": "Roasted Roots",
       "category": "topping",
-      "acquisition": "forage",
+      "acquisition": "market",
       "tier": "uncommon",
       "spoilable": true,
+      "base_price": 12,
+      "stock_min": 80,
+      "stock_max": 120,
       "tags": [
         "smoky",
         "earthy"

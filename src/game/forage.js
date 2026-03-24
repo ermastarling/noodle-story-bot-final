@@ -21,7 +21,6 @@ const FORAGE_TABLE = [
   { item_id: "ember_peppers",     weight: 30, min: 1, max: 1 },
   { item_id: "dew_greens",       weight: 30, min: 1, max: 2 },
   { item_id: "petal_garnish",    weight: 20, min: 1, max: 1, seasonalOnly: true },
-  { item_id: "roasted_roots",    weight: 20, min: 1, max: 1, seasonalOnly: true },
 
   // Spices/Aromatics
   { item_id: "black_garlic",     weight: 20,  min: 1, max: 1 },
