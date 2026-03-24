@@ -8,6 +8,7 @@
 
 import { nowTs, dayKeyUTC } from "../util/time.js";
 import { MARKET_ITEM_IDS, sellPrice } from "./market.js";
+import { FISHING_ITEM_IDS } from "./fishing.js";
 import { getIcon } from "../ui/icons.js";
 
 // Constants
@@ -16,6 +17,7 @@ export const FAIL_STREAK_TRIGGER = 3;
 export const RECOVERY_COOLDOWN_HOURS = 24;
 export const MARKET_PITY_DISCOUNT = 0.50;
 export const REP_FLOOR = 0;
+const SELLABLE_ITEM_IDS = new Set([...MARKET_ITEM_IDS, ...FISHING_ITEM_IDS]);
 
 /**
  * B1: Economic Deadlock Detection
@@ -62,11 +64,10 @@ export function detectDeadlock(player, serverState, content) {
 
   if (canBuyAny) return false;
 
-  // Check if player has any sellable items (items that can be sold to the market)
-  // Only items in MARKET_ITEM_IDS with a valid sell price count as sellable
+  // Check if player has any sellable items (market or fishing with valid sell price)
   let hasSellableItems = false;
   for (const [itemId, qty] of Object.entries(inventory)) {
-    if (qty > 0 && MARKET_ITEM_IDS.includes(itemId)) {
+    if (qty > 0 && SELLABLE_ITEM_IDS.has(itemId)) {
       // Check if this item actually has a sell price in the current market
       const price = sellPrice(serverState, itemId);
       if (price > 0) {
@@ -189,13 +190,12 @@ export function ensureOrderBoardHasFulfillable(orderBoard, knownRecipes) {
  * If prices exceed coins and no sellables exist, apply pity discount
  */
 export function applyMarketPityDiscount(player, serverState, content) {
-  // Check if player has any sellable items (items that can be sold to the market)
-  // Only items in MARKET_ITEM_IDS with a valid sell price count as sellable
+  // Check if player has any sellable items (market or fishing with valid sell price)
   const inventory = player.inv_ingredients || {};
   let hasSellableItems = false;
   
   for (const [itemId, qty] of Object.entries(inventory)) {
-    if (qty > 0 && MARKET_ITEM_IDS.includes(itemId)) {
+    if (qty > 0 && SELLABLE_ITEM_IDS.has(itemId)) {
       // Check if this item actually has a sell price in the current market
       const price = sellPrice(serverState, itemId);
       if (price > 0) {

@@ -287,6 +287,33 @@ const PROTEIN_ITEM_IDS = new Set([
   "topping_braised_tofu",
   "topping_brisket"
 ]);
+const SELLABLE_ITEM_IDS = new Set([...MARKET_ITEM_IDS, ...FISHING_ITEM_IDS]);
+
+function getStarBrothCount(player, brothId) {
+  const raw = Math.max(0, Number(player?.star_broths?.[brothId] || 0));
+  const invQty = Math.max(0, Number(player?.inv_ingredients?.[brothId] || 0));
+  return Math.max(0, Math.min(raw, invQty));
+}
+
+function addStarBroths(player, drops) {
+  if (!player.star_broths) player.star_broths = {};
+  for (const [id, qty] of Object.entries(drops ?? {})) {
+    const q = Math.max(0, Number(qty) || 0);
+    if (!q) continue;
+    player.star_broths[id] = (player.star_broths[id] ?? 0) + q;
+  }
+}
+
+function consumeStarBroth(player, brothId, qty) {
+  if (!player?.star_broths) return 0;
+  const current = Math.max(0, Number(player.star_broths[brothId] || 0));
+  const use = Math.min(current, Math.max(0, Number(qty) || 0));
+  if (use > 0) {
+    player.star_broths[brothId] = current - use;
+    if (player.star_broths[brothId] <= 0) delete player.star_broths[brothId];
+  }
+  return use;
+}
 
 const baseContent = loadContentBundle(1);
 const settingsCatalog = loadSettingsCatalog();
@@ -1491,6 +1518,30 @@ function addBowlsWithQuality(player, recipeId, tier, quality, qty) {
   } else {
     existing.qty += qty;
     existing.quality = q;
+  }
+}
+
+function applyGuaranteedExcellent(qualityCounts, guaranteed, successTotal) {
+  const target = Math.min(Math.max(0, successTotal || 0), Math.max(0, guaranteed || 0));
+  const current = Math.max(0, Number(qualityCounts?.excellent || 0));
+  let needed = target - current;
+  if (needed <= 0) return;
+
+  const buckets = ["standard", "good"];
+  for (const key of buckets) {
+    const available = Math.max(0, Number(qualityCounts[key] || 0));
+    if (!available) continue;
+    const take = Math.min(available, needed);
+    if (take > 0) {
+      qualityCounts[key] = available - take;
+      qualityCounts.excellent = (qualityCounts.excellent ?? 0) + take;
+      needed -= take;
+      if (needed <= 0) break;
+    }
+  }
+
+  if (needed > 0) {
+    qualityCounts.excellent = (qualityCounts.excellent ?? 0) + needed;
   }
 }
 
@@ -2727,11 +2778,11 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
 function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const ownedItems = Object.entries(p.inv_ingredients ?? {})
-    .filter(([id, q]) => q > 0 && MARKET_ITEM_IDS.includes(id));
+    .filter(([id, q]) => q > 0 && SELLABLE_ITEM_IDS.has(id));
 
   if (!ownedItems.length) {
     return {
-      content: `${getIcon("coins")} You don't have any market items to sell.`,
+      content: `${getIcon("coins")} You don't have any sellable items right now.`,
       ephemeral: true
     };
   }
@@ -2746,6 +2797,7 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     if (!it) return null;
 
     const price = sellPrice(s, id);
+    if (price <= 0) return null;
     const labelRaw = `${it.name} — ${price}c each (you have ${ownedQty})`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
 
@@ -2754,7 +2806,7 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
   if (!opts.length) {
     return {
-      content: `${getIcon("coins")} You don't have any market items to sell.`,
+      content: `${getIcon("coins")} You don't have any sellable items right now.`,
       ephemeral: true
     };
   }
@@ -2791,7 +2843,7 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const sellEmbed = buildMenuEmbed({
     title: `${getIcon("coins")} Sell Items`,
     description:
-      "Select up to **5** items to sell\n" +
+      "Select up to **5** sellable items (market or fresh catches)\n" +
       "When you’re done selecting, if on Desktop, press **Esc** to continue",
     user: ownerUser
   });
@@ -3599,7 +3651,7 @@ if (sub === "pantry") {
       const name = displayItemName(id);
       const catMap = grouped.get(category) ?? new Map();
       const key = name.toLowerCase();
-      const cur = catMap.get(key) ?? { name, qty: 0 };
+      const cur = catMap.get(key) ?? { name, qty: 0, id };
       cur.qty += qty;
       catMap.set(key, cur);
       grouped.set(category, catMap);
@@ -3621,7 +3673,11 @@ if (sub === "pantry") {
         const items = grouped.get(category) ?? new Map();
         const lines = [...items.values()]
           .sort((a, b) => a.name.localeCompare(b.name))
-          .map(({ name, qty }) => `• ${name}: **${qty}**`)
+          .map(({ name, qty, id }) => {
+            const starQty = category === "broth" ? Math.min(qty, getStarBrothCount(p, id)) : 0;
+            const starPart = starQty > 0 ? ` (${getIcon("star", "⭐")} ${starQty})` : "";
+            return `• ${name}: **${qty}**${starPart}`;
+          })
           .join("\n");
         const have = countsByType[category] ?? 0;
         const cap = perTypeCap[category] ?? perTypeCap.topping ?? 0;
@@ -3947,6 +4003,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       }
 
       addIngredientsToInventory(p, accepted, "block");
+      addStarBroths(p, accepted);
 
       const totalBroths = Object.values(accepted).reduce((sum, qty) => sum + (qty || 0), 0);
       if (totalBroths > 0) {
@@ -5799,8 +5856,8 @@ ${lines.join("\n")}`;
       return commit(payload);
     }
 
-    if (!MARKET_ITEM_IDS.includes(itemId)) {
-      return commitState({ content: "That item isn’t available in the market.", ephemeral: true });
+    if (!SELLABLE_ITEM_IDS.has(itemId)) {
+      return commitState({ content: "You can only sell market items or fresh catches.", ephemeral: true });
     }
 
     const item = content.items[itemId];
@@ -5811,8 +5868,12 @@ ${lines.join("\n")}`;
     if (owned < qty) return commitState({ content: `You only have ${owned}.`, ephemeral: true });
 
     const unit = sellPrice(s, itemId);
+    if (unit <= 0) return commitState({ content: "That item can’t be sold right now.", ephemeral: true });
     const gain = unit * qty;
 
+    if (normalizeIngredientType(itemId) === "broth") {
+      consumeStarBroth(p, itemId, qty);
+    }
     p.inv_ingredients[itemId] = owned - qty;
     p.coins += gain;
     p.lifetime.coins_earned += gain;
@@ -5888,13 +5949,19 @@ ${lines.join("\n")}`;
     const batchOutput = Math.min(getCookBatchOutput(qtyToCook, p, combinedEffects), remainingBowls);
 
     const ingredientsToUse = [];
+    let starBrothUsed = 0;
+    let brothUnitsPerBowl = null;
     for (const ing of r.ingredients) {
       const need = (ing.qty ?? 0) * qtyToCook;
       if (need <= 0) continue;
+      const isBroth = normalizeIngredientType(ing.item_id) === "broth";
+      if (isBroth && !ing.optional && brothUnitsPerBowl == null) {
+        brothUnitsPerBowl = Math.max(1, ing.qty ?? 1);
+      }
       const haveIng = p.inv_ingredients?.[ing.item_id] ?? 0;
       if (ing.optional) {
         if (haveIng >= need) {
-          ingredientsToUse.push({ ...ing, need });
+          ingredientsToUse.push({ ...ing, need, isBroth });
         }
         continue;
       }
@@ -5905,7 +5972,7 @@ ${lines.join("\n")}`;
           ephemeral: true
         });
       }
-      ingredientsToUse.push({ ...ing, need });
+      ingredientsToUse.push({ ...ing, need, isBroth });
     }
 
     const cookRng = makeStreamRng({ mode: "secure", streamName: "cook", serverId, userId });
@@ -5920,9 +5987,16 @@ ${lines.join("\n")}`;
         }
       }
       const consume = Math.max(0, need - saved);
+      let consumeRemaining = consume;
+      if (consume > 0 && ing.isBroth) {
+        const starUsed = consumeStarBroth(p, ing.item_id, consume);
+        starBrothUsed += starUsed;
+        consumeRemaining -= starUsed;
+      }
+
       p.inv_ingredients[ing.item_id] -= consume;
-      if (consume > 0) {
-        consumedByItem[ing.item_id] = (consumedByItem[ing.item_id] ?? 0) + consume;
+      if (consumeRemaining > 0) {
+        consumedByItem[ing.item_id] = (consumedByItem[ing.item_id] ?? 0) + consumeRemaining;
       }
       if (saved > 0) {
         savedLines.push(`${getIcon("ingredient_save")} Saved **${saved}× ${displayItemName(ing.item_id)}**`);
@@ -5951,6 +6025,13 @@ ${lines.join("\n")}`;
     }
 
     const qualityCounts = outcome.qualityCounts ?? {};
+    const totalCooked = batchOutput + extra;
+    const perBowl = Math.max(1, brothUnitsPerBowl ?? 1);
+    const guaranteedExcellent = Math.min(totalCooked, Math.floor(starBrothUsed / perBowl));
+    const successTotal = Object.entries(qualityCounts)
+      .filter(([q]) => q !== "salvage")
+      .reduce((sum, [, c]) => sum + (c ?? 0), 0);
+    applyGuaranteedExcellent(qualityCounts, guaranteedExcellent, successTotal);
     for (const [quality, count] of Object.entries(qualityCounts)) {
       addBowlsWithQuality(p, recipeId, r.tier, quality, count);
     }
@@ -6349,11 +6430,14 @@ ${lines.join("\n")}`;
             break;
           }
 
+          const acqRaw = item?.acquisition;
+          const acqType = typeof acqRaw === "string" ? acqRaw : acqRaw?.type;
+          const isMarketItem = MARKET_ITEM_IDS.includes(itemId) || acqType === "market";
           const type = normalizeIngredientType(itemId);
           allItems.push({ itemId, need, have, missing, type, name: item.name });
 
           if (missing > 0) {
-            if (!MARKET_ITEM_IDS.includes(itemId)) {
+            if (!isMarketItem) {
               needsForageOnlyItems = true;
               continue;
             }
@@ -8566,8 +8650,12 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           if (owned < qtyEach) continue;
 
           const unit = sellPrice(s, id);
+          if (unit <= 0) continue;
           const gain = unit * qtyEach;
 
+          if (normalizeIngredientType(id) === "broth") {
+            consumeStarBroth(p2, id, qtyEach);
+          }
           p2.inv_ingredients[id] = owned - qtyEach;
           p2.coins += gain;
           p2.lifetime.coins_earned += gain;
@@ -8706,7 +8794,7 @@ const noodleCommandData = new SlashCommandBuilder()
   .addSubcommand((sc) =>
     sc
       .setName("sell")
-      .setDescription("Sell an item to the market.")
+      .setDescription("Sell a market item or fresh catch.")
       .addStringOption((o) => o.setName("item").setDescription("Market item (type to search)").setRequired(false).setAutocomplete(true))
       .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(false).setMinValue(1))
   )

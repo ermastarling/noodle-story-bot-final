@@ -6,6 +6,24 @@ const MARKET_ROLL_MAX = 1.15;
 const SELL_RATE = 0.60;
 const PRICE_MIN = 1;
 const ORDER_STOCK_SCALE_MAX = 5; // Cap stock scaling when order caps increase
+const FISH_SELL_PRICES = {
+  tilapia: 1,
+  catfish: 1,
+  basa: 1,
+  shrimp: 1,
+  clams: 1,
+  seabass: 2,
+  flounder: 2,
+  mackerel: 2,
+  squid: 2,
+  oysters: 2,
+  grouper: 3,
+  salmon: 3,
+  tuna: 3,
+  crab: 3,
+  eel: 3
+};
+const FISH_SELLABLE_IDS = new Set(Object.keys(FISH_SELL_PRICES));
 
 // ✅ Market pool: guarantees these are available daily (if present in content.items)
 export const MARKET_ITEM_IDS = [
@@ -150,5 +168,7 @@ export function rollPlayerMarketStock({
 
 export function sellPrice(serverState, itemId) {
   const p = serverState.market_prices?.[itemId] ?? 0;
-  return Math.floor(p * SELL_RATE);
+  if (p > 0) return Math.floor(p * SELL_RATE);
+  if (FISH_SELLABLE_IDS.has(itemId)) return FISH_SELL_PRICES[itemId] ?? 0;
+  return 0;
 }
