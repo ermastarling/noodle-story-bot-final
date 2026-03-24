@@ -1780,6 +1780,18 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
 
   const pagePlans = recipePlans.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
+  const cannotSimmer = kitchenUnlocked && (remainingSlots <= 0 || craftableMax <= 0 || pagePlans.length === 0);
+  if (cannotSimmer) {
+    const lowerLines = kitchenLines.map((line) => (typeof line === "string" ? line.toLowerCase() : ""));
+    const alreadyNoted = lowerLines.some((line) => line.includes("no broths") || line.includes("cannot simmer") || line.includes("slots are full"));
+    if (!alreadyNoted) {
+      const reason = remainingSlots <= 0
+        ? `${getIcon("cook")} All simmer slots are full — collect broths to open space.`
+        : `${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`;
+      kitchenLines.push(reason);
+    }
+  }
+
   const options = pagePlans.map(({ item, plan, recipe, craftableCount }) => {
     const ingTokens = (recipe ?? []).map((ing) => {
       const have = Math.max(0, Number(player?.inv_ingredients?.[ing.item_id] ?? 0));
@@ -5318,10 +5330,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (newlyUnlockedRecipes.length) {
       const recipeNames = newlyUnlockedRecipes.map((rid) => content.recipes?.[rid]?.name ?? rid).join(" · ");
       unlockLines.push(`${getIcon("sparkle")} New recipes unlocked: ${recipeNames}.`);
-      delete p.orders_day; // force regenerate pool for new recipes
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
-      unlockLines.push(`${getIcon("orders")} Fresh orders are now on today’s board.`);
     }
 
     const rejectedText = Object.keys(rejected || {}).length
@@ -6197,6 +6207,7 @@ ${lines.join("\n")}`;
     if (!p.orders.accepted) p.orders.accepted = {};
 
     const results = [];
+    const unlockedRecipeNames = [];
     const readyBowlsByRecipe = new Map();
     const acceptedOrdersNow = [];
     let acceptedNow = 0;
@@ -6752,6 +6763,8 @@ ${lines.join("\n")}`;
           // Track if a new recipe was unlocked
           if (result.recipeUnlocked) {
             recipeUnlocked = true;
+            const unlockedName = result.unlockedRecipeName || result.unlockedRecipeId || discovery.recipeName || discovery.recipeId;
+            if (unlockedName) unlockedRecipeNames.push(unlockedName);
           }
         }
       }
@@ -6887,12 +6900,16 @@ ${lines.join("\n")}`;
       results.push(...unlockLines);
     }
     
-    // If a recipe was unlocked, force regenerate order board to include new recipe
+    // If a recipe was unlocked, refresh order pool and let regulars know they can order it now
     if (recipeUnlocked) {
-      delete p.orders_day; // Force regeneration by clearing day marker
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
-      results.push(`\n${getIcon("orders")} Fresh orders are now on today’s board.`);
+      const friendlyNames = unlockedRecipeNames.length
+        ? unlockedRecipeNames.length === 1
+          ? unlockedRecipeNames[0]
+          : `${unlockedRecipeNames.slice(0, -1).join(", ")} & ${unlockedRecipeNames.at(-1)}`
+        : "your new recipe";
+      results.push(`${getIcon("orders")} Regulars are already asking for **${friendlyNames}**.`);
     }
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;

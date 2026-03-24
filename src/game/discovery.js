@@ -300,9 +300,11 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
       delete player.clues_owned[clueKey]; // Remove clues once recipe learned
       const badgeLine = maybeGrantEventBadge(recipe);
       
-      return { 
+      return {
         isDuplicate: false,
         recipeUnlocked: true,
+        unlockedRecipeId: discovery.recipeId,
+        unlockedRecipeName: discovery.recipeName,
         reward: null,
         message: `${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}${badgeLine ? `\n${badgeLine}` : ""}`
       };
@@ -370,9 +372,11 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     
     const badgeLine = maybeGrantEventBadge(recipe);
 
-    return { 
+    return {
       isDuplicate: false,
       recipeUnlocked: true,
+      unlockedRecipeId: discovery.recipeId,
+      unlockedRecipeName: discovery.recipeName,
       reward: null,
       message: `${getIcon("scroll")} Learned **${discovery.recipeName}** from a scroll!${ingredientsText}${badgeLine ? `\n${badgeLine}` : ""}`
     };
