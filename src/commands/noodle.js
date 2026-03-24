@@ -210,58 +210,6 @@ function fishingUnlockLine(prevLevel, newLevel) {
   return "";
 }
 
-function buildUnlockEmbed(kind, user) {
-  const copy = {
-    garden: {
-      title: `${getIcon("tree")} Garden Unlocked!`,
-      description: `${getIcon("sparkle")} Grow forageables in the Garden and collect seeds from future forage trips.`
-    },
-    kitchen: {
-      title: `${getIcon("cook")} Kitchen Unlocked!`,
-      description: `${getIcon("sparkle")} Simmer broths to boost your ramen lineup and store bowls for orders.`
-    },
-    fishing: {
-      title: `${getIcon("fishing")} Fishing Unlocked!`,
-      description: `${getIcon("sparkle")} Cast lines to catch seafood, unlock new ramen recipes, and refresh today’s order board when new recipes appear.`
-    }
-  };
-  const entry = copy[kind];
-  if (!entry) return null;
-  return buildMenuEmbed({
-    title: entry.title,
-    description: entry.description,
-    user,
-    color: theme.colors.success
-  });
-}
-
-function applyUnlockNoticeEmbeds(payload, player, user) {
-  if (!player) return payload;
-
-  const garden = getGardenUnlockState(player);
-  const kitchen = getKitchenUnlockState(player);
-  const fishing = getFishingUnlockState(player);
-
-  const notices = [];
-  if (garden.justUnlocked) notices.push(buildUnlockEmbed("garden", user));
-  if (kitchen.justUnlocked) notices.push(buildUnlockEmbed("kitchen", user));
-  if (fishing.justUnlocked) notices.push(buildUnlockEmbed("fishing", user));
-
-  const cleanNotices = notices.filter(Boolean);
-  if (!cleanNotices.length) return payload;
-
-  const existingEmbeds = Array.isArray(payload?.embeds) ? [...payload.embeds] : [];
-  const existingTitles = new Set(existingEmbeds.map((e) => e?.title ?? e?.data?.title ?? ""));
-
-  for (const notice of cleanNotices) {
-    const title = notice?.title ?? notice?.data?.title ?? "";
-    if (title && existingTitles.has(title)) continue;
-    existingEmbeds.push(notice);
-  }
-
-  return { ...payload, embeds: existingEmbeds, content: payload?.content ?? " " };
-}
-
 // Aliases for v14+ compatibility in code
 const ActionRowBuilder = MessageActionRow;
 const StringSelectMenuBuilder = MessageSelectMenu;
@@ -520,7 +468,7 @@ function buildHelpPage({ page, userId, user }) {
         "**Hello chef! Begin the tutorial with `/noodle start`, you can play exclusively with buttons.**",
         "\n**When you've completed the tutorial, you will only need to use `/noodle orders` any time you want to access all play commands.**",
         "",
-        `Error messages are sent only to you.\n${getIcon("help")} If you need further help, screenshot your error & head over to the ⁠support server! [Join here](https://discord.gg/uue7K92pwj)\nTip: Copy/paste the '/noodle start' or '/noodle orders' text into a message on this channel and send!`
+        `Error messages are sent only to you.\n${getIcon("help")} If you need further help, screenshot your error & head over to the ⁠support server! [Join here](https://discord.gg/uue7K92pwj)\n\nTip: Copy/paste the '/noodle start' or '/noodle orders' text into a message on this channel and send!`
       ].join("\n"),
       supportUrl: "https://discord.gg/uue7K92pwj"
     },
@@ -553,8 +501,10 @@ function buildHelpPage({ page, userId, user }) {
           value: [
             "• `/noodle pantry` — View your pantry.",
             "• `/noodle forage` — Forage for ingredients.",
+            "• `/noodle recipes` — View your recipes and clues.",
+            "• `/noodle regulars` — View your shop regulars.",            
             `• \`/noodle garden\` — Tend your garden. ${getIcon("lock")} Unlocks at shop level ${GARDEN_UNLOCK_LEVEL}.`,
-            `• \`/noodle kitchen\` — Simmer broths and bowls. ${getIcon("lock")} Unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`,
+            `• \`/noodle kitchen\` — Simmer your own broths. ${getIcon("lock")} Unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`,
             `• \`/noodle fishing\` — Cast a line for fresh catches. ${getIcon("lock")} Unlocks at shop level ${FISHING_UNLOCK_LEVEL}.`
           ].join("\n"),
           inline: true
@@ -562,10 +512,10 @@ function buildHelpPage({ page, userId, user }) {
         {
           name: "Profile & Customize",
           value: [
-            "• `/noodle recipes` — View your recipes and clues.",
-            "• `/noodle regulars` — View your shop regulars.",
+            "• `/noodle-upgrades` — View and purchase shop upgrades.",
+            "• `/noodle-staff` — Hire, level, and manage your staff.",
             "• `/noodle specialize` — Choose a shop specialization.",
-            "• `/noodle profile` — Edit shop name/tagline.",
+            "• Shop Name & Tagline buttons — Edit shop name/tagline.",
             "• Store button — Opens the decor/cosmetics store."
           ].join("\n"),
           inline: true
@@ -582,9 +532,14 @@ function buildHelpPage({ page, userId, user }) {
           inline: true
         },
         {
-          name: "Social & Support",
+          name: "Social & Party",
           value: [
-            "• Support button — Join the support server for support!"
+            "• `/noodle-social party` — Manage your party.",
+            "• `/noodle-social stats` — View your social stats.",
+            "• `/noodle-social visit` — Visit another shop (grants a blessing).",
+            "• `/noodle-social tip` — Send a tip to another player.",
+            "• `/noodle-social leaderboard` — View server leaderboards.",
+            "• Collections button — View your collections."
           ].join("\n"),
           inline: true
         }
