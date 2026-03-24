@@ -1801,8 +1801,10 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   const craftableLine = craftableMax > 0
     ? null
     : " ";
+  const pantryIcon = getIcon("basket");
   const forageValue = [
-    `${getIcon("basket")} **${totalForage}** in pantry.`,
+    "· · · · · · ·",
+    `${pantryIcon} **${totalForage}** in pantry.`,
     craftableLine,
     `${forageList}${forageFooter}`
   ].filter(Boolean).join("\n");
@@ -1815,7 +1817,8 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   const proteinHiddenCount = Math.max(0, proteinEntries.length - 10);
   const proteinFooter = proteinHiddenCount > 0 ? `\n…and ${proteinHiddenCount} more.` : "";
   const proteinValue = [
-    `${getIcon("fish")} **${totalProtein}** in pantry.`,
+    "· · · · · · ·",
+    `${pantryIcon} **${totalProtein}** in pantry.`,
     " ",
     `${proteinList}${proteinFooter}`
   ].filter(Boolean).join("\n");
@@ -1834,16 +1837,14 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
       value: forageValue,
       inline: true
     },
-    { name: " ", value: "· · · · · · ·", inline: true },
     {
       name: "Proteins Available",
       value: proteinValue,
       inline: true
     },
-    { name: " ", value: "· · · · · · ·", inline: true },
     {
       name: "Kitchen Status",
-      value: kitchenStatusValue,
+      value: ["· · · · · · ·", kitchenStatusValue].join("\n"),
       inline: true
     }
   );
