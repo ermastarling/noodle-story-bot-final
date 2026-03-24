@@ -1819,7 +1819,6 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   const proteinValue = [
     "· · · · · · ·",
     `${pantryIcon} **${totalProtein}** in pantry.`,
-    " ",
     `${proteinList}${proteinFooter}`
   ].filter(Boolean).join("\n");
 
@@ -1833,12 +1832,12 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
 
   embed.addFields(
     {
-      name: "Forageables Available",
+      name: "Forageables",
       value: forageValue,
       inline: true
     },
     {
-      name: "Proteins Available",
+      name: "Proteins",
       value: proteinValue,
       inline: true
     },
@@ -2751,10 +2750,10 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     : "";
   const shoppingList = showShoppingList
     ? (shoppingShortages.length
-      ? `${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
+      ? `\n${getIcon("basket")} **Shopping List**\n${shoppingLines.join("\n")}${shoppingSummary}`
       : shortages.length
-        ? `${getIcon("basket")} **Shopping List**\n_Forage-only ingredients aren't shown here. Forage to gather what's left._`
-        : `${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`)
+        ? `\n${getIcon("basket")} **Shopping List**\n_Forage-only ingredients aren't shown here. Forage to gather what's left._`
+        : `\n${getIcon("basket")} **Shopping List**\n_All ingredients ready for accepted orders._`)
     : null;
 
   const descriptionLines = [
@@ -2904,12 +2903,12 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     user: ownerUser
   });
 
-  if (totalPages > 1) {
-    const existingFooter = sellEmbed?.data?.footer?.text ?? sellEmbed?.footer?.text ?? "";
-    const pageLabel = `Page ${safePage + 1}/${totalPages}`;
-    const footerText = existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel;
-    sellEmbed.setFooter({ text: footerText });
-  }
+  const footerBase = `Coins: ${p.coins || 0}c`;
+  const footerOwner = ownerFooterText(ownerUser);
+  const pageLabel = totalPages > 1 ? `Page ${safePage + 1}/${totalPages}` : null;
+  const footerParts = [footerBase, pageLabel].filter(Boolean).join(" • ");
+  const footerText = footerOwner ? `${footerParts}\n${footerOwner}` : footerParts;
+  sellEmbed.setFooter({ text: footerText });
 
   return {
     content: " ",
@@ -3731,7 +3730,7 @@ if (sub === "pantry") {
           .sort((a, b) => a.name.localeCompare(b.name))
           .map(({ name, qty, id }) => {
             const starQty = category === "broth" ? Math.min(qty, getStarBrothCount(p, id)) : 0;
-            const starPart = starQty > 0 ? ` (${getIcon("star", "⭐")} ${starQty})` : "";
+            const starPart = starQty > 0 ? ` ${getIcon("star", "⭐")} (${starQty})` : "";
             return `• ${name}: **${qty}**${starPart}`;
           })
           .join("\n");
@@ -3742,13 +3741,17 @@ if (sub === "pantry") {
       })
       .filter(Boolean);
 
-    const stapleBlocksRaw = [categoryBlocks[0], categoryBlocks[1]].filter(Boolean).join("\n\n") || "No ingredients yet.";
-    const flavorBlocksRaw = [categoryBlocks[2], categoryBlocks[3], categoryBlocks[4]].filter(Boolean).join("\n\n") || "No spices yet.";
-    const stapleChunks = chunkTextByLength(stapleBlocksRaw, 900);
-    const flavorChunks = chunkTextByLength(flavorBlocksRaw, 900);
-    if (!stapleChunks.length) stapleChunks.push("No ingredients yet.");
-    if (!flavorChunks.length) flavorChunks.push("No spices yet.");
-    const ingredientPages = Math.max(stapleChunks.length, flavorChunks.length);
+    const brothBlock = categoryBlocks[0] || "No broths yet.";
+    const noodleSpiceBlock = [categoryBlocks[1], categoryBlocks[2]].filter(Boolean).join("\n\n") || "No noodles or spices yet.";
+    const toppingProteinBlock = [categoryBlocks[3], categoryBlocks[4]].filter(Boolean).join("\n\n") || "No toppings or proteins yet.";
+
+    const brothChunks = chunkTextByLength(brothBlock, 900);
+    const noodleSpiceChunks = chunkTextByLength(noodleSpiceBlock, 900);
+    const toppingProteinChunks = chunkTextByLength(toppingProteinBlock, 900);
+    if (!brothChunks.length) brothChunks.push("No broths yet.");
+    if (!noodleSpiceChunks.length) noodleSpiceChunks.push("No noodles or spices yet.");
+    if (!toppingProteinChunks.length) toppingProteinChunks.push("No toppings or proteins yet.");
+    const ingredientPages = Math.max(brothChunks.length, noodleSpiceChunks.length, toppingProteinChunks.length);
 
     const bowlGroups = new Map();
     for (const [, bowl] of Object.entries(p.inv_bowls ?? {})) {
@@ -3840,17 +3843,23 @@ if (sub === "pantry") {
 
     if (safePage < ingredientPages) {
       const ingredientPage = Math.min(safePage, ingredientPages - 1);
-      const stapleValue = stapleChunks[Math.min(ingredientPage, stapleChunks.length - 1)] ?? "No ingredients yet.";
-      const flavorValue = flavorChunks[Math.min(ingredientPage, flavorChunks.length - 1)] ?? "No spices yet.";
+      const brothValue = brothChunks[Math.min(ingredientPage, brothChunks.length - 1)] ?? "No broths yet.";
+      const noodleSpiceValue = noodleSpiceChunks[Math.min(ingredientPage, noodleSpiceChunks.length - 1)] ?? "No noodles or spices yet.";
+      const toppingProteinValue = toppingProteinChunks[Math.min(ingredientPage, toppingProteinChunks.length - 1)] ?? "No toppings or proteins yet.";
       pantryEmbed.addFields(
         {
           name: " ",
-          value: stapleValue,
+          value: ["· · · · · · ·", brothValue].join("\n"),
           inline: true
         },
         {
           name: " ",
-          value: `· · · · · · ·\n${flavorValue}`,
+          value: ["· · · · · · ·", noodleSpiceValue].join("\n"),
+          inline: true
+        },
+        {
+          name: " ",
+          value: ["· · · · · · ·", toppingProteinValue].join("\n"),
           inline: true
         }
       );
