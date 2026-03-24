@@ -31,14 +31,14 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "carrots", qty: 1 }
   ],
   broth_chicken: [
-    { item_id: "root_vegetables", qty: 2 },
+    { item_id: "roasted_roots", qty: 2 },
     { item_id: "carrots", qty: 2 },
     { item_id: "topping_grilled_chicken", qty: 1 }
   ],
   broth_rich_stock: [
-    { item_id: "forest_mushrooms", qty: 2 },
-    { item_id: "root_vegetables", qty: 1 },
-    { item_id: "scallions", qty: 1 },
+    { item_id: "topping_brisket", qty: 2 },
+    { item_id: "roasted_roots", qty: 1 },
+    { item_id: "topping_roasted_pork", qty: 2 },
     { item_id: "black_garlic", qty: 1 }
   ],
   broth_chili: [
@@ -55,8 +55,8 @@ export const KITCHEN_BROTH_RECIPES = {
   ],
   broth_beef: [
     { item_id: "forest_mushrooms", qty: 2 },
-    { item_id: "root_vegetables", qty: 2 },
-    { item_id: "topping_brisket", qty: 1 }
+    { item_id: "scallions", qty: 1 },
+    { item_id: "topping_brisket", qty: 2 }
   ],
   broth_mixed: [
     { item_id: "wild_greens", qty: 1 },
@@ -71,23 +71,21 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "night_herbs", qty: 1 }
   ],
   broth_miso: [
-    { item_id: "forest_mushrooms", qty: 1 },
-    { item_id: "root_vegetables", qty: 2 },
+    { item_id: "forest_mushrooms", qty: 2 },
+    { item_id: "root_vegetables", qty: 1 },
     { item_id: "dew_greens", qty: 1 },
-    { item_id: "topping_braised_tofu", qty: 1 }
+    { item_id: "topping_braised_tofu", qty: 2 }
   ],
   broth_black_garlic: [
     { item_id: "black_garlic", qty: 1 },
     { item_id: "forest_mushrooms", qty: 1 },
     { item_id: "night_herbs", qty: 1 },
-    { item_id: "carrots", qty: 1 },
     { item_id: "scallions", qty: 1 }
   ],
   broth_shio: [
     { item_id: "citrus_peels", qty: 1 },
     { item_id: "citrus_slices", qty: 1 },
     { item_id: "scallions", qty: 1 },
-    { item_id: "dew_greens", qty: 1 },
     { item_id: "wild_greens", qty: 1 }
   ],
   broth_citrus_infused: [
@@ -106,7 +104,6 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "ember_peppers", qty: 1 },
     { item_id: "night_spices", qty: 1 },
     { item_id: "forest_mushrooms", qty: 1 },
-    { item_id: "carrots", qty: 1 },
     { item_id: "citrus_peels", qty: 1 }
   ],
   broth_floral: [
@@ -116,7 +113,7 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "citrus_slices", qty: 1 }
   ],
   broth_sakura: [
-    { item_id: "petal_garnish", qty: 1 },
+    { item_id: "petal_garnish", qty: 2 },
     { item_id: "dew_greens", qty: 1 },
     { item_id: "citrus_slices", qty: 1 },
     { item_id: "scallions", qty: 1 },
@@ -152,7 +149,7 @@ export const KITCHEN_BROTH_RECIPES = {
     { item_id: "shrimp", qty: 3 },
     { item_id: "clams", qty: 2 },
     { item_id: "squid", qty: 1 },
-    { item_id: "crab", qty: 1 },
+    { item_id: "crab", qty: 3 },
     { item_id: "oysters", qty: 5 }
   ],
   broth_tilapia_ginger: [
