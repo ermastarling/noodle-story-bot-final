@@ -113,6 +113,7 @@ function formatEffects(effects) {
     if (key === "ingredient_save_chance") lines.push(`+${(value * 100).toFixed(2)}% ingredient save`);
     else if (key === "bowl_capacity_bonus") lines.push(`+${formatTwoDecimals(value)} bowl capacity`);
     else if (key === "ingredient_capacity") lines.push(`+${formatTwoDecimals(value)} ingredient storage`);
+    else if (key === "protein_capacity_bonus") lines.push(`+${formatTwoDecimals(value)} protein storage`);
     else if (key === "spoilage_reduction") lines.push(`-${(value * 100).toFixed(2)}% spoilage`);
     else if (key === "bowl_storage_capacity") lines.push(`+${formatTwoDecimals(value)} bowl storage`);
     else if (key === "rep_bonus_flat") lines.push(`+${value.toFixed(1)} rep`);
@@ -318,6 +319,7 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effects.ingredient_save_chance > 0) effectLines.push(`${getIcon("ingredient_save")} ${(effects.ingredient_save_chance * 100).toFixed(2)}% ingredient save`);
   if (effects.bowl_capacity_bonus > 0) effectLines.push(`${getIcon("bowl_capacity")} +${formatTwoDecimals(effects.bowl_capacity_bonus)} bowl capacity`);
   if (effects.ingredient_capacity > 0) effectLines.push(`${getIcon("ingredient_capacity")} +${formatTwoDecimals(effects.ingredient_capacity)} ingredient capacity`);
+  if (effects.protein_capacity_bonus > 0) effectLines.push(`${getIcon("ingredient_capacity")} +${formatTwoDecimals(effects.protein_capacity_bonus)} protein capacity`);
   if (effects.bowl_storage_capacity > 0) effectLines.push(`${getIcon("bowl_storage")} +${formatTwoDecimals(effects.bowl_storage_capacity)} bowl storage`);
   if (effects.rep_bonus_flat > 0) effectLines.push(`${getIcon("rep")} +${effects.rep_bonus_flat.toFixed(1)} rep per serve`);
   if (effects.rep_bonus_percent > 0) effectLines.push(`${getIcon("rep")} +${(effects.rep_bonus_percent * 100).toFixed(2)}% rep`);
@@ -361,6 +363,7 @@ function buildUpgradesManagementEmbed(player, user) {
     if (effectKey === "ingredient_save_chance") return `+${(total * 100).toFixed(2)}% ingredient save`;
     if (effectKey === "bowl_capacity_bonus") return `+${formatTwoDecimals(total)} bowl capacity`;
     if (effectKey === "ingredient_capacity") return `+${formatTwoDecimals(total)} ingredient storage`;
+    if (effectKey === "protein_capacity_bonus") return `+${formatTwoDecimals(total)} protein storage`;
     if (effectKey === "spoilage_reduction") return `-${(total * 100).toFixed(2)}% spoilage`;
     if (effectKey === "bowl_storage_capacity") return `+${formatTwoDecimals(total)} bowl storage`;
     if (effectKey === "rep_bonus_flat") return `+${total.toFixed(1)} rep per serve`;

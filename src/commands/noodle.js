@@ -1729,6 +1729,13 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   if (!player.kitchen) player.kitchen = {};
   player.kitchen.broth_notice_key = unlockedBrothKey;
 
+  if (kitchenUnlocked && batches.length === 0 && craftableMax === 0) {
+    const hasEmptyMessage = kitchenLines.some((line) => typeof line === "string" && line.toLowerCase().includes("no broths"));
+    if (!hasEmptyMessage) {
+      kitchenLines.push(`${getIcon("info")} No broths are ready to simmer — forage for ingredients or catch fish to begin.`);
+    }
+  }
+
   const forageList = forageEntries
     .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
     .slice(0, 10)
