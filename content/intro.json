@@ -7,36 +7,37 @@
     "Your goal is to build a warm reputation, learn new recipes, and turn a humble counter into a beloved neighborhood spot."
   ],
   "how_to_play": [
-    "Check the order board, accept an order, and gather ingredients.",
-    "Buy staples at the market and forage for fresh items.",
-    "Cook the recipe the customer asked for, then serve it to earn coins and reputation.",
-    "Repeat to unlock new recipes, upgrades, staff, decor, and specializations."
+    "Watch the order board for hungry adventurers and curious travelers asking for their favorites.",
+    "Gather wholesome ingredients from the bustling market or venture out to forage hidden treasures.",
+    "Prepare each recipe with care and serve it with a smile. Every bowl warms hearts and fills your purse with coins and gratitude.",
+    "As word of your delicious cooking spreads, your humble shop blossoms—unlock a cozy Garden (Lv 25), a fragrant Kitchen (Lv 45), and sparkling Fishing ponds (Lv 65).",
+    "Nurture your dream with loving upgrades, trusty staff, unique specializations, and delightful recipes waiting to be discovered."
   ],
   "core_mechanics": [
     {
       "title": "Orders",
-      "text": "Orders have rarities and sometimes time limits. Higher tiers pay more but can be harder to fulfill."
+      "text": "Each visitor carries a story and a craving—from simple comfort bowls to elaborate seasonal feasts. Greater challenges bring greater rewards, but every order is special."
     },
     {
-      "title": "Ingredients",
-      "text": "Ingredients come from the market and forage. Some can spoil over time, so keep an eye on your pantry."
+      "title": "Ingredients & Gathering",
+      "text": "Source essentials from the friendly market, gather wild flavors from beyond your door, plant heirloom seeds in your Garden (Lv 25), brew aromatic broths in your Kitchen (Lv 45), and catch the day's bounty at Fishing ponds (Lv 65). Freshness fades with time, so use what you gather with love!"
     },
     {
-      "title": "Cooking",
-      "text": "Recipes reward skillful cooking with better quality and bigger rewards."
+      "title": "Serving & Progression",
+      "text": "Each grateful bowl served writes another chapter in your shop's story. Watch your reputation bloom, recipes unfold like flower petals, and discover specializations that reflect your unique style."
     },
     {
-      "title": "Progression",
-      "text": "Serving customers unlocks recipes and content, while upgrades and staff make the shop run smoother."
+      "title": "Shop Care & Companions",
+      "text": "Tenderly invest in cozy upgrades to make your kitchen swifter and warmer. Bring on caring staff members who become part of your shop's heart and create beautiful teamwork."
     },
     {
-      "title": "Seasons",
-      "text": "Seasonal content rotates in and out, bringing limited recipes, events, and visitors."
+      "title": "Seasons & Surprises",
+      "text": "With each turning season come enchanting new recipes, festive events, and visitors from afar. Treasure these fleeting moments and the magic they bring to your beloved shop."
     }
   ],
   "next_steps": [
-    "Start the tutorial and complete your first order.",
-    "Stock up on noodles and broth, then try cooking a classic recipe.",
-    "Claim your daily reward when it appears to keep progress steady."
+    "Begin your journey with the tutorial—prepare your first heartfelt meal and see magic happen.",
+    "Stock your tiny pantry with noodles and broth, then craft a cherished recipe to serve someone special.",
+    "Don't forget to claim your daily gift when it appears—these small blessings keep your dreams alive!"
   ]
 }
