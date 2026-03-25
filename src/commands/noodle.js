@@ -210,6 +210,66 @@ function fishingUnlockLine(prevLevel, newLevel) {
   return "";
 }
 
+function applyUnlockNoticeEmbeds(payload = {}, player, user) {
+  if (!player) return payload;
+
+  const garden = getGardenUnlockState(player);
+  const kitchen = getKitchenUnlockState(player);
+  const fishing = getFishingUnlockState(player);
+
+  const notices = [];
+  if (garden?.justUnlocked) {
+    notices.push(
+      buildMenuEmbed({
+        title: `${getIcon("tree")} Garden Unlocked`,
+        description: "Plant seeds and harvest ingredients with `/noodle garden` (find it through your Pantry).",
+        user
+      })
+    );
+  }
+  if (kitchen?.justUnlocked) {
+    notices.push(
+      buildMenuEmbed({
+        title: `${getIcon("cook")} Kitchen Unlocked`,
+        description: "Simmer your own broths with `/noodle kitchen` (find it through your Pantry).",
+        user
+      })
+    );
+  }
+  if (fishing?.justUnlocked) {
+    notices.push(
+      buildMenuEmbed({
+        title: `${getIcon("fishing")} Fishing Unlocked`,
+        description: "Catch fish and seafood with `/noodle fishing` (find it through your Pantry).",
+        user
+      })
+    );
+  }
+
+  if (!notices.length) return payload;
+
+  const updated = { ...(payload ?? {}) };
+  const existingEmbeds = Array.isArray(updated.embeds) ? [...updated.embeds] : [];
+
+  for (const notice of notices) {
+    if (!notice) continue;
+    const title = notice?.title ?? notice?.data?.title ?? "";
+    const alreadyPresent = existingEmbeds.some((e) => {
+      const t = e?.title ?? e?.data?.title ?? "";
+      return title && t === title;
+    });
+    if (!alreadyPresent) existingEmbeds.push(notice);
+  }
+
+  if (existingEmbeds.length) {
+    updated.embeds = existingEmbeds;
+    if (updated.content === undefined) updated.content = " ";
+  }
+
+  Object.defineProperty(updated, "__unlockNoticeApplied", { value: true, enumerable: false });
+  return updated;
+}
+
 // Aliases for v14+ compatibility in code
 const ActionRowBuilder = MessageActionRow;
 const StringSelectMenuBuilder = MessageSelectMenu;

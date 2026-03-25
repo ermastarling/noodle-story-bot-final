@@ -1112,6 +1112,11 @@ import { getIcon } from "./ui/icons.js";
         try {
           const msg = friendlyErrorMessage(e);
           if (interaction.replied || interaction.deferred) {
+            try {
+              await interaction.deleteReply();
+            } catch (_) {
+              // ignore if already gone
+            }
             return interaction.followUp({ content: msg, ephemeral: true });
           }
           return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
@@ -1144,6 +1149,11 @@ import { getIcon } from "./ui/icons.js";
       try {
         const msg = friendlyErrorMessage(e);
         if (interaction.replied || interaction.deferred) {
+          try {
+            await interaction.deleteReply();
+          } catch (_) {
+            // ignore if already gone
+          }
           await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
         } else {
           await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
