@@ -2991,7 +2991,20 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   const totalPages = Math.max(1, Math.ceil(Math.max(0, totalCount) / pageSize));
   const rawPage = Number.isFinite(page) ? page : 0;
   const requestedPage = rawPage < 0 ? totalPages - 1 : Math.max(0, rawPage);
-  let safePage = Math.min(requestedPage, totalPages - 1);
+  const boundedPage = Math.min(requestedPage, totalPages - 1);
+  const availablePageSet = new Set();
+  if (availableCount > 0) {
+    for (let idx = 0; idx < totalCount; idx++) {
+      if (consumedSet.has(idx)) continue;
+      availablePageSet.add(Math.floor(idx / pageSize));
+      if (availablePageSet.size >= totalPages) break;
+    }
+  }
+  const availablePages = Array.from(availablePageSet).sort((a, b) => a - b);
+  let safePage = boundedPage;
+  if (availablePages.length > 0) {
+    safePage = availablePageSet.has(boundedPage) ? boundedPage : availablePages[0];
+  }
 
   const loadPage = (pageNumber) => generateOrderPageForPlayer({
     playerState: p,
@@ -3007,21 +3020,22 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   let pageData = loadPage(safePage);
 
-  // If the requested page is empty but there are still available orders, jump to the nearest page with orders
+  // If the requested page is empty but there are still available orders, jump to a page with orders
   if (!pageData.orders.length && availableCount > 0) {
-    let firstAvailableIndex = null;
-    for (let i = 0; i < totalCount; i++) {
-      if (!consumedSet.has(i)) {
-        firstAvailableIndex = i;
-        break;
+    let fallbackPage = null;
+    if (availablePages.length > 0) {
+      fallbackPage = availablePages[0];
+    } else {
+      for (let i = 0; i < totalCount; i++) {
+        if (!consumedSet.has(i)) {
+          fallbackPage = Math.floor(i / pageSize);
+          break;
+        }
       }
     }
-    if (firstAvailableIndex !== null) {
-      const fallbackPage = Math.floor(firstAvailableIndex / pageSize);
-      if (fallbackPage !== safePage) {
-        safePage = fallbackPage;
-        pageData = loadPage(safePage);
-      }
+    if (fallbackPage !== null && fallbackPage !== safePage) {
+      safePage = fallbackPage;
+      pageData = loadPage(safePage);
     }
   }
 
@@ -3052,28 +3066,31 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     .setMaxValues(Math.min(5, opts.length))
     .addOptions(opts);
 
-  const navRow = new ActionRowBuilder();
-  if (totalPages > 1) {
-    const prevTarget = (safePage - 1 + totalPages) % totalPages;
-    const nextTarget = Math.min(totalPages - 1, safePage + 1);
-    navRow.addComponents(
+  const navigablePages = availablePages.length > 1 ? availablePages : null;
+  let navRow = null;
+  if (navigablePages) {
+    const currentIndex = Math.max(0, navigablePages.indexOf(safePage));
+    const prevIndex = (currentIndex - 1 + navigablePages.length) % navigablePages.length;
+    const hasNext = currentIndex < navigablePages.length - 1;
+    const prevTarget = navigablePages[prevIndex];
+    const nextTarget = hasNext ? navigablePages[currentIndex + 1] : navigablePages[navigablePages.length - 1];
+    navRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:pick:accept:${userId}:${prevTarget}`)
         .setLabel("Prev")
         .setEmoji(getButtonEmoji("back"))
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(totalPages <= 1),
+        .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`noodle:pick:accept:${userId}:${nextTarget}`)
         .setLabel("Next")
         .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage >= totalPages - 1)
+        .setDisabled(!hasNext)
     );
   }
 
   const rows = [new ActionRowBuilder().addComponents(menu)];
-  if (totalPages > 1) rows.push(navRow);
+  if (navRow) rows.push(navRow);
   const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
   if (!tutorialOnlyAccept) {
     rows.push(
