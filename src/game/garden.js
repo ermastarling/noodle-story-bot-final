@@ -1,5 +1,6 @@
 import { addIngredientsToInventory } from "./inventory.js";
 import { applyHarvestCooldownReduction } from "./upgrades.js";
+import { getIcon } from "../ui/icons.js";
 
 export const GARDEN_UNLOCK_LEVEL = 25;
 export const BASE_GARDEN_PLOTS = 5;
@@ -442,7 +443,7 @@ export function formatPlotLines(player, content, effects = {}, now = Date.now())
   if (!plots.length) return "_No plots available yet._";
   return plots
     .map((plot, idx) => {
-      const label = `Plot ${idx + 1}`;
+      const label = getIcon(`plot_${idx + 1}`, `Plot ${idx + 1}`);
       const remainingMap = getPlotYieldRemaining(plot);
       const remainingTotal = getYieldTotal(remainingMap);
       if (!plot?.seed_id || remainingTotal <= 0) {

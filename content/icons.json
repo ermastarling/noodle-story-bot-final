@@ -138,8 +138,8 @@
     },
     "gameplay": {
       "orders": "<:orders:1470315427841179841>",
-      "cook": "<:cook:1470315514026004520>",
-      "serve": "<:serve:1470315518450733221>",
+      "cook": "<:cook:1486464251412353305>",
+      "serve": "<:serve:1486463795848024204>",
       "pantry": "<:pantry:1486270776502911167>",
       "protein": "<:protein:1486270783834558475>",
       "recipes": "<:recipes:1470315517364539521>",
@@ -147,10 +147,10 @@
       "pot": "<:pot:1486270782123409489>",
       "simmering_pot": "<:simmering_pot:1486270793523396694>",
       "forage": "<:forage:1470315960018800732>",
+      "forageables": "<:forageables:1486270770073178399>",
       "fishing": "<:fishing:1486270768798109726>",
       "bucket_of_fish": "<:bucket_of_fish:1486270766415745024>",
       "garden": "<:garden:1486270771872661504>",
-      "plot": "<:plot:1486270780567326861>",
       "planted": "<:planted:1486270778843594762>",
       "compost_bag": "<:compost_bag:1486270767552270549>",
       "seeds": "<:seeds:1486270786120585306>",
@@ -169,13 +169,41 @@
       "regulars": "<:regulars:1486270601587851316>",
       "mail": "<:mail:1470315425375064120>"
     },
+    "plots": {
+      "plot": "<:plot:1486270780567326861>",
+      "plot_1": "<:plot_1:1486270481484087307>",
+      "plot_2": "<:plot_2:1486270483199561829>",
+      "plot_3": "<:plot_3:1486270484525092944>",
+      "plot_4": "<:plot_4:1486270486038974534>",
+      "plot_5": "<:plot_5:1486270487624548503>",
+      "plot_6": "<:plot_6:1486270489297944676>",
+      "plot_7": "<:plot_7:1486270491768393789>",
+      "plot_8": "<:plot_8:1486270493181870150>",
+      "plot_9": "<:plot_9:1486270494368862318>",
+      "plot_10": "<:plot_10:1486270495807508621>",
+      "plot_11": "<:plot_11:1486270497292550295>",
+      "plot_12": "<:plot_12:1486270498571554938>",
+      "plot_13": "<:plot_13:1486270500211789864>",
+      "plot_14": "<:plot_14:1486270501474140180>",
+      "plot_15": "<:plot_15:1486270502958796800>",
+      "plot_16": "<:plot_16:1486270504208699493>",
+      "plot_17": "<:plot_17:1486270505534361672>",
+      "plot_18": "<:plot_18:1486270507262283776>",
+      "plot_19": "<:plot_19:1486270508646531132>",
+      "plot_20": "<:plot_20:1486270509967474809>",
+      "plot_21": "<:plot_21:1486270511347404960>",
+      "plot_22": "<:plot_22:1486270512639512576>",
+      "plot_23": "<:plot_23:1486270514325487656>",
+      "plot_24": "<:plot_24:1486270515604885634>",
+      "plot_25": "<:plot_25:1486270517194260511>"
+    },
     "items_storage": {
-      "bowl": "<:bowl:1470315508661227530>",
+      "bowl": "<:bowl:1486463510610182174>",
       "bowl_capacity": "<:bowl_capacity:1470315509701546232>",
       "bowl_storage": "<:bowl_storage:1470315510867693653>",
       "ingredient_capacity": "<:ingredient_capacity:1470315514994626611>",
       "ingredient_save": "<:ingredient_save:1470315516253048944>",
-      "basket": "<:basket:1470315507205804165>"
+      "basket": "<:basket:1486464012072910941>"
     },
     "shop_profile": {
       "profile": "<:profile:1470315766652866591>",
@@ -200,7 +228,7 @@
       "music": "<:music:1470315963651194921>",
       "confetti": "<:confetti:1470315952456597627>",
       "effect": "<:effect:1470315956348911646>",
-      "chef": "<:chef:1470315512968904906>",
+      "chef": "<:chef:1486464417754517564>",
       "cart": "<:cart:1470315512067129366>"
     },
     "rarity": {
@@ -213,12 +241,12 @@
       "staff_rarity_epic": "<:staff_rarity_epic:1470315772369965147>"
     },
     "categories": {
-      "category_ambience": "<:category_ambience:1470315458648604724>",
+      "category_ambience": "<:category_ambience:1486462402123006135>",
       "category_default": "<:category_default:1470315459592327243>",
-      "category_kitchen": "<:category_kitchen:1470315460942626901>",
-      "category_service": "<:category_service:1470315462263963701>",
-      "category_storage": "<:category_storage:1470315463459209216>",
-      "category_support": "<:category_support:1470315465162096845>"
+      "category_kitchen": "<:category_kitchen:1486462568687075569>",
+      "category_service": "<:category_service:1486462672865067209>",
+      "category_storage": "<:category_storage:1486462925110509779>",
+      "category_support": "<:category_support:1486462773050343598>"
     },
     "misc": {
       "sleepy": "<:sleepy:1470315970005438546>"

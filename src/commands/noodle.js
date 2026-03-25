@@ -1069,7 +1069,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
 
   const compostValue = [
     "· · · · · · ·",
-    `${getIcon("compost_bag")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
     `**Compost Inputs**`,
     `Spoiled saved: **${spoiledTotal}**`,
     `Fresh forageables: **${pantryTotal}**`,
@@ -1857,7 +1857,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   const craftableLine = craftableMax > 0
     ? null
     : " ";
-  const forageIcon = getIcon("forage");
+  const forageIcon = getIcon("forageables");
   const proteinIcon = getIcon("protein");
   const forageValue = [
     "· · · · · · ·",
@@ -5254,7 +5254,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
         ? ` Could not collect: ${blockedLines.join(", ")}.`
         : "";
       const forageFullEmbed = buildMenuEmbed({
-        title: `${getIcon("forage")} Forage`,
+        title: `${getIcon("forageables")} Forage`,
         description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
@@ -5624,7 +5624,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     if (maxCraftable <= 0) {
       const description = roomBags <= 0
-        ? `${getIcon("compost_bag")} Compost storage is full (${compostCount}/${compostCap}).`
+        ? `${getIcon("warning")} Compost storage is full (${compostCount}/${compostCap}).`
         : `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
       const embed = buildMenuEmbed({ title: `${getIcon("compost_bag")} Compost`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
       return commitState({ content: " ", embeds: [embed], components: navRows });
@@ -7538,7 +7538,7 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
   const compostCount = garden.compost_bags || 0;
   const room = Math.max(0, compostCap - compostCount);
   const compostDescription = [
-    `${getIcon("compost_bag")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
     `Spoiled saved: **${gardenState.spoiledTotal}**`,
     `Fresh forageables: **${gardenState.pantryTotal}**`,
     `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
@@ -7688,13 +7688,13 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     .filter(Boolean)
     .join("\n");
   const header = selectionList
-    ? `${getIcon("compost_bag")} Selected sources:\n${selectionList}\n\nAdd 5/10 buttons pull that many units from each selected source.`
-    : `${getIcon("compost_bag")} No items selected. Add 5/10 buttons pull that many units from each selected source.`;
+    ? `Selected sources:\n${selectionList}\n\nAdd 5/10 buttons pull that many units from each selected source.`
+    : `No items selected. Add 5/10 buttons pull that many units from each selected source.`;
   const compostCap = gardenState.compostCap;
   const compostCount = gardenState.compostCount;
   const room = Math.max(0, compostCap - compostCount);
   const compostDescription = [
-    `${getIcon("compost_bag")} Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
     header
   ].join("\n\n");
 
