@@ -167,7 +167,7 @@ function buildCategoryButtonsRows(userId, activeCategory = null, source = null, 
     { id: "storage", label: "Storage", icon: "category_storage" },
     { id: "ambience", label: "Ambiance", icon: "category_ambience" },
     { id: "service", label: "Service", icon: "category_service" },
-    { id: "garden", label: "Garden", icon: "tree" },
+    { id: "garden", label: "Garden", icon: "garden" },
     { id: "fishing", label: "Fishing", icon: "fishing" }
   ];
 
@@ -325,7 +325,7 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effects.rep_bonus_percent > 0) effectLines.push(`${getIcon("rep")} +${(effects.rep_bonus_percent * 100).toFixed(2)}% rep`);
   if (effects.staff_effect_multiplier > 0) effectLines.push(`${getIcon("staff_management")} +${(effects.staff_effect_multiplier * 100).toFixed(2)}% staff effects`);
   if (effects.order_board_bonus > 0) effectLines.push(`${getIcon("orders")} +${effects.order_board_bonus} daily orders`);
-  if (effects.kitchen_simmer_capacity > 0) effectLines.push(`${getIcon("cook")} +${formatTwoDecimals(effects.kitchen_simmer_capacity)} kitchen slots`);
+  if (effects.kitchen_simmer_capacity > 0) effectLines.push(`${getIcon("kitchen")} +${formatTwoDecimals(effects.kitchen_simmer_capacity)} kitchen slots`);
   if (effects.kitchen_simmer_time_reduction > 0) effectLines.push(`${getIcon("hourglass")} -${(effects.kitchen_simmer_time_reduction * 100).toFixed(2)}% simmer time`);
 
   if (effectLines.length > 0) {

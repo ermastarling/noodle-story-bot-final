@@ -248,7 +248,7 @@
     },
     "garden": {
       "display_name": "Garden",
-      "icon": "tree",
+      "icon": "garden",
       "description": "Grow seeds, make compost, and expand your plots"
     },
     "fishing": {

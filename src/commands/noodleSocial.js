@@ -565,7 +565,7 @@ function statsViewButtons(userId) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:pantry:${userId}`)
-      .setLabel("Pantry").setEmoji(getButtonEmoji("basket"))
+      .setLabel("Pantry").setEmoji(getButtonEmoji("pantry"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
