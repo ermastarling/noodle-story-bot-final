@@ -266,8 +266,11 @@ function simulateDay({
 
     const serverState = serverStates?.get(serverId) || null;
     const activeEventId = serverState?.active_event_id ?? null;
+    if (serverState) serverState.season = season;
 
-    timeSection(metrics, "quests_assign", () => ensureQuests(player, questsContent, player.user_id, dayTs));
+    const storyAnchor = serverState?.active_event_id ? `story:${serverState.active_event_id}` : "story:default";
+    const seasonAnchor = season ?? "seasonal:default";
+    timeSection(metrics, "quests_assign", () => ensureQuests(player, questsContent, player.user_id, dayTs, { storyKey: storyAnchor, seasonKey: seasonAnchor }));
 
     const forageDrops = timeSection(metrics, "forage", () =>
       rollForageDrops({ serverId, userId: player.user_id, picks: 2 })

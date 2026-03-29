@@ -1050,9 +1050,9 @@
         {"item_id": "noodles_wheat", "qty": 1}
       ]
     },
-    "sweet_soy_broth": {
-      "recipe_id": "sweet_soy_broth",
-      "name": "Sweet Soy Broth",
+    "sweet_soy_bowl": {
+      "recipe_id": "sweet_soy_bowl",
+      "name": "Sweet Soy Bowl",
       "tier": "uncommon",
       "season": null,
       "ingredients": [
@@ -1072,9 +1072,9 @@
         {"item_id": "topping_grilled_chicken", "qty": 1}
       ]
     },
-    "slow_simmered_broth": {
-      "recipe_id": "slow_simmered_broth",
-      "name": "Slow-Simmered Broth",
+    "slow_simmered_noodles": {
+      "recipe_id": "slow_simmered_noodles",
+      "name": "Slow-Simmered Noodles",
       "tier": "uncommon",
       "season": null,
       "ingredients": [

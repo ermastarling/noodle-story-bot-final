@@ -116,6 +116,39 @@
       "reward": { "coins": 30, "sxp": 10, "rep": 1 }
     },
     {
+      "quest_id": "shared_order_daily",
+      "name": "Finish a shared order",
+      "description": "Team up with other chefs to complete a shared order today.",
+      "cadence": "daily",
+      "type": "shared_order_complete",
+      "target": 1,
+      "weight": 1,
+      "min_shop_level": 30,
+      "reward": { "coins": 50, "sxp": 18, "rep": 3 }
+    },
+    {
+      "quest_id": "serve_breakfast_club",
+      "name": "Serve the breakfast club",
+      "description": "Deliver 10 bowls to the early risers before the rush.",
+      "cadence": "daily",
+      "type": "serve",
+      "target": 10,
+      "weight": 1,
+      "min_shop_level": 20,
+      "reward": { "coins": 60, "sxp": 22, "rep": 4 }
+    },
+    {
+      "quest_id": "cook_morning_special",
+      "name": "Cook the morning special",
+      "description": "Cook four bowls before the lunch crowd arrives.",
+      "cadence": "daily",
+      "type": "cook",
+      "target": 4,
+      "weight": 1,
+      "min_shop_level": 12,
+      "reward": { "coins": 50, "sxp": 20, "rep": 2 }
+    },
+    {
       "quest_id": "coins_200",
       "name": "Earn 200c",
       "description": "Earn coins from serving customers.",
@@ -126,7 +159,29 @@
       "reward": { "coins": 45, "sxp": 8, "rep": 2 }
     },
     {
-      "quest_id": "serve_30",
+      "quest_id": "forage_morning_run",
+      "name": "Morning Forage Run",
+      "description": "Gather foraged ingredients before the city wakes.",
+      "cadence": "daily",
+      "type": "forage",
+      "target": 4,
+      "weight": 1,
+      "min_shop_level": 8,
+      "reward": { "coins": 35, "sxp": 12, "rep": 2 }
+    },
+    {
+      "quest_id": "bless_crafters",
+      "name": "Bless the Crafters",
+      "description": "Send blessings to two artisan chefs.",
+      "cadence": "daily",
+      "type": "bless_player",
+      "target": 2,
+      "weight": 1,
+      "min_shop_level": 10,
+      "reward": { "coins": 35, "sxp": 14, "rep": 3 }
+    },
+    {
+      "quest_id": "serve_50",
       "name": "Serve 50 orders",
       "description": "Complete a busy week of service.",
       "cadence": "weekly",
@@ -157,7 +212,7 @@
       "reward": { "coins": 210, "sxp": 80, "rep": 14 }
     },
     {
-      "quest_id": "cook_20",
+      "quest_id": "cook_35",
       "name": "Cook 35 bowls",
       "description": "Cook a large batch of bowls.",
       "cadence": "weekly",
@@ -189,14 +244,100 @@
       "reward": { "coins": 240, "sxp": 80, "rep": 14 }
     },
     {
-      "quest_id": "serve_200",
-      "name": "Serve 200 orders",
+      "quest_id": "buy_20",
+      "name": "Stock 20 market items",
+      "description": "Purchase ingredients from the market throughout the week to keep your pantry ready.",
+      "cadence": "weekly",
+      "type": "buy",
+      "target": 20,
+      "weight": 1,
+      "reward": { "coins": 230, "sxp": 85, "rep": 14 }
+    },
+    {
+      "quest_id": "tip_player_weekly",
+      "name": "Tip 3 chefs",
+      "description": "Share coins with fellow chefs three times this week.",
+      "cadence": "weekly",
+      "type": "tip_player",
+      "target": 3,
+      "weight": 1,
+      "min_shop_level": 15,
+      "reward": { "coins": 240, "sxp": 88, "rep": 15 }
+    },
+    {
+      "quest_id": "earn_1500",
+      "name": "Earn 1,500c",
+      "description": "Serve customers all week to earn 1,500 coins.",
+      "cadence": "weekly",
+      "type": "earn_coins",
+      "target": 1500,
+      "weight": 1,
+      "reward": { "coins": 250, "sxp": 95, "rep": 16 }
+    },
+    {
+      "quest_id": "garden_compost_weekly",
+      "name": "Craft 15 compost bags",
+      "description": "Keep the garden thriving by packing compost throughout the week.",
+      "cadence": "weekly",
+      "type": "garden_compost",
+      "target": 15,
+      "weight": 1,
+      "min_shop_level": 25,
+      "reward": { "coins": 230, "sxp": 82, "rep": 13 }
+    },
+    {
+      "quest_id": "forage_market_run",
+      "name": "Market Forage Run",
+      "description": "Gather ingredients from every market stall before the week ends.",
+      "cadence": "weekly",
+      "type": "forage",
+      "target": 12,
+      "weight": 1,
+      "min_shop_level": 15,
+      "reward": { "coins": 220, "sxp": 80, "rep": 12 }
+    },
+    {
+      "quest_id": "tip_guild_support",
+      "name": "Guild Support Tips",
+      "description": "Tip four party members for keeping the kitchens warm.",
+      "cadence": "weekly",
+      "type": "tip_player",
+      "target": 4,
+      "weight": 1,
+      "min_shop_level": 15,
+      "reward": { "coins": 250, "sxp": 90, "rep": 15 }
+    },
+    {
+      "quest_id": "garden_plant_renewal",
+      "name": "Renewal Planting",
+      "description": "Plant ten seeds to refresh your seasonal beds.",
+      "cadence": "weekly",
+      "type": "garden_plant",
+      "target": 10,
+      "weight": 1,
+      "min_shop_level": 30,
+      "reward": { "coins": 230, "sxp": 84, "rep": 14 }
+    },
+    {
+      "quest_id": "garden_compost_renewal",
+      "name": "Renewal Compost",
+      "description": "Craft twenty compost bags to nurture the garden beds.",
+      "cadence": "weekly",
+      "type": "garden_compost",
+      "target": 20,
+      "weight": 1,
+      "min_shop_level": 30,
+      "reward": { "coins": 240, "sxp": 86, "rep": 15 }
+    },
+    {
+      "quest_id": "serve_500",
+      "name": "Serve 500 orders",
       "description": "Run a full month of service.",
       "cadence": "monthly",
       "type": "serve",
-      "target": 200,
+      "target": 500,
       "weight": 1,
-      "reward": { "coins": 600, "sxp": 220, "rep": 40 }
+      "reward": { "coins": 1000, "sxp": 520, "rep": 100 }
     },
     {
       "quest_id": "coins_5000",
@@ -206,15 +347,92 @@
       "type": "earn_coins",
       "target": 5000,
       "weight": 1,
-      "reward": { "coins": 700, "sxp": 200, "rep": 45 }
+      "reward": { "coins": 1000, "sxp": 500, "rep": 90 }
+    },
+    {
+      "quest_id": "garden_harvest_monthly",
+      "name": "Harvest 60 plots",
+      "description": "Tend to your entire garden and bring in a month of harvests.",
+      "cadence": "monthly",
+      "type": "garden_harvest",
+      "target": 60,
+      "weight": 1,
+      "min_shop_level": 30,
+      "reward": { "coins": 980, "sxp": 480, "rep": 88 }
+    },
+    {
+      "quest_id": "garden_compost_monthly",
+      "name": "Compost Guild Hours",
+      "description": "Craft forty compost bags to fuel every garden bed this month.",
+      "cadence": "monthly",
+      "type": "garden_compost",
+      "target": 40,
+      "weight": 1,
+      "min_shop_level": 30,
+      "reward": { "coins": 980, "sxp": 450, "rep": 90 }
+    },
+    {
+      "quest_id": "story_lantern_feast",
+      "name": "Lantern Feast",
+      "description": "Serve glowing bowls to the Lantern Storyteller regulars and keep their stories warm.",
+      "cadence": "story",
+      "type": "serve",
+      "target": 15,
+      "weight": 1,
+      "min_shop_level": 40,
+      "reward": { "coins": 480, "sxp": 140, "rep": 25 }
+    },
+    {
+      "quest_id": "story_blessing_circle",
+      "name": "Blessing Circle",
+      "description": "Send blessings to three chefs and weave their tales together.",
+      "cadence": "story",
+      "type": "bless_player",
+      "target": 3,
+      "weight": 1,
+      "min_shop_level": 25,
+      "reward": { "coins": 320, "sxp": 110, "rep": 18 }
+    },
+    {
+      "quest_id": "story_market_tales",
+      "name": "Market Stories",
+      "description": "Pick up 12 ingredients while sharing stories with fellow vendors.",
+      "cadence": "story",
+      "type": "buy",
+      "target": 12,
+      "weight": 1,
+      "min_shop_level": 10,
+      "reward": { "coins": 360, "sxp": 125, "rep": 20 }
+    },
+    {
+      "quest_id": "seasonal_moonlit_catch",
+      "name": "Moonlit Catch",
+      "description": "Reel in 25 fish under the seasonal glow and keep your nets brimming.",
+      "cadence": "seasonal",
+      "type": "fishing_catch",
+      "target": 25,
+      "weight": 1,
+      "min_shop_level": 65,
+      "reward": { "coins": 420, "sxp": 150, "rep": 22 }
+    },
+    {
+      "quest_id": "seasonal_garden_blossom",
+      "name": "Garden Blossom",
+      "description": "Plant 12 seasonal seeds while lanterns glow.",
+      "cadence": "seasonal",
+      "type": "garden_plant",
+      "target": 12,
+      "weight": 1,
+      "min_shop_level": 25,
+      "reward": { "coins": 450, "sxp": 160, "rep": 24 }
     }
   ],
   "counts": {
-    "daily": 3,
-    "weekly": 2,
-    "monthly": 1,
-    "story": 0,
-    "seasonal": 0
+    "daily": 4,
+    "weekly": 3,
+    "monthly": 2,
+    "story": 1,
+    "seasonal": 1
   },
   "cadence_multipliers": {
     "daily": 1,

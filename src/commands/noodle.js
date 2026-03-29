@@ -4659,6 +4659,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   const activeEventId = s.active_event_id ?? null;
   const baseOrders = Math.max(1, Number(set.ORDERS_BASE_COUNT ?? 100));
   const totalOrders = computeOrderCount(set, combinedEffects);
+  const storyAnchor = activeEventId ? `story:${activeEventId}` : "story:default";
+  const seasonAnchor = s.season ?? "seasonal:default";
+  const questOptions = { storyKey: storyAnchor, seasonKey: seasonAnchor };
   
   // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
   const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
@@ -4682,7 +4685,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   const prevOrdersDay = p.orders_day;
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
-  ensureQuests(p, questsContent, userId, now);
+  ensureQuests(p, questsContent, userId, now, questOptions);
 
   // Force market stock refresh to align with daily order reset
   const dayChanged = prevOrdersDay !== p.orders_day;
@@ -4819,7 +4822,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   /* ---------------- QUESTS ---------------- */
   if (sub === "quests") {
-    const summary = getQuestSummary(p, questsContent, userId, now);
+    const summary = getQuestSummary(p, questsContent, userId, now, questOptions);
     const active = summary.active;
     const cadenceOrder = ["daily", "weekly", "monthly", "story", "seasonal"];
     const cadenceLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly", story: "Story", seasonal: "Seasonal" };

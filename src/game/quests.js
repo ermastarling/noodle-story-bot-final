@@ -10,6 +10,9 @@ function ensureQuestState(player) {
   if (!("daily_day" in player.quests)) player.quests.daily_day = null;
   if (!("weekly_week" in player.quests)) player.quests.weekly_week = null;
   if (!("monthly_month" in player.quests)) player.quests.monthly_month = null;
+  if (!("story_key" in player.quests)) player.quests.story_key = null;
+  if (!("seasonal_key" in player.quests)) player.quests.seasonal_key = null;
+  if (!player.quests.quest_options) player.quests.quest_options = {};
   if (!player.quests.weekly_reset_v2) {
     for (const [id, quest] of Object.entries(player.quests.active)) {
       if (quest?.cadence === "weekly") delete player.quests.active[id];
@@ -92,12 +95,17 @@ function isQuestTemplateEligible(template, playerLevel) {
   return true;
 }
 
-export function ensureQuests(player, questsContent, userId, now = nowTs()) {
+export function ensureQuests(player, questsContent, userId, now = nowTs(), options = {}) {
   const quests = ensureQuestState(player);
   const counts = questsContent?.counts ?? { daily: 3, weekly: 2, monthly: 1, story: 0, seasonal: 0 };
   const multipliers = questsContent?.cadence_multipliers ?? { daily: 1, weekly: 2.5, monthly: 4, story: 4, seasonal: 3 };
   const templates = questsContent?.quests ?? [];
   const playerLevel = player?.shop_level ?? 1;
+  const savedOptions = quests.quest_options ?? {};
+  const storyKeyInput = options.storyKey ?? savedOptions.storyKey ?? null;
+  const seasonalKeyInput = options.seasonKey ?? savedOptions.seasonKey ?? null;
+  const storyKey = storyKeyInput ?? (quests.story_key ?? "story:default");
+  const seasonalKey = seasonalKeyInput ?? (quests.seasonal_key ?? "seasonal:default");
 
   const dailyKey = dayKeyUTC(now);
   if (quests.daily_day !== dailyKey) {
@@ -148,11 +156,62 @@ export function ensureQuests(player, questsContent, userId, now = nowTs()) {
     }
   }
 
+  const storyCount = Math.max(0, Number(counts.story ?? 0));
+  if (storyCount <= 0) {
+    if (quests.story_key !== null) {
+      for (const [id, quest] of Object.entries(quests.active)) {
+        if (quest.cadence === "story") delete quests.active[id];
+      }
+      quests.story_key = null;
+    }
+  } else {
+    const storyTemplates = templates.filter((q) => q.cadence === "story" && isQuestTemplateEligible(q, playerLevel));
+    if (storyTemplates.length > 0 && storyKey !== quests.story_key) {
+      for (const [id, quest] of Object.entries(quests.active)) {
+        if (quest.cadence === "story") delete quests.active[id];
+      }
+      const rng = makeStreamRng({ mode: "seeded", seed: 4041, streamName: "quests-story", serverId: userId, dayKey: storyKey });
+      const picks = pickQuestTemplates(rng, storyTemplates, storyCount);
+      for (const template of picks) {
+        const instanceId = `${template.quest_id}:${storyKey}`;
+        const reward = applyRewardMultiplier(template.reward ?? {}, multipliers.story ?? 1);
+        quests.active[instanceId] = createQuestInstance(template, instanceId, "story", reward);
+      }
+      quests.story_key = storyKey;
+    }
+  }
+
+  const seasonalCount = Math.max(0, Number(counts.seasonal ?? 0));
+  if (seasonalCount <= 0) {
+    if (quests.seasonal_key !== null) {
+      for (const [id, quest] of Object.entries(quests.active)) {
+        if (quest.cadence === "seasonal") delete quests.active[id];
+      }
+      quests.seasonal_key = null;
+    }
+  } else {
+    const seasonalTemplates = templates.filter((q) => q.cadence === "seasonal" && isQuestTemplateEligible(q, playerLevel));
+    if (seasonalTemplates.length > 0 && seasonalKey !== quests.seasonal_key) {
+      for (const [id, quest] of Object.entries(quests.active)) {
+        if (quest.cadence === "seasonal") delete quests.active[id];
+      }
+      const rng = makeStreamRng({ mode: "seeded", seed: 5051, streamName: "quests-seasonal", serverId: userId, dayKey: seasonalKey });
+      const picks = pickQuestTemplates(rng, seasonalTemplates, seasonalCount);
+      for (const template of picks) {
+        const instanceId = `${template.quest_id}:${seasonalKey}`;
+        const reward = applyRewardMultiplier(template.reward ?? {}, multipliers.seasonal ?? 1);
+        quests.active[instanceId] = createQuestInstance(template, instanceId, "seasonal", reward);
+      }
+      quests.seasonal_key = seasonalKey;
+    }
+  }
+
+  quests.quest_options = { storyKey, seasonKey };
   return quests;
 }
 
-export function applyQuestProgress(player, questsContent, userId, event, now = nowTs()) {
-  const quests = ensureQuests(player, questsContent, userId, now);
+export function applyQuestProgress(player, questsContent, userId, event, now = nowTs(), options = {}) {
+  const quests = ensureQuests(player, questsContent, userId, now, options);
   const updated = [];
   const amount = Math.max(0, Number(event.amount ?? 1));
 
@@ -199,8 +258,8 @@ export function claimCompletedQuests(player) {
   return { claimed, leveledUp };
 }
 
-export function getQuestSummary(player, questsContent, userId, now = nowTs()) {
-  const quests = ensureQuests(player, questsContent, userId, now);
+export function getQuestSummary(player, questsContent, userId, now = nowTs(), options = {}) {
+  const quests = ensureQuests(player, questsContent, userId, now, options);
   const active = Object.values(quests.active);
   return { active };
 }
