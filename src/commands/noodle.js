@@ -943,6 +943,23 @@ function gardenPageRow(userId, page = 0) {
   );
 }
 
+function formatAutoHarvestNote(autoHarvestResult, content) {
+  if (!autoHarvestResult?.harvested?.length) return null;
+  const totalAdded = autoHarvestResult.added || {};
+  const seeded = Object.entries(autoHarvestResult.seedBonus || {}).filter(([, qty]) => qty > 0);
+  const hasIngredients = getYieldTotal(totalAdded) > 0;
+  if (!hasIngredients && !seeded.length) return null;
+  const plotCount = autoHarvestResult.harvested.length;
+  const plotDescriptor = plotCount === 1 ? "the ready plot" : "each ready plot";
+  const harvestLine = hasIngredients
+    ? `${getIcon("garden")} The gardener lovingly tended ${plotDescriptor} and gathered ${describeYieldMap(totalAdded, content)}.`
+    : `${getIcon("garden")} The gardener lovingly tended ${plotDescriptor} to keep the beds full of life.`;
+  const seedLine = seeded.length
+    ? `${getIcon("seeds")} Seeds tucked away while tending:\n${seeded.map(([seedId, qty]) => `• **${qty}×** ${getSeedDisplayName(seedId, content)}`).join("\n")}`
+    : null;
+  return [harvestLine, seedLine].filter(Boolean).join("\n");
+}
+
 function chunkTextByLength(text, maxLen = 900) {
   if (!text) return [];
   const lines = String(text).split("\n");
@@ -1037,7 +1054,7 @@ function pantryPageRow(userId, page = 0, totalPages = 1, ingredientPages = 1) {
   );
 }
 
-function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocked = false, kitchenJustUnlocked = false, page = 0 }) {
+function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocked = false, kitchenJustUnlocked = false, page = 0, autoHarvestResult = null }) {
   const garden = ensureGardenState(player);
   const plots = ensureGardenPlots(player, combinedEffects);
   const gardenState = getGardenActionState(player, combinedEffects);
@@ -1061,6 +1078,10 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const plotsLinesRaw = plotsSection ? plotsSection.split("\n").filter(Boolean) : [];
   const plotsLines = plotsLinesRaw.length ? plotsLinesRaw : ["_No plots available yet._"];
 
+  const autoHarvestNote = formatAutoHarvestNote(autoHarvestResult, content);
+  const descriptionParts = [autoHarvestNote, plotSummary].filter(Boolean);
+  const description = descriptionParts.join("\n\n");
+
   const seedsValue = [
     "· · · · · · ·",
     `${getIcon("seeds")} **Seeds (unlimited)**`,
@@ -1070,13 +1091,11 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const compostValue = [
     "· · · · · · ·",
     `Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
-    `**Compost Inputs**`,
+    `${getIcon("compost_bag")} **Compost Inputs**`,
     `Spoiled saved: **${spoiledTotal}**`,
     `Fresh forageables: **${pantryTotal}**`,
     `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
   ].join("\n");
-
-  const description = [plotSummary].join("\n\n");
 
   const seedOptions = Object.entries(garden.seeds || {})
     .filter(([, qty]) => qty > 0)
@@ -4225,7 +4244,7 @@ if (sub === "recipes") {
   });
 
   const cluesMap = p.clues_owned ?? {};
-  const clueEntries = Object.values(cluesMap).filter(Boolean);
+  const clueEntries = Object.values(cluesMap).filter((entry) => entry && !knownSet.has(entry.recipe_id));
   const clueLines = clueEntries
     .map((entry) => {
       const recipeId = entry.recipe_id;
@@ -4284,19 +4303,22 @@ if (sub === "recipes") {
   const footerText = existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel;
   recipesEmbed.setFooter({ text: footerText });
 
+  const hasMultiplePages = totalPages > 1;
+  const prevPage = Math.max(page - 1, 0);
+  const nextPage = page >= totalPages - 1 ? 0 : page + 1;
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:recipes:${userId}:${page - 1}`)
+      .setCustomId(`noodle:nav:recipes:${userId}:${prevPage}`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page <= 0),
+      .setDisabled(!hasMultiplePages || page <= 0),
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:recipes:${userId}:${page + 1}`)
+      .setCustomId(`noodle:nav:recipes:${userId}:${nextPage}`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page >= totalPages - 1),
+      .setDisabled(!hasMultiplePages),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:recipes:${userId}:clues`)
       .setLabel("Clues")
@@ -5557,8 +5579,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const page = Math.max(0, Math.min(1, opt.getInteger("page") ?? 0));
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    let autoHarvestResult = null;
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects, {
+      autoHarvestResult = autoHarvestReadyPlots(p, content, combinedEffects, {
         capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
       });
     }
@@ -5582,6 +5605,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       combinedEffects,
       user: interaction.member ?? interaction.user,
       userId,
+      autoHarvestResult,
       kitchenUnlocked,
       kitchenJustUnlocked,
       page
@@ -5740,8 +5764,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "plant") {
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    let autoHarvestResult = null;
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects, {
+      autoHarvestResult = autoHarvestReadyPlots(p, content, combinedEffects, {
         capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
       });
     }
@@ -5796,7 +5821,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       player: p,
       combinedEffects,
       user: interaction.member ?? interaction.user,
-      userId
+      userId,
+      autoHarvestResult
     });
 
     const summary = `${getIcon("planted")} Planted **${getSeedDisplayName(seedId, content)}** in plot #${result.plotIndex + 1}.`;
@@ -5812,8 +5838,9 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
   if (sub === "harvest") {
     const gardenUnlocked = isGardenUnlocked(p);
+    let autoHarvestResult = null;
     if (combinedEffects.garden_autoharvest) {
-      autoHarvestReadyPlots(p, content, combinedEffects, {
+      autoHarvestResult = autoHarvestReadyPlots(p, content, combinedEffects, {
         capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
       });
     }
@@ -5848,7 +5875,8 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       player: p,
       combinedEffects,
       user: interaction.member ?? interaction.user,
-      userId
+      userId,
+      autoHarvestResult
     });
 
     let summary;

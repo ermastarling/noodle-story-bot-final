@@ -206,7 +206,7 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
     }
   }
 
-  quests.quest_options = { storyKey, seasonKey };
+  quests.quest_options = { storyKey, seasonalKey };
   return quests;
 }
 

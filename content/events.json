@@ -44,14 +44,15 @@
       },
       "event_recipes": [
         {
-          "recipe_id": "spring_blossoms_garden_broth",
-          "name": "Garden Broth",
+          "recipe_id": "spring_blossoms_garden_bowl",
+          "name": "Garden Bowl",
           "tier": "common",
           "season": "spring",
           "ingredients": [
             { "item_id": "broth_herbal", "qty": 1 },
             { "item_id": "noodles_wheat", "qty": 1 },
-            { "item_id": "scallions", "qty": 1 }
+            { "item_id": "scallions", "qty": 1 },
+            { "item_id": "topping_braised_tofu", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -63,19 +64,22 @@
           "ingredients": [
             { "item_id": "broth_shio", "qty": 1 },
             { "item_id": "noodles_fine", "qty": 1 },
-            { "item_id": "topping_extra_broth", "qty": 1 }
+            { "item_id": "topping_extra_broth", "qty": 1 },
+            { "item_id": "topping_grilled_chicken", "qty": 1 },
+            { "item_id": "shrimp", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
         {
-          "recipe_id": "spring_blossoms_bloom_broth",
-          "name": "Bloom Broth",
+          "recipe_id": "spring_blossoms_bloom_noodles",
+          "name": "Bloom Noodles",
           "tier": "rare",
           "season": "spring",
           "ingredients": [
             { "item_id": "broth_sweet_soy", "qty": 1 },
             { "item_id": "noodles_thin", "qty": 1 },
-            { "item_id": "topping_chili_flakes", "qty": 1 }
+            { "item_id": "topping_chili_flakes", "qty": 1 },
+            { "item_id": "topping_roasted_pork", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -99,7 +103,8 @@
           "ingredients": [
             { "item_id": "broth_miso", "qty": 1 },
             { "item_id": "noodles_thin", "qty": 1 },
-            { "item_id": "topping_chili_flakes", "qty": 1 }
+            { "item_id": "topping_chili_flakes", "qty": 1 },
+            { "item_id": "tilapia", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         }
@@ -124,13 +129,14 @@
       },
       "event_recipes": [
         {
-          "recipe_id": "summer_solstice_breeze_broth",
-          "name": "Breeze Broth",
+          "recipe_id": "summer_solstice_breeze_noodles",
+          "name": "Soft Breeze Noodles",
           "tier": "common",
           "season": "summer",
           "ingredients": [
             { "item_id": "broth_light", "qty": 1 },
-            { "item_id": "noodles_soft", "qty": 1 }
+            { "item_id": "noodles_soft", "qty": 1 },
+            { "item_id": "topping_brisket", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -142,7 +148,8 @@
           "ingredients": [
             { "item_id": "broth_citrus_infused", "qty": 1 },
             { "item_id": "noodles_thin", "qty": 1 },
-            { "item_id": "topping_extra_broth", "qty": 1 }
+            { "item_id": "topping_extra_broth", "qty": 1 },
+            { "item_id": "shrimp", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -154,7 +161,8 @@
           "ingredients": [
             { "item_id": "broth_citrus_infused", "qty": 1 },
             { "item_id": "noodles_udon", "qty": 1 },
-            { "item_id": "spice_sesame_oil", "qty": 1 }
+            { "item_id": "spice_sesame_oil", "qty": 1 },
+            { "item_id": "topping_roasted_pork", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -166,7 +174,9 @@
           "ingredients": [
             { "item_id": "broth_fire", "qty": 1 },
             { "item_id": "noodles_spiced", "qty": 1 },
-            { "item_id": "spice_chili_oil", "qty": 1 }
+            { "item_id": "spice_chili_oil", "qty": 1 },
+            { "item_id": "topping_grilled_chicken", "qty": 1 },
+            { "item_id": "seabass", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -212,7 +222,8 @@
           "season": "autumn",
           "ingredients": [
             { "item_id": "broth_chicken", "qty": 1 },
-            { "item_id": "noodles_wheat", "qty": 1 }
+            { "item_id": "noodles_wheat", "qty": 1 },
+            { "item_id": "topping_roasted_pork", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -224,7 +235,9 @@
           "ingredients": [
             { "item_id": "broth_herbal", "qty": 1 },
             { "item_id": "noodles_udon", "qty": 1 },
-            { "item_id": "topping_extra_broth", "qty": 1 }
+            { "item_id": "topping_extra_broth", "qty": 1 },
+            { "item_id": "topping_grilled_chicken", "qty": 1 },
+            { "item_id": "clams", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -248,7 +261,8 @@
           "ingredients": [
             { "item_id": "broth_pumpkin", "qty": 1 },
             { "item_id": "noodles_ramen", "qty": 1 },
-            { "item_id": "topping_roasted_pork", "qty": 1 }
+            { "item_id": "topping_roasted_pork", "qty": 1 },
+            { "item_id": "shrimp", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -292,7 +306,8 @@
           "season": "winter",
           "ingredients": [
             { "item_id": "broth_shio", "qty": 1 },
-            { "item_id": "noodles_fine", "qty": 1 }
+            { "item_id": "noodles_fine", "qty": 1 },
+            { "item_id": "topping_roasted_pork", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
@@ -304,25 +319,28 @@
           "ingredients": [
             { "item_id": "broth_miso", "qty": 1 },
             { "item_id": "noodles_soft", "qty": 1 },
-            { "item_id": "topping_extra_broth", "qty": 1 }
+            { "item_id": "topping_extra_broth", "qty": 1 },
+            { "item_id": "topping_grilled_chicken", "qty": 1 },
+            { "item_id": "salmon", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
         {
           "recipe_id": "winter_market_glow",
-          "name": "Glow Broth",
+          "name": "Glow Noodles",
           "tier": "rare",
           "season": "winter",
           "ingredients": [
             { "item_id": "broth_glowing_miso", "qty": 1 },
             { "item_id": "noodles_ramen", "qty": 1 },
-            { "item_id": "spice_sesame_oil", "qty": 1 }
+            { "item_id": "spice_sesame_oil", "qty": 1 },
+            { "item_id": "topping_brisket", "qty": 1 }
           ],
           "notes": "Event-only recipe; uses existing ingredients."
         },
         {
-          "recipe_id": "winter_market_hearth_broth",
-          "name": "Hearth Broth",
+          "recipe_id": "winter_market_hearth_bowl",
+          "name": "Hearth Bowl",
           "tier": "epic",
           "season": "winter",
           "ingredients": [

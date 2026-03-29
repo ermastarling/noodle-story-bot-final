@@ -1,73 +1,113 @@
-# Noodle Story Bot
+Noodle Story Bot is a cozy Discord experience where you run a noodle shop, serve NPC orders, unlock new recipes, expand your staff and decor, and experiment with seasonal content as you progress.
 
-Cozy Discord bot game where players run a noodle shop, serve NPCs, unlock recipes, and grow their shop through upgrades, staff, and seasonal content.
+## Table of Contents
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Scripts](#scripts)
+- [Configuration](#configuration)
+- [Simulation Harness](#simulation-harness)
+- [Data Notes](#data-notes)
+- [Project Structure](#project-structure)
+- [Testing](#testing)
+- [Resources](#resources)
 
-## Highlights
+## Overview
 
-- NPC order board with rarity tiers, seasonal recipes, and limited-time orders
-- Cooking system with quality outcomes and rewards
-- Recipe discovery via clues and scrolls
-- Quests, daily rewards, and collections
-- Shop upgrades, staff, decor, and specializations
-- Social features: parties, tips, blessings, and leaderboards
+The bot pairs a stateful game simulation with Discord interactions so players can run a noodle stall, tackle quests, collect badges, and trade seasonal ambiance with friends. Orders arrive through an NPC board, cooking outcomes depend on ingredients and upgrades, and social hooks let players tip, bless, and party with each other.
+
+## Features
+
+- NPC order board with rarity tiers, seasonal recipes, and limited-time requests
+- Cooking system with roll-based quality, discovery clues, and scroll unlocks
+- Quests, daily rewards, collections, and progression through specializations
+- Shop upgrades, decor, staff management, and kitchen unlockables
+- Social features such as parties, tips, blessings, and leaderboards
+- Simulation harness for validating economy and progression before deploying
 
 ## Requirements
 
-- Node.js 18+ (ESM)
-- Discord bot token with guild and message intents
+- Node.js 18 or newer (ESM-only build)
+- A Discord application with bot token, guild, and message content intents
+- Writable `data/` directory for SQLite persistence (the bot creates WAL/SHM files at runtime)
 
 ## Quick Start
 
-1) Install dependencies
+1. Install dependencies
 
-```
-npm install
-```
+   ```bash
+   npm install
+   ```
 
-2) Create a .env file
+2. Create a `.env` file and add your bot token
 
-```
-DISCORD_TOKEN=your_token_here
-```
+   ```bash
+   cat <<'EOF' > .env
+   DISCORD_TOKEN=your_token_here
+   EOF
+   ```
 
-3) Register commands
+3. Register slash commands for your development guild
 
-```
-npm run register:dev
-```
+   ```bash
+   npm run register:dev
+   ```
 
-4) Run the bot
+4. Start the bot locally
 
-```
-npm run dev
-```
+   ```bash
+   npm run dev
+   ```
 
 ## Scripts
 
-- npm run dev: run the bot in watch mode
-- npm run start: run the bot once
-- npm run register:dev: register slash commands (dev)
-- npm run register:prod: register slash commands (prod)
-- npm run test: run tests
-- npm run sim: run the simulation harness
+- `npm run dev` — launch the bot with watcher/npm environment for rapid iteration
+- `npm run start` — run the bot once (no watch mode)
+- `npm run register:dev` — register slash commands in the dev guild
+- `npm run register:prod` — register slash commands for production
+- `npm run test` — execute the automated test suite
+- `npm run sim` — exercise the simulation harness (see below)
+
+## Configuration
+
+Only `DISCORD_TOKEN` is required for booting the bot; it exits immediately if the value is missing. Optional runtime knobs such as `NODE_ENV=production` control the verbosity of logging and scheduler behavior, and the SQLite database lives under `data/` unless you customize the path in `db/index.js`.
 
 ## Simulation Harness
 
-The simulation helps stress-test the economy and progression without Discord. It generates daily orders, serves them, applies rewards, discovery, and upgrades, then writes a JSON report.
+Run the harness to stress-test progression, upgrades, and rewards without sending Discord traffic:
 
-```
+```bash
 npm run sim -- --days=30 --players=100 --orders-per-day=8 --seed=1337 --output=sim-output.json
 ```
 
-See SIMULATION.md for full options.
+See `SIMULATION.md` for every supported flag and how to interpret the generated report.
 
 ## Data Notes
 
-- SQLite data is stored in data/ by default.
-- WAL/SHM files are transient and can be regenerated.
+- Persistent SQLite data lives under `data/`; WAL/SHM files are transient and can be regenerated.
+- Backups are written to `data/backups/` by the scheduled job and can be restored manually if needed.
 
 ## Project Structure
 
-- src/: bot, game logic, infra, and jobs
-- content/: game content (recipes, NPCs, upgrades, etc.)
-- test/: automated tests
+- `src/` — Discord access, command handlers, game logic, infra helpers, and job schedulers
+- `content/` — JSON bundles for recipes, NPCs, badges, decor, events, and seasonal sets
+- `db/` — SQLite interface, schema definition, and helper queries
+- `game/` — Domain rules for cooking, quests, rewards, resilience, and story systems
+- `jobs/` — Scheduled work such as daily resets, reward reminders, event sync, and backups
+- `test/` — Jest suites covering discovery, inventory, NPC modifiers, orders, resilience, social systems, staff, and upgrades
+- `sim/` — Simulation harness entrypoint and helpers
+- `data/` — Runtime database storage referenced by `db/index.js`
+
+## Testing
+
+```bash
+npm run test
+```
+
+The suite exercises discovery, inventory flow, NPC modifiers, order boards, resilience, social interactions, staff, and upgrades.
+
+## Resources
+
+- Detailed simulation options: `SIMULATION.md`
+- Team workflow guidelines: `GIT_WORKFLOW.md`
