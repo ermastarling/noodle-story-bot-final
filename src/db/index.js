@@ -19,6 +19,13 @@ const statementCache = new WeakMap();
 const sharedServerCache = new Map();
 const SHARED_SERVER_TTL_MS = 30_000;
 const SHARED_SERVER_MAX = 500;
+const GLOBAL_PLAYER_SERVER_ID = "__global__";
+const USE_GLOBAL_PLAYER_DATA = process.env.NOODLE_GLOBAL_PLAYER_DATA !== "0";
+
+export function getPlayerStorageServerId(serverId) {
+  if (USE_GLOBAL_PLAYER_DATA) return GLOBAL_PLAYER_SERVER_ID;
+  return serverId;
+}
 
 export function withPlayerCache(fn) {
   return playerCacheStorage.run(new Map(), fn);
@@ -146,25 +153,46 @@ export function upsertServer(db, serverId, serverData, expectedRev=null) {
 }
 
 export function getPlayer(db, serverId, userId) {
+  const storageServerId = getPlayerStorageServerId(serverId);
   const cache = getPlayerCache();
-  const cacheKey = cache ? makePlayerCacheKey(serverId, userId) : null;
+  const cacheKey = cache ? makePlayerCacheKey(storageServerId, userId) : null;
   if (cache && cache.has(cacheKey)) {
     return cache.get(cacheKey);
   }
 
-  const shared = getSharedPlayer(serverId, userId);
+  const shared = getSharedPlayer(storageServerId, userId);
   if (shared) {
     if (cache && cacheKey) cache.set(cacheKey, shared);
     return shared;
   }
   const row = prepareCached(db, "SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
-    .get(serverId, userId);
+    .get(storageServerId, userId);
+
+  if (!row && USE_GLOBAL_PLAYER_DATA && storageServerId === GLOBAL_PLAYER_SERVER_ID) {
+    const legacyRow = prepareCached(
+      db,
+      "SELECT data_json, state_rev, schema_version FROM players WHERE user_id=? AND server_id<>? ORDER BY last_active_at DESC LIMIT 1"
+    ).get(userId, GLOBAL_PLAYER_SERVER_ID);
+    if (!legacyRow) return null;
+    const legacyPlayer = {
+      ...JSON.parse(legacyRow.data_json),
+      user_id: userId,
+      state_rev: legacyRow.state_rev,
+      schema_version: legacyRow.schema_version
+    };
+    if (cache && cacheKey) {
+      cache.set(cacheKey, legacyPlayer);
+    }
+    setSharedPlayer(storageServerId, userId, legacyPlayer);
+    return legacyPlayer;
+  }
+
   if (!row) return null;
   const player = { ...JSON.parse(row.data_json), user_id: userId, state_rev: row.state_rev, schema_version: row.schema_version };
   if (cache && cacheKey) {
     cache.set(cacheKey, player);
   }
-  setSharedPlayer(serverId, userId, player);
+  setSharedPlayer(storageServerId, userId, player);
   return player;
 }
 
@@ -201,30 +229,37 @@ function setSharedPlayerLite(serverId, userId, playerLite) {
 }
 
 export function getPlayerLite(db, serverId, userId) {
+  const storageServerId = getPlayerStorageServerId(serverId);
   const cache = getPlayerCache();
-  const cacheKey = cache ? makePlayerCacheKey(serverId, userId) : null;
+  const cacheKey = cache ? makePlayerCacheKey(storageServerId, userId) : null;
   if (cache && cache.has(cacheKey)) {
     return buildPlayerLite(cache.get(cacheKey));
   }
 
-  const sharedLite = getSharedPlayerLite(serverId, userId);
+  const sharedLite = getSharedPlayerLite(storageServerId, userId);
   if (sharedLite) {
     return sharedLite;
   }
 
-  const sharedFull = getSharedPlayer(serverId, userId);
+  const sharedFull = getSharedPlayer(storageServerId, userId);
   if (sharedFull) {
     const lite = buildPlayerLite(sharedFull);
-    setSharedPlayerLite(serverId, userId, lite);
+    setSharedPlayerLite(storageServerId, userId, lite);
     return lite;
   }
 
   const row = db.prepare("SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
-    .get(serverId, userId);
-  if (!row) return null;
+    .get(storageServerId, userId);
+  if (!row) {
+    const full = getPlayer(db, serverId, userId);
+    if (!full) return null;
+    const lite = buildPlayerLite(full);
+    setSharedPlayerLite(storageServerId, userId, lite);
+    return lite;
+  }
   const full = { ...JSON.parse(row.data_json), user_id: userId, state_rev: row.state_rev, schema_version: row.schema_version };
   const lite = buildPlayerLite(full);
-  setSharedPlayerLite(serverId, userId, lite);
+  setSharedPlayerLite(storageServerId, userId, lite);
   return lite;
 }
 
@@ -303,12 +338,13 @@ function prunePlayerBeforePersist(player) {
 }
 
 export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null, schemaVersion=1) {
+  const storageServerId = getPlayerStorageServerId(serverId);
   prunePlayerBeforePersist(playerData);
   const tx = db.transaction(() => {
-    const existing = prepareCached(db, "SELECT state_rev FROM players WHERE server_id=? AND user_id=?").get(serverId, userId);
+    const existing = prepareCached(db, "SELECT state_rev FROM players WHERE server_id=? AND user_id=?").get(storageServerId, userId);
     if (!existing) {
       prepareCached(db, "INSERT INTO players(server_id,user_id,schema_version,state_rev,created_at,last_active_at,data_json) VALUES (?,?,?,?,?,?,?)")
-        .run(serverId, userId, schemaVersion, 1, nowTs(), nowTs(), JSON.stringify(playerData));
+        .run(storageServerId, userId, schemaVersion, 1, nowTs(), nowTs(), JSON.stringify(playerData));
       return 1;
     }
     if (expectedRev !== null && existing.state_rev !== expectedRev) {
@@ -318,21 +354,42 @@ export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null,
     }
     const newRev = existing.state_rev + 1;
     prepareCached(db, "UPDATE players SET state_rev=?, last_active_at=?, data_json=? WHERE server_id=? AND user_id=?")
-      .run(newRev, nowTs(), JSON.stringify(playerData), serverId, userId);
+      .run(newRev, nowTs(), JSON.stringify(playerData), storageServerId, userId);
     return newRev;
   });
   const rev = tx();
-  invalidateSharedPlayer(serverId, userId);
+  invalidateSharedPlayer(storageServerId, userId);
   return rev;
 }
 
 export function getLastActiveAt(db, serverId, userId) {
-  const row = prepareCached(db, "SELECT last_active_at FROM players WHERE server_id=? AND user_id=?").get(serverId, userId);
+  const storageServerId = getPlayerStorageServerId(serverId);
+  const row = prepareCached(db, "SELECT last_active_at FROM players WHERE server_id=? AND user_id=?").get(storageServerId, userId);
+  if (!row && USE_GLOBAL_PLAYER_DATA && storageServerId === GLOBAL_PLAYER_SERVER_ID) {
+    const fallback = prepareCached(db, "SELECT last_active_at FROM players WHERE user_id=? ORDER BY last_active_at DESC LIMIT 1")
+      .get(userId);
+    return fallback?.last_active_at || null;
+  }
   return row?.last_active_at || null;
 }
 
 export function getLatestServerIdForUser(db, userId) {
+  if (USE_GLOBAL_PLAYER_DATA) {
+    const globalRow = prepareCached(db, "SELECT data_json FROM players WHERE server_id=? AND user_id=?")
+      .get(GLOBAL_PLAYER_SERVER_ID, userId);
+    if (globalRow?.data_json) {
+      try {
+        const parsed = JSON.parse(globalRow.data_json);
+        const lastGuildId = parsed?.notifications?.last_noodle_guild_id;
+        if (lastGuildId) return lastGuildId;
+      } catch {
+        // Ignore malformed JSON and continue fallback lookup.
+      }
+    }
+  }
   const row = prepareCached(db, "SELECT server_id FROM players WHERE user_id=? ORDER BY last_active_at DESC LIMIT 1")
     .get(userId);
-  return row?.server_id || null;
+  if (!row?.server_id) return null;
+  if (row.server_id === GLOBAL_PLAYER_SERVER_ID && USE_GLOBAL_PLAYER_DATA) return null;
+  return row.server_id;
 }

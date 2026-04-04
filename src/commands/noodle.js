@@ -31,7 +31,7 @@ import {
   loadEventsContent
 } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
-import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt } from "../db/index.js";
+import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt, getPlayerStorageServerId } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
@@ -3624,7 +3624,8 @@ if (group === "dev" && sub === "wipe_user") {
 
   const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(targetServerId, targetUserId);
+    const storageServerId = getPlayerStorageServerId(targetServerId);
+    const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(storageServerId, targetUserId);
     const deleted = result?.changes ?? 0;
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
