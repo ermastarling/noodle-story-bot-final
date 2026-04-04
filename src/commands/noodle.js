@@ -6864,6 +6864,7 @@ ${lines.join("\n")}`;
     let servedCount = 0;
     let leveledUp = false;
     let recipeUnlocked = false;
+    const unlockedRecipeNames = [];
 
     for (const tok of tokens) {
       const matchEntry = Object.entries(acceptedMap).find(([fullId]) => {
