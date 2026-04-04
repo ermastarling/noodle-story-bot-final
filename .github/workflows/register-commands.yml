@@ -3,24 +3,41 @@ name: Register Slash Commands
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Registration mode"
+        required: true
+        default: "global"
+        type: choice
+        options:
+          - global
+          - guild
       guild:
-        description: "Guild ID (leave blank to register global)"
+        description: "Guild ID (required when mode=guild)"
         required: false
         default: ""
 
 jobs:
   register:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 18
       - run: npm ci
+      - name: Validate inputs
+        if: ${{ github.event.inputs.mode == 'guild' }}
+        run: |
+          if [ -z "${{ github.event.inputs.guild }}" ]; then
+            echo "guild input is required when mode=guild"
+            exit 1
+          fi
       - name: Register
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
-          DISCORD_GUILD_ID: ${{ github.event.inputs.guild || secrets.DISCORD_GUILD_ID }}
+          DISCORD_GUILD_ID: ${{ github.event.inputs.mode == 'guild' && github.event.inputs.guild || '' }}
           NODE_ENV: ${{ secrets.NODE_ENV || 'development' }}
         run: node src/register-commands.js

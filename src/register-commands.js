@@ -19,12 +19,14 @@ async function main() {
   const rest = new REST({ version: "10" }).setToken(token);
   const body = commands.map(c => c.data.toJSON());
 
+  console.log(`Registering ${body.length} commands for application ${clientId}`);
+
   if (guildId) {
     await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
     console.log(`Registered guild commands for ${guildId}`);
   } else {
     await rest.put(Routes.applicationCommands(clientId), { body });
-    console.log("Registered global commands");
+    console.log("Registered global commands (Discord can take up to 1 hour to propagate).");
   }
 }
 
