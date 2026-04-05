@@ -100,6 +100,73 @@ function invalidateSharedPlayer(serverId, userId) {
   sharedPlayerCache.delete(makePlayerCacheKey(serverId, userId));
   sharedProjectionCache.delete(makePlayerCacheKey(serverId, userId));
 }
+
+function parsePlayerRow(row, userId) {
+  if (!row?.data_json) return null;
+  try {
+    return {
+      ...JSON.parse(row.data_json),
+      user_id: userId,
+      state_rev: row.state_rev,
+      schema_version: row.schema_version
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getPlayerProgressScore(player, lastActiveAt = 0) {
+  if (!player || typeof player !== "object") return 0;
+  const shopLevel = Number(player.shop_level || 0);
+  const sxpTotal = Number(player.sxp_total || 0);
+  const coins = Number(player.coins || 0);
+  const rep = Number(player.rep || 0);
+  const ordersServed = Number(player?.lifetime?.orders_served || 0);
+  const knownRecipes = Array.isArray(player.known_recipes) ? player.known_recipes.length : 0;
+  const safeActive = Number(lastActiveAt || 0);
+
+  return (
+    (shopLevel * 1_000_000_000) +
+    (ordersServed * 10_000_000) +
+    (knownRecipes * 1_000_000) +
+    (sxpTotal * 1_000) +
+    (rep * 100) +
+    coins +
+    Math.floor(safeActive / 1000)
+  );
+}
+
+function isWeakGlobalPlayer(player) {
+  if (!player) return true;
+  const shopLevel = Number(player.shop_level || 0);
+  const sxpTotal = Number(player.sxp_total || 0);
+  const ordersServed = Number(player?.lifetime?.orders_served || 0);
+  const knownRecipes = Array.isArray(player.known_recipes) ? player.known_recipes.length : 0;
+  const stateRev = Number(player.state_rev || 0);
+  return shopLevel <= 1 && sxpTotal <= 0 && ordersServed <= 0 && knownRecipes <= 2 && stateRev <= 3;
+}
+
+function loadBestLegacyPlayerRow(db, userId) {
+  const rows = prepareCached(
+    db,
+    "SELECT server_id, data_json, state_rev, schema_version, last_active_at FROM players WHERE user_id=? AND server_id<>?"
+  ).all(userId, GLOBAL_PLAYER_SERVER_ID);
+  if (!rows?.length) return null;
+
+  let best = null;
+  let bestScore = -1;
+  for (const candidate of rows) {
+    const parsed = parsePlayerRow(candidate, userId);
+    if (!parsed) continue;
+    const score = getPlayerProgressScore(parsed, candidate.last_active_at);
+    if (score > bestScore) {
+      best = { row: candidate, player: parsed, score };
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 export function openDb() {
   if (process.env.NOODLE_SKIP_DB === "1") {
     return null;
@@ -169,17 +236,9 @@ export function getPlayer(db, serverId, userId) {
     .get(storageServerId, userId);
 
   if (!row && USE_GLOBAL_PLAYER_DATA && storageServerId === GLOBAL_PLAYER_SERVER_ID) {
-    const legacyRow = prepareCached(
-      db,
-      "SELECT data_json, state_rev, schema_version FROM players WHERE user_id=? AND server_id<>? ORDER BY last_active_at DESC LIMIT 1"
-    ).get(userId, GLOBAL_PLAYER_SERVER_ID);
-    if (!legacyRow) return null;
-    const legacyPlayer = {
-      ...JSON.parse(legacyRow.data_json),
-      user_id: userId,
-      state_rev: legacyRow.state_rev,
-      schema_version: legacyRow.schema_version
-    };
+    const bestLegacy = loadBestLegacyPlayerRow(db, userId);
+    if (!bestLegacy?.player) return null;
+    const legacyPlayer = bestLegacy.player;
     if (cache && cacheKey) {
       cache.set(cacheKey, legacyPlayer);
     }
@@ -188,7 +247,20 @@ export function getPlayer(db, serverId, userId) {
   }
 
   if (!row) return null;
-  const player = { ...JSON.parse(row.data_json), user_id: userId, state_rev: row.state_rev, schema_version: row.schema_version };
+
+  let player = parsePlayerRow(row, userId);
+  if (!player) return null;
+
+  if (USE_GLOBAL_PLAYER_DATA && storageServerId === GLOBAL_PLAYER_SERVER_ID && isWeakGlobalPlayer(player)) {
+    const bestLegacy = loadBestLegacyPlayerRow(db, userId);
+    if (bestLegacy?.player) {
+      const globalScore = getPlayerProgressScore(player);
+      if (bestLegacy.score > globalScore) {
+        player = bestLegacy.player;
+      }
+    }
+  }
+
   if (cache && cacheKey) {
     cache.set(cacheKey, player);
   }
