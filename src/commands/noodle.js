@@ -3578,8 +3578,10 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile";
+const inDevPath = group === "dev" || isDevSubcommand;
 
-if (group === "dev") {
+if (inDevPath) {
   if (!isDevAdmin(userId)) {
     return commit({ content: "You don’t have access to that command.", ephemeral: true });
   }
@@ -3597,7 +3599,7 @@ if (group === "dev") {
   const activeEventEffects = getActiveEventEffects(eventsContent, server);
   rollMarket({ serverId, content, serverState: server, eventEffects: activeEventEffects });
 
-if (group === "dev" && sub === "reset_tutorial") {
+if (inDevPath && sub === "reset_tutorial") {
   const target = opt.getUser("user");
   if (!target) {
     return commit({ content: "Pick a user to reset.", ephemeral: true });
@@ -3627,7 +3629,7 @@ if (group === "dev" && sub === "reset_tutorial") {
   });
 }
 
-if (group === "dev" && sub === "wipe_user") {
+if (inDevPath && sub === "wipe_user") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim();
   const targetServerId = opt.getString("server_id")?.trim() || serverId;
@@ -3651,7 +3653,7 @@ if (group === "dev" && sub === "wipe_user") {
   });
 }
 
-if (group === "dev" && sub === "repair_profile") {
+if (inDevPath && sub === "repair_profile") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
   const force = opt.getBoolean("force") === true;
