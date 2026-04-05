@@ -31,7 +31,16 @@ import {
   loadEventsContent
 } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
-import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getLastActiveAt, getPlayerStorageServerId } from "../db/index.js";
+import {
+  openDb,
+  getPlayer,
+  upsertPlayer,
+  getServer,
+  upsertServer,
+  getLastActiveAt,
+  getPlayerStorageServerId,
+  repairGlobalPlayerProfileFromLegacy
+} from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
@@ -342,6 +351,7 @@ const db = openDb();
 const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
+const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 const DISCORD_STORE_URL = "https://noodlestory.lol/home/shop/";
 
 const DECOR_SET_SPECIALIZATION_MAP = {
@@ -3569,6 +3579,18 @@ return componentCommit(interaction, payload);
 try {
 const owner = `discord:${interaction.id}`;
 
+if (group === "dev") {
+  if (!isDevAdmin(userId)) {
+    return commit({ content: "You don’t have access to that command.", ephemeral: true });
+  }
+  if (OFFICIAL_DEV_GUILD_ID && serverId !== OFFICIAL_DEV_GUILD_ID) {
+    return commit({
+      content: "Developer commands are only available in the official server.",
+      ephemeral: true
+    });
+  }
+}
+
   const server = ensureServer(serverId);
   const settings = buildSettingsMap(settingsCatalog, server.settings);
   server.season = computeActiveSeason(settings);
@@ -3576,9 +3598,6 @@ const owner = `discord:${interaction.id}`;
   rollMarket({ serverId, content, serverState: server, eventEffects: activeEventEffects });
 
 if (group === "dev" && sub === "reset_tutorial") {
-  if (!isDevAdmin(userId)) {
-    return commit({ content: "You don’t have access to that command.", ephemeral: true });
-  }
   const target = opt.getUser("user");
   if (!target) {
     return commit({ content: "Pick a user to reset.", ephemeral: true });
@@ -3609,9 +3628,6 @@ if (group === "dev" && sub === "reset_tutorial") {
 }
 
 if (group === "dev" && sub === "wipe_user") {
-  if (!isDevAdmin(userId)) {
-    return commit({ content: "You don’t have access to that command.", ephemeral: true });
-  }
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim();
   const targetServerId = opt.getString("server_id")?.trim() || serverId;
@@ -3632,6 +3648,45 @@ if (group === "dev" && sub === "wipe_user") {
       return commit({ content: `${getIcon("info")} No profile found for ${mention} on server ${targetServerId}.`, ephemeral: true });
     }
     return commit({ content: `${getIcon("upgrades")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`, ephemeral: true });
+  });
+}
+
+if (group === "dev" && sub === "repair_profile") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const force = opt.getBoolean("force") === true;
+  if (!targetUserId) {
+    return commit({ content: "Provide a user or user ID to repair.", ephemeral: true });
+  }
+  if (!db) {
+    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+  }
+
+  const lockKey = `lock:user:${targetUserId}`;
+  return await withLock(db, lockKey, owner, 8000, async () => {
+    const result = repairGlobalPlayerProfileFromLegacy(db, targetUserId, { force });
+    const mention = `<@${targetUserId}>`;
+
+    if (!result.ok) {
+      return commit({
+        content: `${getIcon("error")} Repair failed for ${mention}: ${result.reason}.`,
+        ephemeral: true
+      });
+    }
+
+    if (!result.repaired) {
+      return commit({
+        content: `${getIcon("info")} No repair needed for ${mention} (${result.reason}).`,
+        ephemeral: true
+      });
+    }
+
+    return commit({
+      content:
+        `${getIcon("success")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
+        `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`,
+      ephemeral: true
+    });
   });
 }
 
@@ -8883,7 +8938,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 /*  Slash command export                                               */
 /* ------------------------------------------------------------------ */
 
-const includeDevCommands = process.env.NODE_ENV === "development" && Boolean(process.env.DISCORD_GUILD_ID);
+// Dev commands are only registered when a guild target is explicitly provided.
+// This keeps global registration free of dev-only subcommands regardless of NODE_ENV.
+const includeDevCommands = Boolean(process.env.DISCORD_GUILD_ID);
 
 const noodleCommandData = new SlashCommandBuilder()
   .setName("noodle")
@@ -9007,6 +9064,24 @@ if (includeDevCommands) {
               o
                 .setName("server_id")
                 .setDescription("Override server ID (defaults to current guild)")
+                .setRequired(false)
+            )
+        )
+        .addSubcommand((sc) =>
+          sc
+            .setName("repair_profile")
+            .setDescription("Repair a user profile from the strongest legacy server profile.")
+            .addUserOption((o) => o.setName("user").setDescription("User to repair").setRequired(false))
+            .addStringOption((o) =>
+              o
+                .setName("user_id")
+                .setDescription("User ID (use if the user left the server)")
+                .setRequired(false)
+            )
+            .addBooleanOption((o) =>
+              o
+                .setName("force")
+                .setDescription("Force repair even if global profile score is not lower")
                 .setRequired(false)
             )
         )

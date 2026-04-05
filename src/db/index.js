@@ -155,6 +155,90 @@ function loadBestLegacyPlayerRow(db, userId) {
 
   let best = null;
   let bestScore = -1;
+
+function mergeRepairCandidate({ legacyPlayer, globalPlayer }) {
+  if (!globalPlayer) return { ...legacyPlayer };
+  const merged = { ...legacyPlayer };
+
+  const globalNotifications = globalPlayer.notifications || null;
+  if (globalNotifications && typeof globalNotifications === "object") {
+    merged.notifications = {
+      ...(legacyPlayer.notifications || {}),
+      ...globalNotifications
+    };
+  }
+
+  return merged;
+}
+
+export function repairGlobalPlayerProfileFromLegacy(db, userId, { force = false } = {}) {
+  if (!db) {
+    return { ok: false, repaired: false, reason: "db_unavailable" };
+  }
+  if (!userId) {
+    return { ok: false, repaired: false, reason: "missing_user_id" };
+  }
+  if (!USE_GLOBAL_PLAYER_DATA) {
+    return { ok: false, repaired: false, reason: "global_mode_disabled" };
+  }
+
+  const globalRow = prepareCached(
+    db,
+    "SELECT data_json, state_rev, schema_version, last_active_at FROM players WHERE server_id=? AND user_id=?"
+  ).get(GLOBAL_PLAYER_SERVER_ID, userId);
+  const globalPlayer = parsePlayerRow(globalRow, userId);
+  const globalScore = globalPlayer ? getPlayerProgressScore(globalPlayer, globalRow?.last_active_at) : -1;
+
+  const bestLegacy = loadBestLegacyPlayerRow(db, userId);
+  if (!bestLegacy?.player) {
+    return {
+      ok: true,
+      repaired: false,
+      reason: "no_legacy_profile",
+      userId,
+      globalScore,
+      legacyScore: -1
+    };
+  }
+
+  const shouldRepair = force || !globalPlayer || bestLegacy.score > globalScore;
+  if (!shouldRepair) {
+    return {
+      ok: true,
+      repaired: false,
+      reason: "global_profile_already_best",
+      userId,
+      globalScore,
+      legacyScore: bestLegacy.score,
+      sourceServerId: bestLegacy.row.server_id
+    };
+  }
+
+  const repairedPlayer = mergeRepairCandidate({
+    legacyPlayer: bestLegacy.player,
+    globalPlayer
+  });
+
+  upsertPlayer(
+    db,
+    GLOBAL_PLAYER_SERVER_ID,
+    userId,
+    repairedPlayer,
+    null,
+    repairedPlayer.schema_version ?? bestLegacy.row.schema_version ?? 1
+  );
+
+  return {
+    ok: true,
+    repaired: true,
+    reason: force ? "forced_repair" : "legacy_profile_stronger",
+    userId,
+    sourceServerId: bestLegacy.row.server_id,
+    globalScore,
+    legacyScore: bestLegacy.score
+  };
+}
+
   for (const candidate of rows) {
     const parsed = parsePlayerRow(candidate, userId);
     if (!parsed) continue;
