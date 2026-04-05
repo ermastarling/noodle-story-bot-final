@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import discordPkg from "discord.js";
-import { openDb, upsertPlayer } from "../db/index.js";
+import { openDb, getPlayer, getLatestServerIdForUser, upsertPlayer } from "../db/index.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { theme } from "../ui/theme.js";
@@ -99,52 +99,60 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
   const inactiveCutoff = now - (maxInactive * 24 * 60 * 60 * 1000);
 
   try {
-    const serverIds = await getKnownServerIds();
-    for (const serverId of serverIds) {
-      const rows = db.prepare(`
-        SELECT user_id, data_json, schema_version, last_active_at
-        FROM players
-        WHERE server_id = ?
-      `).all(serverId);
+    await getKnownServerIds();
 
-      for (const row of rows) {
-        if (row.last_active_at && row.last_active_at < inactiveCutoff) continue;
+    const userRows = db.prepare(`
+      SELECT user_id, MAX(last_active_at) AS last_active_at
+      FROM players
+      GROUP BY user_id
+    `).all();
 
-        const player = { ...JSON.parse(row.data_json), user_id: row.user_id };
-        normalizeNotifications(player);
+    const processedUsers = new Set();
 
-        if (player.notifications.dm_reminders_opt_out === true) continue;
-        if (!hasDailyRewardAvailable(player, now)) continue;
-        if (player.notifications.last_daily_reminder_day === todayKey) continue;
+    for (const row of userRows) {
+      const userId = row.user_id;
+      if (!userId || processedUsers.has(userId)) continue;
+      processedUsers.add(userId);
 
-        const user = await client.users.fetch(row.user_id).catch(() => null);
-        if (!user) continue;
+      if (row.last_active_at && row.last_active_at < inactiveCutoff) continue;
 
-        const lastGuildId = player.notifications.last_noodle_guild_id ?? serverId;
-        const lastGuildName = client.guilds.cache.get(lastGuildId)?.name ?? "this server";
-        const channelId = player.notifications.last_noodle_channel_id ?? null;
-        const channelUrl = channelId
-          ? `https://discord.com/channels/${lastGuildId}/${channelId}`
-          : null;
-        const channelLine = channelId
-          ? `<#${channelId}>`
-          : null;
-        const claimLine = `Use /noodle quests_daily to claim your daily reward.`;
-        const embed = buildReminderEmbed({ guildName: lastGuildName, channelLine, claimLine, user });
-        const components = buildDmReminderComponents({
-          userId: row.user_id,
-          serverId,
-          channelUrl,
-          optOut: false
-        });
+      const preferredServerId = getLatestServerIdForUser(db, userId) ?? "global";
+      const player = getPlayer(db, preferredServerId, userId);
+      if (!player) continue;
 
-        try {
-          await user.send({ embeds: [embed], components });
-          player.notifications.last_daily_reminder_day = todayKey;
-          upsertPlayer(db, serverId, row.user_id, player, null, row.schema_version ?? 1);
-        } catch {
-          // ignore DM failures
-        }
+      normalizeNotifications(player);
+
+      if (player.notifications.dm_reminders_opt_out === true) continue;
+      if (!hasDailyRewardAvailable(player, now)) continue;
+      if (player.notifications.last_daily_reminder_day === todayKey) continue;
+
+      const user = await client.users.fetch(userId).catch(() => null);
+      if (!user) continue;
+
+      const lastGuildId = player.notifications.last_noodle_guild_id ?? preferredServerId;
+      const guildName = lastGuildId && lastGuildId !== "global"
+        ? (client.guilds.cache.get(lastGuildId)?.name ?? "this server")
+        : "your last server";
+      const channelId = player.notifications.last_noodle_channel_id ?? null;
+      const channelUrl = channelId && lastGuildId && lastGuildId !== "global"
+        ? `https://discord.com/channels/${lastGuildId}/${channelId}`
+        : null;
+      const channelLine = channelId ? `<#${channelId}>` : null;
+      const claimLine = `Use /noodle quests_daily to claim your daily reward.`;
+      const embed = buildReminderEmbed({ guildName, channelLine, claimLine, user });
+      const components = buildDmReminderComponents({
+        userId,
+        serverId: lastGuildId || preferredServerId,
+        channelUrl,
+        optOut: false
+      });
+
+      try {
+        await user.send({ embeds: [embed], components });
+        player.notifications.last_daily_reminder_day = todayKey;
+        upsertPlayer(db, preferredServerId, userId, player, null, player.schema_version ?? 1);
+      } catch {
+        // ignore DM failures
       }
     }
   } finally {

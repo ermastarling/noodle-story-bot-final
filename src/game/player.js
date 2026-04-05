@@ -86,6 +86,7 @@ export function newPlayerProfile(userId) {
     notifications: {
       pending_pantry_messages: [],
       dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
       last_noodle_channel_id: null,
       last_noodle_guild_id: null
     },
@@ -105,6 +106,7 @@ export function trackLastKitchen(player, serverId, channelId) {
     player.notifications = {
       pending_pantry_messages: [],
       dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
       last_noodle_channel_id: null,
       last_noodle_guild_id: null
     };
