@@ -156,6 +156,18 @@ function loadBestLegacyPlayerRow(db, userId) {
   let best = null;
   let bestScore = -1;
 
+  for (const candidate of rows) {
+    const parsed = parsePlayerRow(candidate, userId);
+    if (!parsed) continue;
+    const score = getPlayerProgressScore(parsed, candidate.last_active_at);
+    if (score > bestScore) {
+      best = { row: candidate, player: parsed, score };
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 function mergeRepairCandidate({ legacyPlayer, globalPlayer }) {
   if (!globalPlayer) return { ...legacyPlayer };
   const merged = { ...legacyPlayer };
@@ -237,18 +249,6 @@ export function repairGlobalPlayerProfileFromLegacy(db, userId, { force = false 
     globalScore,
     legacyScore: bestLegacy.score
   };
-}
-
-  for (const candidate of rows) {
-    const parsed = parsePlayerRow(candidate, userId);
-    if (!parsed) continue;
-    const score = getPlayerProgressScore(parsed, candidate.last_active_at);
-    if (score > bestScore) {
-      best = { row: candidate, player: parsed, score };
-      bestScore = score;
-    }
-  }
-  return best;
 }
 
 export function openDb() {
