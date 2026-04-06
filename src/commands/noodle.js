@@ -5237,7 +5237,10 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   /* ---------------- QUESTS: VOTE ---------------- */
   if (sub === "quests_vote") {
-    const status = getVoteRewardStatus(p);
+    // Load player from latest server to check vote rewards, not current guild
+    const latestServerId = getLatestServerIdForUser(db, userId) || serverId;
+    const latestPlayer = latestServerId ? ensurePlayer(latestServerId, userId) : p;
+    const status = getVoteRewardStatus(latestPlayer);
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
@@ -5280,8 +5283,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   /* ---------------- QUESTS: VOTE CLAIM ---------------- */
   if (sub === "quests_vote_claim") {
-    const prevShopLevel = p.shop_level ?? 1;
-    const result = claimTopggVoteReward(p, now);
+    // Load player from latest server to claim vote rewards, not current guild
+    const latestServerId = getLatestServerIdForUser(db, userId) || serverId;
+    const latestPlayer = latestServerId ? ensurePlayer(latestServerId, userId) : p;
+    const prevShopLevel = latestPlayer.shop_level ?? 1;
+    const result = claimTopggVoteReward(latestPlayer, now);
     if (!result.ok) {
       const embed = buildMenuEmbed({
         title: `${getIcon("leaderboard")} Top.gg Vote Rewards`,
@@ -5304,13 +5310,18 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
-    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
-    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
+    const gardenLine = gardenUnlockLine(prevShopLevel, latestPlayer.shop_level);
+    const fishingLine = fishingUnlockLine(prevShopLevel, latestPlayer.shop_level);
     const embed = buildMenuEmbed({
       title: `${getIcon("leaderboard")} Vote Reward Claimed`,
       description: `Rewards: ${rewardLines.join(" · ")}\nPending claims: **${result.pendingClaims}**${levelLine}${gardenLine}${fishingLine}`,
       user: interaction.member ?? interaction.user
     });
+
+    // Save the updated player profile to the latest server
+    if (latestServerId) {
+      upsertPlayer(db, latestServerId, userId, latestPlayer, null, latestPlayer.schema_version);
+    }
 
     return commitState({
       content: " ",
