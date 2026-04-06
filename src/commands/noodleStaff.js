@@ -166,7 +166,7 @@ export async function noodleStaffHandler(interaction) {
 
   const lockKey = `user:${userId}`;
   
-  return withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
+  const lockedResult = await withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
     let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
@@ -197,11 +197,13 @@ export async function noodleStaffHandler(interaction) {
     response.embeds = applyGreenButtonFooter(response.embeds, response.components);
 
     putIdempotentResult(db, { key: idempKey, userId, action: "noodle-staff", ttlSeconds: 900, result: response });
-    if (interaction.deferred || interaction.replied) {
-      return interaction.editReply(response);
-    }
-    return interaction.reply(response);
+    return response;
   });
+
+  if (interaction.deferred || interaction.replied) {
+    return interaction.editReply(lockedResult);
+  }
+  return interaction.reply(lockedResult);
 }
 
 export function buildStaffOverviewEmbed(player, server, user) {
@@ -387,7 +389,9 @@ export async function noodleStaffInteractionHandler(interaction) {
       const staffId = interaction.values[0];
       
       const result = levelUpStaff(p, staffId, staffContent);
-      upsertPlayer(db, userId, serverId, p, null);
+      if (result.success) {
+        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      }
 
       const embed = buildStaffOverviewEmbed(p, s, interaction.user);
       const components = buildStaffComponents(userId, p, s);

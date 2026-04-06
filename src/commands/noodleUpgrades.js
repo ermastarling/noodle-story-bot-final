@@ -244,7 +244,7 @@ export async function noodleUpgradesHandler(interaction) {
 
   const lockKey = `user:${userId}`;
 
-  return withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
+  const lockedResult = await withLock(db, lockKey, `discord:${interaction.id}`, 8000, async () => {
     let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
@@ -268,11 +268,13 @@ export async function noodleUpgradesHandler(interaction) {
     response.embeds = applyGreenButtonFooter(response.embeds, response.components);
 
     putIdempotentResult(db, { key: idempKey, userId, action: "noodle-upgrades", ttlSeconds: 900, result: response });
-    if (interaction.deferred || interaction.replied) {
-      return interaction.editReply(response);
-    }
-    return interaction.reply(response);
+    return response;
   });
+
+  if (interaction.deferred || interaction.replied) {
+    return interaction.editReply(lockedResult);
+  }
+  return interaction.reply(lockedResult);
 }
 
 function buildUpgradesOverviewEmbed(player, user) {
@@ -775,7 +777,9 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       const upgradeId = interaction.values[0];
       
       const result = purchaseUpgrade(p, upgradeId, upgradesContent);
-      upsertPlayer(db, serverId, userId, p, null);
+      if (result.success) {
+        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      }
 
       const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
       const updatedEmbed = categoryId && categoryId !== "all"
@@ -810,7 +814,9 @@ export async function noodleUpgradesInteractionHandler(interaction) {
 
       const staffId = interaction.values[0];
       const result = levelUpStaff(p, staffId, staffContent);
-      upsertPlayer(db, serverId, userId, p, null);
+      if (result.success) {
+        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      }
 
       const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
       const updatedEmbed = buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, "staff", { staffRarity });

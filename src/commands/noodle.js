@@ -2484,6 +2484,11 @@ function getUnlockedIngredientIds(player, contentBundle) {
   // Use getAvailableRecipes to include both permanent and temporary recipes
   const known = getAvailableRecipes(player);
   const knownSet = new Set(known);
+  if (!knownSet.size) {
+    for (const recipeId of STARTER_PROFILE.known_recipes ?? []) {
+      knownSet.add(recipeId);
+    }
+  }
   const fishingUnlocked = isFishingUnlocked(player);
 
   const addRecipeIngredients = (recipeId) => {
@@ -3725,9 +3730,6 @@ if (inDevPath && sub === "reset_tutorial") {
     if (db) {
       upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
     }
-    if (db) {
-      upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
-    }
 
     const step = getCurrentTutorialStep(p);
     const tut = formatTutorialMessage(step);
@@ -3928,7 +3930,7 @@ if (sub === "pantry") {
     return commit({ content: "Database unavailable in this environment.", ephemeral: true });
   }
 
-  return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+  const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
     unlockNoticePlayer = p;
@@ -3943,7 +3945,13 @@ if (sub === "pantry") {
     const set = buildSettingsMap(settingsCatalog, s.settings);
     s.season = computeActiveSeason(set);
 
-    const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
+    const elapsedMs = Math.max(0, now - lastActiveAt);
+    const spoilageTickHours = Number(set.SPOILAGE_TICK_HOURS ?? 1);
+    const spoilageTickMs = Math.max(1, spoilageTickHours * 60 * 60 * 1000);
+    const shouldRunCatchup = elapsedMs >= spoilageTickMs || elapsedMs >= (7 * 24 * 60 * 60 * 1000);
+    const timeCatchup = shouldRunCatchup
+      ? applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects)
+      : { applied: false, messages: [], spoilage: { messages: [] }, cooldownStatus: { expired: [], hasExpired: false } };
     const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
     if (spoilageMessages.length > 0) {
       if (!p.notifications) {
@@ -4148,7 +4156,7 @@ if (sub === "pantry") {
       pantryEmbed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
     }
 
-    return commit({
+    return {
       content: " ",
       embeds: [pantryEmbed],
       components: [
@@ -4164,8 +4172,10 @@ if (sub === "pantry") {
         noodleMainMenuRowNoPantry(userId),
         noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
       ]
-    });
+    };
   });
+
+  return commit(lockedPayload);
 }
 
 /* ---------------- KITCHEN ---------------- */
@@ -4174,7 +4184,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     return commit({ content: "Database unavailable in this environment.", ephemeral: true });
   }
 
-  return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+  const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
     const s = ensureServer(serverId);
     unlockNoticePlayer = p;
@@ -4186,7 +4196,13 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     const set = buildSettingsMap(settingsCatalog, s.settings);
     s.season = computeActiveSeason(set);
 
-    const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
+    const elapsedMs = Math.max(0, now - lastActiveAt);
+    const spoilageTickHours = Number(set.SPOILAGE_TICK_HOURS ?? 1);
+    const spoilageTickMs = Math.max(1, spoilageTickHours * 60 * 60 * 1000);
+    const shouldRunCatchup = elapsedMs >= spoilageTickMs || elapsedMs >= (7 * 24 * 60 * 60 * 1000);
+    const timeCatchup = shouldRunCatchup
+      ? applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects)
+      : { applied: false, messages: [], spoilage: { messages: [] }, cooldownStatus: { expired: [], hasExpired: false } };
     const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
     if (spoilageMessages.length > 0) {
       if (!p.notifications) {
@@ -4215,7 +4231,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
         upsertPlayer(db, serverId, userId, p, null, p.schema_version);
         upsertServer(db, serverId, s, null);
       }
-      return commit({ ...payload });
+      return { ...payload };
     };
 
     const kitchenView = (overrides = {}) => buildKitchenViewPayload({
@@ -4370,6 +4386,8 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     const view = kitchenView();
     return finalize(view);
   });
+
+  return commit(lockedPayload);
 }
 
 /* ---------------- RECIPES ---------------- */
@@ -4832,76 +4850,116 @@ if (cached) {
 if (!db) {
   return commit({ content: "Database unavailable in this environment.", ephemeral: true });
 }
-return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   let p = ensurePlayer(serverId, userId);
   let s = ensureServer(serverId);
   unlockNoticePlayer = p;
 
   const now = nowTs();
-  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-  
-  // C: Apply time catch-up BEFORE any state changes
-  // Get last_active_at from database (before it's updated by upsertPlayer)
-  const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
-  
   const set = buildSettingsMap(settingsCatalog, s.settings);
   s.season = computeActiveSeason(set);
-  const activeEventEffects = getActiveEventEffects(eventsContent, s);
   const activeEventId = s.active_event_id ?? null;
-  const baseOrders = Math.max(1, Number(set.ORDERS_BASE_COUNT ?? 100));
-  const totalOrders = computeOrderCount(set, combinedEffects);
   const storyAnchor = activeEventId ? `story:${activeEventId}` : "story:default";
   const seasonAnchor = s.season ?? "seasonal:default";
   const questOptions = { storyKey: storyAnchor, seasonKey: seasonAnchor };
-  
-  // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
-  const timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects);
-  
-  const sweep = sweepExpiredAcceptedOrders(p, s, content, now);
+  let combinedEffects = null;
+  let activeEventEffects = null;
+  let timeCatchup = { applied: false, messages: [], spoilage: { messages: [] }, cooldownStatus: { expired: [], hasExpired: false } };
+  let resilience = { applied: false, messages: [] };
+  let progressionPrepared = false;
 
-  rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
-  if (!s.market_prices) s.market_prices = {};
-  
-  // Roll per-player market stock daily
-  rollPlayerMarketStock({
-    userId,
-    serverId,
-    content,
-    playerState: p,
-    eventEffects: activeEventEffects,
-    orderCountHint: totalOrders,
-    baseOrders
-  });
-  if (!p.market_stock) p.market_stock = {};
+  const prepareCombinedEffects = () => {
+    if (!combinedEffects) {
+      combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+    }
+    return combinedEffects;
+  };
 
-  const prevOrdersDay = p.orders_day;
-  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
-  ensureQuests(p, questsContent, userId, now, questOptions);
+  const prepareProgressionState = () => {
+    if (progressionPrepared) return;
 
-  // Force market stock refresh to align with daily order reset
-  const dayChanged = prevOrdersDay !== p.orders_day;
-  if (dayChanged) {
-    p.market_stock_day = null;
-    p.market_stock = null;
-    const orderCountForStock = Math.max(totalOrders, Number(p.orders_total_count ?? 0));
+    const effects = prepareCombinedEffects();
+    const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
+    activeEventEffects = getActiveEventEffects(eventsContent, s);
+
+    // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
+    timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, effects);
+
+    sweepExpiredAcceptedOrders(p, s, content, now);
+
+    rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
+    if (!s.market_prices) s.market_prices = {};
+
+    const baseOrders = Math.max(1, Number(set.ORDERS_BASE_COUNT ?? 100));
+    const totalOrders = computeOrderCount(set, effects);
+
+    // Roll per-player market stock daily
     rollPlayerMarketStock({
       userId,
       serverId,
       content,
       playerState: p,
       eventEffects: activeEventEffects,
-      orderCountHint: orderCountForStock,
+      orderCountHint: totalOrders,
       baseOrders
     });
-  }
+    if (!p.market_stock) p.market_stock = {};
 
-  // Apply resilience mechanics (B1-B9)
-  const resilience = applyResilienceMechanics(p, s, content);
-
-  // If resilience granted temporary recipes, regenerate order board to include them
-  if (resilience.applied && p.resilience?.temp_recipes?.length > 0) {
-    p.orders_day = null; // Force regeneration
+    const prevOrdersDay = p.orders_day;
     ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+    ensureQuests(p, questsContent, userId, now, questOptions);
+
+    // Force market stock refresh to align with daily order reset
+    const dayChanged = prevOrdersDay !== p.orders_day;
+    if (dayChanged) {
+      p.market_stock_day = null;
+      p.market_stock = null;
+      const orderCountForStock = Math.max(totalOrders, Number(p.orders_total_count ?? 0));
+      rollPlayerMarketStock({
+        userId,
+        serverId,
+        content,
+        playerState: p,
+        eventEffects: activeEventEffects,
+        orderCountHint: orderCountForStock,
+        baseOrders
+      });
+    }
+
+    // Apply resilience mechanics (B1-B9)
+    resilience = applyResilienceMechanics(p, s, content);
+
+    // If resilience granted temporary recipes, regenerate order board to include them
+    if (resilience.applied && p.resilience?.temp_recipes?.length > 0) {
+      p.orders_day = null; // Force regeneration
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+    }
+
+    progressionPrepared = true;
+  };
+
+  const progressionSubcommands = new Set([
+    "quests",
+    "quests_vote",
+    "quests_vote_claim",
+    "quests_daily",
+    "quests_claim",
+    "forage",
+    "fishing",
+    "garden",
+    "compost",
+    "plant",
+    "harvest",
+    "buy",
+    "sell",
+    "cook",
+    "orders",
+    "accept",
+    "cancel",
+    "serve"
+  ]);
+  if (progressionSubcommands.has(sub)) {
+    prepareProgressionState();
   }
 
   const commitState = async (replyObj) => {
@@ -4921,7 +4979,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
     }
     
-    const spoilageMessages = timeCatchup.spoilage?.messages ?? [];
+    const spoilageMessages = timeCatchup?.spoilage?.messages ?? [];
     if (spoilageMessages.length > 0) {
       if (!p.notifications) {
         p.notifications = {
@@ -4948,7 +5006,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     let finalEmbeds = replyWithUnlock.embeds ? [...replyWithUnlock.embeds] : [];
 
     const spoilageSet = new Set(spoilageMessages);
-    const catchupMsgs = timeCatchup.messages.filter((msg) => !spoilageSet.has(msg));
+    const catchupMsgs = (timeCatchup?.messages ?? []).filter((msg) => !spoilageSet.has(msg));
     const catchupMsg = catchupMsgs.length > 0
       ? catchupMsgs.join("\n\n")
       : "";
@@ -4965,10 +5023,10 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     }
 
     const rescueEmbeds = [];
-    if (resilience.messages.length > 0) {
+    if ((resilience?.messages ?? []).length > 0) {
       rescueEmbeds.push(buildMenuEmbed({
         title: `${getIcon("rescue")} Rescue Mode`,
-        description: resilience.messages.join("\n\n"),
+        description: (resilience?.messages ?? []).join("\n\n"),
         user: interaction.member ?? interaction.user
       }));
     }
@@ -5008,7 +5066,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     if (db) {
       putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: out });
     }
-    return commit(out);
+    return out;
   };
 
   /* ---------------- QUESTS ---------------- */
@@ -6230,7 +6288,7 @@ ${lines.join("\n")}`;
         page
       });
 
-      return commit(payload);
+      return payload;
     }
 
     // Single buy
@@ -6324,7 +6382,7 @@ ${lines.join("\n")}`;
         page
       });
 
-      return commit(payload);
+      return payload;
     }
 
     if (!SELLABLE_ITEM_IDS.has(itemId)) {
@@ -6374,7 +6432,7 @@ ${lines.join("\n")}`;
         page
       });
 
-      return commit(payload);
+      return payload;
     }
 
     const r = content.recipes[recipeId];
@@ -6738,7 +6796,7 @@ ${lines.join("\n")}`;
         ownerUser: interaction.member ?? interaction.user
       });
 
-      return commit(payload);
+      return payload;
     }
     const tokens = rawInput
       .split(/[\s,]+/)
@@ -7081,7 +7139,7 @@ ${lines.join("\n")}`;
         ownerUser: interaction.member ?? interaction.user
       });
 
-      return commit(payload);
+      return payload;
     }
 
     // Ensure orders is a valid object (handle case where it might be an array or null)
@@ -7136,7 +7194,7 @@ ${lines.join("\n")}`;
         ownerUser: interaction.member ?? interaction.user
       });
 
-      return commit(payload);
+      return payload;
     }
 
     const acceptedMap = p.orders?.accepted ?? {};
@@ -7536,6 +7594,7 @@ ${lines.join("\n")}`;
 
   return commitState({ content: "That subcommand exists but isn’t implemented yet.", ephemeral: true });
 });
+return commit(lockedPayload);
 
 } catch (e) {
 console.error("NOODLE CMD ERROR:", e?.stack ?? e);
@@ -8843,7 +8902,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
       const ownerLock = `discord:${interaction.id}`;
 
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      const lockedPayload = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
         if (!p2.market_stock) p2.market_stock = {};
@@ -8869,13 +8928,13 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         for (const [id3, qty3] of Object.entries(want)) {
           if (!MARKET_ITEM_IDS.includes(id3)) {
             const friendly = displayItemName(id3);
-            return componentCommit(interaction, { content: `${friendly} isn’t a market item.`, ephemeral: true });
+            return { content: `${friendly} isn’t a market item.`, ephemeral: true };
           }
 
           const it = content.items?.[id3];
           if (!it) {
             const friendly = displayItemName(id3);
-            return componentCommit(interaction, { content: `Unknown item: ${friendly}.`, ephemeral: true });
+            return { content: `Unknown item: ${friendly}.`, ephemeral: true };
           }
 
           const basePrice = s.market_prices?.[id3] ?? it.base_price ?? 0;
@@ -8892,10 +8951,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
           if (stock < qtyToBuy) {
             const friendly = displayItemName(id3);
-            return componentCommit(interaction, {
+            return {
               content: `Only ${stock} in stock today for **${friendly}**.`,
               ephemeral: true
-            });
+            };
           }
 
           if (qtyToBuy < qty3) capacityReduced = true;
@@ -8906,14 +8965,14 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         }
 
         if (!buyLines.length) {
-          return componentCommit(interaction, {
+          return {
             content: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
             ephemeral: true
-          });
+          };
         }
 
         if ((p2.coins ?? 0) < totalCost) {
-          return componentCommit(interaction, { content: `Not enough coins. Total is **${totalCost}c**.`, ephemeral: true });
+          return { content: `Not enough coins. Total is **${totalCost}c**.`, ephemeral: true };
         }
 
         // Check inventory capacity before purchase
@@ -8928,10 +8987,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
           const blockedItems = Object.entries(inventoryResult.blocked)
             .map(([id, qty]) => `${qty}× ${displayItemName(id)}`)
             .join(", ");
-          return componentCommit(interaction, { 
+          return { 
             content: `${getIcon("warning")} **Pantry Full!** Cannot store: ${blockedItems}\nUpgrade your Pantry to increase capacity.`,
             ephemeral: true
-          });
+          };
         }
 
         // Apply purchase
@@ -8949,10 +9008,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         advanceTutorial(p2, "buy");
 
         // Persist
-        if (db) {
-          upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-          upsertServer(db, serverId, s, null);
-        }
         if (db) {
           upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
           upsertServer(db, serverId, s, null);
@@ -9003,12 +9058,11 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         }
-        if (db) {
-          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-        }
         
-        return componentCommit(interaction, replyObj);
+        return replyObj;
       });
+
+      return componentCommit(interaction, lockedPayload);
     }
 
     return componentCommit(interaction, { content: "Unknown multi-buy action.", ephemeral: true });
@@ -9104,7 +9158,7 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
       if (!db) {
         return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
       }
-      return await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
+      const lockedPayload = await withLock(db, `lock:user:${userId}`, owner2, 8000, async () => {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
 
@@ -9134,15 +9188,12 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         }
 
         if (!sellLines.length) {
-          return componentCommit(interaction, {
+          return {
             content: `${getIcon("cancel")} You don't have any of those items to sell.`,
             ephemeral: true
-          });
+          };
         }
 
-        if (db) {
-          upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
-        }
         if (db) {
           upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
         }
@@ -9188,11 +9239,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         }
-        if (db) {
-          putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
-        }
-        return componentCommit(interaction, replyObj);
+        return replyObj;
       });
+
+      return componentCommit(interaction, lockedPayload);
     }
   }
 

@@ -268,6 +268,54 @@ import { getIcon } from "./ui/icons.js";
   const decorSetsContent = loadDecorSetsContent();
 
   function getUnlockedIngredientIds(player, content) {
+    const LEGACY_RECIPE_ID_ALIASES = {
+      sweet_soy_broth: "sweet_soy_bowl",
+      spring_blossoms_garden_broth: "spring_blossoms_garden_bowl"
+    };
+
+    const canonicalRecipeId = (recipeId) => {
+      const id = String(recipeId ?? "").trim();
+      if (!id) return null;
+      if (content.recipes?.[id]) return id;
+
+      const aliased = LEGACY_RECIPE_ID_ALIASES[id];
+      if (aliased && content.recipes?.[aliased]) return aliased;
+
+      if (id.endsWith("_broth")) {
+        const bowlCandidate = `${id.slice(0, -6)}_bowl`;
+        if (content.recipes?.[bowlCandidate]) return bowlCandidate;
+      }
+
+      return null;
+    };
+
+    const normalizeKnownRecipes = () => {
+      const input = Array.isArray(player?.known_recipes) ? player.known_recipes : [];
+      const outKnown = [];
+      const seen = new Set();
+
+      for (const rawId of input) {
+        const canonical = canonicalRecipeId(rawId);
+        if (!canonical || seen.has(canonical)) continue;
+        seen.add(canonical);
+        outKnown.push(canonical);
+      }
+
+      // Lightweight backfill only when known recipes are empty.
+      if (!outKnown.length) {
+        for (const starterId of STARTER_PROFILE.known_recipes ?? []) {
+          const canonicalStarter = canonicalRecipeId(starterId);
+          if (!canonicalStarter || seen.has(canonicalStarter)) continue;
+          seen.add(canonicalStarter);
+          outKnown.push(canonicalStarter);
+        }
+      }
+
+      player.known_recipes = outKnown;
+    };
+
+    normalizeKnownRecipes();
+
     const out = new Set();
     const knownSet = new Set(getAvailableRecipes(player));
     const fishingUnlocked = isFishingUnlocked(player);

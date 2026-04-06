@@ -113,21 +113,79 @@ const LEADERBOARD_TYPES = [
   }
 ];
 
+const LEADERBOARD_CACHE_TTL_MS = 15_000;
+const LEADERBOARD_PAGE_SIZE = 10;
+const leaderboardCache = new Map();
+const CONTRIBUTOR_LOCK_CONCURRENCY = 3;
+const CONTRIBUTOR_LOCK_RETRY_DELAYS_MS = [25, 75, 150];
+
 function getLeaderboardTypeIndex(typeId) {
   const idx = LEADERBOARD_TYPES.findIndex((type) => type.id === typeId);
   return idx >= 0 ? idx : 0;
 }
 
-function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser }) {
+function getLeaderboardSnapshot(serverId) {
+  const now = Date.now();
+  const cached = leaderboardCache.get(serverId);
+  if (cached && cached.expiresAt > now) return cached.playerData;
+
+  let playerData;
+  try {
+    const rows = db.prepare(`
+      SELECT
+        user_id,
+        COALESCE(CAST(json_extract(data_json, '$.coins') AS INTEGER), 0) AS coins,
+        COALESCE(CAST(json_extract(data_json, '$.rep') AS INTEGER), 0) AS rep,
+        COALESCE(CAST(json_extract(data_json, '$.lifetime.bowls_served_total') AS INTEGER), 0) AS bowls_served_total
+      FROM players
+      WHERE server_id = ?
+      ORDER BY last_active_at DESC
+      LIMIT 100
+    `).all(serverId);
+
+    playerData = rows.map((row) => ({
+      user_id: row.user_id,
+      coins: row.coins || 0,
+      rep: row.rep || 0,
+      lifetime: { bowls_served_total: row.bowls_served_total || 0 }
+    }));
+  } catch {
+    const allPlayers = db.prepare(`
+      SELECT user_id, data_json FROM players
+      WHERE server_id = ?
+      ORDER BY last_active_at DESC
+      LIMIT 100
+    `).all(serverId);
+
+    playerData = allPlayers.map((row) => ({
+      user_id: row.user_id,
+      ...JSON.parse(row.data_json)
+    }));
+  }
+
+  leaderboardCache.set(serverId, {
+    expiresAt: now + LEADERBOARD_CACHE_TTL_MS,
+    playerData
+  });
+
+  return playerData;
+}
+
+function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser, page = 0 }) {
   const safeIndex = Math.min(Math.max(typeIndex, 0), LEADERBOARD_TYPES.length - 1);
   const type = LEADERBOARD_TYPES[safeIndex];
   const sortedPlayers = [...playerData]
-    .sort((a, b) => type.sortValue(b) - type.sortValue(a))
-    .slice(0, 10);
+    .sort((a, b) => type.sortValue(b) - type.sortValue(a));
 
-  const leaderboardText = sortedPlayers
+  const totalPages = Math.max(1, Math.ceil(sortedPlayers.length / LEADERBOARD_PAGE_SIZE));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const start = safePage * LEADERBOARD_PAGE_SIZE;
+  const pagePlayers = sortedPlayers.slice(start, start + LEADERBOARD_PAGE_SIZE);
+
+  const leaderboardText = pagePlayers
     .map((player, i) => {
-      const medal = i === 0 ? getIcon("medal_gold") : i === 1 ? getIcon("medal_silver") : i === 2 ? getIcon("medal_bronze") : `${i + 1}.`;
+      const rank = start + i;
+      const medal = rank === 0 ? getIcon("medal_gold") : rank === 1 ? getIcon("medal_silver") : rank === 2 ? getIcon("medal_bronze") : `${rank + 1}.`;
       return `${medal} <@${player.user_id}> — ${type.displayValue(player)}`;
     })
     .join("\n");
@@ -136,26 +194,41 @@ function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser }) {
     .setTitle(`${getIcon("leaderboard")} Server Leaderboard`)
     .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
     .setColor(theme.colors.info)
-    .setFooter({ text: `${ownerFooterText(ownerUser)}` });
+    .setFooter({ text: `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}` });
 
-  const navRow = new ActionRowBuilder().addComponents(
+  const typeNavRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex - 1}`)
-      .setLabel("Prev")
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex - 1}:${safePage}`)
+      .setLabel("Type Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safeIndex <= 0),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex + 1}`)
-      .setLabel("Next")
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex + 1}:${safePage}`)
+      .setLabel("Type Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safeIndex >= LEADERBOARD_TYPES.length - 1)
   );
 
+  const pageNavRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex}:${safePage - 1}`)
+      .setLabel("Page Prev")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage <= 0),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex}:${safePage + 1}`)
+      .setLabel("Page Next")
+      .setEmoji(getButtonEmoji("next"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage >= totalPages - 1)
+  );
+
   return {
     embeds: [embed],
-    components: [navRow, socialMainMenuRow(userId)]
+    components: [typeNavRow, pageNavRow, socialMainMenuRow(userId)]
   };
 }
 
@@ -475,6 +548,32 @@ function getSharedOrderIngredientLimit(recipe) {
   return Infinity;
 }
 
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withLockRetry(dbRef, key, owner, ttlMs, fn) {
+  for (let attempt = 0; attempt <= CONTRIBUTOR_LOCK_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await withLock(dbRef, key, owner, ttlMs, fn);
+    } catch (err) {
+      const isBusy = err?.code === "ERR_LOCK_BUSY";
+      if (!isBusy || attempt >= CONTRIBUTOR_LOCK_RETRY_DELAYS_MS.length) throw err;
+      await sleepMs(CONTRIBUTOR_LOCK_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  throw new Error("ERR_LOCK_BUSY");
+}
+
+async function runWithConcurrency(taskFactories, maxConcurrent) {
+  if (!taskFactories.length) return;
+  const limit = Math.max(1, Number(maxConcurrent) || 1);
+  for (let i = 0; i < taskFactories.length; i += limit) {
+    const chunk = taskFactories.slice(i, i + limit).map((factory) => factory());
+    await Promise.all(chunk);
+  }
+}
+
 function getUserIngredientSlots(contributions, userId) {
   return new Set(
     (contributions ?? [])
@@ -737,26 +836,26 @@ async function handleParty(interaction) {
   if (!db) {
     return errorReply(interaction, "Database unavailable in this environment.");
   }
-  return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+  const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     const player = ensurePlayer(serverId, userId);
     touchLastKitchen(player, serverId, channelId, userId);
 
     if (action === "create") {
       if (!partyName) {
-        return errorReply(interaction, `${getIcon("error")} Please provide a party name.`);
+        return { ok: false, error: `${getIcon("error")} Please provide a party name.` };
       }
       const cleanedName = partyName.trim().replace(/\s+/g, " ");
       if (!cleanedName) {
-        return errorReply(interaction, `${getIcon("error")} Please provide a party name.`);
+        return { ok: false, error: `${getIcon("error")} Please provide a party name.` };
       }
       if (containsProfanity(cleanedName)) {
-        return errorReply(interaction, `${getIcon("error")} Party name contains blocked words. Please keep it friendly.`);
+        return { ok: false, error: `${getIcon("error")} Party name contains blocked words. Please keep it friendly.` };
       }
 
       // Check if already in a party
       const currentParty = getUserActiveParty(db, userId);
       if (currentParty) {
-        return errorReply(interaction, `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to create a new one.`);
+        return { ok: false, error: `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to create a new one.` };
       }
 
       const result = createParty(db, serverId, userId, cleanedName);
@@ -772,16 +871,18 @@ async function handleParty(interaction) {
 
       applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-      await ensurePublicReply();
-      return interaction.editReply({ 
-        embeds: [embed], 
-        components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)] 
-      });
+      return {
+        ok: true,
+        response: {
+          embeds: [embed],
+          components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
+        }
+      };
     }
 
     if (action === "join") {
       if (!partyId) {
-        return errorReply(interaction, `${getIcon("error")} Please provide a party ID to join.`);
+        return { ok: false, error: `${getIcon("error")} Please provide a party ID to join.` };
       }
 
       try {
@@ -794,20 +895,22 @@ async function handleParty(interaction) {
 
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-        await ensurePublicReply();
-        return interaction.editReply({ 
-          embeds: [embed], 
-          components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)] 
-        });
+        return {
+          ok: true,
+          response: {
+            embeds: [embed],
+            components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
+          }
+        };
       } catch (err) {
-        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+        return { ok: false, error: `${getIcon("error")} ${err.message}` };
       }
     }
 
     if (action === "leave") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
+        return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
 
       try {
@@ -825,31 +928,20 @@ async function handleParty(interaction) {
           components: [partyCreationRow(userId), socialMainMenuRow(userId)]
         };
 
-        const sourceMessageId = interaction.message?.id ?? null;
-        if (sourceMessageId && interaction.channel?.messages) {
-          try {
-            const msg = await interaction.channel.messages.fetch(sourceMessageId);
-            await msg.edit(replyObj);
-            if (interaction.deferred || interaction.replied) {
-              await interaction.deleteReply().catch(() => {});
-            }
-            return;
-          } catch (e) {
-            // fallback to editing interaction reply
-          }
-        }
-
-        await ensurePublicReply();
-        return interaction.editReply(replyObj);
+        return {
+          ok: true,
+          response: replyObj,
+          targetMessageId: interaction.message?.id ?? null
+        };
       } catch (err) {
-        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+        return { ok: false, error: `${getIcon("error")} ${err.message}` };
       }
     }
 
     if (action === "info") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
+        return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
 
       const memberList = currentParty.members
@@ -869,112 +961,138 @@ async function handleParty(interaction) {
       applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       const isLeader = currentParty.leader_user_id === userId;
-      await ensurePublicReply();
       const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
-      return interaction.editReply({ 
-        embeds: [embed], 
-        components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)] 
-      });
+      return {
+        ok: true,
+        response: {
+          embeds: [embed],
+          components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
+        }
+      };
     }
 
     if (action === "rename") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
+        return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
       if (currentParty.leader_user_id !== userId) {
-        return errorReply(interaction, `${getIcon("error")} Only the party leader can rename the party.`);
+        return { ok: false, error: `${getIcon("error")} Only the party leader can rename the party.` };
       }
       if (!partyName || !partyName.trim()) {
-        return errorReply(interaction, `${getIcon("error")} Please provide a new party name.`);
+        return { ok: false, error: `${getIcon("error")} Please provide a new party name.` };
       }
       const cleanedName = partyName.trim().replace(/\s+/g, " ");
       if (containsProfanity(cleanedName)) {
-        return errorReply(interaction, `${getIcon("error")} Party name contains blocked words. Please keep it friendly.`);
+        return { ok: false, error: `${getIcon("error")} Party name contains blocked words. Please keep it friendly.` };
       }
 
       try {
         const result = renameParty(db, currentParty.party_id, cleanedName);
-        await ensurePublicReply();
         const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
-        return interaction.editReply({
-          content: `${getIcon("status_complete")} Party renamed to **${result.partyName}**.`,
-          components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
-        });
+        return {
+          ok: true,
+          response: {
+            content: `${getIcon("status_complete")} Party renamed to **${result.partyName}**.`,
+            components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
+          }
+        };
       } catch (err) {
-        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+        return { ok: false, error: `${getIcon("error")} ${err.message}` };
       }
     }
 
     if (action === "transfer_leader") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
+        return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
       if (currentParty.leader_user_id !== userId) {
-        return errorReply(interaction, `${getIcon("error")} Only the party leader can transfer leadership.`);
+        return { ok: false, error: `${getIcon("error")} Only the party leader can transfer leadership.` };
       }
 
       const targetUser = interaction.options.getUser("user");
       if (!targetUser) {
-        return errorReply(interaction, `${getIcon("error")} Please select a party member.`);
+        return { ok: false, error: `${getIcon("error")} Please select a party member.` };
       }
       if (targetUser.id === userId) {
-        return errorReply(interaction, `${getIcon("error")} You are already the leader.`);
+        return { ok: false, error: `${getIcon("error")} You are already the leader.` };
       }
 
       const membership = db.prepare(
         "SELECT * FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL"
       ).get(currentParty.party_id, targetUser.id);
       if (!membership) {
-        return errorReply(interaction, `${getIcon("error")} That user is not in your party.`);
+        return { ok: false, error: `${getIcon("error")} That user is not in your party.` };
       }
 
       try {
         transferPartyLeadership(db, currentParty.party_id, targetUser.id);
-        await ensurePublicReply();
         const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
-        return interaction.editReply({
-          content: `${getIcon("status_complete")} Leadership transferred to <@${targetUser.id}>.`,
-          components: [partyActionRow(userId, true, false, !!existingOrder), socialMainMenuRow(userId)]
-        });
+        return {
+          ok: true,
+          response: {
+            content: `${getIcon("status_complete")} Leadership transferred to <@${targetUser.id}>.`,
+            components: [partyActionRow(userId, true, false, !!existingOrder), socialMainMenuRow(userId)]
+          }
+        };
       } catch (err) {
-        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+        return { ok: false, error: `${getIcon("error")} ${err.message}` };
       }
     }
 
     if (action === "kick") {
       const currentParty = getUserActiveParty(db, userId);
       if (!currentParty) {
-        return errorReply(interaction, `${getIcon("error")} You're not in any party.`);
+        return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
       if (currentParty.leader_user_id !== userId) {
-        return errorReply(interaction, `${getIcon("error")} Only the party leader can kick members.`);
+        return { ok: false, error: `${getIcon("error")} Only the party leader can kick members.` };
       }
 
       const targetUser = interaction.options.getUser("user");
       if (!targetUser) {
-        return errorReply(interaction, `${getIcon("error")} Please select a party member to kick.`);
+        return { ok: false, error: `${getIcon("error")} Please select a party member to kick.` };
       }
       if (targetUser.id === userId) {
-        return errorReply(interaction, `${getIcon("error")} You cannot kick yourself.`);
+        return { ok: false, error: `${getIcon("error")} You cannot kick yourself.` };
       }
 
       const isMember = currentParty.members.some((m) => m.user_id === targetUser.id);
       if (!isMember) {
-        return errorReply(interaction, `${getIcon("error")} That user is not in your party.`);
+        return { ok: false, error: `${getIcon("error")} That user is not in your party.` };
       }
 
       try {
         kickPartyMember(db, currentParty.party_id, targetUser.id);
-        return errorReply(interaction, `${getIcon("status_complete")} Removed <@${targetUser.id}> from the party.`);
+        return { ok: false, error: `${getIcon("status_complete")} Removed <@${targetUser.id}> from the party.` };
       } catch (err) {
-        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+        return { ok: false, error: `${getIcon("error")} ${err.message}` };
       }
     }
 
-    return errorReply(interaction, `${getIcon("error")} Unknown party action.`);
+    return { ok: false, error: `${getIcon("error")} Unknown party action.` };
   });
+
+  if (!lockedResult?.ok) {
+    return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process party action.`);
+  }
+
+  if (lockedResult.targetMessageId && interaction.channel?.messages) {
+    try {
+      const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
+      await msg.edit(lockedResult.response ?? {});
+      if (interaction.deferred || interaction.replied) {
+        await interaction.deleteReply().catch(() => {});
+      }
+      return;
+    } catch {
+      // fallback to interaction reply
+    }
+  }
+
+  await ensurePublicReply();
+  return interaction.editReply(lockedResult.response ?? {});
 }
 
 async function handleTip(interaction) {
@@ -1005,7 +1123,7 @@ async function handleTip(interaction) {
   if (!db) {
     return errorReply(interaction, "Database unavailable in this environment.");
   }
-  return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+  const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
       let sender = ensurePlayer(serverId, userId);
       let receiver = ensurePlayer(serverId, targetUser.id);
@@ -1045,12 +1163,17 @@ async function handleTip(interaction) {
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         }
-        return interaction.editReply(replyObj);
+        return { ok: true, response: replyObj };
       } catch (err) {
-        return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+        return { ok: false, error: `${getIcon("error")} ${err.message}` };
       }
     });
   });
+
+  if (!lockedResult?.ok) {
+    return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process tip.`);
+  }
+  return interaction.editReply(lockedResult.response);
 }
 
 async function handleVisit(interaction) {
@@ -1079,7 +1202,7 @@ async function handleVisit(interaction) {
   if (!db) {
     return errorReply(interaction, "Database unavailable in this environment.");
   }
-  return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+  const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
     return await withLock(db, `lock:user:${targetUser.id}`, ownerLock, 8000, async () => {
        let serverState = ensureServer(serverId);
        let visitor = ensurePlayer(serverId, userId);
@@ -1133,26 +1256,24 @@ async function handleVisit(interaction) {
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
         }
-       return interaction.editReply(replyObj);
+       return { ok: true, response: replyObj };
     } catch (err) {
       if (err?.code === "BLESSING_ACTIVE") {
-        if (interaction.deferred || interaction.replied) {
-          try {
-            await interaction.deleteReply();
-          } catch (e) {
-            // ignore if already deleted
-          }
-        }
-        return errorReply(interaction, `${getIcon("error")} They already have an active blessing.`);
+        return { ok: false, error: `${getIcon("error")} They already have an active blessing.` };
       }
       if (err?.code === "BLESSING_COOLDOWN" && err?.cooldownEnds) {
         const ts = Math.floor(err.cooldownEnds / 1000);
-        return errorReply(interaction, `${getIcon("error")} Blessing cooldown active. Try again <t:${ts}:F>.`);
+        return { ok: false, error: `${getIcon("error")} Blessing cooldown active. Try again <t:${ts}:F>.` };
       }
-      return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+      return { ok: false, error: `${getIcon("error")} ${err.message}` };
     }
     });
   });
+
+  if (!lockedResult?.ok) {
+    return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process visit.`);
+  }
+  return interaction.editReply(lockedResult.response);
 }
 
 async function handleLeaderboard(interaction) {
@@ -1168,29 +1289,17 @@ async function handleLeaderboard(interaction) {
   await interaction.deferReply({ ephemeral: false });
 
   try {
-    // Get all players in the server
-    const allPlayers = db.prepare(`
-      SELECT user_id, data_json FROM players 
-      WHERE server_id = ? 
-      ORDER BY last_active_at DESC
-      LIMIT 100
-    `).all(serverId);
-
-    if (allPlayers.length === 0) {
+    const playerData = getLeaderboardSnapshot(serverId);
+    if (playerData.length === 0) {
       return errorReply(interaction, `${getIcon("error")} No players found in this server yet.`);
     }
-
-    // Parse and sort
-    const playerData = allPlayers.map(row => ({
-      user_id: row.user_id,
-      ...JSON.parse(row.data_json)
-    }));
 
     const view = buildLeaderboardView({
       playerData,
       typeIndex,
       userId: interaction.user.id,
-      ownerUser: interaction.member ?? interaction.user
+      ownerUser: interaction.member ?? interaction.user,
+      page: 0
     });
 
     return interaction.editReply(view);
@@ -1319,11 +1428,10 @@ async function handleComponent(interaction) {
       }
 
       const ownerLock = `discord:${interaction.id}`;
-      const targetMessageId = interaction.message?.id ?? null;
       if (!db) {
         return errorReply(interaction, "Database unavailable in this environment.");
       }
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const result = createParty(db, serverId, userId, cleanedName);
 
@@ -1341,23 +1449,28 @@ async function handleComponent(interaction) {
             embeds: [embed],
             components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
           };
-
-          if (sourceMessageId && interaction.channel?.messages) {
-            try {
-              const msg = await interaction.channel.messages.fetch(sourceMessageId);
-              await msg.edit(replyObj);
-              await interaction.deleteReply().catch(() => {});
-              return;
-            } catch (e) {
-              // fallback to editing interaction reply
-            }
-          }
-
-          return interaction.editReply(replyObj);
+          return { ok: true, response: replyObj, targetMessageId: sourceMessageId };
         } catch (err) {
-          return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+          return { ok: false, error: `${getIcon("error")} ${err.message}` };
         }
       });
+
+      if (!lockedResult?.ok) {
+        return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to create party.`);
+      }
+
+      if (lockedResult.targetMessageId && interaction.channel?.messages) {
+        try {
+          const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
+          await msg.edit(lockedResult.response);
+          await interaction.deleteReply().catch(() => {});
+          return;
+        } catch {
+          // fallback to editing interaction reply
+        }
+      }
+
+      return interaction.editReply(lockedResult.response);
     }
 
     if (customId.startsWith("noodle-social:modal:join_party:")) {
@@ -1379,7 +1492,7 @@ async function handleComponent(interaction) {
       if (!db) {
         return errorReply(interaction, "Database unavailable in this environment.");
       }
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const result = joinParty(db, serverId, partyId, userId);
           
@@ -1390,28 +1503,35 @@ async function handleComponent(interaction) {
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-          if (sourceMessageId && interaction.channel?.messages) {
-            try {
-              const msg = await interaction.channel.messages.fetch(sourceMessageId);
-              await msg.edit({
-                embeds: [embed],
-                components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
-              });
-              await interaction.deleteReply().catch(() => {});
-              return;
-            } catch (e) {
-              // fallback to editing interaction reply
-            }
-          }
-
-          return interaction.editReply({ 
-            embeds: [embed], 
-            components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)] 
-          });
+          return {
+            ok: true,
+            response: {
+              embeds: [embed],
+              components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
+            },
+            targetMessageId: sourceMessageId
+          };
         } catch (err) {
-          return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+          return { ok: false, error: `${getIcon("error")} ${err.message}` };
         }
       });
+
+      if (!lockedResult?.ok) {
+        return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to join party.`);
+      }
+
+      if (lockedResult.targetMessageId && interaction.channel?.messages) {
+        try {
+          const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
+          await msg.edit(lockedResult.response);
+          await interaction.deleteReply().catch(() => {});
+          return;
+        } catch {
+          // fallback to editing interaction reply
+        }
+      }
+
+      return interaction.editReply(lockedResult.response);
     }
 
     if (customId.startsWith("noodle-social:modal:invite_user:")) {
@@ -1424,79 +1544,78 @@ async function handleComponent(interaction) {
       const searchName = nameInput.trim().toLowerCase();
       const ownerLock = `discord:${interaction.id}`;
 
+      // Resolve target member outside lock to avoid holding DB lock during Discord API lookups.
+      const guild = interaction.guild;
+      if (!guild) {
+        return errorReply(interaction, `${getIcon("error")} This command only works in a server.`);
+      }
+
+      let targetMember = null;
+      for (const member of guild.members.cache.values()) {
+        const nickname = member.nickname?.toLowerCase();
+        const username = member.user.username?.toLowerCase();
+        const displayName = member.displayName?.toLowerCase();
+        const globalName = member.user.globalName?.toLowerCase();
+        if (nickname === searchName || username === searchName || displayName === searchName || globalName === searchName) {
+          targetMember = member;
+          break;
+        }
+      }
+
+      if (!targetMember) {
+        try {
+          const searchResults = await guild.members.search({ query: searchName, limit: 10 });
+          if (searchResults.size > 0) {
+            targetMember = searchResults.first();
+          }
+        } catch (e) {
+          console.log(`⚠️ Member search failed:`, e?.message);
+        }
+      }
+
+      if (!targetMember) {
+        return errorReply(interaction, `${getIcon("error")} User **${searchName}** not found. Make sure they're in this server and try their exact username or nickname.`);
+      }
+
       try {
         if (!db) {
           return errorReply(interaction, "Database unavailable in this environment.");
         }
-        return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+        const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
           try {
-            // Only allow inviting users in this server
-            const guild = interaction.guild;
-            if (!guild) {
-              return errorReply(interaction, `${getIcon("error")} This command only works in a server.`);
-            }
-
-            let targetMember = null;
-            
-            // Search guild cache first
-            for (const member of guild.members.cache.values()) {
-              const nickname = member.nickname?.toLowerCase();
-              const username = member.user.username?.toLowerCase();
-              const displayName = member.displayName?.toLowerCase();
-              const globalName = member.user.globalName?.toLowerCase();
-              
-              if (nickname === searchName || username === searchName || displayName === searchName || globalName === searchName) {
-                  console.log(`✅ Found user in cache: ${member.displayName}`);
-                targetMember = member;
-                break;
-              }
-            }
-
-            // If not in cache, try to search with a query (limited fetch)
-            if (!targetMember) {
-              try {
-                console.log(`🔍 Searching for user: ${searchName}`);
-                const searchResults = await guild.members.search({ query: searchName, limit: 10 });
-                console.log(`📋 Found ${searchResults.size} search results`);
-                if (searchResults.size > 0) {
-                  targetMember = searchResults.first();
-                  console.log(`✅ Found via search: ${targetMember.displayName}`);
-                }
-              } catch (e) {
-                console.log(`⚠️ Member search failed:`, e?.message);
-              }
-            }
-
-            if (!targetMember) {
-              return errorReply(interaction, `${getIcon("error")} User **${searchName}** not found. Make sure they're in this server and try their exact username or nickname.`);
-            }
             const inviteTargetId = targetMember.user.id;
             const currentParty = getUserActiveParty(db, userId);
             if (!currentParty) {
-              return errorReply(interaction, `${getIcon("error")} You're not in a party anymore.`);
+              return { ok: false, error: `${getIcon("error")} You're not in a party anymore.` };
             }
 
-            console.log(`🎉 Inviting to party: ${currentParty.party_name}`);
-            const result = inviteUserToParty(db, serverId, currentParty.party_id, inviteTargetId);
-            console.log(`$✅ Invite successful, sending response`);
+            const inviteResult = inviteUserToParty(db, serverId, currentParty.party_id, inviteTargetId);
             
             const embed = new EmbedBuilder()
               .setTitle(`${getIcon("status_complete")} User Invited!`)
-              .setDescription(`**${targetMember.displayName}** has been invited to **${result.partyName}**`)
+              .setDescription(`**${targetMember.displayName}** has been invited to **${inviteResult.partyName}**`)
               .setColor(theme.colors.success);
 
             applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
             const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
-            return interaction.editReply({ 
-              embeds: [embed], 
-              components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)] 
-            });
+            return {
+              ok: true,
+              response: {
+                embeds: [embed],
+                components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
+              }
+            };
           } catch (err) {
             console.error(`${getIcon("error")} Error in invite handler:`, err);
-            return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+            return { ok: false, error: `${getIcon("error")} ${err.message}` };
           }
         });
+
+        if (!lockedResult?.ok) {
+          return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to invite user.`);
+        }
+        return interaction.editReply(lockedResult.response);
       } catch (err) {
         console.error(`${getIcon("error")} withLock failed:`, err);
         try {
@@ -1536,7 +1655,7 @@ async function handleComponent(interaction) {
       if (!db) {
         return errorReply(interaction, "Database unavailable in this environment.");
       }
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
           let sender = ensurePlayer(serverId, userId);
           let receiver = ensurePlayer(serverId, targetId);
@@ -1568,16 +1687,24 @@ async function handleComponent(interaction) {
 
             applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-            return componentCommit(interaction, {
-              embeds: [embed],
-              components: [partyRow, socialMainMenuRow(userId)],
-              targetMessageId: sourceMessageId
-            });
+            return {
+              ok: true,
+              payload: {
+                embeds: [embed],
+                components: [partyRow, socialMainMenuRow(userId)],
+                targetMessageId: sourceMessageId
+              }
+            };
           } catch (err) {
-            return errorReply(interaction, `${getIcon("error")} ${err.message}`);
+            return { ok: false, error: `${getIcon("error")} ${err.message}` };
           }
         });
       });
+
+      if (!lockedResult?.ok) {
+        return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to send tip.`);
+      }
+      return componentCommit(interaction, lockedResult.payload);
     }
 
     if (customId.startsWith("noodle-social:modal:bless:")) {
@@ -1601,7 +1728,7 @@ async function handleComponent(interaction) {
       if (!db) {
         return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
       }
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
           let serverState = ensureServer(serverId);
           let targetPlayer = ensurePlayer(serverId, targetId);
@@ -1651,23 +1778,32 @@ async function handleComponent(interaction) {
 
             applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
-            return componentCommit(interaction, {
-              embeds: [embed],
-              components: [partyRow, socialMainMenuRow(userId)],
-              targetMessageId: sourceMessageId
-            });
+            return {
+              ok: true,
+              payload: {
+                embeds: [embed],
+                components: [partyRow, socialMainMenuRow(userId)],
+                targetMessageId: sourceMessageId
+              }
+            };
           } catch (err) {
             if (err?.code === "BLESSING_ACTIVE") {
-              return componentCommit(interaction, { content: `${getIcon("error")} They already have an active blessing.`, ephemeral: true });
+              return { ok: false, payload: { content: `${getIcon("error")} They already have an active blessing.`, ephemeral: true } };
             }
             if (err?.code === "BLESSING_COOLDOWN" && err?.cooldownEnds) {
               const ts = Math.floor(err.cooldownEnds / 1000);
-              return componentCommit(interaction, { content: `${getIcon("error")} Blessing cooldown active. Try again <t:${ts}:F>.`, ephemeral: true });
+              return { ok: false, payload: { content: `${getIcon("error")} Blessing cooldown active. Try again <t:${ts}:F>.`, ephemeral: true } };
             }
-            return componentCommit(interaction, { content: `${getIcon("error")} ${err.message}`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
           }
         });
       });
+
+      if (!lockedResult?.ok) {
+        if (lockedResult?.payload) return componentCommit(interaction, lockedResult.payload);
+        return componentCommit(interaction, { content: `${getIcon("error")} Unable to grant blessing.`, ephemeral: true });
+      }
+      return componentCommit(interaction, lockedResult.payload);
     }
 
     // Removed old modal handler - now using select menus for shared orders
@@ -1715,21 +1851,21 @@ async function handleComponent(interaction) {
       if (!db) {
         return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
       }
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const party = getUserActiveParty(db, userId);
           if (!party) {
-            return componentCommit(interaction, { content: `${getIcon("error")} You're not in a party.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} You're not in a party.`, ephemeral: true } };
           }
 
           const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
           if (!sharedOrder) {
-            return componentCommit(interaction, { content: `${getIcon("error")} No active shared order.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} No active shared order.`, ephemeral: true } };
           }
 
           const recipe = content.recipes[sharedOrder.order_id];
           if (!recipe) {
-            return componentCommit(interaction, { content: `${getIcon("error")} Recipe not found.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} Recipe not found.`, ephemeral: true } };
           }
 
           const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
@@ -1745,24 +1881,27 @@ async function handleComponent(interaction) {
 
           const selected = progress.items.find((i) => i.ingredientId === ingredientId);
           if (!selected || selected.remaining <= 0) {
-            return componentCommit(interaction, { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true } };
           }
 
           if (!userIngredientSlots.has(ingredientId) && Number.isFinite(maxSlots) && userSlotsUsed >= maxSlots) {
-            return componentCommit(interaction, {
-              content: `${getIcon("warning")} You've reached your max ingredient slots for this shared order. Ask teammates to cover another ingredient.`,
-              ephemeral: true
-            });
+            return {
+              ok: false,
+              payload: {
+                content: `${getIcon("warning")} You've reached your max ingredient slots for this shared order. Ask teammates to cover another ingredient.`,
+                ephemeral: true
+              }
+            };
           }
 
           if (quantity > selected.remaining) {
-            return componentCommit(interaction, { content: `${getIcon("error")} Max remaining is ${selected.remaining}.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} Max remaining is ${selected.remaining}.`, ephemeral: true } };
           }
 
           const player = ensurePlayer(serverId, userId);
           const owned = player.inv_ingredients?.[ingredientId] ?? 0;
           if (owned < quantity) {
-            return componentCommit(interaction, { content: `${getIcon("error")} You only have ${owned}.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} You only have ${owned}.`, ephemeral: true } };
           }
 
           player.inv_ingredients[ingredientId] = owned - quantity;
@@ -1793,15 +1932,20 @@ async function handleComponent(interaction) {
           const hasOtherContributor = hasNonLeaderContributor(updatedContributions, party.leader_user_id);
           const canComplete = updatedProgress.isComplete && hasOtherContributor;
 
-          return componentCommit(interaction, {
-            embeds: [embed],
-            components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)],
-            targetMessageId: sourceMessageId
-          });
+          return {
+            ok: true,
+            payload: {
+              embeds: [embed],
+              components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)],
+              targetMessageId: sourceMessageId
+            }
+          };
         } catch (err) {
-          return componentCommit(interaction, { content: `${getIcon("error")} ${err.message}`, ephemeral: true });
+          return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
         }
       });
+
+      return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
     }
   }
 
@@ -1909,32 +2053,38 @@ async function handleComponent(interaction) {
       const recipe = content.recipes[recipeId];
       const ownerLock = `discord:${interaction.id}`;
 
-      return await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
           const party = getUserActiveParty(db, userId);
           if (!party) {
-            return componentCommit(interaction, { content: `${getIcon("error")} You're not in a party.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} You're not in a party.`, ephemeral: true } };
           }
 
           if (party.leader_user_id !== userId) {
-            return componentCommit(interaction, { content: `${getIcon("error")} Only the party leader can create shared orders.`, ephemeral: true });
+            return { ok: false, payload: { content: `${getIcon("error")} Only the party leader can create shared orders.`, ephemeral: true } };
           }
 
           // Check if there's already an active shared order
           const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
           if (existingOrder) {
-            return componentCommit(interaction, { 
-              content: `${getIcon("error")} Your party already has an active shared order. Complete it first.`, 
-              ephemeral: true 
-            });
+            return {
+              ok: false,
+              payload: {
+                content: `${getIcon("error")} Your party already has an active shared order. Complete it first.`,
+                ephemeral: true
+              }
+            };
           }
 
           const commonRecipeIds = getCommonPartyRecipes(db, serverId, party);
           if (!commonRecipeIds.has(recipeId)) {
-            return componentCommit(interaction, {
-              content: `${getIcon("error")} All party members must know this recipe to start a shared order.`,
-              ephemeral: true
-            });
+            return {
+              ok: false,
+              payload: {
+                content: `${getIcon("error")} All party members must know this recipe to start a shared order.`,
+                ephemeral: true
+              }
+            };
           }
 
           // Create the shared order
@@ -1963,14 +2113,19 @@ async function handleComponent(interaction) {
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
           const isLeader = party.leader_user_id === userId;
-          return componentCommit(interaction, {
-            embeds: [embed],
-            components: [partyActionRow(userId, true, isLeader, true), socialMainMenuRow(userId)]
-          });
+          return {
+            ok: true,
+            payload: {
+              embeds: [embed],
+              components: [partyActionRow(userId, true, isLeader, true), socialMainMenuRow(userId)]
+            }
+          };
         } catch (err) {
-          return componentCommit(interaction, { content: `${getIcon("error")} ${err.message}`, ephemeral: true });
+          return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
         }
       });
+
+      return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to create shared order.`, ephemeral: true });
     }
 
     if (action === "shared_order_ingredient") {
@@ -2187,33 +2342,25 @@ async function handleComponent(interaction) {
         return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
       }
 
-      const pageRaw = Number(parts[4] ?? 0);
-      const typeIndex = Number.isFinite(pageRaw) ? pageRaw : 0;
+      const typeRaw = Number(parts[4] ?? 0);
+      const pageRaw = Number(parts[5] ?? 0);
+      const typeIndex = Number.isFinite(typeRaw) ? typeRaw : 0;
+      const page = Number.isFinite(pageRaw) ? pageRaw : 0;
 
-      const allPlayers = db.prepare(`
-        SELECT user_id, data_json FROM players 
-        WHERE server_id = ? 
-        ORDER BY last_active_at DESC
-        LIMIT 100
-      `).all(serverId);
-
-      if (allPlayers.length === 0) {
+      const playerData = getLeaderboardSnapshot(serverId);
+      if (playerData.length === 0) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} No players found in this server yet.`,
           ephemeral: false
         });
       }
 
-      const playerData = allPlayers.map(row => ({
-        user_id: row.user_id,
-        ...JSON.parse(row.data_json)
-      }));
-
       const view = buildLeaderboardView({
         playerData,
         typeIndex,
         userId,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page
       });
 
       return componentCommit(interaction, view);
@@ -2966,9 +3113,12 @@ async function handleComponent(interaction) {
         }
 
         // Lock and update all contributors with scaled rewards
-        const contributorLocks = [];
+        const contributorTasks = [];
         const contributorRewards = {}; // For reward message
-        for (const [contributorId, quantity] of Object.entries(contributorQuantities)) {
+        const contributorEntries = Object.entries(contributorQuantities)
+          .sort(([a], [b]) => String(a).localeCompare(String(b)));
+
+        for (const [contributorId, quantity] of contributorEntries) {
           // Scale rewards proportionally to contribution amount
           const scaleFactor = totalQuantity > 0 ? quantity / totalQuantity : 0;
           const coinsReward = Math.floor(totalCoins * scaleFactor);
@@ -2977,8 +3127,8 @@ async function handleComponent(interaction) {
 
           contributorRewards[contributorId] = { coinsReward, repReward, sxpReward };
 
-          contributorLocks.push(
-            withLock(db, `lock:user:${contributorId}`, ownerLock, 8000, async () => {
+          contributorTasks.push(() =>
+            withLockRetry(db, `lock:user:${contributorId}`, ownerLock, 8000, async () => {
               let player = ensurePlayer(serverId, contributorId);
               if (!player.lifetime) player.lifetime = {};
               player.lifetime.orders_served = (player.lifetime.orders_served || 0) + servings;
@@ -3000,7 +3150,7 @@ async function handleComponent(interaction) {
         }
 
         // Wait for all contributor updates
-        await Promise.all(contributorLocks);
+        await runWithConcurrency(contributorTasks, CONTRIBUTOR_LOCK_CONCURRENCY);
 
         // Mark order complete (after all rewards distributed)
         completeSharedOrder(db, sharedOrder.shared_order_id);
@@ -3110,8 +3260,10 @@ async function handleComponent(interaction) {
           (refundsByUser[contrib.user_id][contrib.ingredient_id] ?? 0) + contrib.quantity;
       }
 
-      const refundLocks = Object.entries(refundsByUser).map(([contributorId, items]) =>
-        withLock(db, `lock:user:${contributorId}`, ownerLock, 8000, async () => {
+      const refundTasks = Object.entries(refundsByUser)
+        .sort(([a], [b]) => String(a).localeCompare(String(b)))
+        .map(([contributorId, items]) => () =>
+        withLockRetry(db, `lock:user:${contributorId}`, ownerLock, 8000, async () => {
           const player = ensurePlayer(serverId, contributorId);
           if (!player.inv_ingredients) player.inv_ingredients = {};
           for (const [ingredientId, qty] of Object.entries(items)) {
@@ -3123,8 +3275,8 @@ async function handleComponent(interaction) {
         })
       );
 
-      if (refundLocks.length) {
-        await Promise.all(refundLocks);
+      if (refundTasks.length) {
+        await runWithConcurrency(refundTasks, CONTRIBUTOR_LOCK_CONCURRENCY);
       }
 
       cancelSharedOrder(db, sharedOrder.shared_order_id);

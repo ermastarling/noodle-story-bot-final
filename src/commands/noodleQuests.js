@@ -115,7 +115,7 @@ export async function noodleQuestsHandler(interaction) {
   const cached = getIdempotentResult(db, idempKey);
   if (cached) return commit(cached);
 
-  return withLock(db, `user:${userId}`, `discord:${interaction.id}`, 8000, async () => {
+  const lockedReply = await withLock(db, `user:${userId}`, `discord:${interaction.id}`, 8000, async () => {
     let player = getPlayer(db, serverId, userId);
     let server = getServer(db, serverId);
     if (!player) player = newPlayerProfile(userId);
@@ -215,6 +215,8 @@ ${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     upsertServer(db, serverId, server, null);
 
     putIdempotentResult(db, { key: idempKey, userId, action: "noodle-quests", ttlSeconds: 900, result: reply });
-    return commit(reply);
+    return reply;
   });
+
+  return commit(lockedReply);
 }

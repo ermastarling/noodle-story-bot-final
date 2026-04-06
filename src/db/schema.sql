@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS players (
 );
 
 CREATE INDEX IF NOT EXISTS idx_players_user_last_active ON players(user_id, last_active_at);
+CREATE INDEX IF NOT EXISTS idx_players_server_last_active ON players(server_id, last_active_at DESC);
 
 CREATE TABLE IF NOT EXISTS servers (
   server_id TEXT PRIMARY KEY,
@@ -26,6 +27,8 @@ CREATE TABLE IF NOT EXISTS locks (
   expires_at INTEGER NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_locks_expires_at ON locks(expires_at);
+
 CREATE TABLE IF NOT EXISTS idempotency (
   key TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -33,6 +36,8 @@ CREATE TABLE IF NOT EXISTS idempotency (
   expires_at INTEGER NOT NULL,
   result_json TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_expires_at ON idempotency(expires_at);
 
 CREATE TABLE IF NOT EXISTS jobs (
   job_id TEXT PRIMARY KEY,
