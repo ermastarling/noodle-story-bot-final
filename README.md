@@ -73,7 +73,7 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 
 - Player-facing commands are registered globally.
 - Developer tools are exposed in the official guild via `/noodle-dev`.
-- Current dev subcommands: `status`, `reset_tutorial`, `wipe_user`, `repair_profile`.
+- Current dev subcommands: `status`, `servers`, `reset_tutorial`, `wipe_user`, `repair_profile`.
 - Default guild registration mode is `dev-overrides`, which keeps `/noodle` global and applies guild-only overrides for dev tooling.
 
 ## Configuration

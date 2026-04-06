@@ -3697,7 +3697,7 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "servers";
 const inDevPath = group === "dev" || isDevSubcommand;
 
 if (inDevPath) {
@@ -3805,6 +3805,50 @@ if (inDevPath && sub === "repair_profile") {
         `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`,
       ephemeral: true
     });
+  });
+}
+
+if (inDevPath && sub === "servers") {
+  const guilds = [...(interaction.client?.guilds?.cache?.values?.() ?? [])]
+    .map((guild) => ({
+      name: guild?.name ?? "Unknown Server",
+      id: guild?.id ?? "unknown",
+      members: Number.isFinite(guild?.memberCount) ? guild.memberCount : null
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+  if (!guilds.length) {
+    return commit({ content: "No servers found in cache.", ephemeral: true });
+  }
+
+  const lines = [];
+  let used = 0;
+  for (const guild of guilds) {
+    const line = `• ${guild.name} | ${guild.id} | ${guild.members ?? "unknown"}`;
+    if (used + line.length + 1 > 3800) break;
+    lines.push(line);
+    used += line.length + 1;
+  }
+
+  const truncated = lines.length < guilds.length;
+  const description = [
+    "Server name | Server ID | Member count",
+    "",
+    ...lines,
+    truncated ? "" : null,
+    truncated ? `Showing ${lines.length}/${guilds.length} servers due to message length.` : null
+  ].filter(Boolean).join("\n");
+
+  const embed = buildMenuEmbed({
+    title: `${getIcon("group")} Bot Servers (${guilds.length})`,
+    description,
+    user: interaction.member ?? interaction.user
+  });
+
+  return commit({
+    content: " ",
+    embeds: [embed],
+    ephemeral: true
   });
 }
 
