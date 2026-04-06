@@ -5239,8 +5239,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
   /* ---------------- QUESTS: VOTE ---------------- */
   if (sub === "quests_vote") {
     // Load player from latest server to check vote rewards, not current guild
-    const latestServerId = getLatestServerIdForUser(db, userId) || serverId;
-    const latestPlayer = latestServerId ? ensurePlayer(latestServerId, userId) : p;
+    const latestServerId = db ? getLatestServerIdForUser(db, userId) : null;
+    const voteServerId = latestServerId || serverId;
+    const latestPlayer = voteServerId ? ensurePlayer(voteServerId, userId) : p;
     const status = getVoteRewardStatus(latestPlayer);
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
@@ -5285,8 +5286,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
   /* ---------------- QUESTS: VOTE CLAIM ---------------- */
   if (sub === "quests_vote_claim") {
     // Load player from latest server to claim vote rewards, not current guild
-    const latestServerId = getLatestServerIdForUser(db, userId) || serverId;
-    const latestPlayer = latestServerId ? ensurePlayer(latestServerId, userId) : p;
+    const latestServerId = db ? getLatestServerIdForUser(db, userId) : null;
+    const voteServerId = latestServerId || serverId;
+    const latestPlayer = voteServerId ? ensurePlayer(voteServerId, userId) : p;
     const prevShopLevel = latestPlayer.shop_level ?? 1;
     const result = claimTopggVoteReward(latestPlayer, now);
     if (!result.ok) {
@@ -5320,8 +5322,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
 
     // Save the updated player profile to the latest server
-    if (latestServerId) {
-      upsertPlayer(db, latestServerId, userId, latestPlayer, null, latestPlayer.schema_version);
+    if (db && voteServerId) {
+      upsertPlayer(db, voteServerId, userId, latestPlayer, null, latestPlayer.schema_version);
     }
 
     return commitState({

@@ -743,6 +743,19 @@ import { getIcon } from "./ui/icons.js";
       }
 
       if (urlPath === topggWebhookPath) {
+        console.log(
+          "Top.gg: Webhook request received",
+          JSON.stringify({
+            method: req.method,
+            path: urlPath,
+            contentType: req.headers["content-type"] || null,
+            userAgent: req.headers["user-agent"] || null,
+            forwardedFor: req.headers["x-forwarded-for"] || null,
+            cfConnectingIp: req.headers["cf-connecting-ip"] || null,
+            hasAuthorization: Boolean(req.headers["authorization"])
+          })
+        );
+
         if (!topggWebhookAuth) {
           res.writeHead(503, { "content-type": "text/plain" });
           res.end("topgg webhook not configured");
@@ -754,6 +767,14 @@ import { getIcon } from "./ui/icons.js";
           ? authHeader.slice(7).trim()
           : authHeader;
         if (!timingSafeEqual(providedToken, topggWebhookAuth)) {
+          console.log(
+            "Top.gg: Invalid authorization",
+            JSON.stringify({
+              bearerFormat: authHeader.toLowerCase().startsWith("bearer "),
+              providedLength: providedToken.length,
+              expectedLength: String(topggWebhookAuth).length
+            })
+          );
           res.writeHead(401, { "content-type": "text/plain" });
           res.end("invalid authorization");
           return;
@@ -787,9 +808,13 @@ import { getIcon } from "./ui/icons.js";
           return;
         }
 
-        const serverId = getLatestServerIdForUser(db, votedUserId);
+        const latestServerId = getLatestServerIdForUser(db, votedUserId);
+        const serverId = latestServerId;
         if (!serverId) {
-          console.log("Top.gg: Vote ignored because user has no known server", votedUserId);
+          console.log(
+            "Top.gg: Vote ignored because user has no known server",
+            JSON.stringify({ userId: votedUserId, latestServerId })
+          );
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: true, ignored: true, reason: "missing server" }));
           return;
@@ -805,7 +830,7 @@ import { getIcon } from "./ui/icons.js";
 
         console.log(
           "Top.gg: Vote registered",
-          JSON.stringify({ userId: votedUserId, serverId, pendingClaims: voteResult.pendingClaims, duplicate: voteResult.duplicate })
+          JSON.stringify({ userId: votedUserId, serverId, latestServerId, pendingClaims: voteResult.pendingClaims, duplicate: voteResult.duplicate })
         );
 
         res.writeHead(200, { "content-type": "application/json" });
