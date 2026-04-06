@@ -1189,19 +1189,7 @@ import { getIcon } from "./ui/icons.js";
         }
         if (id.startsWith("noodle-dev:")) {
           // Already deferred at the top of interactionCreate handler
-          const result = sanitizeResultEmbeds(await noodleDevCommand.handleComponent(interaction));
-          if (result) {
-            if (result.ephemeral) {
-              if (interaction.replied || interaction.deferred) {
-                return await interaction.followUp({ ...result, ephemeral: true });
-              }
-              return await interaction.reply({ ...result, ephemeral: true });
-            }
-            if (interaction.replied || interaction.deferred) {
-              return await interaction.editReply(result);
-            }
-            return await interaction.update(result);
-          }
+          return await noodleDevCommand.handleComponent(interaction);
         }
         if (id.startsWith("noodle-social:")) {
           // Already deferred at the top of interactionCreate handler
