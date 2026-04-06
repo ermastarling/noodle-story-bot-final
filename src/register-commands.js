@@ -32,13 +32,40 @@ const LEGACY_TOP_LEVEL_COMMANDS = new Set([
   "quests"
 ]);
 
-async function cleanupLegacyGlobalCommands(rest) {
-  const globalCommands = await rest.get(Routes.applicationCommands(clientId));
-  const legacy = (globalCommands || []).filter((cmd) => LEGACY_TOP_LEVEL_COMMANDS.has(cmd.name));
-  if (!legacy.length) return 0;
+function compareSnowflakeDesc(a, b) {
+  const aId = BigInt(String(a?.id ?? "0"));
+  const bId = BigInt(String(b?.id ?? "0"));
+  if (aId === bId) return 0;
+  return aId > bId ? -1 : 1;
+}
 
+async function cleanupDuplicateCommands(commands, deleteCommandById) {
+  const byName = new Map();
+  for (const cmd of commands || []) {
+    const key = String(cmd?.name ?? "").trim();
+    if (!key) continue;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(cmd);
+  }
+
+  let removed = 0;
+  for (const group of byName.values()) {
+    if (group.length <= 1) continue;
+    const sorted = [...group].sort(compareSnowflakeDesc);
+    const stale = sorted.slice(1);
+    for (const cmd of stale) {
+      await deleteCommandById(cmd.id);
+      removed += 1;
+    }
+  }
+
+  return removed;
+}
+
+async function cleanupLegacyCommands(commands, deleteCommandById) {
+  const legacy = (commands || []).filter((cmd) => LEGACY_TOP_LEVEL_COMMANDS.has(cmd.name));
   for (const cmd of legacy) {
-    await rest.delete(Routes.applicationCommand(clientId, cmd.id));
+    await deleteCommandById(cmd.id);
   }
   return legacy.length;
 }
@@ -54,18 +81,47 @@ async function main() {
     await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
     console.log(`Registered guild commands for ${guildId}`);
 
+    const guildCommands = await rest.get(Routes.applicationGuildCommands(clientId, guildId));
+    const removedGuildDuplicates = await cleanupDuplicateCommands(
+      guildCommands,
+      (commandId) => rest.delete(Routes.applicationGuildCommand(clientId, guildId, commandId))
+    );
+    if (removedGuildDuplicates > 0) {
+      console.log(`Removed ${removedGuildDuplicates} duplicate guild command(s).`);
+    }
+
     // When registering to a guild, optionally remove stale legacy top-level
     // global commands that can cause duplicate command entries in Discord.
     const shouldCleanupLegacy = String(process.env.NOODLE_CLEANUP_LEGACY_GLOBAL ?? "1") !== "0";
     if (shouldCleanupLegacy) {
-      const removed = await cleanupLegacyGlobalCommands(rest);
-      if (removed > 0) {
-        console.log(`Removed ${removed} legacy global command(s).`);
+      const globalCommands = await rest.get(Routes.applicationCommands(clientId));
+      const removedLegacyGlobal = await cleanupLegacyCommands(
+        globalCommands,
+        (commandId) => rest.delete(Routes.applicationCommand(clientId, commandId))
+      );
+      if (removedLegacyGlobal > 0) {
+        console.log(`Removed ${removedLegacyGlobal} legacy global command(s).`);
+      }
+
+      const removedGlobalDuplicates = await cleanupDuplicateCommands(
+        await rest.get(Routes.applicationCommands(clientId)),
+        (commandId) => rest.delete(Routes.applicationCommand(clientId, commandId))
+      );
+      if (removedGlobalDuplicates > 0) {
+        console.log(`Removed ${removedGlobalDuplicates} duplicate global command(s).`);
       }
     }
   } else {
     await rest.put(Routes.applicationCommands(clientId), { body });
     console.log("Registered global commands (Discord can take up to 1 hour to propagate).");
+
+    const removedGlobalDuplicates = await cleanupDuplicateCommands(
+      await rest.get(Routes.applicationCommands(clientId)),
+      (commandId) => rest.delete(Routes.applicationCommand(clientId, commandId))
+    );
+    if (removedGlobalDuplicates > 0) {
+      console.log(`Removed ${removedGlobalDuplicates} duplicate global command(s).`);
+    }
   }
 }
 
