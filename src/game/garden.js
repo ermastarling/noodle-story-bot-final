@@ -4,7 +4,6 @@ import { getIcon } from "../ui/icons.js";
 
 export const GARDEN_UNLOCK_LEVEL = 25;
 export const BASE_GARDEN_PLOTS = 5;
-export const BASE_COMPOST_CAP = 100;
 export const COMPOST_PER_BAG = 5;
 export const PLOT_YIELD = 5;
 export const SPOILED_STASH_KEY = "spoiled_generic";
@@ -168,9 +167,9 @@ export function describeYieldMap(yieldMap = {}, content) {
 }
 
 export function getCompostCap(player, effects = {}) {
-  void player; // compost cap is now flat
+  void player;
   void effects;
-  return BASE_COMPOST_CAP;
+  return Number.MAX_SAFE_INTEGER;
 }
 
 export function getPlotYieldRemaining(plot) {
@@ -223,10 +222,6 @@ export function craftCompostBags(player, content, effects = {}, { maxBags = null
   const garden = ensureGardenState(player);
   if (!player.inv_ingredients) player.inv_ingredients = {};
   const compostCap = getCompostCap(player, effects);
-  const room = compostCap - (garden.compost_bags || 0);
-  if (room <= 0) {
-    return { bagsMade: 0, reason: "capacity", compostCap };
-  }
 
   const spoiled = { ...garden.spoiled };
   const pantryForageables = getCompostableForageables(player, content);
@@ -235,7 +230,7 @@ export function craftCompostBags(player, content, effects = {}, { maxBags = null
   const pantryCount = Object.values(pantryForageables).reduce((sum, v) => sum + (v || 0), 0);
   const totalUnits = spoiledCount + pantryCount;
   const maxCraftable = Math.floor(totalUnits / COMPOST_PER_BAG);
-  const targetBags = Math.min(room, maxBags ?? maxCraftable);
+  const targetBags = Math.min(maxBags ?? maxCraftable, maxCraftable);
 
   if (targetBags <= 0) {
     return { bagsMade: 0, reason: "materials", compostCap };

@@ -133,7 +133,6 @@ import {
   isGardenUnlocked,
   getGardenUnlockState,
   addSeeds,
-  getCompostCap,
   getGardenPlotCount,
   ensureGardenPlots,
   plantSeedInPlot,
@@ -922,14 +921,12 @@ function getGardenActionState(player, effects) {
   const plots = ensureGardenPlots(player, effects);
   const now = Date.now();
 
-  const compostCap = getCompostCap(player, effects);
   const compostCount = garden.compost_bags || 0;
   const spoiledTotal = Object.values(garden.spoiled || {}).reduce((sum, v) => sum + (v || 0), 0);
   const pantryForageables = getCompostableForageables(player, content);
   const pantryTotal = Object.values(pantryForageables).reduce((sum, v) => sum + (v || 0), 0);
   const craftableBags = Math.floor((spoiledTotal + pantryTotal) / COMPOST_PER_BAG);
-  const room = Math.max(0, compostCap - compostCount);
-  const canCraft = craftableBags > 0 && room > 0;
+  const canCraft = craftableBags > 0;
 
   const readyPlots = plots
     .map((plot, idx) => ({ plot, idx, remainingTotal: getYieldTotal(getPlotYieldRemaining(plot)) }))
@@ -938,7 +935,6 @@ function getGardenActionState(player, effects) {
 
   return {
     canCraft,
-    compostCap,
     compostCount,
     readyPlots,
     hasHarvestable: readyPlots.length > 0,
@@ -1076,13 +1072,11 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const plots = ensureGardenPlots(player, combinedEffects);
   const gardenState = getGardenActionState(player, combinedEffects);
   const allowedIngredients = getUnlockedIngredientIds(player, content);
-  const compostCap = gardenState.compostCap;
   const compostCount = gardenState.compostCount;
   const spoiledTotal = gardenState.spoiledTotal;
   const pantryTotal = gardenState.pantryTotal;
   const canCraft = gardenState.canCraft;
   const readyPlots = gardenState.readyPlots;
-  const room = Math.max(0, compostCap - compostCount);
 
   const seedSection = formatSeedLines(garden.seeds, content);
   const spoiledSection = formatSpoiledLines(garden.spoiled, content);
@@ -1107,7 +1101,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
 
   const compostValue = [
     "· · · · · · ·",
-    `Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `Compost: **${compostCount}** bags`,
     `${getIcon("compost_bag")} **Compost Inputs**`,
     `Spoiled saved: **${spoiledTotal}**`,
     `Fresh forageables: **${pantryTotal}**`,
@@ -6071,26 +6065,21 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
     }
 
-    const compostCap = getCompostCap(p, combinedEffects);
     const garden = ensureGardenState(p);
-    const compostCount = garden.compost_bags || 0;
-    const roomBags = Math.max(0, compostCap - compostCount);
 
     const spoiledPool = { ...garden.spoiled };
     const spoiledTotal = Object.values(spoiledPool).reduce((sum, v) => sum + (v || 0), 0);
     const pantryPool = getCompostableForageables(p, content);
     const pantryTotal = Object.values(pantryPool).reduce((sum, v) => sum + (v || 0), 0);
 
-    const maxCraftable = Math.min(roomBags, Math.floor((spoiledTotal + pantryTotal) / COMPOST_PER_BAG));
+    const maxCraftable = Math.floor((spoiledTotal + pantryTotal) / COMPOST_PER_BAG);
     const requestedBags = Math.max(0, opt.getInteger("bags") || 0);
     const bagsToMake = Math.max(0, Math.min(requestedBags || maxCraftable, maxCraftable));
     const sourceRaw = (opt.getString("source") || "mix").toLowerCase();
     const source = ["fresh", "spoiled", "mix"].includes(sourceRaw) ? sourceRaw : "mix";
 
     if (maxCraftable <= 0) {
-      const description = roomBags <= 0
-        ? `${getIcon("warning")} Compost storage is full (${compostCount}/${compostCap}).`
-        : `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
+      const description = `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
       const embed = buildMenuEmbed({ title: `${getIcon("compost_bag")} Compost`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
       return commitState({ content: " ", embeds: [embed], components: navRows });
     }
@@ -6165,7 +6154,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const usageBlocks = [formatUsage("Saved spoilage", spoiledUsed), formatUsage("Fresh forageables", freshUsed)].filter(Boolean).join("\n\n");
 
     const description = [`${getIcon("compost_bag")} Packed **${bagsToMake}** compost bag(s).`,
-      `Compost now: **${garden.compost_bags}/${compostCap}**.`,
+      `Compost now: **${garden.compost_bags}**.`,
       usageBlocks].filter(Boolean).join("\n\n");
 
     const embed = buildMenuEmbed({
@@ -8034,11 +8023,9 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
   const garden = ensureGardenState(p);
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
   const gardenState = getGardenActionState(p, combinedEffects);
-  const compostCap = getCompostCap(p, combinedEffects);
   const compostCount = garden.compost_bags || 0;
-  const room = Math.max(0, compostCap - compostCount);
   const compostDescription = [
-    `Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `Compost: **${compostCount}** bags`,
     `Spoiled saved: **${gardenState.spoiledTotal}**`,
     `Fresh forageables: **${gardenState.pantryTotal}**`,
     `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
@@ -8182,7 +8169,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
       const [src, ...idParts] = String(raw).split(":");
       const id = idParts.join(":");
       if (!src || !id) return null;
-      const name = src === "spoiled" ? "Spoiled ingredients" : displayItemName(id);
+      const name = src === "spoiled" ? "ingredients" : displayItemName(id);
       return `${src === "spoiled" ? "Spoiled" : "Fresh"} — ${name}`;
     })
     .filter(Boolean)
@@ -8190,11 +8177,9 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   const header = selectionList
     ? `Selected sources:\n${selectionList}\n\nAdd 5/10 buttons pull that many units from each selected source.`
     : `No items selected. Add 5/10 buttons pull that many units from each selected source.`;
-  const compostCap = gardenState.compostCap;
   const compostCount = gardenState.compostCount;
-  const room = Math.max(0, compostCap - compostCount);
   const compostDescription = [
-    `Compost: **${compostCount}/${compostCap}** bags${room <= 0 ? " (capacity reached)" : ""}`,
+    `Compost: **${compostCount}** bags`,
     header
   ].join("\n\n");
 
@@ -8269,25 +8254,16 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   if (!p.inv_ingredients) p.inv_ingredients = {};
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
   const gardenState = getGardenActionState(p, combinedEffects);
-  const compostCap = getCompostCap(p, combinedEffects);
-  const compostCount = garden.compost_bags || 0;
-  const roomBags = Math.max(0, compostCap - compostCount);
-  if (roomBags <= 0) {
-    return componentCommit(interaction, { content: `${getIcon("compost_bag")} Compost storage is full (${compostCount}/${compostCap}).`, ephemeral: true });
-  }
 
   let spoiledUsed = {};
   let freshUsed = {};
   let totalUnitsUsed = 0;
-  const maxUnitsByStorage = roomBags * COMPOST_PER_BAG;
 
   for (const { source, itemId } of parsedSelections) {
-    if (totalUnitsUsed >= maxUnitsByStorage) break;
-
     if (source === "spoiled") {
       const spoiledEntries = Object.entries(garden.spoiled || {}).filter(([, qty]) => qty > 0);
       const availableUnits = spoiledEntries.reduce((sum, [, qty]) => sum + qty, 0);
-      const unitsToUse = Math.min(amountRequested, availableUnits, maxUnitsByStorage - totalUnitsUsed);
+      const unitsToUse = Math.min(amountRequested, availableUnits);
       if (unitsToUse <= 0) continue;
 
       let remainingUse = unitsToUse;
@@ -8308,7 +8284,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     const availableUnits = Math.max(0, pool?.[itemId] || 0);
     if (availableUnits <= 0) continue;
 
-    const unitsToUse = Math.min(amountRequested, availableUnits, maxUnitsByStorage - totalUnitsUsed);
+    const unitsToUse = Math.min(amountRequested, availableUnits);
     if (unitsToUse <= 0) continue;
 
     pool[itemId] = Math.max(0, availableUnits - unitsToUse);
@@ -8318,7 +8294,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     totalUnitsUsed += unitsToUse;
   }
 
-  const bagsMade = Math.min(roomBags, Math.floor(totalUnitsUsed / COMPOST_PER_BAG));
+  const bagsMade = Math.floor(totalUnitsUsed / COMPOST_PER_BAG);
   if (bagsMade <= 0) {
     compostSelectionCache.delete(messageId);
     return componentCommit(interaction, { content: `${getIcon("warning")} Not enough of the selected items to craft any compost bags.`, ephemeral: true });
@@ -8326,9 +8302,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   const requestedUnits = amountRequested * parsedSelections.length;
   const partialNote = totalUnitsUsed < requestedUnits
-    ? totalUnitsUsed >= maxUnitsByStorage
-      ? `${getIcon("help")} Compost storage capped this batch.`
-      : `${getIcon("help")} Not enough of the selected items for the full amount.`
+    ? `${getIcon("help")} Not enough of the selected items for the full amount.`
     : null;
 
   garden.compost_bags = (garden.compost_bags || 0) + bagsMade;
@@ -8351,7 +8325,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const usageBlocks = [formatUsage("Saved spoilage", spoiledUsed), formatUsage("Fresh forageables", freshUsed)].filter(Boolean).join("\n\n");
   const summaryParts = [
     `${getIcon("compost_bag")} Packed **${bagsMade}** compost bag(s).`,
-    `Compost now: **${garden.compost_bags}/${compostCap}**.`,
+    `Compost now: **${garden.compost_bags}**.`,
     usageBlocks,
     partialNote
   ];
