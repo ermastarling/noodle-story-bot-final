@@ -1766,12 +1766,12 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   const remainingSlots = Math.max(0, capacity - batches.length);
   const nextReadyMs = status.nextReadyMs ?? null;
   const nextReadyTs = nextReadyMs != null ? Math.floor((now + nextReadyMs) / 1000) : null;
-  const availableRecipes = getAvailableRecipes(player);
+  const availableRecipes = getValidAvailableRecipeIds(player);
   const activeSeason = server?.season ?? null;
   const activeEventId = server?.active_event_id ?? null;
   const seasonFilteredRecipes = availableRecipes.filter((rid) => {
     const r = content.recipes?.[rid];
-    if (!r) return true;
+    if (!r) return false;
     if (r.is_event_recipe) {
       return !!activeEventId && r.event_id === activeEventId;
     }
@@ -2096,6 +2096,20 @@ function displayRecipeName(recipeId) {
     .replace(/[_-]+/g, " ")
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown recipe";
+}
+
+function getValidAvailableRecipeIds(player) {
+  const seen = new Set();
+  const valid = [];
+
+  for (const recipeId of getAvailableRecipes(player)) {
+    const canonical = resolveCanonicalRecipeId(recipeId);
+    if (!canonical || !content.recipes?.[canonical] || seen.has(canonical)) continue;
+    seen.add(canonical);
+    valid.push(canonical);
+  }
+
+  return valid;
 }
 
 function migrateLegacyRecipeIds(player) {
@@ -3354,12 +3368,12 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const remainingOrders = availableCount;
   const disableAccept = remainingOrders === 0;
   const highlightAccept = !hasAcceptedOrders && !disableAccept;
-  const available = getAvailableRecipes(p);
+  const available = getValidAvailableRecipeIds(p);
   const activeSeason = s?.season ?? null;
   const activeEventId = s?.active_event_id ?? null;
   const seasonFiltered = available.filter((rid) => {
     const r = content.recipes?.[rid];
-    if (!r) return true;
+    if (!r) return false;
     if (r.is_event_recipe) {
       return !!activeEventId && r.event_id === activeEventId;
     }
