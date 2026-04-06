@@ -84,6 +84,7 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../g
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
+import { TOPGG_BOT_URL, getVoteRewardStatus, claimTopggVoteReward } from "../game/voteRewards.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge, grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import {
   applyCollectionProgressOnServe,
@@ -596,6 +597,7 @@ function buildHelpPage({ page, userId, user }) {
             "• `/noodle quests` — View quests.",
             "• `/noodle quests_daily` — Claim your daily reward.",
             "• `/noodle quests_claim` — Claim your quest rewards.",
+            "• `/noodle quests_vote` — View and claim Top.gg vote rewards.",
             "• `/noodle season` — View the current season.",
             "• `/noodle event` — View the current event."
           ].join("\n"),
@@ -1341,6 +1343,7 @@ if (showClaim) {
 }
 
 row.addComponents(
+  new ButtonBuilder().setCustomId(`noodle:action:quests_vote:${userId}`).setLabel("Vote Rewards").setEmoji(getButtonEmoji("quests")).setStyle(ButtonStyle.Secondary),
   new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("Season").setEmoji(getButtonEmoji("season")).setStyle(ButtonStyle.Secondary),
   new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
 );
@@ -3623,7 +3626,7 @@ if (inDevPath && sub === "reset_tutorial") {
     const mention = `<@${target.id}>`;
 
     return commit({
-      content: `${getIcon("upgrades")} Complete reset for ${mention}.${tut ? `\n\n${tut}` : ""}`,
+      content: `${getIcon("status_complete")} Complete reset for ${mention}.${tut ? `\n\n${tut}` : ""}`,
       ephemeral: true
     });
   });
@@ -3647,9 +3650,9 @@ if (inDevPath && sub === "wipe_user") {
     const deleted = result?.changes ?? 0;
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
-      return commit({ content: `${getIcon("info")} No profile found for ${mention} on server ${targetServerId}.`, ephemeral: true });
+      return commit({ content: `${getIcon("error")} No profile found for ${mention} on server ${targetServerId}.`, ephemeral: true });
     }
-    return commit({ content: `${getIcon("upgrades")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`, ephemeral: true });
+    return commit({ content: `${getIcon("status_complete")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`, ephemeral: true });
   });
 }
 
@@ -3678,14 +3681,14 @@ if (inDevPath && sub === "repair_profile") {
 
     if (!result.repaired) {
       return commit({
-        content: `${getIcon("info")} No repair needed for ${mention} (${result.reason}).`,
+        content: `${getIcon("error")} No repair needed for ${mention} (${result.reason}).`,
         ephemeral: true
       });
     }
 
     return commit({
       content:
-        `${getIcon("success")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
+        `${getIcon("status_complete")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
         `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`,
       ephemeral: true
     });
@@ -4904,48 +4907,180 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
   if (sub === "quests") {
     const summary = getQuestSummary(p, questsContent, userId, now, questOptions);
     const active = summary.active;
-    const cadenceOrder = ["daily", "weekly", "monthly", "story", "seasonal"];
-    const cadenceLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly", story: "Story", seasonal: "Seasonal" };
-    const grouped = cadenceOrder.map((cadence) => ({
-      cadence,
-      label: cadenceLabel[cadence] ?? cadence,
-      quests: active
-        .filter((q) => q.cadence === cadence)
-        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
-    }));
+    const pages = [
+      {
+        title: "Daily Quests",
+        subtitle: "Refreshes every day",
+        cadences: ["daily"]
+      },
+      {
+        title: "Weekly & Monthly Quests",
+        subtitle: "Longer goals for steady progress",
+        cadences: ["weekly", "monthly"]
+      },
+      {
+        title: "Story & Seasonal Quests",
+        subtitle: "Narrative and event-driven objectives",
+        cadences: ["story", "seasonal"]
+      }
+    ];
+    const rawPage = opt.getInteger("page") ?? 0;
+    const page = Math.min(Math.max(rawPage, 0), pages.length - 1);
+    const current = pages[page];
 
-    const lines = active.length
-      ? grouped.flatMap(({ label, quests }) => {
-          if (!quests.length) return [];
-          const header = `**${label}**`;
-          const entries = quests.map((q) => {
-            const status = q.completed_at ? getIcon("status_complete") : getIcon("status_pending");
-            const rewardParts = [];
-            if (q.reward?.coins) rewardParts.push(`${q.reward.coins}c`);
-            if (q.reward?.sxp) rewardParts.push(`${q.reward.sxp} SXP`);
-            if (q.reward?.rep) rewardParts.push(`${q.reward.rep} REP`);
-            const rewardText = rewardParts.length ? ` — Rewards: ${rewardParts.join(" · ")}` : "";
-            return `${status} **${q.name}** (${q.progress}/${q.target})${rewardText}`;
-          });
-          return [header, ...entries, ""];
-        }).filter((line) => line !== "")
-      : ["_No quests available right now._"]; 
+    const pageQuests = active
+      .filter((q) => current.cadences.includes(q.cadence))
+      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+
+    const lines = pageQuests.length
+      ? pageQuests.flatMap((q) => {
+          const status = q.completed_at ? getIcon("status_complete") : getIcon("status_pending");
+          const rewardParts = [];
+          if (q.reward?.coins) rewardParts.push(`${q.reward.coins}c`);
+          if (q.reward?.sxp) rewardParts.push(`${q.reward.sxp} SXP`);
+          if (q.reward?.rep) rewardParts.push(`${q.reward.rep} REP`);
+          const rewardText = rewardParts.length ? `Rewards: ${rewardParts.join(" · ")}` : "Rewards: none";
+          const desc = q.description ? `${q.description}` : "No description provided.";
+          return [
+            `${status} **${q.name}**`,
+            `${getIcon("scroll")} ${desc}`,
+            `${getIcon("stats")} Progress: **${q.progress}/${q.target}**`,
+            `${getIcon("coins")} ${rewardText}`,
+            ""
+          ];
+        }).slice(0, -1)
+      : ["_No quests available on this page right now._"]; 
 
     const questsEmbed = buildMenuEmbed({
-      title: `${getIcon("quests")} Quests`,
-      description: lines.join("\n"),
+      title: `${getIcon("quests")} Quests — ${current.title}`,
+      description: `_${current.subtitle}_\n\n${lines.join("\n")}`,
       user: interaction.member ?? interaction.user
     });
     const ownerText = ownerFooterText(interaction.member ?? interaction.user);
     questsEmbed.setFooter({
-      text: `${ownerText}`
+      text: `Page ${page + 1}/${pages.length} • ${ownerText}`
     });
+
+    const pageRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:quests:${userId}:${page - 1}`)
+        .setLabel("Prev")
+        .setEmoji(getButtonEmoji("back"))
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page <= 0),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:quests:${userId}:0`)
+        .setLabel("Daily")
+        .setStyle(page === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:quests:${userId}:1`)
+        .setLabel("Weekly/Monthly")
+        .setStyle(page === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:quests:${userId}:2`)
+        .setLabel("Story/Seasonal")
+        .setStyle(page === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:quests:${userId}:${page + 1}`)
+        .setLabel("Next")
+        .setEmoji(getButtonEmoji("next"))
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page >= pages.length - 1)
+    );
 
     return commitState({
       content: " ",
       embeds: [questsEmbed],
       components: [
+        pageRow,
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
+        noodleQuestsBackRow(userId)
+      ]
+    });
+  }
+
+  /* ---------------- QUESTS: VOTE ---------------- */
+  if (sub === "quests_vote") {
+    const status = getVoteRewardStatus(p);
+    const reward = status.reward;
+    const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
+    const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
+
+    const voteEmbed = buildMenuEmbed({
+      title: `${getIcon("leaderboard")} Top.gg Vote Rewards`,
+      description: [
+        `Vote for the bot, then claim your reward here.`,
+        "",
+        `Per claim reward: ${rewardLine}`,
+        `Ready to claim: **${status.pendingClaims}**`,
+        `Last vote webhook: **${lastVoteLine}**`
+      ].join("\n"),
+      user: interaction.member ?? interaction.user
+    });
+
+    const voteRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Vote on Top.gg")
+        .setStyle(ButtonStyle.Link)
+        .setURL(TOPGG_BOT_URL),
+      new ButtonBuilder()
+        .setCustomId(`noodle:action:quests_vote_claim:${userId}`)
+        .setLabel("Claim Vote Reward")
+        .setEmoji(getButtonEmoji("status_complete"))
+        .setStyle(status.pendingClaims > 0 ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(status.pendingClaims <= 0)
+    );
+
+    return commitState({
+      content: " ",
+      embeds: [voteEmbed],
+      components: [
+        voteRow,
+        noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
+        noodleQuestsBackRow(userId)
+      ]
+    });
+  }
+
+  /* ---------------- QUESTS: VOTE CLAIM ---------------- */
+  if (sub === "quests_vote_claim") {
+    const prevShopLevel = p.shop_level ?? 1;
+    const result = claimTopggVoteReward(p, now);
+    if (!result.ok) {
+      const embed = buildMenuEmbed({
+        title: `${getIcon("leaderboard")} Top.gg Vote Rewards`,
+        description: result.message,
+        user: interaction.member ?? interaction.user
+      });
+      return commitState({
+        content: " ",
+        embeds: [embed],
+        components: [
+          noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
+          noodleQuestsBackRow(userId)
+        ]
+      });
+    }
+
+    const rewardLines = [];
+    if (result.reward.coins) rewardLines.push(`${getIcon("coins")} **${result.reward.coins}c**`);
+    if (result.reward.sxp) rewardLines.push(`${getIcon("sxp")} **${result.reward.sxp} SXP**`);
+    if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
+
+    const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
+    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
+    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
+    const embed = buildMenuEmbed({
+      title: `${getIcon("leaderboard")} Vote Reward Claimed`,
+      description: `Rewards: ${rewardLines.join(" · ")}\nPending claims: **${result.pendingClaims}**${levelLine}${gardenLine}${fishingLine}`,
+      user: interaction.member ?? interaction.user
+    });
+
+    return commitState({
+      content: " ",
+      embeds: [embed],
+      components: [
+        noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
         noodleQuestsBackRow(userId)
       ]
     });
@@ -8982,6 +9117,7 @@ const noodleCommandData = new SlashCommandBuilder()
   .addSubcommand((sc) => sc.setName("quests").setDescription("View active quests."))
   .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
   .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
+  .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim Top.gg vote rewards."))
   .addSubcommand((sc) =>
     sc
       .setName("buy")

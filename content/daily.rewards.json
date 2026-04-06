@@ -3,6 +3,11 @@
   "streak_bonuses": [
     { "day": 3, "reward": { "coins": 20 } },
     { "day": 7, "reward": { "coins": 50, "sxp": 10 } },
-    { "day": 14, "reward": { "coins": 100, "rep": 3 } }
+    { "day": 14, "reward": { "coins": 100, "rep": 3 } },
+    { "day": 21, "reward": { "coins": 130, "sxp": 18, "rep": 2 } },
+    { "day": 30, "reward": { "coins": 180, "sxp": 30, "rep": 4 } },
+    { "day": 45, "reward": { "coins": 260, "sxp": 45, "rep": 6 } },
+    { "day": 60, "reward": { "coins": 360, "sxp": 60, "rep": 8 } },
+    { "day": 90, "reward": { "coins": 520, "sxp": 90, "rep": 12 } }
   ]
 }

@@ -49,6 +49,7 @@ import { getIcon } from "./ui/icons.js";
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
   const { ensureSpecializationState, getSpecializationById } = await import("./game/specialization.js");
   const { getAvailableRecipes } = await import("./game/resilience.js");
+  const { registerTopggVote } = await import("./game/voteRewards.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
@@ -479,6 +480,8 @@ import { getIcon } from "./ui/icons.js";
     const webhookPath = process.env.NOODLE_WEBHOOK_PATH || "/discord/entitlements";
     const stripeWebhookPath = process.env.NOODLE_STRIPE_WEBHOOK_PATH || "/store/stripe";
     const stripePrecheckPath = process.env.NOODLE_STRIPE_PRECHECK_PATH || "/store/stripe-precheck";
+    const topggWebhookPath = process.env.NOODLE_TOPGG_WEBHOOK_PATH || "/topgg/webhook";
+    const topggWebhookAuth = process.env.TOPGG_WEBHOOK_AUTH || process.env.NOODLE_TOPGG_WEBHOOK_AUTH || "";
     const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
     const stripeSecret = process.env.NOODLE_STRIPE_WEBHOOK_SECRET || "";
     const stripePrecheckSecret = process.env.NOODLE_STRIPE_PRECHECK_SECRET || "";
@@ -488,8 +491,10 @@ import { getIcon } from "./ui/icons.js";
       return;
     }
     if (!publicKeyHex) {
-      console.error("❌ Missing DISCORD_PUBLIC_KEY; webhook server not started.");
-      return;
+      console.log("INFO: DISCORD_PUBLIC_KEY not set; Discord entitlement signature checks are disabled.");
+    }
+    if (!topggWebhookAuth) {
+      console.log("INFO: Top.gg vote webhook auth token not set; Top.gg webhook route disabled.");
     }
 
     const server = http.createServer(async (req, res) => {
@@ -543,7 +548,7 @@ import { getIcon } from "./ui/icons.js";
         return;
       }
 
-      if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== stripeWebhookPath)) {
+      if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== stripeWebhookPath && urlPath !== topggWebhookPath)) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
         return;
@@ -681,8 +686,74 @@ import { getIcon } from "./ui/icons.js";
         return;
       }
 
+      if (urlPath === topggWebhookPath) {
+        if (!topggWebhookAuth) {
+          res.writeHead(503, { "content-type": "text/plain" });
+          res.end("topgg webhook not configured");
+          return;
+        }
+
+        const authHeader = String(req.headers["authorization"] || "").trim();
+        const providedToken = authHeader.toLowerCase().startsWith("bearer ")
+          ? authHeader.slice(7).trim()
+          : authHeader;
+        if (!timingSafeEqual(providedToken, topggWebhookAuth)) {
+          res.writeHead(401, { "content-type": "text/plain" });
+          res.end("invalid authorization");
+          return;
+        }
+
+        if (!db) {
+          res.writeHead(503, { "content-type": "text/plain" });
+          res.end("db unavailable");
+          return;
+        }
+
+        const votedUserId = String(
+          payload?.user
+          ?? payload?.user_id
+          ?? payload?.id
+          ?? ""
+        ).trim();
+
+        if (!votedUserId) {
+          res.writeHead(400, { "content-type": "text/plain" });
+          res.end("missing user id");
+          return;
+        }
+
+        const serverId = getLatestServerIdForUser(db, votedUserId);
+        if (!serverId) {
+          res.writeHead(202, { "content-type": "text/plain" });
+          res.end("missing server");
+          return;
+        }
+
+        let player = getPlayer(db, serverId, votedUserId);
+        if (!player) player = newPlayerProfile(votedUserId);
+
+        const voteResult = registerTopggVote(player, Date.now());
+        if (!voteResult.duplicate) {
+          upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
+        }
+
+        console.log(
+          "Top.gg: Vote registered",
+          JSON.stringify({ userId: votedUserId, serverId, pendingClaims: voteResult.pendingClaims, duplicate: voteResult.duplicate })
+        );
+
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, pending_claims: voteResult.pendingClaims, duplicate: voteResult.duplicate }));
+        return;
+      }
+
       const signature = req.headers["x-signature-ed25519"];
       const timestamp = req.headers["x-signature-timestamp"];
+      if (!publicKeyHex) {
+        res.writeHead(503, { "content-type": "text/plain" });
+        res.end("discord webhook not configured");
+        return;
+      }
       const signatureOk = verifyDiscordSignature({
         publicKeyHex,
         signature,
@@ -777,6 +848,7 @@ import { getIcon } from "./ui/icons.js";
     server.listen(port, () => {
       console.log(`OK: Discord store webhook listening on ${port}${webhookPath}`);
       console.log(`OK: Stripe webhook listening on ${port}${stripeWebhookPath}`);
+      console.log(`OK: Top.gg webhook listening on ${port}${topggWebhookPath}`);
     });
   }
 
