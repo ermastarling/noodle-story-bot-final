@@ -307,6 +307,11 @@ const PROTEIN_ITEM_IDS = new Set([
 ]);
 const SELLABLE_ITEM_IDS = new Set([...MARKET_ITEM_IDS, ...FISHING_ITEM_IDS]);
 
+const LEGACY_RECIPE_ID_ALIASES = {
+  sweet_soy_broth: "sweet_soy_bowl",
+  spring_blossoms_garden_broth: "spring_blossoms_garden_bowl"
+};
+
 function getStarBrothCount(player, brothId) {
   const raw = Math.max(0, Number(player?.star_broths?.[brothId] || 0));
   const invQty = Math.max(0, Number(player?.inv_ingredients?.[brothId] || 0));
@@ -2073,6 +2078,108 @@ function friendlyErrorMessage(errOrCode) {
   return "Something went a little sideways. Please try again.";
 }
 
+function resolveCanonicalRecipeId(recipeId) {
+  const id = String(recipeId ?? "").trim();
+  if (!id) return null;
+  if (content.recipes?.[id]) return id;
+
+  const aliased = LEGACY_RECIPE_ID_ALIASES[id];
+  if (aliased && content.recipes?.[aliased]) return aliased;
+
+  if (id.endsWith("_broth")) {
+    const bowlCandidate = `${id.slice(0, -6)}_bowl`;
+    if (content.recipes?.[bowlCandidate]) return bowlCandidate;
+  }
+
+  return id;
+}
+
+function displayRecipeName(recipeId) {
+  const canonicalId = resolveCanonicalRecipeId(recipeId);
+  const known = canonicalId ? content.recipes?.[canonicalId]?.name : null;
+  if (known) return known;
+  return String(recipeId ?? "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown recipe";
+}
+
+function migrateLegacyRecipeIds(player) {
+  if (!player || typeof player !== "object") return false;
+  let changed = false;
+
+  if (Array.isArray(player.known_recipes)) {
+    const deduped = [];
+    const seen = new Set();
+
+    for (const recipeId of player.known_recipes) {
+      const canonical = resolveCanonicalRecipeId(recipeId) ?? recipeId;
+      if (canonical !== recipeId) changed = true;
+      if (seen.has(canonical)) {
+        changed = true;
+        continue;
+      }
+      seen.add(canonical);
+      deduped.push(canonical);
+    }
+
+    if (changed) {
+      player.known_recipes = deduped;
+    }
+  }
+
+  if (!player.inv_bowls || typeof player.inv_bowls !== "object") return changed;
+
+  const migratedBowls = {};
+  for (const [key, bowl] of Object.entries(player.inv_bowls)) {
+    if (!bowl || typeof bowl !== "object") {
+      migratedBowls[key] = bowl;
+      continue;
+    }
+
+    const sourceRecipeId = bowl.recipe_id ?? String(key).split(":")[0];
+    const canonicalRecipeId = resolveCanonicalRecipeId(sourceRecipeId) ?? sourceRecipeId;
+    const canonicalQuality = normalizeQuality(bowl.quality);
+    const targetKey = canonicalQuality === "standard"
+      ? canonicalRecipeId
+      : `${canonicalRecipeId}:${canonicalQuality}`;
+
+    const qty = Math.max(0, Number(bowl.qty || 0));
+    if (!qty) {
+      changed = true;
+      continue;
+    }
+
+    const existing = migratedBowls[targetKey];
+    if (!existing) {
+      migratedBowls[targetKey] = {
+        ...bowl,
+        recipe_id: canonicalRecipeId,
+        quality: canonicalQuality,
+        tier: bowl.tier ?? content.recipes?.[canonicalRecipeId]?.tier ?? "common",
+        qty
+      };
+    } else {
+      existing.qty = Math.max(0, Number(existing.qty || 0)) + qty;
+      const existingCookedAt = Number(existing.cooked_at || 0);
+      const nextCookedAt = Number(bowl.cooked_at || 0);
+      if (nextCookedAt > existingCookedAt) {
+        existing.cooked_at = nextCookedAt;
+      }
+    }
+
+    if (targetKey !== key || canonicalRecipeId !== sourceRecipeId || canonicalQuality !== normalizeQuality(bowl.quality)) {
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    player.inv_bowls = migratedBowls;
+  }
+
+  return changed;
+}
+
 function ensureServer(serverId) {
   if (!db) return newServerState(serverId);
   let s = getServer(db, serverId);
@@ -2096,6 +2203,7 @@ function ensurePlayer(serverId, userId) {
   if (!Array.isArray(p.known_recipes) || p.known_recipes.length === 0) {
     p.known_recipes = [...(STARTER_PROFILE.known_recipes || [])];
   }
+  migrateLegacyRecipeIds(p);
   if (!p.profile) {
     p.profile = {
       shop_name: "My Noodle Shop",
@@ -3173,7 +3281,7 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     .map(([recipeId, need]) => {
       const ready = getTotalBowlsForRecipe(p, recipeId);
       if (ready >= need) return null;
-      const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+      const rName = displayRecipeName(recipeId);
       const short = need - ready;
       return `• ${rName} — need **${need}**, ready **${ready}** (cook **${short}** more)`;
     })
@@ -3181,7 +3289,7 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
 
   const opts = accepted.slice(0, 25).map(([oid, entry]) => {
     const snap = entry?.order ?? null;
-    const rName = snap ? (content.recipes[snap.recipe_id]?.name ?? snap.recipe_id) : "Unknown Recipe";
+    const rName = snap ? displayRecipeName(snap.recipe_id) : "Unknown Recipe";
     const npcName = snap ? (content.npcs[snap.npc_archetype]?.name ?? snap.npc_archetype) : "Unknown NPC";
     const labelRaw = `${shortOrderId(oid)} — ${rName}`;
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
@@ -3324,7 +3432,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
       const ready = getTotalBowlsForRecipe(p, recipeId);
       const short = Math.max(0, need - ready);
       if (short <= 0) return null; // hide recipes already ready
-      const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
+      const recipeName = displayRecipeName(recipeId);
       const line = `• ${recipeName} — need **${need}**, ready **${ready}** (cook **${short}** more)`;
       return { short, line, recipeName };
     })
@@ -3921,12 +4029,12 @@ if (sub === "pantry") {
 
     const bowlLines = [...bowlGroups.entries()]
       .sort(([a], [b]) => {
-        const nameA = content.recipes?.[a]?.name ?? a;
-        const nameB = content.recipes?.[b]?.name ?? b;
+        const nameA = displayRecipeName(a);
+        const nameB = displayRecipeName(b);
         return String(nameA).localeCompare(String(nameB));
       })
       .map(([recipeId, entries]) => {
-        const recipeName = content.recipes?.[recipeId]?.name ?? recipeId;
+        const recipeName = displayRecipeName(recipeId);
         const counts = entries.reduce((acc, entry) => {
           const q = normalizeQuality(entry.quality);
           acc[q] = (acc[q] ?? 0) + Number(entry.qty || 0);
@@ -5009,11 +5117,11 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const voteEmbed = buildMenuEmbed({
       title: `${getIcon("leaderboard")} Top.gg Vote Rewards`,
       description: [
-        `Vote for the bot, then claim your reward here.`,
+        `Vote for the bot, then claim your reward here! You can vote every 12 hours.`,
         "",
         `Per claim reward: ${rewardLine}`,
         `Ready to claim: **${status.pendingClaims}**`,
-        `Last vote webhook: **${lastVoteLine}**`
+        `Last vote: **${lastVoteLine}**`
       ].join("\n"),
       user: interaction.member ?? interaction.user
     });
@@ -5745,7 +5853,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
 
     const unlockLines = [];
     if (newlyUnlockedRecipes.length) {
-      const recipeNames = newlyUnlockedRecipes.map((rid) => content.recipes?.[rid]?.name ?? rid).join(" · ");
+      const recipeNames = newlyUnlockedRecipes.map((rid) => displayRecipeName(rid)).join(" · ");
       unlockLines.push(`${getIcon("sparkle")} New recipes unlocked: ${recipeNames}.`);
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
@@ -6918,7 +7026,7 @@ ${lines.join("\n")}`;
         const readyTotal = getTotalBowlsForRecipe(p, recipeId);
         const ready = Math.min(needed, readyTotal);
         if (ready <= 0) return null;
-        const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+        const rName = displayRecipeName(recipeId);
         return `• **${rName}** — **${ready}/${needed}** bowl(s) ready`;
       })
       .filter(Boolean);
@@ -7306,7 +7414,7 @@ ${lines.join("\n")}`;
     }
 
     const missingLines = Object.entries(missingByRecipe).map(([recipeId, count]) => {
-      const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+      const rName = displayRecipeName(recipeId);
       const suffix = count === 1 ? "" : "s";
       return `• ${rName} — missing **${count}** bowl${suffix}`;
     });
@@ -8221,7 +8329,7 @@ if (action === "serveall") {
       .map(([recipeId, need]) => {
         const ready = getTotalBowlsForRecipe(p, recipeId);
         if (ready >= need) return null;
-        const rName = content.recipes?.[recipeId]?.name ?? recipeId;
+        const rName = displayRecipeName(recipeId);
         const short = need - ready;
         return `• ${rName} — need **${need}**, ready **${ready}** (cook **${short}** more)`;
       })
