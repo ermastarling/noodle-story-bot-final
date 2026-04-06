@@ -530,7 +530,12 @@ import { getIcon } from "./ui/icons.js";
     const stripeWebhookPath = process.env.NOODLE_STRIPE_WEBHOOK_PATH || "/store/stripe";
     const stripePrecheckPath = process.env.NOODLE_STRIPE_PRECHECK_PATH || "/store/stripe-precheck";
     const topggWebhookPath = process.env.NOODLE_TOPGG_WEBHOOK_PATH || "/topgg/webhook";
-    const topggWebhookAuth = process.env.TOPGG_WEBHOOK_AUTH || process.env.NOODLE_TOPGG_WEBHOOK_AUTH || "";
+    const topggWebhookAuth = process.env.NOODLE_TOPGG_WEBHOOK_AUTH || process.env.TOPGG_WEBHOOK_AUTH || "";
+    const topggWebhookAuthSource = process.env.NOODLE_TOPGG_WEBHOOK_AUTH
+      ? "NOODLE_TOPGG_WEBHOOK_AUTH"
+      : process.env.TOPGG_WEBHOOK_AUTH
+        ? "TOPGG_WEBHOOK_AUTH"
+        : null;
     const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
     const stripeSecret = process.env.NOODLE_STRIPE_WEBHOOK_SECRET || "";
     const stripePrecheckSecret = process.env.NOODLE_STRIPE_PRECHECK_SECRET || "";
@@ -544,6 +549,8 @@ import { getIcon } from "./ui/icons.js";
     }
     if (!topggWebhookAuth) {
       console.log("INFO: Top.gg vote webhook auth token not set; Top.gg webhook route disabled.");
+    } else {
+      console.log(`INFO: Top.gg webhook auth source: ${topggWebhookAuthSource}`);
     }
 
     const server = http.createServer(async (req, res) => {
