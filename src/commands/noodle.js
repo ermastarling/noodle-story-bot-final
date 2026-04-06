@@ -6519,7 +6519,7 @@ ${lines.join("\n")}`;
     advanceTutorial(p, "cook");
     p.lifetime.recipes_cooked = (p.lifetime.recipes_cooked || 0) + 1;
 
-    applyQuestProgress(p, questsContent, userId, { type: "cook", amount: batchOutput }, now);
+    applyQuestProgress(p, questsContent, userId, { type: "cook", amount: batchOutput, recipeTier: r.tier }, now);
     applyCollectionProgressOnCook(p, collectionsContent, content, { recipeId, bowlsCooked: batchOutput });
 
     const lostLine = ingredientsToUse
@@ -7163,6 +7163,9 @@ ${lines.join("\n")}`;
     let totalRep = 0;
     let totalSxp = 0;
     let servedCount = 0;
+    const servedByNpc = {};
+    let seasonalServedCount = 0;
+    let seasonalServedCoins = 0;
     let leveledUp = false;
     let recipeUnlocked = false;
     const unlockedRecipeNames = [];
@@ -7332,6 +7335,15 @@ ${lines.join("\n")}`;
       totalRep += rewards.rep;
       totalSxp += rewards.sxp;
       servedCount += 1;
+      servedByNpc[order.npc_archetype] = (servedByNpc[order.npc_archetype] ?? 0) + 1;
+
+      const recipeTierForQuest = recipe?.tier ?? order.tier;
+      const recipeSeasonForQuest = recipe?.season ?? order.season ?? null;
+      const isSeasonalRecipeServe = recipeTierForQuest === "seasonal" && (!recipeSeasonForQuest || recipeSeasonForQuest === s.season);
+      if (isSeasonalRecipeServe) {
+        seasonalServedCount += 1;
+        seasonalServedCoins += rewards.coins;
+      }
 
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
@@ -7433,9 +7445,26 @@ ${lines.join("\n")}`;
     }
 
     if (servedCount > 0) {
-      applyQuestProgress(p, questsContent, userId, { type: "serve", amount: servedCount }, now);
+      applyQuestProgress(
+        p,
+        questsContent,
+        userId,
+        {
+          type: "serve",
+          amount: servedCount,
+          tierAmounts: { seasonal: seasonalServedCount },
+          npcAmounts: servedByNpc
+        },
+        now
+      );
       if (totalCoins > 0) {
-        applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: totalCoins }, now);
+        applyQuestProgress(
+          p,
+          questsContent,
+          userId,
+          { type: "earn_coins", amount: totalCoins, tierAmounts: { seasonal: seasonalServedCoins } },
+          now
+        );
       }
       unlockBadges(p, badgesContent);
     }

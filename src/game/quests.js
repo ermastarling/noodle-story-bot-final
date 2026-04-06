@@ -2,6 +2,13 @@ import { dayKeyUTC, nowTs } from "../util/time.js";
 import { makeStreamRng, weightedPick } from "../util/rng.js";
 import { applySxpLevelUp } from "./serve.js";
 
+const LEGACY_SEASONAL_TIER_QUEST_IDS = new Set([
+  "seasonal_lantern_service",
+  "seasonal_bowl_batch",
+  "seasonal_shared_table",
+  "seasonal_coin_rush"
+]);
+
 function ensureQuestState(player) {
   if (!player.quests) player.quests = { active: {}, completed: [], claimed: [] };
   if (!player.quests.active) player.quests.active = {};
@@ -76,6 +83,10 @@ function createQuestInstance(template, instanceId, cadence, rewards) {
     cadence,
     type: template.type,
     target: template.target,
+    requires_recipe_tier: template.requires_recipe_tier ?? null,
+    requires_npc_archetypes: Array.isArray(template.requires_npc_archetypes)
+      ? [...template.requires_npc_archetypes]
+      : null,
     progress: 0,
     reward: rewards,
     min_shop_level: template.min_shop_level ?? null,
@@ -83,6 +94,39 @@ function createQuestInstance(template, instanceId, cadence, rewards) {
     completed_at: null,
     claimed_at: null
   };
+}
+
+function getProgressAmountForQuest(quest, event, defaultAmount) {
+  let amount = defaultAmount;
+
+  const requiredNpcs = Array.isArray(quest?.requires_npc_archetypes)
+    ? quest.requires_npc_archetypes.filter(Boolean)
+    : [];
+  if (requiredNpcs.length > 0) {
+    const npcAmounts = event?.npcAmounts ?? null;
+    if (npcAmounts) {
+      amount = requiredNpcs.reduce((sum, npcId) => sum + Math.max(0, Number(npcAmounts[npcId] ?? 0)), 0);
+    } else if (event?.npcArchetype) {
+      amount = requiredNpcs.includes(event.npcArchetype) ? amount : 0;
+    } else {
+      amount = 0;
+    }
+  }
+
+  const requiredTier = quest?.requires_recipe_tier ?? (LEGACY_SEASONAL_TIER_QUEST_IDS.has(quest?.quest_id) ? "seasonal" : null);
+  if (!requiredTier) return amount;
+
+  const tierAmounts = event?.tierAmounts ?? null;
+  if (tierAmounts && Object.prototype.hasOwnProperty.call(tierAmounts, requiredTier)) {
+    return Math.max(0, Number(tierAmounts[requiredTier] ?? 0));
+  }
+
+  const eventTier = event?.recipeTier ?? null;
+  if (eventTier) {
+    return eventTier === requiredTier ? amount : 0;
+  }
+
+  return 0;
 }
 
 function isQuestTemplateEligible(template, playerLevel) {
@@ -213,11 +257,14 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
 export function applyQuestProgress(player, questsContent, userId, event, now = nowTs(), options = {}) {
   const quests = ensureQuests(player, questsContent, userId, now, options);
   const updated = [];
-  const amount = Math.max(0, Number(event.amount ?? 1));
+  const baseAmount = Math.max(0, Number(event.amount ?? 1));
 
   for (const quest of Object.values(quests.active)) {
     if (quest.type !== event.type) continue;
     if (quest.completed_at) continue;
+
+    const amount = getProgressAmountForQuest(quest, event, baseAmount);
+    if (amount <= 0) continue;
 
     quest.progress = Math.min(quest.target, (quest.progress || 0) + amount);
     if (quest.progress >= quest.target) {
