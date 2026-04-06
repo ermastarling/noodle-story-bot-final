@@ -752,7 +752,9 @@ import { getIcon } from "./ui/icons.js";
             userAgent: req.headers["user-agent"] || null,
             forwardedFor: req.headers["x-forwarded-for"] || null,
             cfConnectingIp: req.headers["cf-connecting-ip"] || null,
-            hasAuthorization: Boolean(req.headers["authorization"])
+            hasAuthorization: Boolean(req.headers["authorization"]),
+            hasXTopggAuthorization: Boolean(req.headers["x-topgg-authorization"]),
+            hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"])
           })
         );
 
@@ -762,7 +764,12 @@ import { getIcon } from "./ui/icons.js";
           return;
         }
 
-        const authHeader = String(req.headers["authorization"] || "").trim();
+        const authHeader = String(
+          req.headers["authorization"]
+          || req.headers["x-topgg-authorization"]
+          || req.headers["x-webhook-authorization"]
+          || ""
+        ).trim();
         const providedToken = authHeader.toLowerCase().startsWith("bearer ")
           ? authHeader.slice(7).trim()
           : authHeader;
@@ -772,7 +779,10 @@ import { getIcon } from "./ui/icons.js";
             JSON.stringify({
               bearerFormat: authHeader.toLowerCase().startsWith("bearer "),
               providedLength: providedToken.length,
-              expectedLength: String(topggWebhookAuth).length
+              expectedLength: String(topggWebhookAuth).length,
+              hasAuthorization: Boolean(req.headers["authorization"]),
+              hasXTopggAuthorization: Boolean(req.headers["x-topgg-authorization"]),
+              hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"])
             })
           );
           res.writeHead(401, { "content-type": "text/plain" });
