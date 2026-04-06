@@ -129,6 +129,43 @@ function getProgressAmountForQuest(quest, event, defaultAmount) {
   return 0;
 }
 
+function trimCadenceQuestsInPlace(questsState, cadence, keepCount) {
+  if (!questsState?.active) return;
+  const active = Object.entries(questsState.active)
+    .filter(([, q]) => q?.cadence === cadence)
+    .map(([id, q]) => ({ id, quest: q }));
+
+  if (active.length <= keepCount) return;
+
+  const scoreQuestRetention = (quest) => {
+    if (quest?.completed_at && !quest?.claimed_at) return 3;
+    if (!quest?.completed_at && (quest?.progress ?? 0) > 0) return 2;
+    return 1;
+  };
+
+  active.sort((a, b) => {
+    const scoreDiff = scoreQuestRetention(b.quest) - scoreQuestRetention(a.quest);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const aTarget = Math.max(1, Number(a.quest?.target ?? 1));
+    const bTarget = Math.max(1, Number(b.quest?.target ?? 1));
+    const aRatio = Math.max(0, Number(a.quest?.progress ?? 0)) / aTarget;
+    const bRatio = Math.max(0, Number(b.quest?.progress ?? 0)) / bTarget;
+    if (bRatio !== aRatio) return bRatio - aRatio;
+
+    const aAssigned = Number(a.quest?.assigned_at ?? 0);
+    const bAssigned = Number(b.quest?.assigned_at ?? 0);
+    if (aAssigned !== bAssigned) return aAssigned - bAssigned;
+
+    return a.id.localeCompare(b.id);
+  });
+
+  const toDrop = active.slice(keepCount);
+  for (const entry of toDrop) {
+    delete questsState.active[entry.id];
+  }
+}
+
 function isQuestTemplateEligible(template, playerLevel) {
   const minLevel = Number(template.min_shop_level ?? 0);
   if (Number.isFinite(minLevel) && minLevel > 0 && playerLevel < minLevel) return false;
@@ -239,6 +276,9 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
           quests.active[instanceId] = createQuestInstance(template, instanceId, "story", reward);
         }
       }
+
+      // Trim extras when configured story count is reduced.
+      trimCadenceQuestsInPlace(quests, "story", effectiveStoryCount);
     }
   }
 
@@ -280,6 +320,9 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
           quests.active[instanceId] = createQuestInstance(template, instanceId, "seasonal", reward);
         }
       }
+
+      // Trim extras when configured seasonal count is reduced.
+      trimCadenceQuestsInPlace(quests, "seasonal", seasonalCount);
     }
   }
 
