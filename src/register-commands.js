@@ -70,16 +70,42 @@ async function cleanupLegacyCommands(commands, deleteCommandById) {
   return legacy.length;
 }
 
+async function cleanupGlobalOverlapCommands(commands, targetNames, deleteCommandById) {
+  const names = new Set((targetNames || []).map((n) => String(n ?? "").trim()).filter(Boolean));
+  if (!names.size) return 0;
+
+  const overlap = (commands || []).filter((cmd) => names.has(String(cmd?.name ?? "").trim()));
+  for (const cmd of overlap) {
+    await deleteCommandById(cmd.id);
+  }
+  return overlap.length;
+}
+
 async function main() {
   const { commands } = await import("./commands/index.js");
   const rest = new REST({ version: "10" }).setToken(token);
   const body = commands.map(c => c.data.toJSON());
+  const registeredCommandNames = body.map((cmd) => cmd?.name).filter(Boolean);
 
   console.log(`Registering ${body.length} commands for application ${clientId}`);
 
   if (guildId) {
     await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
     console.log(`Registered guild commands for ${guildId}`);
+
+    // Guild-mode registration can show duplicate entries in that guild when
+    // same-name global commands still exist; remove global overlap by default.
+    const shouldCleanupGlobalOverlap = String(process.env.NOODLE_CLEANUP_GLOBAL_OVERLAP ?? "1") !== "0";
+    if (shouldCleanupGlobalOverlap) {
+      const removedGlobalOverlap = await cleanupGlobalOverlapCommands(
+        await rest.get(Routes.applicationCommands(clientId)),
+        registeredCommandNames,
+        (commandId) => rest.delete(Routes.applicationCommand(clientId, commandId))
+      );
+      if (removedGlobalOverlap > 0) {
+        console.log(`Removed ${removedGlobalOverlap} overlapping global command(s) for guild mode.`);
+      }
+    }
 
     const guildCommands = await rest.get(Routes.applicationGuildCommands(clientId, guildId));
     const removedGuildDuplicates = await cleanupDuplicateCommands(
