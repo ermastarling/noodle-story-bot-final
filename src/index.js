@@ -758,11 +758,14 @@ import { getIcon } from "./ui/icons.js";
             hasXForwardedAuthorization: Boolean(req.headers["x-forwarded-authorization"]),
             hasXOriginalAuthorization: Boolean(req.headers["x-original-authorization"]),
             hasProxyAuthorization: Boolean(req.headers["proxy-authorization"]),
-            hasQueryToken: Boolean(requestUrl.searchParams.get("token") || requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("authorization"))
+            hasQueryToken: Boolean(requestUrl.searchParams.get("token") || requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("authorization")),
+            hasConfiguredAuth: Boolean(topggWebhookAuth),
+            configuredAuthLength: String(topggWebhookAuth || "").length
           })
         );
 
         if (!topggWebhookAuth) {
+          console.log("Top.gg: Webhook auth is not configured on running process");
           res.writeHead(503, { "content-type": "text/plain" });
           res.end("topgg webhook not configured");
           return;
