@@ -196,39 +196,45 @@ function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser, page =
     .setColor(theme.colors.info)
     .setFooter({ text: `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}` });
 
-  const typeNavRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex - 1}:${safePage}`)
-      .setLabel("Type Prev")
-      .setEmoji(getButtonEmoji("back"))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safeIndex <= 0),
-    new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex + 1}:${safePage}`)
-      .setLabel("Type Next")
-      .setEmoji(getButtonEmoji("next"))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safeIndex >= LEADERBOARD_TYPES.length - 1)
-  );
+  const typeCount = LEADERBOARD_TYPES.length;
+  const canNavigate = typeCount > 1 || totalPages > 1;
 
-  const pageNavRow = new ActionRowBuilder().addComponents(
+  let prevType = safeIndex;
+  let prevPage = safePage;
+  if (safePage > 0) {
+    prevPage = safePage - 1;
+  } else {
+    prevType = (safeIndex - 1 + typeCount) % typeCount;
+    prevPage = totalPages - 1;
+  }
+
+  let nextType = safeIndex;
+  let nextPage = safePage;
+  if (safePage < totalPages - 1) {
+    nextPage = safePage + 1;
+  } else {
+    nextType = (safeIndex + 1) % typeCount;
+    nextPage = 0;
+  }
+
+  const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex}:${safePage - 1}`)
-      .setLabel("Page Prev")
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${prevType}:${prevPage}`)
+      .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage <= 0),
+      .setDisabled(!canNavigate),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${safeIndex}:${safePage + 1}`)
-      .setLabel("Page Next")
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${nextType}:${nextPage}`)
+      .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage >= totalPages - 1)
+      .setDisabled(!canNavigate)
   );
 
   return {
     embeds: [embed],
-    components: [typeNavRow, pageNavRow, socialMainMenuRow(userId)]
+    components: [navRow, socialMainMenuRow(userId)]
   };
 }
 
