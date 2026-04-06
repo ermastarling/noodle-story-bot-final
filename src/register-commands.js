@@ -8,6 +8,7 @@ process.env.NOODLE_SKIP_DB = process.env.NOODLE_SKIP_DB || "1";
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID || "";
+const guildRegistrationMode = String(process.env.NOODLE_GUILD_REGISTRATION_MODE || "dev-overrides").toLowerCase();
 
 if (!token || !clientId) {
   console.error("Missing DISCORD_TOKEN or DISCORD_CLIENT_ID in .env");
@@ -81,10 +82,78 @@ async function cleanupGlobalOverlapCommands(commands, targetNames, deleteCommand
   return overlap.length;
 }
 
+async function loadCommandsForRegistration({ includeDevCommands }) {
+  process.env.NOODLE_INCLUDE_DEV_COMMANDS = includeDevCommands ? "1" : "0";
+  const stamp = `${includeDevCommands ? "dev" : "nodev"}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const mod = await import(`./commands/index.js?register=${stamp}`);
+  return mod.commands || [];
+}
+
+function toCommandBody(commands) {
+  return (commands || []).map((c) => c.data.toJSON());
+}
+
+function buildGuildOverrideBody(globalBody, guildBody) {
+  const globalByName = new Map((globalBody || []).map((cmd) => [cmd?.name, cmd]));
+  return (guildBody || []).filter((guildCmd) => {
+    const name = guildCmd?.name;
+    if (!name) return false;
+    const globalCmd = globalByName.get(name);
+    if (!globalCmd) return true;
+    return JSON.stringify(globalCmd) !== JSON.stringify(guildCmd);
+  });
+}
+
 async function main() {
-  const { commands } = await import("./commands/index.js");
   const rest = new REST({ version: "10" }).setToken(token);
-  const body = commands.map(c => c.data.toJSON());
+  const useDevOverridesMode = Boolean(guildId) && guildRegistrationMode !== "full";
+
+  if (useDevOverridesMode) {
+    const globalCommands = await loadCommandsForRegistration({ includeDevCommands: false });
+    const globalBody = toCommandBody(globalCommands);
+    console.log(`Registering ${globalBody.length} global command(s) for application ${clientId}`);
+
+    await rest.put(Routes.applicationCommands(clientId), { body: globalBody });
+    console.log("Registered global commands (Discord can take up to 1 hour to propagate).");
+
+    const removedGlobalDuplicates = await cleanupDuplicateCommands(
+      await rest.get(Routes.applicationCommands(clientId)),
+      (commandId) => rest.delete(Routes.applicationCommand(clientId, commandId))
+    );
+    if (removedGlobalDuplicates > 0) {
+      console.log(`Removed ${removedGlobalDuplicates} duplicate global command(s).`);
+    }
+
+    const guildCommands = await loadCommandsForRegistration({ includeDevCommands: true });
+    const guildBody = toCommandBody(guildCommands);
+    const guildOverrideBody = buildGuildOverrideBody(globalBody, guildBody);
+
+    await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: guildOverrideBody });
+    console.log(`Registered ${guildOverrideBody.length} guild override command(s) for ${guildId}`);
+
+    const removedGuildDuplicates = await cleanupDuplicateCommands(
+      await rest.get(Routes.applicationGuildCommands(clientId, guildId)),
+      (commandId) => rest.delete(Routes.applicationGuildCommand(clientId, guildId, commandId))
+    );
+    if (removedGuildDuplicates > 0) {
+      console.log(`Removed ${removedGuildDuplicates} duplicate guild command(s).`);
+    }
+
+    const shouldCleanupLegacy = String(process.env.NOODLE_CLEANUP_LEGACY_GLOBAL ?? "1") !== "0";
+    if (shouldCleanupLegacy) {
+      const removedLegacyGlobal = await cleanupLegacyCommands(
+        await rest.get(Routes.applicationCommands(clientId)),
+        (commandId) => rest.delete(Routes.applicationCommand(clientId, commandId))
+      );
+      if (removedLegacyGlobal > 0) {
+        console.log(`Removed ${removedLegacyGlobal} legacy global command(s).`);
+      }
+    }
+    return;
+  }
+
+  const commands = await loadCommandsForRegistration({ includeDevCommands: Boolean(guildId) });
+  const body = toCommandBody(commands);
   const registeredCommandNames = body.map((cmd) => cmd?.name).filter(Boolean);
 
   console.log(`Registering ${body.length} commands for application ${clientId}`);

@@ -9262,9 +9262,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 /*  Slash command export                                               */
 /* ------------------------------------------------------------------ */
 
-// Dev commands are only registered when a guild target is explicitly provided.
-// This keeps global registration free of dev-only subcommands regardless of NODE_ENV.
-const includeDevCommands = Boolean(process.env.DISCORD_GUILD_ID);
+// Dev commands are only registered when explicitly requested by registration flow.
+// This keeps global registration free of dev-only subcommands by default.
+const includeDevCommands = String(process.env.NOODLE_INCLUDE_DEV_COMMANDS ?? "0") === "1";
 
 const noodleCommandData = new SlashCommandBuilder()
   .setName("noodle")
