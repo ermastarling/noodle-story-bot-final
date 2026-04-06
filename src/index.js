@@ -43,7 +43,7 @@ import { getIcon } from "./ui/icons.js";
   const { newPlayerProfile } = await import("./game/player.js");
   const { STARTER_PROFILE } = await import("./constants.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
-  const { isFishingUnlocked, FISHING_ITEM_IDS } = await import("./game/fishing.js");
+  const { isFishingUnlocked, FISHING_ITEM_IDS, FISHING_RECIPE_IDS } = await import("./game/fishing.js");
   const { getKitchenUnlockState, KITCHEN_BROTH_RECIPES } = await import("./game/kitchen.js");
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
