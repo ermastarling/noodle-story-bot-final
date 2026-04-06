@@ -1,7 +1,7 @@
 import { nowTs } from "../util/time.js";
 import { applySxpLevelUp } from "./serve.js";
 
-export const TOPGG_BOT_URL = "https://top.gg/bot/1460058511802105976";
+export const TOPGG_BOT_URL = "https://top.gg/bot/1460058511802105976/vote";
 
 const DEFAULT_VOTE_REWARD = {
   coins: 1000,
