@@ -531,11 +531,6 @@ import { getIcon } from "./ui/icons.js";
     const stripePrecheckPath = process.env.NOODLE_STRIPE_PRECHECK_PATH || "/store/stripe-precheck";
     const topggWebhookPath = process.env.NOODLE_TOPGG_WEBHOOK_PATH || "/topgg/webhook";
     const topggWebhookAuth = process.env.NOODLE_TOPGG_WEBHOOK_AUTH || process.env.TOPGG_WEBHOOK_AUTH || "";
-    const topggWebhookAuthSource = process.env.NOODLE_TOPGG_WEBHOOK_AUTH
-      ? "NOODLE_TOPGG_WEBHOOK_AUTH"
-      : process.env.TOPGG_WEBHOOK_AUTH
-        ? "TOPGG_WEBHOOK_AUTH"
-        : null;
     const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
     const stripeSecret = process.env.NOODLE_STRIPE_WEBHOOK_SECRET || "";
     const stripePrecheckSecret = process.env.NOODLE_STRIPE_PRECHECK_SECRET || "";
@@ -549,8 +544,6 @@ import { getIcon } from "./ui/icons.js";
     }
     if (!topggWebhookAuth) {
       console.log("INFO: Top.gg vote webhook auth token not set; Top.gg webhook route disabled.");
-    } else {
-      console.log(`INFO: Top.gg webhook auth source: ${topggWebhookAuthSource}`);
     }
 
     const server = http.createServer(async (req, res) => {
@@ -743,65 +736,17 @@ import { getIcon } from "./ui/icons.js";
       }
 
       if (urlPath === topggWebhookPath) {
-        console.log(
-          "Top.gg: Webhook request received",
-          JSON.stringify({
-            method: req.method,
-            path: urlPath,
-            contentType: req.headers["content-type"] || null,
-            userAgent: req.headers["user-agent"] || null,
-            forwardedFor: req.headers["x-forwarded-for"] || null,
-            cfConnectingIp: req.headers["cf-connecting-ip"] || null,
-            hasAuthorization: Boolean(req.headers["authorization"]),
-            hasXTopggAuthorization: Boolean(req.headers["x-topgg-authorization"]),
-            hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"]),
-            hasXForwardedAuthorization: Boolean(req.headers["x-forwarded-authorization"]),
-            hasXOriginalAuthorization: Boolean(req.headers["x-original-authorization"]),
-            hasProxyAuthorization: Boolean(req.headers["proxy-authorization"]),
-            hasQueryToken: Boolean(requestUrl.searchParams.get("token") || requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("authorization")),
-            hasConfiguredAuth: Boolean(topggWebhookAuth),
-            configuredAuthLength: String(topggWebhookAuth || "").length
-          })
-        );
-
         if (!topggWebhookAuth) {
-          console.log("Top.gg: Webhook auth is not configured on running process");
           res.writeHead(503, { "content-type": "text/plain" });
           res.end("topgg webhook not configured");
           return;
         }
 
-        const authHeader = String(
-          req.headers["authorization"]
-          || req.headers["x-topgg-authorization"]
-          || req.headers["x-webhook-authorization"]
-          || req.headers["x-forwarded-authorization"]
-          || req.headers["x-original-authorization"]
-          || req.headers["proxy-authorization"]
-          || requestUrl.searchParams.get("token")
-          || requestUrl.searchParams.get("auth")
-          || requestUrl.searchParams.get("authorization")
-          || ""
-        ).trim();
+        const authHeader = String(req.headers["authorization"] || "").trim();
         const providedToken = authHeader.toLowerCase().startsWith("bearer ")
           ? authHeader.slice(7).trim()
           : authHeader;
         if (!timingSafeEqual(providedToken, topggWebhookAuth)) {
-          console.log(
-            "Top.gg: Invalid authorization",
-            JSON.stringify({
-              bearerFormat: authHeader.toLowerCase().startsWith("bearer "),
-              providedLength: providedToken.length,
-              expectedLength: String(topggWebhookAuth).length,
-              hasAuthorization: Boolean(req.headers["authorization"]),
-              hasXTopggAuthorization: Boolean(req.headers["x-topgg-authorization"]),
-              hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"]),
-              hasXForwardedAuthorization: Boolean(req.headers["x-forwarded-authorization"]),
-              hasXOriginalAuthorization: Boolean(req.headers["x-original-authorization"]),
-              hasProxyAuthorization: Boolean(req.headers["proxy-authorization"]),
-              hasQueryToken: Boolean(requestUrl.searchParams.get("token") || requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("authorization"))
-            })
-          );
           res.writeHead(401, { "content-type": "text/plain" });
           res.end("invalid authorization");
           return;
@@ -829,21 +774,15 @@ import { getIcon } from "./ui/icons.js";
         ).trim();
 
         if (!votedUserId) {
-          console.log("Top.gg: Vote ignored due to missing user id");
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: true, ignored: true, reason: "missing user id" }));
+          res.writeHead(202, { "content-type": "text/plain" });
+          res.end("missing user id");
           return;
         }
 
-        const latestServerId = getLatestServerIdForUser(db, votedUserId);
-        const serverId = latestServerId;
+        const serverId = getLatestServerIdForUser(db, votedUserId);
         if (!serverId) {
-          console.log(
-            "Top.gg: Vote ignored because user has no known server",
-            JSON.stringify({ userId: votedUserId, latestServerId })
-          );
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: true, ignored: true, reason: "missing server" }));
+          res.writeHead(202, { "content-type": "text/plain" });
+          res.end("missing server");
           return;
         }
 
@@ -855,10 +794,7 @@ import { getIcon } from "./ui/icons.js";
           upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
         }
 
-        console.log(
-          "Top.gg: Vote registered",
-          JSON.stringify({ userId: votedUserId, serverId, latestServerId, pendingClaims: voteResult.pendingClaims, duplicate: voteResult.duplicate })
-        );
+        console.log("Top.gg: Vote registered", JSON.stringify({ userId: votedUserId, serverId, pendingClaims: voteResult.pendingClaims, duplicate: voteResult.duplicate }));
 
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true, pending_claims: voteResult.pendingClaims, duplicate: voteResult.duplicate }));
