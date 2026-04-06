@@ -51,6 +51,7 @@ import { getIcon } from "./ui/icons.js";
   const { getAvailableRecipes } = await import("./game/resilience.js");
   const { registerTopggVote } = await import("./game/voteRewards.js");
   const { noodleCommand } = await import("./commands/noodle.js");
+  const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
   const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
