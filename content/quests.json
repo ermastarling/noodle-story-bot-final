@@ -8,7 +8,7 @@
       "type": "serve",
       "target": 5,
       "weight": 1,
-      "reward": { "coins": 40, "sxp": 10, "rep": 2 }
+      "reward": { "coins": 46, "sxp": 12, "rep": 2 }
     },
     {
       "quest_id": "cook_5",
@@ -18,7 +18,7 @@
       "type": "cook",
       "target": 5,
       "weight": 1,
-      "reward": { "coins": 45, "sxp": 15, "rep": 1 }
+      "reward": { "coins": 48, "sxp": 14, "rep": 2 }
     },
     {
       "quest_id": "forage_3",
@@ -28,7 +28,7 @@
       "type": "forage",
       "target": 3,
       "weight": 1,
-      "reward": { "coins": 30, "sxp": 8, "rep": 1 }
+      "reward": { "coins": 34, "sxp": 10, "rep": 1 }
     },
     {
       "quest_id": "buy_5",
@@ -38,7 +38,7 @@
       "type": "buy",
       "target": 5,
       "weight": 1,
-      "reward": { "coins": 30, "sxp": 6, "rep": 1 }
+      "reward": { "coins": 36, "sxp": 10, "rep": 1 }
     },
     {
       "quest_id": "fishing_catch_daily",
@@ -49,7 +49,7 @@
       "target": 5,
       "weight": 1,
       "min_shop_level": 65,
-      "reward": { "coins": 45, "sxp": 14, "rep": 2 }
+      "reward": { "coins": 52, "sxp": 16, "rep": 2 }
     },
     {
       "quest_id": "broth_collect_daily",
@@ -60,7 +60,7 @@
       "target": 3,
       "weight": 1,
       "min_shop_level": 45,
-      "reward": { "coins": 40, "sxp": 12, "rep": 1 }
+      "reward": { "coins": 46, "sxp": 14, "rep": 2 }
     },
     {
       "quest_id": "garden_compost_daily",
@@ -71,7 +71,7 @@
       "target": 5,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 40, "sxp": 12, "rep": 2 }
+      "reward": { "coins": 46, "sxp": 14, "rep": 2 }
     },
     {
       "quest_id": "garden_plant_daily",
@@ -82,7 +82,7 @@
       "target": 3,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 38, "sxp": 12, "rep": 1 }
+      "reward": { "coins": 42, "sxp": 13, "rep": 1 }
     },
     {
       "quest_id": "garden_harvest_daily",
@@ -93,7 +93,7 @@
       "target": 3,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 42, "sxp": 12, "rep": 2 }
+      "reward": { "coins": 46, "sxp": 14, "rep": 2 }
     },
     {
       "quest_id": "tip_player_daily",
@@ -103,7 +103,7 @@
       "type": "tip_player",
       "target": 1,
       "weight": 1,
-      "reward": { "coins": 35, "sxp": 10, "rep": 1 }
+      "reward": { "coins": 38, "sxp": 11, "rep": 1 }
     },
     {
       "quest_id": "bless_player_daily",
@@ -113,7 +113,7 @@
       "type": "bless_player",
       "target": 1,
       "weight": 1,
-      "reward": { "coins": 30, "sxp": 10, "rep": 1 }
+      "reward": { "coins": 36, "sxp": 11, "rep": 1 }
     },
     {
       "quest_id": "shared_order_daily",
@@ -124,7 +124,7 @@
       "target": 1,
       "weight": 1,
       "min_shop_level": 30,
-      "reward": { "coins": 50, "sxp": 18, "rep": 3 }
+      "reward": { "coins": 56, "sxp": 20, "rep": 3 }
     },
     {
       "quest_id": "serve_breakfast_club",
@@ -135,7 +135,7 @@
       "target": 10,
       "weight": 1,
       "min_shop_level": 20,
-      "reward": { "coins": 60, "sxp": 22, "rep": 4 }
+      "reward": { "coins": 78, "sxp": 28, "rep": 5 }
     },
     {
       "quest_id": "cook_morning_special",
@@ -146,7 +146,7 @@
       "target": 4,
       "weight": 1,
       "min_shop_level": 12,
-      "reward": { "coins": 50, "sxp": 20, "rep": 2 }
+      "reward": { "coins": 54, "sxp": 20, "rep": 2 }
     },
     {
       "quest_id": "coins_200",
@@ -156,7 +156,7 @@
       "type": "earn_coins",
       "target": 200,
       "weight": 1,
-      "reward": { "coins": 45, "sxp": 8, "rep": 2 }
+      "reward": { "coins": 48, "sxp": 10, "rep": 2 }
     },
     {
       "quest_id": "forage_morning_run",
@@ -167,7 +167,7 @@
       "target": 4,
       "weight": 1,
       "min_shop_level": 8,
-      "reward": { "coins": 35, "sxp": 12, "rep": 2 }
+      "reward": { "coins": 40, "sxp": 13, "rep": 2 }
     },
     {
       "quest_id": "bless_crafters",
@@ -178,7 +178,7 @@
       "target": 2,
       "weight": 1,
       "min_shop_level": 10,
-      "reward": { "coins": 35, "sxp": 14, "rep": 3 }
+      "reward": { "coins": 46, "sxp": 16, "rep": 3 }
     },
     {
       "quest_id": "serve_50",
@@ -188,7 +188,7 @@
       "type": "serve",
       "target": 50,
       "weight": 1,
-      "reward": { "coins": 220, "sxp": 80, "rep": 15 }
+      "reward": { "coins": 260, "sxp": 96, "rep": 16 }
     },
     {
       "quest_id": "shared_order_complete_weekly",
@@ -198,7 +198,7 @@
       "type": "shared_order_complete",
       "target": 1,
       "weight": 1,
-      "reward": { "coins": 260, "sxp": 90, "rep": 16 }
+      "reward": { "coins": 280, "sxp": 100, "rep": 17 }
     },
     {
       "quest_id": "garden_harvest_weekly",
@@ -209,7 +209,7 @@
       "target": 20,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 210, "sxp": 80, "rep": 14 }
+      "reward": { "coins": 250, "sxp": 92, "rep": 15 }
     },
     {
       "quest_id": "cook_35",
@@ -219,7 +219,7 @@
       "type": "cook",
       "target": 35,
       "weight": 1,
-      "reward": { "coins": 200, "sxp": 70, "rep": 12 }
+      "reward": { "coins": 240, "sxp": 88, "rep": 14 }
     },
     {
       "quest_id": "fishing_catch_weekly",
@@ -230,7 +230,7 @@
       "target": 40,
       "weight": 1,
       "min_shop_level": 65,
-      "reward": { "coins": 260, "sxp": 90, "rep": 15 }
+      "reward": { "coins": 290, "sxp": 104, "rep": 17 }
     },
     {
       "quest_id": "broth_collect_weekly",
@@ -241,7 +241,7 @@
       "target": 20,
       "weight": 1,
       "min_shop_level": 45,
-      "reward": { "coins": 240, "sxp": 80, "rep": 14 }
+      "reward": { "coins": 270, "sxp": 94, "rep": 15 }
     },
     {
       "quest_id": "buy_20",
@@ -251,7 +251,7 @@
       "type": "buy",
       "target": 20,
       "weight": 1,
-      "reward": { "coins": 230, "sxp": 85, "rep": 14 }
+      "reward": { "coins": 255, "sxp": 92, "rep": 15 }
     },
     {
       "quest_id": "tip_player_weekly",
@@ -262,7 +262,7 @@
       "target": 3,
       "weight": 1,
       "min_shop_level": 15,
-      "reward": { "coins": 240, "sxp": 88, "rep": 15 }
+      "reward": { "coins": 260, "sxp": 96, "rep": 16 }
     },
     {
       "quest_id": "earn_1500",
@@ -272,7 +272,7 @@
       "type": "earn_coins",
       "target": 1500,
       "weight": 1,
-      "reward": { "coins": 250, "sxp": 95, "rep": 16 }
+      "reward": { "coins": 280, "sxp": 104, "rep": 17 }
     },
     {
       "quest_id": "garden_compost_weekly",
@@ -283,7 +283,7 @@
       "target": 15,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 230, "sxp": 82, "rep": 13 }
+      "reward": { "coins": 255, "sxp": 92, "rep": 15 }
     },
     {
       "quest_id": "forage_market_run",
@@ -294,7 +294,7 @@
       "target": 12,
       "weight": 1,
       "min_shop_level": 15,
-      "reward": { "coins": 220, "sxp": 80, "rep": 12 }
+      "reward": { "coins": 245, "sxp": 88, "rep": 14 }
     },
     {
       "quest_id": "tip_guild_support",
@@ -305,7 +305,7 @@
       "target": 2,
       "weight": 1,
       "min_shop_level": 15,
-      "reward": { "coins": 250, "sxp": 90, "rep": 15 }
+      "reward": { "coins": 250, "sxp": 92, "rep": 15 }
     },
     {
       "quest_id": "garden_plant_renewal",
@@ -316,7 +316,7 @@
       "target": 10,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 230, "sxp": 84, "rep": 14 }
+      "reward": { "coins": 255, "sxp": 92, "rep": 15 }
     },
     {
       "quest_id": "garden_compost_renewal",
@@ -327,7 +327,7 @@
       "target": 20,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 240, "sxp": 86, "rep": 15 }
+      "reward": { "coins": 270, "sxp": 98, "rep": 16 }
     },
     {
       "quest_id": "serve_500",
@@ -337,7 +337,7 @@
       "type": "serve",
       "target": 500,
       "weight": 1,
-      "reward": { "coins": 1000, "sxp": 520, "rep": 100 }
+      "reward": { "coins": 1200, "sxp": 600, "rep": 110 }
     },
     {
       "quest_id": "coins_5000",
@@ -347,7 +347,7 @@
       "type": "earn_coins",
       "target": 5000,
       "weight": 1,
-      "reward": { "coins": 1000, "sxp": 500, "rep": 90 }
+      "reward": { "coins": 1180, "sxp": 580, "rep": 105 }
     },
     {
       "quest_id": "garden_harvest_monthly",
@@ -358,7 +358,7 @@
       "target": 60,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 980, "sxp": 480, "rep": 88 }
+      "reward": { "coins": 1160, "sxp": 560, "rep": 102 }
     },
     {
       "quest_id": "garden_compost_monthly",
@@ -369,330 +369,388 @@
       "target": 40,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 980, "sxp": 450, "rep": 90 }
+      "reward": { "coins": 1120, "sxp": 540, "rep": 100 }
+    },
+    {
+      "quest_id": "cook_320_monthly",
+      "name": "Season-Long Simmer",
+      "description": "Cook 320 bowls over the month to keep your kitchen in full stride.",
+      "cadence": "monthly",
+      "type": "cook",
+      "target": 320,
+      "weight": 1,
+      "min_shop_level": 20,
+      "reward": { "coins": 1140, "sxp": 560, "rep": 102 }
+    },
+    {
+      "quest_id": "buy_220_monthly",
+      "name": "Pantry Quartermaster",
+      "description": "Buy 220 ingredients this month to keep every prep station stocked.",
+      "cadence": "monthly",
+      "type": "buy",
+      "target": 220,
+      "weight": 1,
+      "min_shop_level": 15,
+      "reward": { "coins": 1100, "sxp": 540, "rep": 100 }
+    },
+    {
+      "quest_id": "story_early_morning_counter",
+      "name": "Early Morning Counter",
+      "description": "Serve 48 bowls to Morning Commuter and Sleepy Traveler regulars before the city fully wakes.",
+      "cadence": "story",
+      "type": "serve",
+      "target": 48,
+      "weight": 1,
+      "requires_npc_archetypes": ["morning_commuter", "sleepy_traveler"],
+      "min_shop_level": 10,
+      "reward": { "coins": 1536, "sxp": 446, "rep": 79 }
+    },
+    {
+      "quest_id": "story_apprentice_notebook_run",
+      "name": "Apprentice Notebook Run",
+      "description": "Serve 49 bowls to Curious Apprentice and Wandering Scholar regulars as they compare notes.",
+      "cadence": "story",
+      "type": "serve",
+      "target": 49,
+      "weight": 1,
+      "requires_npc_archetypes": ["curious_apprentice", "wandering_scholar"],
+      "min_shop_level": 14,
+      "reward": { "coins": 1568, "sxp": 456, "rep": 81 }
+    },
+    {
+      "quest_id": "story_market_lane_regulars",
+      "name": "Market Lane Regulars",
+      "description": "Serve 50 bowls to Book Cart Vendor and Quiet Artist regulars throughout the month.",
+      "cadence": "story",
+      "type": "serve",
+      "target": 50,
+      "weight": 1,
+      "requires_npc_archetypes": ["book_cart_vendor", "quiet_artist"],
+      "min_shop_level": 18,
+      "reward": { "coins": 1600, "sxp": 465, "rep": 83 }
     },
     {
       "quest_id": "story_lantern_feast",
       "name": "Lantern Feast",
-      "description": "Serve glowing bowls to the Lantern Storyteller regulars and keep their stories warm.",
+      "description": "Serve 55 bowls to the Lantern Storyteller regulars and keep their stories warm.",
       "cadence": "story",
       "type": "serve",
-      "target": 15,
+      "target": 55,
       "weight": 1,
       "requires_npc_archetypes": ["lantern_storyteller"],
       "min_shop_level": 40,
-      "reward": { "coins": 480, "sxp": 140, "rep": 25 }
+      "reward": { "coins": 1760, "sxp": 512, "rep": 91 }
     },
     {
       "quest_id": "story_dawn_dock_breakfast",
       "name": "Dawn Dock Breakfast",
-      "description": "Serve 18 bowls to Dockside Fisher and Canal Boat Hand regulars before the first freight bell.",
+      "description": "Serve 58 bowls to Dockside Fisher and Canal Boat Hand regulars before the first freight bell.",
       "cadence": "story",
       "type": "serve",
-      "target": 18,
+      "target": 58,
       "weight": 1,
       "requires_npc_archetypes": ["dockside_fisher", "canal_boat_hand"],
       "min_shop_level": 38,
-      "reward": { "coins": 576, "sxp": 168, "rep": 30 }
+      "reward": { "coins": 1856, "sxp": 539, "rep": 96 }
     },
     {
       "quest_id": "story_noon_scholars_table",
       "name": "Scholars' Noon Table",
-      "description": "Serve 16 bowls to Wandering Scholar and Archive Caretaker regulars between lectures.",
+      "description": "Serve 56 bowls to Wandering Scholar and Archive Caretaker regulars between lectures.",
       "cadence": "story",
       "type": "serve",
-      "target": 16,
+      "target": 56,
       "weight": 1,
       "requires_npc_archetypes": ["wandering_scholar", "archive_caretaker"],
       "min_shop_level": 42,
-      "reward": { "coins": 512, "sxp": 149, "rep": 27 }
+      "reward": { "coins": 1792, "sxp": 521, "rep": 92 }
     },
     {
       "quest_id": "story_evening_guard_shift",
       "name": "Evening Guard Shift",
-      "description": "Serve 20 bowls to Bridge Sentry and Stormwatch Lookout regulars heading into night patrol.",
+      "description": "Serve 50 bowls to Bridge Sentry and Stormwatch Lookout regulars heading into night patrol.",
       "cadence": "story",
       "type": "serve",
-      "target": 20,
+      "target": 50,
       "weight": 1,
       "requires_npc_archetypes": ["bridge_sentry", "stormwatch_lookout"],
       "min_shop_level": 45,
-      "reward": { "coins": 640, "sxp": 187, "rep": 33 }
+      "reward": { "coins": 1600, "sxp": 465, "rep": 83 }
     },
     {
       "quest_id": "story_midnight_musicians",
       "name": "Midnight Musicians",
-      "description": "Serve 14 bowls to Traveling Bard and Stone-Bridge Musician regulars after the encore.",
+      "description": "Serve 54 bowls to Traveling Bard and Stone-Bridge Musician regulars after the encore.",
       "cadence": "story",
       "type": "serve",
-      "target": 14,
+      "target": 54,
       "weight": 1,
       "requires_npc_archetypes": ["traveling_bard", "stone_bridge_musician"],
       "min_shop_level": 40,
-      "reward": { "coins": 448, "sxp": 131, "rep": 23 }
+      "reward": { "coins": 1728, "sxp": 502, "rep": 89 }
     },
     {
       "quest_id": "story_sunrise_commuter_line",
       "name": "Sunrise Commuter Line",
-      "description": "Serve 12 bowls to Morning Commuter and Sleepy Traveler regulars before first light fades.",
+      "description": "Serve 52 bowls to Morning Commuter and Sleepy Traveler regulars before first light fades.",
       "cadence": "story",
       "type": "serve",
-      "target": 12,
+      "target": 52,
       "weight": 1,
       "requires_npc_archetypes": ["morning_commuter", "sleepy_traveler"],
       "min_shop_level": 22,
-      "reward": { "coins": 384, "sxp": 112, "rep": 20 }
+      "reward": { "coins": 1664, "sxp": 484, "rep": 86 }
     },
     {
       "quest_id": "story_riverfront_shift",
       "name": "Riverfront Shift",
-      "description": "Serve 17 bowls to Canal Boat Hand and Harbor Cartographer regulars before the tide turns.",
+      "description": "Serve 57 bowls to Canal Boat Hand and Harbor Cartographer regulars before the tide turns.",
       "cadence": "story",
       "type": "serve",
-      "target": 17,
+      "target": 57,
       "weight": 1,
       "requires_npc_archetypes": ["canal_boat_hand", "harbor_cartographer"],
       "min_shop_level": 36,
-      "reward": { "coins": 544, "sxp": 159, "rep": 28 }
+      "reward": { "coins": 1824, "sxp": 530, "rep": 94 }
     },
     {
       "quest_id": "story_courier_rush_window",
       "name": "Courier Rush Window",
-      "description": "Serve 19 bowls to Rain-Soaked Courier and Mountain Messenger regulars during the delivery crush.",
+      "description": "Serve 59 bowls to Rain-Soaked Courier and Mountain Messenger regulars during the delivery crush.",
       "cadence": "story",
       "type": "serve",
-      "target": 19,
+      "target": 59,
       "weight": 1,
       "requires_npc_archetypes": ["rain_soaked_courier", "mountain_messenger"],
       "min_shop_level": 46,
-      "reward": { "coins": 608, "sxp": 177, "rep": 32 }
+      "reward": { "coins": 1888, "sxp": 549, "rep": 97 }
     },
     {
       "quest_id": "story_market_square_lunch",
       "name": "Market Square Lunch",
-      "description": "Serve 15 bowls to Book Cart Vendor and Market Inspector regulars between peak stalls.",
+      "description": "Serve 55 bowls to Book Cart Vendor and Market Inspector regulars between peak stalls.",
       "cadence": "story",
       "type": "serve",
-      "target": 15,
+      "target": 55,
       "weight": 1,
       "requires_npc_archetypes": ["book_cart_vendor", "market_inspector"],
       "min_shop_level": 30,
-      "reward": { "coins": 480, "sxp": 140, "rep": 25 }
+      "reward": { "coins": 1760, "sxp": 512, "rep": 91 }
     },
     {
       "quest_id": "story_workshop_heatwave",
       "name": "Workshop Heatwave",
-      "description": "Serve 18 bowls to Ember Glassblower and Clockmaker regulars before the furnaces cool.",
+      "description": "Serve 58 bowls to Ember Glassblower and Clockmaker regulars before the furnaces cool.",
       "cadence": "story",
       "type": "serve",
-      "target": 18,
+      "target": 58,
       "weight": 1,
       "requires_npc_archetypes": ["ember_glassblower", "clockmaker"],
       "min_shop_level": 44,
-      "reward": { "coins": 576, "sxp": 168, "rep": 30 }
+      "reward": { "coins": 1856, "sxp": 539, "rep": 96 }
     },
     {
       "quest_id": "story_aftercare_supper",
       "name": "Aftercare Supper",
-      "description": "Serve 13 bowls to Late Shift Nurse and Hearth Grandparent regulars after a long day.",
+      "description": "Serve 53 bowls to Late Shift Nurse and Hearth Grandparent regulars after a long day.",
       "cadence": "story",
       "type": "serve",
-      "target": 13,
+      "target": 53,
       "weight": 1,
       "requires_npc_archetypes": ["late_shift_nurse", "hearth_grandparent"],
       "min_shop_level": 28,
-      "reward": { "coins": 416, "sxp": 121, "rep": 22 }
+      "reward": { "coins": 1696, "sxp": 493, "rep": 87 }
     },
     {
       "quest_id": "story_twilight_watchfires",
       "name": "Twilight Watchfires",
-      "description": "Serve 21 bowls to Skyrail Conductor and Stormwatch Lookout regulars before the storm sirens.",
+      "description": "Serve 51 bowls to Skyrail Conductor and Stormwatch Lookout regulars before the storm sirens.",
       "cadence": "story",
       "type": "serve",
-      "target": 21,
+      "target": 51,
       "weight": 1,
       "requires_npc_archetypes": ["skyrail_conductor", "stormwatch_lookout"],
       "min_shop_level": 52,
-      "reward": { "coins": 672, "sxp": 196, "rep": 35 }
+      "reward": { "coins": 1632, "sxp": 474, "rep": 84 }
     },
     {
       "quest_id": "story_festival_tailor_break",
       "name": "Festival Tailor Break",
-      "description": "Serve 16 bowls to Moon Festival Tailor and Festival-Goer regulars during lantern setup.",
+      "description": "Serve 56 bowls to Moon Festival Tailor and Festival-Goer regulars during lantern setup.",
       "cadence": "story",
       "type": "serve",
-      "target": 16,
+      "target": 56,
       "weight": 1,
       "requires_npc_archetypes": ["moon_festival_tailor", "festival_goer"],
       "min_shop_level": 42,
-      "reward": { "coins": 512, "sxp": 149, "rep": 27 }
+      "reward": { "coins": 1792, "sxp": 521, "rep": 92 }
     },
     {
       "quest_id": "story_midnight_archive_round",
       "name": "Midnight Archive Round",
-      "description": "Serve 22 bowls to Archive Caretaker and Window Scribe regulars as the stacks go quiet.",
+      "description": "Serve 52 bowls to Archive Caretaker and Window Scribe regulars as the stacks go quiet.",
       "cadence": "story",
       "type": "serve",
-      "target": 22,
+      "target": 52,
       "weight": 1,
       "requires_npc_archetypes": ["archive_caretaker", "window_scribe"],
       "min_shop_level": 58,
-      "reward": { "coins": 704, "sxp": 205, "rep": 37 }
+      "reward": { "coins": 1664, "sxp": 484, "rep": 86 }
     },
     {
       "quest_id": "story_moonpath_whispers",
       "name": "Moonpath Whispers",
-      "description": "Serve 24 bowls to Moonlit Spirit and Forest Spirit regulars under silver lanterns.",
+      "description": "Serve 54 bowls to Moonlit Spirit and Forest Spirit regulars under silver lanterns.",
       "cadence": "story",
       "type": "serve",
-      "target": 24,
+      "target": 54,
       "weight": 1,
       "requires_npc_archetypes": ["moonlit_spirit", "forest_spirit"],
       "min_shop_level": 65,
-      "reward": { "coins": 768, "sxp": 224, "rep": 40 }
+      "reward": { "coins": 1728, "sxp": 502, "rep": 89 }
     },
     {
       "quest_id": "seasonal_lantern_service",
       "name": "Lantern Night Service",
-      "description": "Serve 14 seasonal recipe bowls.",
+      "description": "Serve 56 seasonal recipe bowls.",
       "cadence": "seasonal",
       "type": "serve",
-      "target": 14,
+      "target": 56,
       "weight": 1,
       "requires_recipe_tier": "seasonal",
       "min_shop_level": 28,
-      "reward": { "coins": 430, "sxp": 152, "rep": 23 }
+      "reward": { "coins": 1720, "sxp": 608, "rep": 92 }
     },
     {
       "quest_id": "seasonal_bowl_batch",
       "name": "Seasonal Bowl Batch",
-      "description": "Cook 10 seasonal recipe bowls.",
+      "description": "Cook 40 seasonal recipe bowls.",
       "cadence": "seasonal",
       "type": "cook",
-      "target": 10,
+      "target": 40,
       "weight": 1,
       "requires_recipe_tier": "seasonal",
       "min_shop_level": 24,
-      "reward": { "coins": 390, "sxp": 145, "rep": 20 }
+      "reward": { "coins": 1560, "sxp": 580, "rep": 80 }
     },
     {
       "quest_id": "seasonal_market_stock",
       "name": "Festival Pantry Stock",
-      "description": "Buy 16 seasonal ingredients before the Festival-Goer rush begins.",
+      "description": "Buy 64 seasonal ingredients before the Festival-Goer rush begins.",
       "cadence": "seasonal",
       "type": "buy",
-      "target": 16,
+      "target": 64,
       "weight": 1,
       "min_shop_level": 20,
-      "reward": { "coins": 360, "sxp": 132, "rep": 19 }
+      "reward": { "coins": 1440, "sxp": 528, "rep": 76 }
     },
     {
       "quest_id": "seasonal_forage_moonherbs",
       "name": "Moonherb Forage",
-      "description": "Forage 9 times to gather herbs and roots for seasonal broth prep.",
+      "description": "Forage 36 times to gather herbs and roots for seasonal broth prep.",
       "cadence": "seasonal",
       "type": "forage",
-      "target": 9,
+      "target": 36,
       "weight": 1,
       "min_shop_level": 18,
-      "reward": { "coins": 350, "sxp": 128, "rep": 18 }
+      "reward": { "coins": 1400, "sxp": 512, "rep": 72 }
     },
     {
       "quest_id": "seasonal_tide_catch",
       "name": "Tide Lantern Catch",
-      "description": "Catch 20 fish for seasonal specials favored by Dockside Fisher regulars.",
+      "description": "Catch 80 fish for seasonal specials favored by Dockside Fisher regulars.",
       "cadence": "seasonal",
       "type": "fishing_catch",
-      "target": 20,
+      "target": 80,
       "weight": 1,
       "min_shop_level": 65,
-      "reward": { "coins": 460, "sxp": 166, "rep": 24 }
+      "reward": { "coins": 1840, "sxp": 664, "rep": 96 }
     },
     {
       "quest_id": "seasonal_broth_reserve",
       "name": "Seasonal Broth Reserve",
-      "description": "Collect 12 broths to keep seasonal bowl service flowing through the night.",
+      "description": "Collect 48 broths to keep seasonal bowl service flowing through the night.",
       "cadence": "seasonal",
       "type": "broth_collect",
-      "target": 12,
+      "target": 48,
       "weight": 1,
       "min_shop_level": 45,
-      "reward": { "coins": 410, "sxp": 150, "rep": 22 }
+      "reward": { "coins": 1640, "sxp": 600, "rep": 88 }
     },
     {
       "quest_id": "seasonal_garden_turnover",
       "name": "Seasonal Garden Turnover",
-      "description": "Plant 8 seasonal seeds for the next wave of fresh bowl ingredients.",
+      "description": "Plant 32 seasonal seeds for the next wave of fresh bowl ingredients.",
       "cadence": "seasonal",
       "type": "garden_plant",
-      "target": 8,
+      "target": 32,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 370, "sxp": 138, "rep": 20 }
+      "reward": { "coins": 1480, "sxp": 552, "rep": 80 }
     },
     {
       "quest_id": "seasonal_harvest_crate",
       "name": "Harvest Crate Prep",
-      "description": "Harvest 16 plots to crate fresh seasonal ingredients for bowl toppings.",
+      "description": "Harvest 64 plots to crate fresh seasonal ingredients for bowl toppings.",
       "cadence": "seasonal",
       "type": "garden_harvest",
-      "target": 16,
+      "target": 64,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 420, "sxp": 154, "rep": 23 }
+      "reward": { "coins": 1680, "sxp": 616, "rep": 92 }
     },
     {
       "quest_id": "seasonal_shared_table",
       "name": "Seasonal Supper Rush",
-      "description": "Serve 16 seasonal recipe bowls.",
+      "description": "Serve 64 seasonal recipe bowls.",
       "cadence": "seasonal",
       "type": "serve",
-      "target": 16,
+      "target": 64,
       "weight": 1,
       "requires_recipe_tier": "seasonal",
       "min_shop_level": 30,
-      "reward": { "coins": 480, "sxp": 170, "rep": 25 }
+      "reward": { "coins": 1920, "sxp": 680, "rep": 100 }
     },
     {
       "quest_id": "seasonal_coin_rush",
       "name": "Seasonal Coin Rush",
-      "description": "Earn 1800c from serving seasonal recipe bowls.",
+      "description": "Earn 7200c from serving seasonal recipe bowls.",
       "cadence": "seasonal",
       "type": "earn_coins",
-      "target": 1800,
+      "target": 7200,
       "weight": 1,
       "requires_recipe_tier": "seasonal",
       "min_shop_level": 55,
-      "reward": { "coins": 500, "sxp": 180, "rep": 26 }
+      "reward": { "coins": 2000, "sxp": 720, "rep": 104 }
     },
     {
       "quest_id": "seasonal_moonlit_catch",
       "name": "Moonlit Catch",
-      "description": "Reel in 25 fish under the seasonal glow and keep your nets brimming.",
+      "description": "Reel in 100 fish under the seasonal glow and keep your nets brimming.",
       "cadence": "seasonal",
       "type": "fishing_catch",
-      "target": 25,
+      "target": 100,
       "weight": 1,
       "min_shop_level": 65,
-      "reward": { "coins": 420, "sxp": 150, "rep": 22 }
+      "reward": { "coins": 1680, "sxp": 600, "rep": 88 }
     },
     {
       "quest_id": "seasonal_garden_blossom",
       "name": "Garden Blossom",
-      "description": "Plant 12 seasonal seeds while lanterns glow.",
+      "description": "Plant 48 seasonal seeds while lanterns glow.",
       "cadence": "seasonal",
       "type": "garden_plant",
-      "target": 12,
+      "target": 48,
       "weight": 1,
       "min_shop_level": 25,
-      "reward": { "coins": 450, "sxp": 160, "rep": 24 }
+      "reward": { "coins": 1800, "sxp": 640, "rep": 96 }
     }
   ],
   "counts": {
     "daily": 4,
     "weekly": 3,
     "monthly": 2,
-    "story": 4,
+    "story": 3,
     "seasonal": 1
   },
   "cadence_multipliers": {

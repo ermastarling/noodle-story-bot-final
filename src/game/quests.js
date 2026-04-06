@@ -210,12 +210,13 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
     }
   } else {
     const storyTemplates = templates.filter((q) => q.cadence === "story" && isQuestTemplateEligible(q, playerLevel));
+    const effectiveStoryCount = Math.min(storyCount, storyTemplates.length);
     if (storyTemplates.length > 0 && storyKey !== quests.story_key) {
       for (const [id, quest] of Object.entries(quests.active)) {
         if (quest.cadence === "story") delete quests.active[id];
       }
       const rng = makeStreamRng({ mode: "seeded", seed: 4041, streamName: "quests-story", serverId: userId, dayKey: storyKey });
-      const picks = pickQuestTemplates(rng, storyTemplates, storyCount);
+      const picks = pickQuestTemplates(rng, storyTemplates, effectiveStoryCount);
       for (const template of picks) {
         const instanceId = `${template.quest_id}:${storyKey}`;
         const reward = applyRewardMultiplier(template.reward ?? {}, multipliers.story ?? 1);
@@ -225,7 +226,7 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
     } else if (storyTemplates.length > 0 && quests.story_key === storyKey) {
       // Backfill story quests for existing players when configured story count increases.
       const activeStoryQuests = Object.values(quests.active).filter((q) => q.cadence === "story");
-      const missingStorySlots = Math.max(0, storyCount - activeStoryQuests.length);
+      const missingStorySlots = Math.max(0, effectiveStoryCount - activeStoryQuests.length);
       if (missingStorySlots > 0) {
         const activeStoryIds = new Set(activeStoryQuests.map((q) => q.quest_id));
         const availableTemplates = storyTemplates.filter((q) => !activeStoryIds.has(q.quest_id));

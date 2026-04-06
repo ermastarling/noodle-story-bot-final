@@ -5028,7 +5028,7 @@ return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
       },
       {
         title: "Story & Seasonal Quests",
-        subtitle: "Narrative and event-driven objectives",
+        subtitle: "Narrative and event-driven objectives during the current season",
         cadences: ["story", "seasonal"]
       }
     ];
