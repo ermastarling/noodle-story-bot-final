@@ -5,7 +5,7 @@ const noodleDevData = new SlashCommandBuilder()
   .setName("noodle-dev")
   .setDescription("Developer tools for Noodle Story.")
   .addSubcommand((sc) => sc.setName("status").setDescription("Show reset timestamps (debug info)."))
-  .addSubcommand((sc) => sc.setName("servers").setDescription(" "))
+  .addSubcommand((sc) => sc.setName("servers").setDescription("Dev only."))
   .addSubcommand((sc) =>
     sc
       .setName("reset_tutorial")
