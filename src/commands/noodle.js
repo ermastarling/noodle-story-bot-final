@@ -3580,10 +3580,13 @@ const isStatusCmd = subCmd === "status";
 
 // Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
-// Skip defer for status command - it will defer with ephemeral flag
-if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !interaction.deferred && !interaction.replied && !isStatusCmd) {
+if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !interaction.deferred && !interaction.replied) {
   try {
-    await interaction.deferReply();
+    if (isStatusCmd) {
+      await interaction.deferReply({ ephemeral: true });
+    } else {
+      await interaction.deferReply();
+    }
   } catch (e) {
     // If defer fails, mark as deferred to avoid double-reply attempts
     interaction.deferred = true;
@@ -4710,15 +4713,6 @@ if (sub === "status") {
     `${getIcon("leaderboard")} Shard: ${shardText}`,
     `${getIcon("refresh")} Last backup: ${lastBackup}`
   ].join("\n");
-  
-  // Defer as ephemeral, then editReply with the info
-  if (!interaction.deferred && !interaction.replied) {
-    try {
-      await interaction.deferReply({ ephemeral: true });
-    } catch (e) {
-      // ignore
-    }
-  }
   
   const statusEmbed = buildMenuEmbed({
     title: `${getIcon("stats")} Status`,

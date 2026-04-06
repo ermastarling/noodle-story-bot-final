@@ -69,6 +69,13 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 - `npm run test` — execute the automated test suite
 - `npm run sim` — exercise the simulation harness (see below)
 
+## Command Registration Notes
+
+- Player-facing commands are registered globally.
+- Developer tools are exposed in the official guild via `/noodle-dev`.
+- Current dev subcommands: `status`, `reset_tutorial`, `wipe_user`, `repair_profile`.
+- Default guild registration mode is `dev-overrides`, which keeps `/noodle` global and applies guild-only overrides for dev tooling.
+
 ## Configuration
 
 Only `DISCORD_TOKEN` is required for booting the bot; it exits immediately if the value is missing. Optional runtime knobs such as `NODE_ENV=production` control the verbosity of logging and scheduler behavior, and the SQLite database lives under `data/` unless you customize the path in `db/index.js`.
