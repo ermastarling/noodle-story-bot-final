@@ -967,6 +967,7 @@ import { getIcon } from "./ui/icons.js";
     const isModal = interaction.isModalSubmit?.();
     const cid = interaction.customId;
     const isNoodle = cid?.startsWith("noodle:");
+    const isNoodleDev = cid?.startsWith("noodle-dev:");
     const isNoodleSocial = cid?.startsWith("noodle-social:");
     const isNoodleStaff = cid?.startsWith("noodle-staff:");
     const isNoodleUpgrades = cid?.startsWith("noodle-upgrades:");
@@ -976,7 +977,7 @@ import { getIcon } from "./ui/icons.js";
     // Defer buttons/selects with deferUpdate (updates original message)
     // BUT: Don't defer buttons/selects that will show modals
     if (!alreadyAck && (isBtn || isSelect)) {
-      if (isNoodle || isNoodleSocial || isNoodleStaff || isNoodleUpgrades) {
+      if (isNoodle || isNoodleDev || isNoodleSocial || isNoodleStaff || isNoodleUpgrades) {
         // Check if this button/select will show a modal
           const willShowModal = cid?.includes("pick:cook_select:") ||
               cid?.includes("action:party_create") ||
@@ -1184,6 +1185,22 @@ import { getIcon } from "./ui/icons.js";
         if (id.startsWith("noodle:")) {
           // Already deferred at the top of interactionCreate handler
           return await noodleCommand.handleComponent(interaction);
+        }
+        if (id.startsWith("noodle-dev:")) {
+          // Already deferred at the top of interactionCreate handler
+          const result = sanitizeResultEmbeds(await noodleDevCommand.handleComponent(interaction));
+          if (result) {
+            if (result.ephemeral) {
+              if (interaction.replied || interaction.deferred) {
+                return await interaction.followUp({ ...result, ephemeral: true });
+              }
+              return await interaction.reply({ ...result, ephemeral: true });
+            }
+            if (interaction.replied || interaction.deferred) {
+              return await interaction.editReply(result);
+            }
+            return await interaction.update(result);
+          }
         }
         if (id.startsWith("noodle-social:")) {
           // Already deferred at the top of interactionCreate handler

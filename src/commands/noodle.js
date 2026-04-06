@@ -3574,15 +3574,17 @@ let unlockNoticePlayer = null;
 
 let seasonRolloverNotice = null;
 
-// Check if this is the status command (which needs ephemeral defer)
+// Check commands that should defer ephemerally before heavy work/permission gates
 const subCmd = interaction.options?.getSubcommand?.();
 const isStatusCmd = subCmd === "status";
+const isDashboardCmd = subCmd === "dashboard";
+const shouldDeferEphemeral = isStatusCmd || isDashboardCmd || (group === "dev" && !isDevAdmin(userId));
 
 // Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
 if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !interaction.deferred && !interaction.replied) {
   try {
-    if (isStatusCmd) {
+    if (shouldDeferEphemeral) {
       await interaction.deferReply({ ephemeral: true });
     } else {
       await interaction.deferReply();
@@ -3648,8 +3650,12 @@ if (base.embeds) {
 if (base.embeds) {
   base.embeds = applyGreenButtonFooter(base.embeds, base.components);
 }
-// For ephemeral messages after a non-ephemeral defer, delete original and send ephemeral followUp
+// Ephemeral replies: if already deferred ephemerally, keep the normal editReply flow.
+// Fallback to delete+followUp only when initial defer/reply was non-ephemeral.
 if (ephemeral && (interaction.deferred || interaction.replied)) {
+  if (interaction.ephemeral === true) {
+    return interaction.editReply(base);
+  }
   try {
     await interaction.deleteReply();
   } catch (e) {
@@ -3697,8 +3703,66 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "servers";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "dashboard";
 const inDevPath = group === "dev" || isDevSubcommand;
+
+const buildDevStatusEmbed = () => {
+  const p = ensurePlayer(serverId, userId);
+  const ordersDay = p.orders_day ?? "unknown";
+  const marketDay = server.market_day ?? "unknown";
+
+  const ordersTimestamp = ordersDay !== "unknown" ? new Date(`${ordersDay}T00:00:00Z`).getTime() / 1000 : "unknown";
+  const marketTimestamp = marketDay !== "unknown" ? new Date(`${marketDay}T00:00:00Z`).getTime() / 1000 : "unknown";
+
+  const ordersStr = ordersTimestamp !== "unknown" ? `<t:${Math.floor(ordersTimestamp)}:f>` : "unknown";
+  const marketStr = marketTimestamp !== "unknown" ? `<t:${Math.floor(marketTimestamp)}:f>` : "unknown";
+
+  const guildCount = interaction.client?.guilds?.cache?.size ?? 0;
+  const shardId = interaction.guild?.shardId ?? null;
+  const shardCount = interaction.client?.shard?.count ?? null;
+  const shardText = Number.isFinite(shardId) && Number.isFinite(shardCount)
+    ? `${shardId + 1}/${shardCount}`
+    : "n/a";
+  const mem = process.memoryUsage();
+  const rssMb = (mem.rss / (1024 * 1024)).toFixed(1);
+  const heapMb = (mem.heapUsed / (1024 * 1024)).toFixed(1);
+
+  const backupDir = process.env.NOODLE_BACKUP_DIR || path.join(process.cwd(), "data", "backups");
+  let lastBackup = "unknown";
+  try {
+    const latestPath = path.join(backupDir, "latest.sqlite");
+    if (fs.existsSync(latestPath)) {
+      const stat = fs.statSync(latestPath);
+      lastBackup = `<t:${Math.floor(stat.mtimeMs / 1000)}:f>`;
+    } else if (fs.existsSync(backupDir)) {
+      const entries = fs.readdirSync(backupDir)
+        .filter((name) => name.startsWith("noodlestory-") && name.endsWith(".sqlite"));
+      if (entries.length) {
+        const newest = entries
+          .map((name) => ({ name, stat: fs.statSync(path.join(backupDir, name)) }))
+          .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs)[0];
+        lastBackup = `<t:${Math.floor(newest.stat.mtimeMs / 1000)}:f>`;
+      }
+    }
+  } catch {
+    // Ignore backup stat errors.
+  }
+
+  const statusInfo = [
+    `${getIcon("calendar")} Orders last reset: ${ordersStr}`,
+    `${getIcon("cart")} Market last rolled: ${marketStr}`,
+    `${getIcon("group")} Guilds: ${guildCount}`,
+    `${getIcon("stats")} Memory: ${rssMb} MB RSS / ${heapMb} MB heap`,
+    `${getIcon("leaderboard")} Shard: ${shardText}`,
+    `${getIcon("refresh")} Last backup: ${lastBackup}`
+  ].join("\n");
+
+  return buildMenuEmbed({
+    title: `${getIcon("stats")} Status`,
+    description: statusInfo,
+    user: interaction.member ?? interaction.user
+  });
+};
 
 if (inDevPath) {
   if (!isDevAdmin(userId)) {
@@ -3808,7 +3872,7 @@ if (inDevPath && sub === "repair_profile") {
   });
 }
 
-if (inDevPath && sub === "servers") {
+if (inDevPath && sub === "dashboard") {
   const guilds = [...(interaction.client?.guilds?.cache?.values?.() ?? [])]
     .map((guild) => ({
       name: guild?.name ?? "Unknown Server",
@@ -3816,10 +3880,6 @@ if (inDevPath && sub === "servers") {
       members: Number.isFinite(guild?.memberCount) ? guild.memberCount : null
     }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-
-  if (!guilds.length) {
-    return commit({ content: "No servers found in cache.", ephemeral: true });
-  }
 
   const lines = [];
   let used = 0;
@@ -3839,15 +3899,33 @@ if (inDevPath && sub === "servers") {
     truncated ? `Showing ${lines.length}/${guilds.length} servers due to message length.` : null
   ].filter(Boolean).join("\n");
 
-  const embed = buildMenuEmbed({
+  const serversEmbed = buildMenuEmbed({
     title: `${getIcon("group")} Bot Servers (${guilds.length})`,
     description,
     user: interaction.member ?? interaction.user
   });
 
+  const statusEmbed = buildDevStatusEmbed();
+  const pageRaw = Number(opt.getInteger("dashboard_page") ?? 0);
+  const page = pageRaw === 1 ? 1 : 0;
+
+  const navRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-dev:dashboard:page:${userId}:0`)
+      .setLabel("Servers")
+      .setStyle(page === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setDisabled(page === 0),
+    new ButtonBuilder()
+      .setCustomId(`noodle-dev:dashboard:page:${userId}:1`)
+      .setLabel("Status")
+      .setStyle(page === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setDisabled(page === 1)
+  );
+
   return commit({
     content: " ",
-    embeds: [embed],
+    embeds: [page === 0 ? serversEmbed : statusEmbed],
+    components: [navRow],
     ephemeral: true
   });
 }
@@ -4707,66 +4785,12 @@ if (sub === "status") {
   if (!isDevAdmin(userId)) {
     return commit({ content: "You don’t have access to that command.", ephemeral: true });
   }
-  const p = ensurePlayer(serverId, userId);
-  const ordersDay = p.orders_day ?? "unknown";
-  const marketDay = server.market_day ?? "unknown";
-  
-  // Format as timestamp - these are day keys in YYYY-MM-DD format, assume midnight UTC
-  const ordersTimestamp = ordersDay !== "unknown" ? new Date(`${ordersDay}T00:00:00Z`).getTime() / 1000 : "unknown";
-  const marketTimestamp = marketDay !== "unknown" ? new Date(`${marketDay}T00:00:00Z`).getTime() / 1000 : "unknown";
-  
-  const ordersStr = ordersTimestamp !== "unknown" ? `<t:${Math.floor(ordersTimestamp)}:f>` : "unknown";
-  const marketStr = marketTimestamp !== "unknown" ? `<t:${Math.floor(marketTimestamp)}:f>` : "unknown";
+  const statusEmbed = buildDevStatusEmbed();
 
-  const guildCount = interaction.client?.guilds?.cache?.size ?? 0;
-  const shardId = interaction.guild?.shardId ?? null;
-  const shardCount = interaction.client?.shard?.count ?? null;
-  const shardText = Number.isFinite(shardId) && Number.isFinite(shardCount)
-    ? `${shardId + 1}/${shardCount}`
-    : "n/a";
-  const mem = process.memoryUsage();
-  const rssMb = (mem.rss / (1024 * 1024)).toFixed(1);
-  const heapMb = (mem.heapUsed / (1024 * 1024)).toFixed(1);
-
-  const backupDir = process.env.NOODLE_BACKUP_DIR || path.join(process.cwd(), "data", "backups");
-  let lastBackup = "unknown";
-  try {
-    const latestPath = path.join(backupDir, "latest.sqlite");
-    if (fs.existsSync(latestPath)) {
-      const stat = fs.statSync(latestPath);
-      lastBackup = `<t:${Math.floor(stat.mtimeMs / 1000)}:f>`;
-    } else if (fs.existsSync(backupDir)) {
-      const entries = fs.readdirSync(backupDir)
-        .filter((name) => name.startsWith("noodlestory-") && name.endsWith(".sqlite"));
-      if (entries.length) {
-        const newest = entries
-          .map((name) => ({ name, stat: fs.statSync(path.join(backupDir, name)) }))
-          .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs)[0];
-        lastBackup = `<t:${Math.floor(newest.stat.mtimeMs / 1000)}:f>`;
-      }
-    }
-  } catch {
-    // Ignore backup stat errors.
-  }
-  
-  const statusInfo = [
-    `${getIcon("calendar")} Orders last reset: ${ordersStr}`,
-    `${getIcon("cart")} Market last rolled: ${marketStr}`,
-    `${getIcon("group")} Guilds: ${guildCount}`,
-    `${getIcon("stats")} Memory: ${rssMb} MB RSS / ${heapMb} MB heap`,
-    `${getIcon("leaderboard")} Shard: ${shardText}`,
-    `${getIcon("refresh")} Last backup: ${lastBackup}`
-  ].join("\n");
-  
-  const statusEmbed = buildMenuEmbed({
-    title: `${getIcon("stats")} Status`,
-    description: statusInfo,
-    user: interaction.member ?? interaction.user
-  });
-
-  return await interaction.editReply({
+  return commit({
     content: " ",
-    embeds: [statusEmbed]
+    embeds: [statusEmbed],
+    ephemeral: true
   });
 }
 
