@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Skip loading native SQLite bindings during command registration to improve startup performance and avoid unnecessary dependencies.
 process.env.NOODLE_SKIP_DB = process.env.NOODLE_SKIP_DB || "1";
@@ -82,15 +84,37 @@ async function cleanupGlobalOverlapCommands(commands, targetNames, deleteCommand
   return overlap.length;
 }
 
-async function loadCommandsForRegistration({ includeDevCommands }) {
-  process.env.NOODLE_INCLUDE_DEV_COMMANDS = includeDevCommands ? "1" : "0";
-  const stamp = `${includeDevCommands ? "dev" : "nodev"}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const mod = await import(`./commands/index.js?register=${stamp}`);
-  return mod.commands || [];
-}
+async function loadCommandBodyForRegistration({ includeDevCommands }) {
+  const commandsIndexUrl = pathToFileURL(fileURLToPath(new URL("./commands/index.js", import.meta.url))).href;
+  const script = [
+    `import { commands } from ${JSON.stringify(commandsIndexUrl)};`,
+    "const body = (commands || []).map((c) => c.data.toJSON());",
+    "process.stdout.write(JSON.stringify(body));"
+  ].join("\n");
 
-function toCommandBody(commands) {
-  return (commands || []).map((c) => c.data.toJSON());
+  const child = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", script],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NOODLE_SKIP_DB: "1",
+        NOODLE_INCLUDE_DEV_COMMANDS: includeDevCommands ? "1" : "0"
+      }
+    }
+  );
+
+  if (child.status !== 0) {
+    const err = new Error(`Failed to load command payload (includeDevCommands=${includeDevCommands ? "1" : "0"})`);
+    err.details = child.stderr || child.stdout || "unknown error";
+    throw err;
+  }
+
+  const raw = String(child.stdout || "[]").trim();
+  if (!raw) return [];
+  return JSON.parse(raw);
 }
 
 function buildGuildOverrideBody(globalBody, guildBody) {
@@ -109,8 +133,7 @@ async function main() {
   const useDevOverridesMode = Boolean(guildId) && guildRegistrationMode !== "full";
 
   if (useDevOverridesMode) {
-    const globalCommands = await loadCommandsForRegistration({ includeDevCommands: false });
-    const globalBody = toCommandBody(globalCommands);
+    const globalBody = await loadCommandBodyForRegistration({ includeDevCommands: false });
     console.log(`Registering ${globalBody.length} global command(s) for application ${clientId}`);
 
     await rest.put(Routes.applicationCommands(clientId), { body: globalBody });
@@ -124,8 +147,7 @@ async function main() {
       console.log(`Removed ${removedGlobalDuplicates} duplicate global command(s).`);
     }
 
-    const guildCommands = await loadCommandsForRegistration({ includeDevCommands: true });
-    const guildBody = toCommandBody(guildCommands);
+    const guildBody = await loadCommandBodyForRegistration({ includeDevCommands: true });
     const guildOverrideBody = buildGuildOverrideBody(globalBody, guildBody);
 
     await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: guildOverrideBody });
@@ -152,8 +174,7 @@ async function main() {
     return;
   }
 
-  const commands = await loadCommandsForRegistration({ includeDevCommands: Boolean(guildId) });
-  const body = toCommandBody(commands);
+  const body = await loadCommandBodyForRegistration({ includeDevCommands: Boolean(guildId) });
   const registeredCommandNames = body.map((cmd) => cmd?.name).filter(Boolean);
 
   console.log(`Registering ${body.length} commands for application ${clientId}`);
@@ -221,6 +242,9 @@ async function main() {
 }
 
 main().catch((e) => {
+  if (e?.details) {
+    console.error(e.details);
+  }
   console.error(e);
   process.exit(1);
 });
