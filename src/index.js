@@ -752,6 +752,14 @@ import { getIcon } from "./ui/icons.js";
           return;
         }
 
+        const voteType = String(payload?.type || "").trim().toLowerCase();
+        if (voteType === "test") {
+          console.log("Top.gg: Test webhook acknowledged");
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, test: true }));
+          return;
+        }
+
         if (!db) {
           res.writeHead(503, { "content-type": "text/plain" });
           res.end("db unavailable");
@@ -766,15 +774,17 @@ import { getIcon } from "./ui/icons.js";
         ).trim();
 
         if (!votedUserId) {
-          res.writeHead(400, { "content-type": "text/plain" });
-          res.end("missing user id");
+          console.log("Top.gg: Vote ignored due to missing user id");
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, ignored: true, reason: "missing user id" }));
           return;
         }
 
         const serverId = getLatestServerIdForUser(db, votedUserId);
         if (!serverId) {
-          res.writeHead(202, { "content-type": "text/plain" });
-          res.end("missing server");
+          console.log("Top.gg: Vote ignored because user has no known server", votedUserId);
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, ignored: true, reason: "missing server" }));
           return;
         }
 
