@@ -9262,10 +9262,6 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 /*  Slash command export                                               */
 /* ------------------------------------------------------------------ */
 
-// Dev commands are only registered when explicitly requested by registration flow.
-// This keeps global registration free of dev-only subcommands by default.
-const includeDevCommands = String(process.env.NOODLE_INCLUDE_DEV_COMMANDS ?? "0") === "1";
-
 const noodleCommandData = new SlashCommandBuilder()
   .setName("noodle")
   .setDescription("Run your cozy noodle shop.")
@@ -9361,58 +9357,6 @@ const noodleCommandData = new SlashCommandBuilder()
       .addIntegerOption((o) => o.setName("quantity").setDescription("Quantity (1-5)").setRequired(false).setMinValue(1).setMaxValue(5))
   );
 
-if (includeDevCommands) {
-  noodleCommandData
-    .addSubcommand((sc) => sc.setName("status").setDescription("Show reset timestamps (debug info)."))
-    .addSubcommandGroup((group) =>
-      group
-        .setName("dev")
-        .setDescription("Developer tools.")
-        .addSubcommand((sc) =>
-          sc
-            .setName("reset_tutorial")
-            .setDescription("Reset a user’s tutorial progress.")
-            .addUserOption((o) => o.setName("user").setDescription("User to reset").setRequired(true))
-        )
-        .addSubcommand((sc) =>
-          sc
-            .setName("wipe_user")
-            .setDescription("Delete a user’s profile from the DB.")
-            .addUserOption((o) => o.setName("user").setDescription("User to wipe").setRequired(true))
-            .addStringOption((o) =>
-              o
-                .setName("user_id")
-                .setDescription("User ID (use if the user left the server)")
-                .setRequired(false)
-            )
-            .addStringOption((o) =>
-              o
-                .setName("server_id")
-                .setDescription("Override server ID (defaults to current guild)")
-                .setRequired(false)
-            )
-        )
-        .addSubcommand((sc) =>
-          sc
-            .setName("repair_profile")
-            .setDescription("Repair a user profile from the strongest legacy server profile.")
-            .addUserOption((o) => o.setName("user").setDescription("User to repair").setRequired(false))
-            .addStringOption((o) =>
-              o
-                .setName("user_id")
-                .setDescription("User ID (use if the user left the server)")
-                .setRequired(false)
-            )
-            .addBooleanOption((o) =>
-              o
-                .setName("force")
-                .setDescription("Force repair even if global profile score is not lower")
-                .setRequired(false)
-            )
-        )
-    );
-}
-
 export const noodleCommand = {
   data: noodleCommandData,
 
@@ -9427,4 +9371,4 @@ export const noodleCommand = {
   }
 };
 
-export { noodleMainMenuRow, noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed };
+export { runNoodle, noodleMainMenuRow, noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed };

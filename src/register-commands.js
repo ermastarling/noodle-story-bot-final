@@ -12,7 +12,7 @@ const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID || "";
 const guildRegistrationMode = String(process.env.NOODLE_GUILD_REGISTRATION_MODE || "dev-overrides").toLowerCase();
 const guildOverrideNames = new Set(
-  String(process.env.NOODLE_GUILD_OVERRIDE_COMMANDS || "noodle")
+  String(process.env.NOODLE_GUILD_OVERRIDE_COMMANDS || "noodle-dev")
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean)
@@ -135,12 +135,16 @@ function buildGuildOverrideBody(globalBody, guildBody) {
   });
 }
 
+function filterGlobalOnlyBody(body) {
+  return (body || []).filter((cmd) => cmd?.name !== "noodle-dev");
+}
+
 async function main() {
   const rest = new REST({ version: "10" }).setToken(token);
   const useDevOverridesMode = Boolean(guildId) && guildRegistrationMode !== "full";
 
   if (useDevOverridesMode) {
-    const globalBody = await loadCommandBodyForRegistration({ includeDevCommands: false });
+    const globalBody = filterGlobalOnlyBody(await loadCommandBodyForRegistration({ includeDevCommands: false }));
     console.log(`Registering ${globalBody.length} global command(s) for application ${clientId}`);
 
     await rest.put(Routes.applicationCommands(clientId), { body: globalBody });
