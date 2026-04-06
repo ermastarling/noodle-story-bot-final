@@ -222,6 +222,22 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
         quests.active[instanceId] = createQuestInstance(template, instanceId, "story", reward);
       }
       quests.story_key = storyKey;
+    } else if (storyTemplates.length > 0 && quests.story_key === storyKey) {
+      // Backfill story quests for existing players when configured story count increases.
+      const activeStoryQuests = Object.values(quests.active).filter((q) => q.cadence === "story");
+      const missingStorySlots = Math.max(0, storyCount - activeStoryQuests.length);
+      if (missingStorySlots > 0) {
+        const activeStoryIds = new Set(activeStoryQuests.map((q) => q.quest_id));
+        const availableTemplates = storyTemplates.filter((q) => !activeStoryIds.has(q.quest_id));
+        const rng = makeStreamRng({ mode: "seeded", seed: 4041, streamName: "quests-story-backfill", serverId: userId, dayKey: storyKey });
+        const picks = pickQuestTemplates(rng, availableTemplates, missingStorySlots);
+        for (const template of picks) {
+          const instanceId = `${template.quest_id}:${storyKey}`;
+          if (quests.active[instanceId]) continue;
+          const reward = applyRewardMultiplier(template.reward ?? {}, multipliers.story ?? 1);
+          quests.active[instanceId] = createQuestInstance(template, instanceId, "story", reward);
+        }
+      }
     }
   }
 
@@ -247,6 +263,22 @@ export function ensureQuests(player, questsContent, userId, now = nowTs(), optio
         quests.active[instanceId] = createQuestInstance(template, instanceId, "seasonal", reward);
       }
       quests.seasonal_key = seasonalKey;
+    } else if (seasonalTemplates.length > 0 && quests.seasonal_key === seasonalKey) {
+      // Backfill seasonal quests for existing players when configured seasonal count increases.
+      const activeSeasonalQuests = Object.values(quests.active).filter((q) => q.cadence === "seasonal");
+      const missingSeasonalSlots = Math.max(0, seasonalCount - activeSeasonalQuests.length);
+      if (missingSeasonalSlots > 0) {
+        const activeSeasonalIds = new Set(activeSeasonalQuests.map((q) => q.quest_id));
+        const availableTemplates = seasonalTemplates.filter((q) => !activeSeasonalIds.has(q.quest_id));
+        const rng = makeStreamRng({ mode: "seeded", seed: 5051, streamName: "quests-seasonal-backfill", serverId: userId, dayKey: seasonalKey });
+        const picks = pickQuestTemplates(rng, availableTemplates, missingSeasonalSlots);
+        for (const template of picks) {
+          const instanceId = `${template.quest_id}:${seasonalKey}`;
+          if (quests.active[instanceId]) continue;
+          const reward = applyRewardMultiplier(template.reward ?? {}, multipliers.seasonal ?? 1);
+          quests.active[instanceId] = createQuestInstance(template, instanceId, "seasonal", reward);
+        }
+      }
     }
   }
 
