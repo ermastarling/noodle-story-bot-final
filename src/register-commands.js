@@ -11,6 +11,12 @@ const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID || "";
 const guildRegistrationMode = String(process.env.NOODLE_GUILD_REGISTRATION_MODE || "dev-overrides").toLowerCase();
+const guildOverrideNames = new Set(
+  String(process.env.NOODLE_GUILD_OVERRIDE_COMMANDS || "noodle")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean)
+);
 
 if (!token || !clientId) {
   console.error("Missing DISCORD_TOKEN or DISCORD_CLIENT_ID in .env");
@@ -122,6 +128,7 @@ function buildGuildOverrideBody(globalBody, guildBody) {
   return (guildBody || []).filter((guildCmd) => {
     const name = guildCmd?.name;
     if (!name) return false;
+    if (!guildOverrideNames.has(name)) return false;
     const globalCmd = globalByName.get(name);
     if (!globalCmd) return true;
     return JSON.stringify(globalCmd) !== JSON.stringify(guildCmd);
