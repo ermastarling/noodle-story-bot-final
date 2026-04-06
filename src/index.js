@@ -754,7 +754,11 @@ import { getIcon } from "./ui/icons.js";
             cfConnectingIp: req.headers["cf-connecting-ip"] || null,
             hasAuthorization: Boolean(req.headers["authorization"]),
             hasXTopggAuthorization: Boolean(req.headers["x-topgg-authorization"]),
-            hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"])
+            hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"]),
+            hasXForwardedAuthorization: Boolean(req.headers["x-forwarded-authorization"]),
+            hasXOriginalAuthorization: Boolean(req.headers["x-original-authorization"]),
+            hasProxyAuthorization: Boolean(req.headers["proxy-authorization"]),
+            hasQueryToken: Boolean(requestUrl.searchParams.get("token") || requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("authorization"))
           })
         );
 
@@ -768,6 +772,12 @@ import { getIcon } from "./ui/icons.js";
           req.headers["authorization"]
           || req.headers["x-topgg-authorization"]
           || req.headers["x-webhook-authorization"]
+          || req.headers["x-forwarded-authorization"]
+          || req.headers["x-original-authorization"]
+          || req.headers["proxy-authorization"]
+          || requestUrl.searchParams.get("token")
+          || requestUrl.searchParams.get("auth")
+          || requestUrl.searchParams.get("authorization")
           || ""
         ).trim();
         const providedToken = authHeader.toLowerCase().startsWith("bearer ")
@@ -782,7 +792,11 @@ import { getIcon } from "./ui/icons.js";
               expectedLength: String(topggWebhookAuth).length,
               hasAuthorization: Boolean(req.headers["authorization"]),
               hasXTopggAuthorization: Boolean(req.headers["x-topgg-authorization"]),
-              hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"])
+              hasXWebhookAuthorization: Boolean(req.headers["x-webhook-authorization"]),
+              hasXForwardedAuthorization: Boolean(req.headers["x-forwarded-authorization"]),
+              hasXOriginalAuthorization: Boolean(req.headers["x-original-authorization"]),
+              hasProxyAuthorization: Boolean(req.headers["proxy-authorization"]),
+              hasQueryToken: Boolean(requestUrl.searchParams.get("token") || requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("authorization"))
             })
           );
           res.writeHead(401, { "content-type": "text/plain" });
