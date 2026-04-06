@@ -96,26 +96,24 @@ const LEADERBOARD_TYPES = [
   {
     id: "coins",
     title: () => `${getIcon("coins")} Top Coin Holders`,
-    sortValue: (player) => player.coins || 0,
-    displayValue: (player) => `${player.coins || 0}c`
+    metricExpr: "json_extract(data_json, '$.coins')",
+    formatMetric: (value) => `${value || 0}c`
   },
   {
     id: "rep",
     title: () => `${getIcon("rep")} Top Reputation`,
-    sortValue: (player) => player.rep || 0,
-    displayValue: (player) => `${player.rep || 0} REP`
+    metricExpr: "json_extract(data_json, '$.rep')",
+    formatMetric: (value) => `${value || 0} REP`
   },
   {
     id: "bowls",
     title: () => `${getIcon("bowl")} Most Bowls Served`,
-    sortValue: (player) => player.lifetime?.bowls_served_total || 0,
-    displayValue: (player) => `${player.lifetime?.bowls_served_total || 0} bowls`
+    metricExpr: "json_extract(data_json, '$.lifetime.bowls_served_total')",
+    formatMetric: (value) => `${value || 0} bowls`
   }
 ];
 
-const LEADERBOARD_CACHE_TTL_MS = 15_000;
 const LEADERBOARD_PAGE_SIZE = 10;
-const leaderboardCache = new Map();
 const CONTRIBUTOR_LOCK_CONCURRENCY = 3;
 const CONTRIBUTOR_LOCK_RETRY_DELAYS_MS = [25, 75, 150];
 
@@ -124,69 +122,44 @@ function getLeaderboardTypeIndex(typeId) {
   return idx >= 0 ? idx : 0;
 }
 
-function getLeaderboardSnapshot(serverId) {
-  const now = Date.now();
-  const cached = leaderboardCache.get(serverId);
-  if (cached && cached.expiresAt > now) return cached.playerData;
-
-  let playerData;
-  try {
-    const rows = db.prepare(`
-      SELECT
-        user_id,
-        COALESCE(CAST(json_extract(data_json, '$.coins') AS INTEGER), 0) AS coins,
-        COALESCE(CAST(json_extract(data_json, '$.rep') AS INTEGER), 0) AS rep,
-        COALESCE(CAST(json_extract(data_json, '$.lifetime.bowls_served_total') AS INTEGER), 0) AS bowls_served_total
-      FROM players
-      WHERE server_id = ?
-      ORDER BY last_active_at DESC
-      LIMIT 100
-    `).all(serverId);
-
-    playerData = rows.map((row) => ({
-      user_id: row.user_id,
-      coins: row.coins || 0,
-      rep: row.rep || 0,
-      lifetime: { bowls_served_total: row.bowls_served_total || 0 }
-    }));
-  } catch {
-    const allPlayers = db.prepare(`
-      SELECT user_id, data_json FROM players
-      WHERE server_id = ?
-      ORDER BY last_active_at DESC
-      LIMIT 100
-    `).all(serverId);
-
-    playerData = allPlayers.map((row) => ({
-      user_id: row.user_id,
-      ...JSON.parse(row.data_json)
-    }));
-  }
-
-  leaderboardCache.set(serverId, {
-    expiresAt: now + LEADERBOARD_CACHE_TTL_MS,
-    playerData
-  });
-
-  return playerData;
-}
-
-function buildLeaderboardView({ playerData, typeIndex, userId, ownerUser, page = 0 }) {
+function getLeaderboardPage(serverId, typeIndex, page = 0) {
   const safeIndex = Math.min(Math.max(typeIndex, 0), LEADERBOARD_TYPES.length - 1);
   const type = LEADERBOARD_TYPES[safeIndex];
-  const sortedPlayers = [...playerData]
-    .sort((a, b) => type.sortValue(b) - type.sortValue(a));
 
-  const totalPages = Math.max(1, Math.ceil(sortedPlayers.length / LEADERBOARD_PAGE_SIZE));
+  const totalPlayers = db.prepare("SELECT COUNT(*) AS count FROM players WHERE server_id = ?").get(serverId)?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalPlayers / LEADERBOARD_PAGE_SIZE));
   const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
-  const start = safePage * LEADERBOARD_PAGE_SIZE;
-  const pagePlayers = sortedPlayers.slice(start, start + LEADERBOARD_PAGE_SIZE);
+  const offset = safePage * LEADERBOARD_PAGE_SIZE;
 
-  const leaderboardText = pagePlayers
-    .map((player, i) => {
-      const rank = start + i;
+  const rows = db.prepare(`
+    SELECT
+      user_id,
+      COALESCE(CAST(${type.metricExpr} AS INTEGER), 0) AS metric
+    FROM players
+    WHERE server_id = ?
+    ORDER BY metric DESC, last_active_at DESC
+    LIMIT ? OFFSET ?
+  `).all(serverId, LEADERBOARD_PAGE_SIZE, offset);
+
+  return {
+    type,
+    safeIndex,
+    safePage,
+    totalPages,
+    totalPlayers,
+    startRank: offset,
+    rows
+  };
+}
+
+function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
+  const { type, safeIndex, safePage, totalPages, totalPlayers, startRank, rows } = leaderboardPage;
+
+  const leaderboardText = rows
+    .map((row, i) => {
+      const rank = startRank + i;
       const medal = rank === 0 ? getIcon("medal_gold") : rank === 1 ? getIcon("medal_silver") : rank === 2 ? getIcon("medal_bronze") : `${rank + 1}.`;
-      return `${medal} <@${player.user_id}> — ${type.displayValue(player)}`;
+      return `${medal} <@${row.user_id}> — ${type.formatMetric(row.metric)}`;
     })
     .join("\n");
 
@@ -1295,17 +1268,15 @@ async function handleLeaderboard(interaction) {
   await interaction.deferReply({ ephemeral: false });
 
   try {
-    const playerData = getLeaderboardSnapshot(serverId);
-    if (playerData.length === 0) {
+    const leaderboardPage = getLeaderboardPage(serverId, typeIndex, 0);
+    if (leaderboardPage.totalPlayers === 0) {
       return errorReply(interaction, `${getIcon("error")} No players found in this server yet.`);
     }
 
     const view = buildLeaderboardView({
-      playerData,
-      typeIndex,
+      leaderboardPage,
       userId: interaction.user.id,
-      ownerUser: interaction.member ?? interaction.user,
-      page: 0
+      ownerUser: interaction.member ?? interaction.user
     });
 
     return interaction.editReply(view);
@@ -2353,8 +2324,8 @@ async function handleComponent(interaction) {
       const typeIndex = Number.isFinite(typeRaw) ? typeRaw : 0;
       const page = Number.isFinite(pageRaw) ? pageRaw : 0;
 
-      const playerData = getLeaderboardSnapshot(serverId);
-      if (playerData.length === 0) {
+      const leaderboardPage = getLeaderboardPage(serverId, typeIndex, page);
+      if (leaderboardPage.totalPlayers === 0) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} No players found in this server yet.`,
           ephemeral: false
@@ -2362,11 +2333,9 @@ async function handleComponent(interaction) {
       }
 
       const view = buildLeaderboardView({
-        playerData,
-        typeIndex,
+        leaderboardPage,
         userId,
-        ownerUser: interaction.member ?? interaction.user,
-        page
+        ownerUser: interaction.member ?? interaction.user
       });
 
       return componentCommit(interaction, view);

@@ -13,6 +13,12 @@ CREATE TABLE IF NOT EXISTS players (
 
 CREATE INDEX IF NOT EXISTS idx_players_user_last_active ON players(user_id, last_active_at);
 CREATE INDEX IF NOT EXISTS idx_players_server_last_active ON players(server_id, last_active_at DESC);
+CREATE INDEX IF NOT EXISTS idx_players_server_coins_desc
+  ON players(server_id, CAST(json_extract(data_json, '$.coins') AS INTEGER) DESC, last_active_at DESC);
+CREATE INDEX IF NOT EXISTS idx_players_server_rep_desc
+  ON players(server_id, CAST(json_extract(data_json, '$.rep') AS INTEGER) DESC, last_active_at DESC);
+CREATE INDEX IF NOT EXISTS idx_players_server_bowls_desc
+  ON players(server_id, CAST(json_extract(data_json, '$.lifetime.bowls_served_total') AS INTEGER) DESC, last_active_at DESC);
 
 CREATE TABLE IF NOT EXISTS servers (
   server_id TEXT PRIMARY KEY,
