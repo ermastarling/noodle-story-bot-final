@@ -14,7 +14,8 @@ import {
   ensureTutorial,
   getCurrentTutorialStep,
   formatTutorialMessage,
-  formatTutorialCompletionMessage
+  formatTutorialCompletionMessage,
+  resetTutorialProgress
 } from "../game/tutorial.js";
 import {
   loadContentBundle,
@@ -2478,20 +2479,7 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
 }
 
 function resetTutorialState(player) {
-  player.tutorial = null;
-  ensureTutorial(player);
-
-  // Reset order flow so tutorial can always restart from the first customer.
-  if (!player.orders || typeof player.orders !== "object" || Array.isArray(player.orders)) {
-    player.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
-  }
-  player.orders.accepted = {};
-  player.orders_day = null;
-  player.orders_seed = null;
-  player.orders_pool_sig = null;
-  player.orders_consumed_indices = [];
-  player.orders_total_count = 0;
-  player.orders_depleted_day = null;
+  resetTutorialProgress(player);
 }
 
 function tutorialSuffix(player) {
@@ -3813,18 +3801,35 @@ if (inDevPath && sub === "reset_tutorial") {
     return commit({ content: "Database unavailable in this environment.", ephemeral: true });
   }
   return await withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
+    const storageServerId = getPlayerStorageServerId(serverId);
+    const rows = db.prepare("SELECT server_id, data_json, schema_version FROM players WHERE user_id=?").all(target.id);
+
+    let resetCount = 0;
+    for (const row of rows) {
+      let parsed;
+      try {
+        parsed = row?.data_json ? JSON.parse(row.data_json) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || typeof parsed !== "object") continue;
+      resetTutorialState(parsed);
+      db.prepare("UPDATE players SET state_rev=state_rev+1, last_active_at=?, data_json=? WHERE server_id=? AND user_id=?")
+        .run(nowTs(), JSON.stringify(parsed), row.server_id, target.id);
+      resetCount += 1;
+    }
+
+    // Ensure a canonical/global profile exists and is reset as well.
     const p = ensurePlayer(serverId, target.id);
     resetTutorialState(p);
-    if (db) {
-      upsertPlayer(db, serverId, target.id, p, null, p.schema_version);
-    }
+    upsertPlayer(db, storageServerId, target.id, p, null, p.schema_version);
 
     const step = getCurrentTutorialStep(p);
     const tut = formatTutorialMessage(step);
     const mention = `<@${target.id}>`;
 
     return commit({
-      content: `${getIcon("status_complete")} Complete reset for ${mention}.${tut ? `\n\n${tut}` : ""}`,
+      content: `${getIcon("status_complete")} Complete reset for ${mention} (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`,
       ephemeral: true
     });
   });

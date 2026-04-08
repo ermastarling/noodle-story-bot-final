@@ -91,3 +91,20 @@ export function formatTutorialCompletionMessage() {
     `Your story begins here, etch your noodle shop into legend, one bowl at a time ${getIcon("serve")}`
   ].join("\n");
 }
+
+export function resetTutorialProgress(player) {
+  player.tutorial = null;
+  ensureTutorial(player);
+
+  // Reset order flow so tutorial can always restart from the first customer.
+  if (!player.orders || typeof player.orders !== "object" || Array.isArray(player.orders)) {
+    player.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
+  }
+  player.orders.accepted = {};
+  player.orders_day = null;
+  player.orders_seed = null;
+  player.orders_pool_sig = null;
+  player.orders_consumed_indices = [];
+  player.orders_total_count = 0;
+  player.orders_depleted_day = null;
+}
