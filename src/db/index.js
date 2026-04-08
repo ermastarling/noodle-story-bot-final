@@ -313,8 +313,16 @@ export function getPlayer(db, serverId, userId) {
 
   const shared = getSharedPlayer(storageServerId, userId);
   if (shared) {
-    if (cache && cacheKey) cache.set(cacheKey, shared);
-    return shared;
+    const revRow = prepareCached(db, "SELECT state_rev FROM players WHERE server_id=? AND user_id=?")
+      .get(storageServerId, userId);
+    const dbRev = Number(revRow?.state_rev ?? 0);
+    const cachedRev = Number(shared?.state_rev ?? 0);
+    if (dbRev > 0 && cachedRev === dbRev) {
+      if (cache && cacheKey) cache.set(cacheKey, shared);
+      return shared;
+    }
+    invalidateSharedPlayer(storageServerId, userId);
+    if (cache && cacheKey) cache.delete(cacheKey);
   }
   const row = prepareCached(db, "SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
     .get(storageServerId, userId);
