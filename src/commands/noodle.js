@@ -3792,9 +3792,9 @@ if (inDevPath) {
   rollMarket({ serverId, content, serverState: server, eventEffects: activeEventEffects });
 
 if (inDevPath && sub === "reset_tutorial") {
-  const target = opt.getUser("user");
-  if (!target) {
-    return commit({ content: "Pick a user to reset.", ephemeral: true });
+  const target = opt.getUser("user") ?? interaction.user;
+  if (target?.bot || (interaction.client?.user?.id && target.id === interaction.client.user.id)) {
+    return commit({ content: "Pick a real player account (non-bot) to reset.", ephemeral: true });
   }
 
   if (!db) {
@@ -3829,7 +3829,7 @@ if (inDevPath && sub === "reset_tutorial") {
     const mention = `<@${target.id}>`;
 
     return commit({
-      content: `${getIcon("status_complete")} Complete reset for ${mention} (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`,
+      content: `${getIcon("status_complete")} Complete reset for ${mention} (${target.id}) (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`,
       ephemeral: true
     });
   });

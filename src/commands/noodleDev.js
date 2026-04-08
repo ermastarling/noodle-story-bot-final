@@ -10,7 +10,7 @@ const noodleDevData = new SlashCommandBuilder()
     sc
       .setName("reset_tutorial")
       .setDescription("Dev only.")
-      .addUserOption((o) => o.setName("user").setDescription("User to reset").setRequired(true))
+      .addUserOption((o) => o.setName("user").setDescription("User to reset (defaults to you)").setRequired(false))
   )
   .addSubcommand((sc) =>
     sc
