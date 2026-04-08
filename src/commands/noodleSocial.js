@@ -52,6 +52,7 @@ const {
   MessageSelectMenu,
   MessageButton,
   MessageEmbed,
+  MessageFlags,
   Modal,
   TextInputComponent,
   Constants
@@ -677,9 +678,9 @@ async function componentCommit(interaction, opts) {
           // ignore if already deleted or not present
         }
       }
-      return interaction.followUp({ ...rest, ephemeral: true });
+      return interaction.followUp({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
     }
-    return interaction.reply({ ...rest, ephemeral: true });
+    return interaction.reply({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
   }
 
   if (targetMessageId) {
@@ -710,7 +711,7 @@ async function componentCommit(interaction, opts) {
 }
 
 async function errorReply(interaction, content) {
-  const payload = { content, ephemeral: true };
+  const payload = { content, flags: MessageFlags.Ephemeral, ephemeral: true };
   const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
   if (interaction.deferred || interaction.replied) {
     if (!isMessageComponent) {

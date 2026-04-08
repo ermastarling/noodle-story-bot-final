@@ -2478,8 +2478,20 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
 }
 
 function resetTutorialState(player) {
-player.tutorial = null;
-ensureTutorial(player);
+  player.tutorial = null;
+  ensureTutorial(player);
+
+  // Reset order flow so tutorial can always restart from the first customer.
+  if (!player.orders || typeof player.orders !== "object" || Array.isArray(player.orders)) {
+    player.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
+  }
+  player.orders.accepted = {};
+  player.orders_day = null;
+  player.orders_seed = null;
+  player.orders_pool_sig = null;
+  player.orders_consumed_indices = [];
+  player.orders_total_count = 0;
+  player.orders_depleted_day = null;
 }
 
 function tutorialSuffix(player) {
@@ -3670,9 +3682,9 @@ if (ephemeral && (interaction.deferred || interaction.replied)) {
   } catch (e) {
     // Ignore errors if already deleted
   }
-  return interaction.followUp({ ...base, ephemeral: true });
+  return interaction.followUp({ ...base, flags: MessageFlags.Ephemeral, ephemeral: true });
 }
-const options = ephemeral ? { ...base, ephemeral: true } : { ...base };
+const options = ephemeral ? { ...base, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...base };
 if (options.components) {
   options.components = normalizeComponents(options.components);
 }
@@ -3961,23 +3973,25 @@ if (sub === "start") {
   }
   return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
     const p = ensurePlayer(serverId, userId);
-    const gardenUnlocked = isGardenUnlocked(p);
-    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
-    const navRows = [
-      noodleForageGardenRow(userId, { active: "forage", gardenLocked: !gardenUnlocked, includeKitchenButton: true, kitchenUnlocked, kitchenJustUnlocked }),
-      noodleMainMenuRow(userId)
-    ];
-
-    const embed = buildMenuEmbed({
-      title: `${getIcon("start")} Welcome to Noodle Story`,
-      description: "Use the buttons below to play. If you need the tutorial again, run /noodle help.",
+    const step = getCurrentTutorialStep(p);
+    const tut = formatTutorialMessage(step);
+    const tutorialDone = !p.tutorial?.active || !step;
+    const tutorialEmbed = buildMenuEmbed({
+      title: tutorialDone ? `${getIcon("status_complete")} Tutorial Complete` : `${getIcon("orders")} Tutorial`,
+      description: tutorialDone
+        ? "You have already completed the tutorial. Use the menu below to play."
+        : (tut ?? "Welcome to your Noodle Story."),
       user: interaction.member ?? interaction.user
     });
 
+    const questsAvailable = hasDailyRewardAvailable(p, nowTs()) || hasClaimableQuests(p);
+
     return commit({
       content: " ",
-      embeds: [embed],
-      components: navRows
+      embeds: [tutorialEmbed],
+      components: tutorialDone
+        ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })]
+        : [noodleTutorialMenuRow(userId)]
     });
   });
 }
