@@ -3974,19 +3974,10 @@ if (sub === "start") {
       user: interaction.member ?? interaction.user
     });
 
-    return commitState({
+    return commit({
       content: " ",
       embeds: [embed],
       components: navRows
-    });
-
-    const questsAvailable = hasDailyRewardAvailable(p, nowTs()) || hasClaimableQuests(p);
-    return commit({
-      content: " ",
-      embeds: [tutorialEmbed],
-      components: tutorialDone
-        ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })]
-        : [noodleTutorialMenuRow(userId)]
     });
   });
 }
