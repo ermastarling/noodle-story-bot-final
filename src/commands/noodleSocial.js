@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import discordPkg from "discord.js";
 import crypto from "node:crypto";
-import { openDb, getPlayer, upsertPlayer, getServer, upsertServer } from "../db/index.js";
+import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getPlayerStorageServerId } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
@@ -117,6 +117,7 @@ const LEADERBOARD_TYPES = [
 const LEADERBOARD_PAGE_SIZE = 10;
 const CONTRIBUTOR_LOCK_CONCURRENCY = 3;
 const CONTRIBUTOR_LOCK_RETRY_DELAYS_MS = [25, 75, 150];
+const GLOBAL_LEADERBOARD_PROBE_SERVER_ID = "__leaderboard_probe__";
 
 function getLeaderboardTypeIndex(typeId) {
   const idx = LEADERBOARD_TYPES.findIndex((type) => type.id === typeId);
@@ -141,6 +142,82 @@ function getLeaderboardPage(serverId, typeIndex, page = 0) {
     ORDER BY metric DESC, last_active_at DESC
     LIMIT ? OFFSET ?
   `).all(serverId, LEADERBOARD_PAGE_SIZE, offset);
+
+  return {
+    type,
+    safeIndex,
+    safePage,
+    totalPages,
+    totalPlayers,
+    startRank: offset,
+    rows
+  };
+}
+
+function getGlobalLeaderboardPage(typeIndex, page = 0) {
+  const safeIndex = Math.min(Math.max(typeIndex, 0), LEADERBOARD_TYPES.length - 1);
+  const type = LEADERBOARD_TYPES[safeIndex];
+  const probeStorageServerId = getPlayerStorageServerId(GLOBAL_LEADERBOARD_PROBE_SERVER_ID);
+  const globalStorageEnabled = probeStorageServerId !== GLOBAL_LEADERBOARD_PROBE_SERVER_ID;
+
+  let totalPlayers = 0;
+  let rows = [];
+
+  if (globalStorageEnabled) {
+    totalPlayers = db
+      .prepare("SELECT COUNT(*) AS count FROM players WHERE server_id = ?")
+      .get(probeStorageServerId)?.count ?? 0;
+
+    const totalPages = Math.max(1, Math.ceil(totalPlayers / LEADERBOARD_PAGE_SIZE));
+    const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+    const offset = safePage * LEADERBOARD_PAGE_SIZE;
+
+    rows = db.prepare(`
+      SELECT
+        user_id,
+        COALESCE(NULLIF(TRIM(json_extract(data_json, '$.profile.shop_name')), ''), 'My Noodle Shop') AS shop_name,
+        COALESCE(CAST(${type.metricExpr} AS INTEGER), 0) AS metric
+      FROM players
+      WHERE server_id = ?
+      ORDER BY metric DESC, last_active_at DESC
+      LIMIT ? OFFSET ?
+    `).all(probeStorageServerId, LEADERBOARD_PAGE_SIZE, offset);
+
+    return {
+      type,
+      safeIndex,
+      safePage,
+      totalPages,
+      totalPlayers,
+      startRank: offset,
+      rows
+    };
+  }
+
+  const totalUsersRow = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
+  totalPlayers = Number(totalUsersRow?.count ?? 0);
+  const totalPages = Math.max(1, Math.ceil(totalPlayers / LEADERBOARD_PAGE_SIZE));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const offset = safePage * LEADERBOARD_PAGE_SIZE;
+
+  rows = db.prepare(`
+    WITH ranked_players AS (
+      SELECT
+        user_id,
+        data_json,
+        last_active_at,
+        ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY last_active_at DESC) AS rn
+      FROM players
+    )
+    SELECT
+      user_id,
+      COALESCE(NULLIF(TRIM(json_extract(data_json, '$.profile.shop_name')), ''), 'My Noodle Shop') AS shop_name,
+      COALESCE(CAST(${type.metricExpr} AS INTEGER), 0) AS metric
+    FROM ranked_players
+    WHERE rn = 1
+    ORDER BY metric DESC, last_active_at DESC
+    LIMIT ? OFFSET ?
+  `).all(LEADERBOARD_PAGE_SIZE, offset);
 
   return {
     type,
@@ -200,6 +277,66 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
       .setDisabled(!canNavigate),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:leaderboard:${userId}:${nextType}:${nextPage}`)
+      .setLabel("Next")
+      .setEmoji(getButtonEmoji("next"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!canNavigate)
+  );
+
+  return {
+    embeds: [embed],
+    components: [navRow, socialMainMenuRow(userId)]
+  };
+}
+
+function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
+  const { type, safeIndex, safePage, totalPages, startRank, rows } = leaderboardPage;
+
+  const leaderboardText = rows
+    .map((row, i) => {
+      const rank = startRank + i;
+      const medal = rank === 0 ? getIcon("medal_gold") : rank === 1 ? getIcon("medal_silver") : rank === 2 ? getIcon("medal_bronze") : `${rank + 1}.`;
+      const shopName = String(row.shop_name || "My Noodle Shop").trim() || "My Noodle Shop";
+      return `${medal} **${shopName}** — ${type.formatMetric(row.metric)}`;
+    })
+    .join("\n");
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${getIcon("leaderboard")} Global Leaderboard`)
+    .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
+    .setColor(theme.colors.info)
+    .setFooter({ text: `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}` });
+
+  const typeCount = LEADERBOARD_TYPES.length;
+  const canNavigate = typeCount > 1 || totalPages > 1;
+
+  let prevType = safeIndex;
+  let prevPage = safePage;
+  if (safePage > 0) {
+    prevPage = safePage - 1;
+  } else {
+    prevType = (safeIndex - 1 + typeCount) % typeCount;
+    prevPage = totalPages - 1;
+  }
+
+  let nextType = safeIndex;
+  let nextPage = safePage;
+  if (safePage < totalPages - 1) {
+    nextPage = safePage + 1;
+  } else {
+    nextType = (safeIndex + 1) % typeCount;
+    nextPage = 0;
+  }
+
+  const navRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${prevType}:${prevPage}`)
+      .setLabel("Prev")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!canNavigate),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${nextType}:${nextPage}`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
@@ -1287,6 +1424,37 @@ async function handleLeaderboard(interaction) {
   }
 }
 
+async function handleGlobalLeaderboard(interaction) {
+  const serverId = interaction.guildId;
+  const userId = interaction.user.id;
+  const channelId = interaction.channelId ?? interaction.channel?.id;
+  const type = interaction.options.getString("type") || "coins";
+  const typeIndex = getLeaderboardTypeIndex(type);
+
+  const player = ensurePlayer(serverId, userId);
+  touchLastKitchen(player, serverId, channelId, userId);
+
+  await interaction.deferReply({ ephemeral: false });
+
+  try {
+    const leaderboardPage = getGlobalLeaderboardPage(typeIndex, 0);
+    if (leaderboardPage.totalPlayers === 0) {
+      return errorReply(interaction, `${getIcon("error")} No players found yet.`);
+    }
+
+    const view = buildGlobalLeaderboardView({
+      leaderboardPage,
+      userId: interaction.user.id,
+      ownerUser: interaction.member ?? interaction.user
+    });
+
+    return interaction.editReply(view);
+  } catch (err) {
+    console.error("Global leaderboard error:", err);
+    return errorReply(interaction, `${getIcon("error")} Error loading global leaderboard: ${err.message}`);
+  }
+}
+
 async function handleStats(interaction) {
   const serverId = interaction.guildId;
   const userId = interaction.user.id;
@@ -2334,6 +2502,33 @@ async function handleComponent(interaction) {
       }
 
       const view = buildLeaderboardView({
+        leaderboardPage,
+        userId,
+        ownerUser: interaction.member ?? interaction.user
+      });
+
+      return componentCommit(interaction, view);
+    }
+
+    if (action === "global_leaderboard") {
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
+
+      const typeRaw = Number(parts[4] ?? 0);
+      const pageRaw = Number(parts[5] ?? 0);
+      const typeIndex = Number.isFinite(typeRaw) ? typeRaw : 0;
+      const page = Number.isFinite(pageRaw) ? pageRaw : 0;
+
+      const leaderboardPage = getGlobalLeaderboardPage(typeIndex, page);
+      if (leaderboardPage.totalPlayers === 0) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} No players found yet.`,
+          ephemeral: false
+        });
+      }
+
+      const view = buildGlobalLeaderboardView({
         leaderboardPage,
         userId,
         ownerUser: interaction.member ?? interaction.user
@@ -3473,6 +3668,22 @@ export const noodleSocialCommand = {
             )
         )
     )
+    .addSubcommand(sc =>
+      sc
+        .setName("global_leaderboard")
+        .setDescription("View global leaderboards (shop names only)")
+        .addStringOption(o =>
+          o
+            .setName("type")
+            .setDescription("Leaderboard type")
+            .setRequired(false)
+            .addChoices(
+              { name: "Coins", value: "coins" },
+              { name: "Reputation", value: "rep" },
+              { name: "Bowls Served", value: "bowls" }
+            )
+        )
+    )
     .addSubcommand(sc => sc.setName("stats").setDescription("View your social stats")),
 
   async execute(interaction) {
@@ -3488,6 +3699,8 @@ export const noodleSocialCommand = {
           return await handleVisit(interaction);
         case "leaderboard":
           return await handleLeaderboard(interaction);
+        case "global_leaderboard":
+          return await handleGlobalLeaderboard(interaction);
         case "stats":
           return await handleStats(interaction);
         default:

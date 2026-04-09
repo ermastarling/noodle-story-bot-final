@@ -632,7 +632,7 @@ function buildHelpPage({ page, userId, user }) {
         "• `/noodle start` — Start the tutorial.",
         "• `/noodle help` — Show this help menu.",
         "",
-        "**Party**",
+        "• `/noodle-social global_leaderboard` — View global leaderboards.",
         "• `/noodle-social party action:rename name:<new>` — Change party name.",
         "• `/noodle-social party action:transfer_leader user:<member>` — Transfer leadership.",
         "• `/noodle-social party action:kick user:<member>` — Kick a party member."
