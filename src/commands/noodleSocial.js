@@ -3671,7 +3671,7 @@ export const noodleSocialCommand = {
     .addSubcommand(sc =>
       sc
         .setName("global_leaderboard")
-        .setDescription("View global leaderboards (shop names only)")
+        .setDescription("View global leaderboards")
         .addStringOption(o =>
           o
             .setName("type")
