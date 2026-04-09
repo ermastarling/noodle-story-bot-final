@@ -3738,6 +3738,8 @@ const buildDevStatusEmbed = () => {
   const p = ensurePlayer(serverId, userId);
   const ordersDay = p.orders_day ?? "unknown";
   const marketDay = server.market_day ?? "unknown";
+  const activeWindowHours = 24;
+  const activeWindowMs = activeWindowHours * 60 * 60 * 1000;
 
   const ordersTimestamp = ordersDay !== "unknown" ? new Date(`${ordersDay}T00:00:00Z`).getTime() / 1000 : "unknown";
   const marketTimestamp = marketDay !== "unknown" ? new Date(`${marketDay}T00:00:00Z`).getTime() / 1000 : "unknown";
@@ -3754,6 +3756,16 @@ const buildDevStatusEmbed = () => {
   const mem = process.memoryUsage();
   const rssMb = (mem.rss / (1024 * 1024)).toFixed(1);
   const heapMb = (mem.heapUsed / (1024 * 1024)).toFixed(1);
+  let activeUsers = "unknown";
+  if (db) {
+    try {
+      const cutoff = nowTs() - activeWindowMs;
+      const row = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players WHERE last_active_at >= ?").get(cutoff);
+      activeUsers = String(Number(row?.count ?? 0));
+    } catch {
+      // Ignore stats query errors.
+    }
+  }
 
   const backupDir = process.env.NOODLE_BACKUP_DIR || path.join(process.cwd(), "data", "backups");
   let lastBackup = "unknown";
@@ -3780,6 +3792,7 @@ const buildDevStatusEmbed = () => {
     `${getIcon("calendar")} Orders last reset: ${ordersStr}`,
     `${getIcon("cart")} Market last rolled: ${marketStr}`,
     `${getIcon("group")} Guilds: ${guildCount}`,
+    `${getIcon("profile")} Global active users (${activeWindowHours}h): ${activeUsers}`,
     `${getIcon("stats")} Memory: ${rssMb} MB RSS / ${heapMb} MB heap`,
     `${getIcon("leaderboard")} Shard: ${shardText}`,
     `${getIcon("refresh")} Last backup: ${lastBackup}`
