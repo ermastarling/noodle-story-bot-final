@@ -18,6 +18,8 @@ const guildOverrideNames = new Set(
     .filter(Boolean)
 );
 
+const FORBIDDEN_GLOBAL_COMMANDS = new Set(["noodle-dev"]);
+
 if (!token || !clientId) {
   console.error("Missing DISCORD_TOKEN or DISCORD_CLIENT_ID in .env");
   process.exit(1);
@@ -136,7 +138,7 @@ function buildGuildOverrideBody(globalBody, guildBody) {
 }
 
 function filterGlobalOnlyBody(body) {
-  return (body || []).filter((cmd) => cmd?.name !== "noodle-dev");
+  return (body || []).filter((cmd) => !FORBIDDEN_GLOBAL_COMMANDS.has(String(cmd?.name ?? "").trim()));
 }
 
 async function main() {
@@ -239,7 +241,8 @@ async function main() {
       }
     }
   } else {
-    await rest.put(Routes.applicationCommands(clientId), { body });
+    const globalBody = filterGlobalOnlyBody(body);
+    await rest.put(Routes.applicationCommands(clientId), { body: globalBody });
     console.log("Registered global commands (Discord can take up to 1 hour to propagate).");
 
     const removedGlobalDuplicates = await cleanupDuplicateCommands(
