@@ -1225,6 +1225,25 @@ new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve")
 );
 }
 
+function getTutorialProgressRows(player, userId, { highlightAccept = false, disableAccept = false } = {}) {
+  if (isTutorialStep(player, "intro_order")) {
+    return [noodleOrdersAcceptOnlyRow(userId, { highlightAccept, disableAccept })];
+  }
+  if (isTutorialStep(player, "intro_market")) {
+    return [noodleTutorialBuyRow(userId)];
+  }
+  if (isTutorialStep(player, "intro_forage")) {
+    return [noodleTutorialForageRow(userId)];
+  }
+  if (isTutorialStep(player, "intro_cook")) {
+    return [noodleTutorialCookRow(userId)];
+  }
+  if (isTutorialStep(player, "intro_serve")) {
+    return [noodleTutorialServeRow(userId)];
+  }
+  return null;
+}
+
 function noodleOrdersAcceptOnlyRow(userId, { highlightAccept = true, disableAccept = false } = {}) {
   const style = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
   return new ActionRowBuilder().addComponents(
@@ -5846,7 +5865,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     forageEmbed.setDescription(description);
     const components = isTutorialStep(p, "intro_cook")
-      ? [...navRows, noodleTutorialCookRow(userId)]
+      ? [noodleTutorialCookRow(userId)]
       : navRows;
     return commitState({
       content: " ",
@@ -6860,12 +6879,12 @@ ${lines.join("\n")}`;
       const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
       menuEmbed.setFooter({ text: footerText });
     }
-    const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
+    const tutorialRows = getTutorialProgressRows(p, userId, { highlightAccept, disableAccept });
     return commitState({
       content: " ",
       embeds: [menuEmbed],
-      components: tutorialOnlyAccept
-        ? [noodleOrdersAcceptOnlyRow(userId, { highlightAccept, disableAccept })]
+      components: tutorialRows
+        ? tutorialRows
         : [
             noodleOrdersMenuActionRow(userId, { showCancel, highlightAccept, disableAccept, disableServe: acceptedEntries.length === 0 }),
             noodleMainMenuRowNoOrders(userId)
