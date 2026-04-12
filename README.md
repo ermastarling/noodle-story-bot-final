@@ -80,6 +80,14 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 
 Only `DISCORD_TOKEN` is required for booting the bot; it exits immediately if the value is missing. Optional runtime knobs such as `NODE_ENV=production` control the verbosity of logging and scheduler behavior, and the SQLite database lives under `data/` unless you customize the path in `db/index.js`.
 
+Optional developer join alert env vars:
+
+- `NOODLE_OFFICIAL_GUILD_ID` (falls back to `DISCORD_GUILD_ID`) — guild where alerts are sent
+- `NOODLE_DEV_ALERT_CHANNEL_ID` — channel ID in the official guild for alerts
+- `NOODLE_DEV_ALERT_USER_ID` — user ID to ping when the bot joins a new guild
+
+When all three values are present, joining a new guild triggers a ping in the configured channel with an embed that only contains the new guild name.
+
 ## Simulation Harness
 
 Run the harness to stress-test progression, upgrades, and rewards without sending Discord traffic:

@@ -244,6 +244,9 @@ import { getIcon } from "./ui/icons.js";
   /* ------------------------------------------------------------------ */
 
   const token = process.env.DISCORD_TOKEN;
+  const officialGuildId = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
+  const devAlertChannelId = process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "";
+  const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -947,6 +950,39 @@ import { getIcon } from "./ui/icons.js";
       setTimeout(() => {
         runDbBackup(db, "startup");
       }, 60_000);
+    }
+  });
+
+  client.on("guildCreate", async (guild) => {
+    try {
+      if (!officialGuildId || !devAlertChannelId || !devAlertUserId) return;
+      if (guild?.id === officialGuildId) return;
+
+      const officialGuild = client.guilds.cache.get(officialGuildId)
+        || await client.guilds.fetch(officialGuildId).catch(() => null);
+      if (!officialGuild) {
+        console.error("⚠️ Guild join alert skipped: official guild not found.");
+        return;
+      }
+
+      const alertChannel = officialGuild.channels.cache.get(devAlertChannelId)
+        || await officialGuild.channels.fetch(devAlertChannelId).catch(() => null);
+      if (!alertChannel || typeof alertChannel.send !== "function") {
+        console.error("⚠️ Guild join alert skipped: alert channel not sendable.");
+        return;
+      }
+
+      await alertChannel.send({
+        content: `<@${devAlertUserId}>`,
+        allowedMentions: { users: [devAlertUserId] },
+        embeds: [
+          {
+            description: String(guild?.name || "Unknown Server").slice(0, 4096)
+          }
+        ]
+      });
+    } catch (error) {
+      console.error("❌ Failed to send guild join alert:", error?.stack ?? error);
     }
   });
 
