@@ -977,7 +977,7 @@ import { getIcon } from "./ui/icons.js";
         allowedMentions: { users: [devAlertUserId] },
         embeds: [
           {
-            description: String(guild?.name || "Unknown Server").slice(0, 4096)
+            description: `New Server: ${String(guild?.name || "Unknown Server")}`.slice(0, 4096)
           }
         ]
       });
