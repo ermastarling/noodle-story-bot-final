@@ -4258,11 +4258,11 @@ if (sub === "pantry") {
       : (kitchenJustUnlocked ? `${getIcon("kitchen")} Kitchen unlocked! Simmer broths with forageables in the Kitchen.` : null);
 
     const gardenLine = !gardenUnlocked
-      ? `${getIcon("garden")} Garden unlocks at shop level ${GARDEN_UNLOCK_LEVEL}.`
+      ? `${getIcon("lock")} Garden unlocks at shop level ${GARDEN_UNLOCK_LEVEL}.`
       : null;
 
     const fishingLine = !fishingUnlocked
-      ? `${getIcon("fishing")} Fishing unlocks at shop level ${FISHING_UNLOCK_LEVEL}.`
+      ? `${getIcon("lock")} Fishing unlocks at shop level ${FISHING_UNLOCK_LEVEL}.`
       : (fishingJustUnlocked ? `${getIcon("fishing")} Fishing unlocked! Cast lines from the Pantry.` : null);
 
     const unlockMessages = [gardenLine, kitchenLine, fishingLine].filter(Boolean);
