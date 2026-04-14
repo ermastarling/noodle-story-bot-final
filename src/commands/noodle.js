@@ -2859,7 +2859,7 @@ if (idMatches.length === 1) return idMatches[0];
 return null;
 }
 
-function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
+function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSellButton = true }) {
   if (!s.market_prices) s.market_prices = {};
   if (!p.market_stock) p.market_stock = {};
 
@@ -3010,18 +3010,22 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
   const rows = [new ActionRowBuilder().addComponents(menu)];
   if (navRow) rows.push(navRow);
-  rows.push(
-    new ActionRowBuilder().addComponents(
+  const footerButtons = [];
+  if (showSellButton) {
+    footerButtons.push(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:sell:${userId}`)
         .setLabel("Sell Items").setEmoji(getButtonEmoji("coins"))
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`noodle:nav:profile:${userId}`)
-        .setLabel("Cancel")
         .setStyle(ButtonStyle.Secondary)
-    )
+    );
+  }
+  footerButtons.push(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:profile:${userId}`)
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary)
   );
+  rows.push(new ActionRowBuilder().addComponents(...footerButtons));
 
   return {
     content: " ",
@@ -3484,7 +3488,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     : "";
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:cook_select:${userId}`)
+    .setCustomId(`noodle:pick:cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
     .setPlaceholder("Select a recipe to cook")
     .setMinValues(1)
     .setMaxValues(1)
@@ -3541,11 +3545,13 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 }
 
 async function renderMultiBuyPicker({ interaction, userId, s, p }) {
+  const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
   const payload = buildMultiBuyPickerPayload({
     userId,
     p,
     s,
-    ownerUser: interaction.member ?? interaction.user
+    ownerUser: interaction.member ?? interaction.user,
+    showSellButton: !tutorialOnlyBuy
   });
 
   return componentCommit(interaction, payload);
@@ -6401,12 +6407,14 @@ ${lines.join("\n")}`;
 
     // Multi-buy entry
     if (!itemId) {
+      const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
       const payload = buildMultiBuyPickerPayload({
         userId,
         p,
         s,
         ownerUser: interaction.member ?? interaction.user,
-        page
+        page,
+        showSellButton: !tutorialOnlyBuy
       });
 
       return payload;
