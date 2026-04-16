@@ -270,13 +270,13 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${prevType}:${prevPage}`)
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${prevType}:${prevPage}:prev`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!canNavigate),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${nextType}:${nextPage}`)
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${nextType}:${nextPage}:next`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
@@ -342,13 +342,13 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${prevType}:${prevPage}`)
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${prevType}:${prevPage}:prev`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!canNavigate),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${nextType}:${nextPage}`)
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${nextType}:${nextPage}:next`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
