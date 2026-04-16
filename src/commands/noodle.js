@@ -1117,6 +1117,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
       value: seedId,
       description: `Uses 1 compost bag — yields ${describeYieldMap(getSeedYieldMap(seedId, { allowedIngredients }), content)}`.slice(0, 100)
     }))
+    .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), undefined, { sensitivity: "base" }))
     .slice(0, 25);
 
   if (!seedOptions.length) {
@@ -1139,7 +1140,9 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
     label: `${getSeedDisplayName(plot.seed_id, content)} — Plot ${plot.idx + 1}`.slice(0, 100),
     value: String(plot.idx),
     description: `Harvest up to ${Math.floor(plot.remainingTotal ?? 0)} items`.slice(0, 100)
-  })).slice(0, 25);
+  }))
+    .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), undefined, { sensitivity: "base" }))
+    .slice(0, 25);
 
   const harvestSelectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -5486,13 +5489,14 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       );
       const components = [];
       if (totalPages > 1) {
+        const prevPage = page <= 0 ? totalPages - 1 : page - 1;
         components.push(new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`noodle:nav:specialize:${userId}:${page - 1}`)
+            .setCustomId(`noodle:nav:specialize:${userId}:${prevPage}`)
             .setLabel("Prev")
             .setEmoji(getButtonEmoji("back"))
             .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page <= 0),
+            .setDisabled(false),
           new ButtonBuilder()
             .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
             .setLabel("Next")
@@ -7967,13 +7971,14 @@ if (kind === "profile" && action === "specialize_cancel") {
   const { embed, page, totalPages } = buildSpecializationListEmbed(p, interaction.member ?? interaction.user, nowTs(), 0, 5);
   const components = [];
   if (totalPages > 1) {
+    const prevPage = page <= 0 ? totalPages - 1 : page - 1;
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`noodle:nav:specialize:${userId}:${page - 1}`)
+        .setCustomId(`noodle:nav:specialize:${userId}:${prevPage}`)
         .setLabel("Prev")
         .setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page <= 0),
+        .setDisabled(false),
       new ButtonBuilder()
         .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
         .setLabel("Next")
@@ -8080,8 +8085,7 @@ function buildCompostSelectOptions(player) {
   }
 
   const freshOptions = freshPool
-    .sort((a, b) => displayItemName(a.id).localeCompare(displayItemName(b.id)))
-    .slice(0, 25 - options.length)
+    .sort((a, b) => displayItemName(a.id).localeCompare(displayItemName(b.id), undefined, { sensitivity: "base" }))
     .map((entry) => ({
       label: `${displayItemName(entry.id)} (${entry.qty})`.slice(0, 100),
       value: `${entry.source}:${entry.id}`,
@@ -8089,6 +8093,12 @@ function buildCompostSelectOptions(player) {
     }));
 
   options.push(...freshOptions);
+
+  options.sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), undefined, { sensitivity: "base" }));
+
+  if (options.length > 25) {
+    options.length = 25;
+  }
 
   return { options };
 }

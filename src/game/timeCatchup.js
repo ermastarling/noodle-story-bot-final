@@ -168,8 +168,8 @@ function getSpoilageReduction(item, effects, fishingUnlocked = false) {
   const tierMultipliers = {
     common: 1.0,
     rare: 0.8,
-    epic: 0.4,
-    seasonal: 0.3
+    epic: 0.6,
+    seasonal: 0.5
   };
 
   const tierMultiplier = tierMultipliers[item.tier] || 1.0;

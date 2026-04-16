@@ -280,7 +280,19 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!canNavigate)
+      .setDisabled(!canNavigate),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${getLeaderboardTypeIndex("bowls")}:${safePage}`)
+      .setLabel("Bowls Served")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("bowls") ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${getLeaderboardTypeIndex("coins")}:${safePage}`)
+      .setLabel("Top Coin")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("coins") ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${getLeaderboardTypeIndex("rep")}:${safePage}`)
+      .setLabel("Top Rep")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("rep") ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 
   return {
@@ -340,7 +352,19 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!canNavigate)
+      .setDisabled(!canNavigate),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${getLeaderboardTypeIndex("bowls")}:${safePage}`)
+      .setLabel("Bowls Served")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("bowls") ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${getLeaderboardTypeIndex("coins")}:${safePage}`)
+      .setLabel("Top Coin")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("coins") ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${getLeaderboardTypeIndex("rep")}:${safePage}`)
+      .setLabel("Top Rep")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("rep") ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 
   return {

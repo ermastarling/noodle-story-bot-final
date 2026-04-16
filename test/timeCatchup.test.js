@@ -201,6 +201,79 @@ test("C1: applySpoilageCatchup - protected items have reduced spoilage", () => {
   assert.strictEqual(result.ticksApplied, 5);
 });
 
+test("C1: applySpoilageCatchup - spoilage reduction lowers spoil chance deterministically", () => {
+  const settings = {
+    SPOILAGE_ENABLED: true,
+    SPOILAGE_APPLY_ON_LOGIN: true,
+    SPOILAGE_TICK_HOURS: 1,
+    SPOILAGE_MAX_CATCHUP_TICKS: 24,
+    SPOILAGE_BASE_CHANCE: 1.0
+  };
+  const content = {
+    items: {
+      test_item: {
+        name: "Test Item",
+        spoilable: true,
+        tags: ["fresh"],
+        acquisition: "forage",
+        tier: "common"
+      }
+    }
+  };
+  const lastActiveAt = 1700000000000;
+  const now = lastActiveAt + HOUR_MS;
+
+  const baselinePlayer = {
+    user_id: "u1",
+    inv_ingredients: { test_item: 1 },
+    upgrades: {}
+  };
+  const reducedPlayer = {
+    user_id: "u1",
+    inv_ingredients: { test_item: 1 },
+    upgrades: {}
+  };
+
+  applySpoilageCatchup(baselinePlayer, settings, content, lastActiveAt, now, { spoilage_reduction: 0 });
+  applySpoilageCatchup(reducedPlayer, settings, content, lastActiveAt, now, { spoilage_reduction: 0.5 });
+
+  assert.strictEqual(baselinePlayer.inv_ingredients.test_item, 0);
+  assert.strictEqual(reducedPlayer.inv_ingredients.test_item, 1);
+});
+
+test("C1: applySpoilageCatchup - epic tier uses documented spoilage multiplier", () => {
+  const player = {
+    user_id: "u1",
+    inv_ingredients: { test_item: 1 },
+    upgrades: {}
+  };
+  const settings = {
+    SPOILAGE_ENABLED: true,
+    SPOILAGE_APPLY_ON_LOGIN: true,
+    SPOILAGE_TICK_HOURS: 1,
+    SPOILAGE_MAX_CATCHUP_TICKS: 24,
+    SPOILAGE_BASE_CHANCE: 1.0
+  };
+  const content = {
+    items: {
+      test_item: {
+        name: "Test Item",
+        spoilable: true,
+        tags: ["fresh"],
+        acquisition: "forage",
+        tier: "epic"
+      }
+    }
+  };
+  const lastActiveAt = 1700000000000;
+  const now = lastActiveAt + HOUR_MS;
+
+  applySpoilageCatchup(player, settings, content, lastActiveAt, now, { spoilage_reduction: 0 });
+
+  // For this deterministic seed, roll is ~0.501. Epic should spoil at 60% chance.
+  assert.strictEqual(player.inv_ingredients.test_item, 0);
+});
+
 test("C6: getInactivityStatus - detects 7 day inactivity", () => {
   const lastActiveAt = Date.now() - 8 * DAY_MS;
   const now = Date.now();
