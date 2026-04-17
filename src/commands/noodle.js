@@ -3995,16 +3995,19 @@ if (inDevPath && sub === "dashboard") {
   const description = [
     headerLine,
     "",
-    ...(serverPages[clampedServerPage] ?? []),
-    "",
-    `Page ${clampedServerPage + 1}/${totalServerPages} • Showing ${shownStart}-${shownEnd} of ${guilds.length} servers`
+    ...(serverPages[clampedServerPage] ?? [])
   ].filter(Boolean).join("\n");
+
+  const paginationText = `Page ${clampedServerPage + 1}/${totalServerPages} • Showing ${shownStart}-${shownEnd} of ${guilds.length} servers`;
+  const ownerText = ownerFooterText(interaction.member ?? interaction.user);
+  const dashboardFooter = `${paginationText} • ${ownerText}`;
 
   const serversEmbed = buildMenuEmbed({
     title: `${getIcon("group")} Bot Servers (${guilds.length})`,
     description,
     user: interaction.member ?? interaction.user
   });
+  serversEmbed.setFooter({ text: dashboardFooter.slice(0, 2048) });
 
   const statusEmbed = buildDevStatusEmbed();
   const pageRaw = Number(opt.getInteger("dashboard_page") ?? 0);
