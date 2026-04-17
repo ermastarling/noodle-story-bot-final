@@ -50,7 +50,8 @@ const mockContent = {
   },
   items: {
     soy_broth: { item_id: "soy_broth", tier: "common", category: "broth" },
-    rare_mushroom: { item_id: "rare_mushroom", tier: "rare", category: "topping" }
+    rare_mushroom: { item_id: "rare_mushroom", tier: "rare", category: "topping" },
+    shrimp: { item_id: "shrimp", tier: "common", category: "protein" }
   }
 };
 
@@ -222,4 +223,80 @@ test("Discovery: applyNpcDiscoveryBuff - other npcs don't set buff", () => {
   applyNpcDiscoveryBuff(player, "sleepy_traveler");
   
   assert.strictEqual(player.buffs.apprentice_bonus_pending, undefined);
+});
+
+test("Discovery: applyDiscovery clue does not reveal fish before fishing unlock", () => {
+  const contentWithFish = {
+    ...mockContent,
+    recipes: {
+      ...mockContent.recipes,
+      fish_ramen: {
+        recipe_id: "fish_ramen",
+        name: "Fish Ramen",
+        tier: "common",
+        ingredients: [
+          { item_id: "soy_broth", qty: 1 },
+          { item_id: "shrimp", qty: 1 }
+        ]
+      }
+    }
+  };
+
+  const player = {
+    shop_level: 1,
+    clues_owned: {},
+    known_recipes: [],
+    coins: 100
+  };
+
+  const discovery = {
+    type: "clue",
+    clueId: "clue_fish_1",
+    recipeId: "fish_ramen",
+    recipeName: "Fish Ramen",
+    recipeTier: "common"
+  };
+
+  const result = applyDiscovery(player, discovery, contentWithFish, () => 0.99);
+  assert.strictEqual(result.isDuplicate, false);
+  assert.ok(player.clues_owned.fish_ramen);
+  assert.deepEqual(player.clues_owned.fish_ramen.revealed_ingredients, ["soy_broth"]);
+});
+
+test("Discovery: applyDiscovery clue can reveal fish after fishing unlock", () => {
+  const contentWithFish = {
+    ...mockContent,
+    recipes: {
+      ...mockContent.recipes,
+      fish_ramen: {
+        recipe_id: "fish_ramen",
+        name: "Fish Ramen",
+        tier: "common",
+        ingredients: [
+          { item_id: "soy_broth", qty: 1 },
+          { item_id: "shrimp", qty: 1 }
+        ]
+      }
+    }
+  };
+
+  const player = {
+    shop_level: 99,
+    clues_owned: {},
+    known_recipes: [],
+    coins: 100
+  };
+
+  const discovery = {
+    type: "clue",
+    clueId: "clue_fish_2",
+    recipeId: "fish_ramen",
+    recipeName: "Fish Ramen",
+    recipeTier: "common"
+  };
+
+  const result = applyDiscovery(player, discovery, contentWithFish, () => 0.99);
+  assert.strictEqual(result.isDuplicate, false);
+  assert.ok(player.clues_owned.fish_ramen);
+  assert.deepEqual(player.clues_owned.fish_ramen.revealed_ingredients, ["shrimp"]);
 });

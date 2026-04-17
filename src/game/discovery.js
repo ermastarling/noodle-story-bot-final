@@ -13,6 +13,7 @@ import {
 import { nowTs } from "../util/time.js";
 import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
 import { FALLBACK_RECIPE_ID } from "./resilience.js";
+import { isFishingIngredientLocked } from "./fishing.js";
 import { weightedPick } from "../util/rng.js";
 import { grantBadge } from "./badges.js";
 import { getIcon } from "../ui/icons.js";
@@ -221,6 +222,12 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     const badgeName = result.badge?.name ?? "Event Badge";
     return `${getIcon("badges")} Badge earned: **${badgeName}**`;
   };
+
+  const getRevealableIngredientIds = (recipe) => {
+    return (recipe?.ingredients ?? [])
+      .map((ing) => ing?.item_id)
+      .filter((itemId) => itemId && !isFishingIngredientLocked(player, itemId));
+  };
   
   if (discovery.type === "clue") {
     // Check if player already knows this recipe
@@ -260,7 +267,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     }
     const existingCount = player.clues_owned[clueKey].count || 0;
     const revealedIngredients = player.clues_owned[clueKey].revealed_ingredients;
-    const allIngredientIds = recipe.ingredients.map(ing => ing.item_id);
+    const allIngredientIds = getRevealableIngredientIds(recipe);
     
     // If we have clues but no revealed ingredients, backfill them
     if (existingCount > 0 && revealedIngredients.length < existingCount) {

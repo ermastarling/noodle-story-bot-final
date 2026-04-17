@@ -7848,7 +7848,7 @@ if (componentTouched && db) {
 }
 
 // lock UI to owner when ownerId is present
-if (ownerId && ownerId !== userId && (kind === "nav" || kind === "pick" || kind === "multibuy" || kind === "profile" || kind === "decor")) {
+if (ownerId && ownerId !== userId && (kind === "nav" || kind === "action" || kind === "pick" || kind === "multibuy" || kind === "profile" || kind === "decor")) {
 return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
 }
 
