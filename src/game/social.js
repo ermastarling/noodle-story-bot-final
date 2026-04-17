@@ -307,15 +307,33 @@ export function getParty(db, partyId) {
 /**
  * Get user's active party
  */
-export function getUserActiveParty(db, userId) {
-  const membership = db.prepare(`
-    SELECT pm.*, gp.* 
-    FROM party_members pm
-    JOIN guild_parties gp ON pm.party_id = gp.party_id
-    WHERE pm.user_id = ? AND pm.left_at IS NULL AND gp.status = 'active'
-    ORDER BY pm.joined_at DESC
-    LIMIT 1
-  `).get(userId);
+export function getUserActiveParty(db, userId, serverId = null) {
+  const query = serverId
+    ? `
+      SELECT pm.*, gp.*
+      FROM party_members pm
+      JOIN guild_parties gp ON pm.party_id = gp.party_id
+      WHERE pm.user_id = ?
+        AND pm.left_at IS NULL
+        AND gp.status = 'active'
+        AND gp.server_id = ?
+      ORDER BY pm.joined_at DESC
+      LIMIT 1
+    `
+    : `
+      SELECT pm.*, gp.*
+      FROM party_members pm
+      JOIN guild_parties gp ON pm.party_id = gp.party_id
+      WHERE pm.user_id = ?
+        AND pm.left_at IS NULL
+        AND gp.status = 'active'
+      ORDER BY pm.joined_at DESC
+      LIMIT 1
+    `;
+
+  const membership = serverId
+    ? db.prepare(query).get(userId, serverId)
+    : db.prepare(query).get(userId);
   
   if (!membership) return null;
   

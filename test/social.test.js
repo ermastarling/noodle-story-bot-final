@@ -24,6 +24,7 @@ import {
   clearExpiredBlessings,
   createParty,
   joinParty,
+  inviteUserToParty,
   leaveParty,
   getParty,
   getUserActiveParty,
@@ -210,6 +211,31 @@ test("Party: getUserActiveParty returns correct party", dbTestOpts, () => {
   const noParty = getUserActiveParty(db, "nouser");
   assert.equal(noParty, null);
   
+  db.close();
+});
+
+test("Party: getUserActiveParty can be scoped by server", dbTestOpts, () => {
+  const db = setupTestDb();
+
+  const server1Party = createParty(db, "server1", "leader1", "Server 1 Party");
+  leaveParty(db, server1Party.partyId, "leader1");
+
+  const server2Party = createParty(db, "server2", "leader1", "Server 2 Party");
+
+  const scopedServer1 = getUserActiveParty(db, "leader1", "server1");
+  assert.equal(scopedServer1, null);
+
+  const scopedServer2 = getUserActiveParty(db, "leader1", "server2");
+  assert.ok(scopedServer2);
+  assert.equal(scopedServer2.party_id, server2Party.partyId);
+
+  assert.throws(() => {
+    inviteUserToParty(db, "server1", server2Party.partyId, "user2");
+  }, /Party not found or inactive/);
+
+  const invited = inviteUserToParty(db, "server2", server2Party.partyId, "user2");
+  assert.equal(invited.partyId, server2Party.partyId);
+
   db.close();
 });
 

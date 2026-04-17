@@ -1169,12 +1169,10 @@ async function handleParty(interaction) {
 
       try {
         const result = renameParty(db, currentParty.party_id, cleanedName);
-        const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
         return {
           ok: true,
           response: {
-            content: `${getIcon("status_complete")} Party renamed to **${result.partyName}**.`,
-            components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
+            content: `${getIcon("status_complete")} Party renamed to **${result.partyName}**.`
           }
         };
       } catch (err) {
@@ -1208,12 +1206,10 @@ async function handleParty(interaction) {
 
       try {
         transferPartyLeadership(db, currentParty.party_id, targetUser.id);
-        const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
         return {
           ok: true,
           response: {
-            content: `${getIcon("status_complete")} Leadership transferred to <@${targetUser.id}>.`,
-            components: [partyActionRow(userId, true, false, !!existingOrder), socialMainMenuRow(userId)]
+            content: `${getIcon("status_complete")} Leadership transferred to <@${targetUser.id}>.`
           }
         };
       } catch (err) {
@@ -1245,7 +1241,13 @@ async function handleParty(interaction) {
 
       try {
         kickPartyMember(db, currentParty.party_id, targetUser.id);
-        return { ok: false, error: `${getIcon("status_complete")} Removed <@${targetUser.id}> from the party.` };
+        return {
+          ok: true,
+          ephemeral: true,
+          response: {
+            content: `${getIcon("status_complete")} Removed <@${targetUser.id}> from the party.`
+          }
+        };
       } catch (err) {
         return { ok: false, error: `${getIcon("error")} ${err.message}` };
       }
@@ -1256,6 +1258,18 @@ async function handleParty(interaction) {
 
   if (!lockedResult?.ok) {
     return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process party action.`);
+  }
+
+  if (lockedResult.ephemeral) {
+    const payload = {
+      ...(lockedResult.response ?? {}),
+      flags: MessageFlags.Ephemeral,
+      ephemeral: true
+    };
+    if (interaction.deferred || interaction.replied) {
+      return interaction.followUp(payload);
+    }
+    return interaction.reply(payload);
   }
 
   if (lockedResult.targetMessageId && interaction.channel?.messages) {
@@ -1793,7 +1807,7 @@ async function handleComponent(interaction) {
         const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
           try {
             const inviteTargetId = targetMember.user.id;
-            const currentParty = getUserActiveParty(db, userId);
+            const currentParty = getUserActiveParty(db, userId, serverId);
             if (!currentParty) {
               return { ok: false, error: `${getIcon("error")} You're not in a party anymore.` };
             }
