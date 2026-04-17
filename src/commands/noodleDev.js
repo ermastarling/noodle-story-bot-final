@@ -59,11 +59,16 @@ export const noodleDevCommand = {
   async handleComponent(interaction) {
     const customId = String(interaction.customId || "");
     const parts = customId.split(":");
-    // noodle-dev:dashboard:page:<ownerUserId>:<page>
-    if (parts[0] !== "noodle-dev" || parts[1] !== "dashboard" || parts[2] !== "page") return null;
+    // Legacy: noodle-dev:dashboard:page:<ownerUserId>:<tabPage>
+    // New:    noodle-dev:dashboard:nav:<ownerUserId>:<tabPage>:<serverPage>
+    if (parts[0] !== "noodle-dev" || parts[1] !== "dashboard") return null;
+
+    const mode = parts[2] ?? "";
+    if (mode !== "page" && mode !== "nav") return null;
 
     const ownerUserId = parts[3] ?? "";
     const page = Number(parts[4] ?? 0);
+    const serverPage = mode === "nav" ? Number(parts[5] ?? 0) : 0;
     if (ownerUserId && ownerUserId !== interaction.user.id) {
       return {
         content: "That dashboard isn’t for you.",
@@ -76,7 +81,8 @@ export const noodleDevCommand = {
       group: "dev",
       overrides: {
         integers: {
-          dashboard_page: Number.isInteger(page) ? page : 0
+          dashboard_page: Number.isInteger(page) ? page : 0,
+          dashboard_server_page: Number.isInteger(serverPage) ? serverPage : 0
         }
       }
     });

@@ -527,6 +527,45 @@ import { getIcon } from "./ui/icons.js";
     };
   }
 
+  async function sendDevAlert({ title, description, requireMention = true }) {
+    if (!officialGuildId || !devAlertChannelId) return false;
+    if (requireMention && !devAlertUserId) {
+      console.error("⚠️ Dev alert skipped: NOODLE_DEV_ALERT_USER_ID is required for mention.");
+      return false;
+    }
+    try {
+      const officialGuild = client.guilds.cache.get(officialGuildId)
+        || await client.guilds.fetch(officialGuildId).catch(() => null);
+      if (!officialGuild) {
+        console.error("⚠️ Dev alert skipped: official guild not found.");
+        return false;
+      }
+
+      const alertChannel = officialGuild.channels.cache.get(devAlertChannelId)
+        || await officialGuild.channels.fetch(devAlertChannelId).catch(() => null);
+      if (!alertChannel || typeof alertChannel.send !== "function") {
+        console.error("⚠️ Dev alert skipped: alert channel not sendable.");
+        return false;
+      }
+
+      const ping = devAlertUserId ? ` <@${devAlertUserId}>` : "";
+      const content = `${title}${ping}`.slice(0, 2000);
+      await alertChannel.send({
+        content,
+        allowedMentions: devAlertUserId ? { users: [devAlertUserId] } : undefined,
+        embeds: [
+          {
+            description: String(description || "").slice(0, 4096)
+          }
+        ]
+      });
+      return true;
+    } catch (error) {
+      console.error("❌ Failed to send dev alert:", error?.stack ?? error);
+      return false;
+    }
+  }
+
   function startEntitlementWebhookServer() {
     const port = Number(process.env.NOODLE_WEBHOOK_PORT || 0);
     const webhookPath = process.env.NOODLE_WEBHOOK_PATH || "/discord/entitlements";
@@ -731,6 +770,17 @@ import { getIcon } from "./ui/icons.js";
               result: { ok: true, specId }
             });
           }
+
+          const spec = getSpecializationById(specializationsContent, specId);
+          const specName = spec?.name ?? specId;
+          await sendDevAlert({
+            title: "Stripe Store Purchase Alert!",
+            description:
+              `User: <@${discordId}> (${discordId})\n` +
+              `Specialization: ${specName} (${specId})\n` +
+              `Server: ${serverId}\n` +
+              `Session: ${sessionId ?? "unknown"}`
+          });
         }
 
         res.writeHead(200, { "content-type": "text/plain" });
@@ -896,6 +946,16 @@ import { getIcon } from "./ui/icons.js";
             result: { ok: true, specId }
           });
         }
+
+        const spec = getSpecializationById(specializationsContent, specId);
+        const specName = spec?.name ?? specId;
+        await sendDevAlert({
+          title: "Discord Store Purchase Alert!",
+          description:
+            `User: <@${userId}> (${userId})\n` +
+            `Specialization: ${specName} (${specId})\n` +
+            `Server: ${serverId}`
+        });
       }
 
       res.writeHead(200, { "content-type": "text/plain" });
@@ -955,31 +1015,11 @@ import { getIcon } from "./ui/icons.js";
 
   client.on("guildCreate", async (guild) => {
     try {
-      if (!officialGuildId || !devAlertChannelId || !devAlertUserId) return;
       if (guild?.id === officialGuildId) return;
-
-      const officialGuild = client.guilds.cache.get(officialGuildId)
-        || await client.guilds.fetch(officialGuildId).catch(() => null);
-      if (!officialGuild) {
-        console.error("⚠️ Guild join alert skipped: official guild not found.");
-        return;
-      }
-
-      const alertChannel = officialGuild.channels.cache.get(devAlertChannelId)
-        || await officialGuild.channels.fetch(devAlertChannelId).catch(() => null);
-      if (!alertChannel || typeof alertChannel.send !== "function") {
-        console.error("⚠️ Guild join alert skipped: alert channel not sendable.");
-        return;
-      }
-
-      await alertChannel.send({
-        content: `<@${devAlertUserId}>`,
-        allowedMentions: { users: [devAlertUserId] },
-        embeds: [
-          {
-            description: `New Server: ${String(guild?.name || "Unknown Server")}`.slice(0, 4096)
-          }
-        ]
+      await sendDevAlert({
+        title: "New Server Alert!",
+        description: `New Server: ${String(guild?.name || "Unknown Server")}`,
+        requireMention: true
       });
     } catch (error) {
       console.error("❌ Failed to send guild join alert:", error?.stack ?? error);

@@ -3957,22 +3957,47 @@ if (inDevPath && sub === "dashboard") {
     }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
-  const lines = [];
-  let used = 0;
-  for (const guild of guilds) {
-    const line = `• ${guild.name} | ${guild.id} | ${guild.members ?? "unknown"}`;
-    if (used + line.length + 1 > 3800) break;
-    lines.push(line);
-    used += line.length + 1;
+  const headerLine = "Server name | Server ID | Member count";
+  const maxDescriptionChars = 3800;
+  const serverLines = guilds.map((guild) => `• ${guild.name} | ${guild.id} | ${guild.members ?? "unknown"}`);
+
+  const serverPages = [];
+  let currentPageLines = [];
+  let currentUsed = `${headerLine}\n\n`.length;
+  for (const line of serverLines) {
+    const needed = line.length + 1;
+    if (currentPageLines.length > 0 && currentUsed + needed > maxDescriptionChars) {
+      serverPages.push(currentPageLines);
+      currentPageLines = [line];
+      currentUsed = `${headerLine}\n\n`.length + needed;
+      continue;
+    }
+    currentPageLines.push(line);
+    currentUsed += needed;
+  }
+  if (currentPageLines.length > 0 || serverPages.length === 0) {
+    serverPages.push(currentPageLines);
   }
 
-  const truncated = lines.length < guilds.length;
+  const totalServerPages = Math.max(1, serverPages.length);
+  const requestedServerPage = Number(opt.getInteger("dashboard_server_page") ?? 0);
+  const clampedServerPage = Number.isFinite(requestedServerPage)
+    ? Math.min(Math.max(Math.floor(requestedServerPage), 0), totalServerPages - 1)
+    : 0;
+
+  const shownCountBeforePage = serverPages
+    .slice(0, clampedServerPage)
+    .reduce((sum, pageLines) => sum + pageLines.length, 0);
+  const shownCountThisPage = serverPages[clampedServerPage]?.length ?? 0;
+  const shownStart = shownCountThisPage > 0 ? shownCountBeforePage + 1 : 0;
+  const shownEnd = shownCountBeforePage + shownCountThisPage;
+
   const description = [
-    "Server name | Server ID | Member count",
+    headerLine,
     "",
-    ...lines,
-    truncated ? "" : null,
-    truncated ? `Showing ${lines.length}/${guilds.length} servers due to message length.` : null
+    ...(serverPages[clampedServerPage] ?? []),
+    "",
+    `Page ${clampedServerPage + 1}/${totalServerPages} • Showing ${shownStart}-${shownEnd} of ${guilds.length} servers`
   ].filter(Boolean).join("\n");
 
   const serversEmbed = buildMenuEmbed({
@@ -3984,18 +4009,30 @@ if (inDevPath && sub === "dashboard") {
   const statusEmbed = buildDevStatusEmbed();
   const pageRaw = Number(opt.getInteger("dashboard_page") ?? 0);
   const page = pageRaw === 1 ? 1 : 0;
+  const hasPrevServerPage = clampedServerPage > 0;
+  const hasNextServerPage = clampedServerPage < totalServerPages - 1;
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle-dev:dashboard:page:${userId}:0`)
+      .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${clampedServerPage}`)
       .setLabel("Servers")
       .setStyle(page === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary)
       .setDisabled(page === 0),
     new ButtonBuilder()
-      .setCustomId(`noodle-dev:dashboard:page:${userId}:1`)
+      .setCustomId(`noodle-dev:dashboard:nav:${userId}:1:${clampedServerPage}`)
       .setLabel("Status")
       .setStyle(page === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
-      .setDisabled(page === 1)
+      .setDisabled(page === 1),
+    new ButtonBuilder()
+      .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${Math.max(0, clampedServerPage - 1)}`)
+      .setLabel("Prev")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page !== 0 || !hasPrevServerPage),
+    new ButtonBuilder()
+      .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${Math.min(totalServerPages - 1, clampedServerPage + 1)}`)
+      .setLabel("Next")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page !== 0 || !hasNextServerPage)
   );
 
   return commit({
