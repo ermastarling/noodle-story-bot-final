@@ -74,19 +74,34 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 - Player-facing commands are registered globally.
 - Developer tools are exposed in the official guild via `/noodle-dev`.
 - Current dev subcommands: `status`, `dashboard`, `reset_tutorial`, `wipe_user`, `repair_profile`.
+- `/noodle-dev dashboard` now paginates the bot server list and includes Prev/Next navigation to stay within Discord embed limits.
 - Default guild registration mode is `dev-overrides`, which keeps `/noodle` global and applies guild-only overrides for dev tooling.
 
 ## Configuration
 
 Only `DISCORD_TOKEN` is required for booting the bot; it exits immediately if the value is missing. Optional runtime knobs such as `NODE_ENV=production` control the verbosity of logging and scheduler behavior, and the SQLite database lives under `data/` unless you customize the path in `db/index.js`.
 
-Optional developer join alert env vars:
+Optional developer alert env vars:
 
 - `NOODLE_OFFICIAL_GUILD_ID` (falls back to `DISCORD_GUILD_ID`) — guild where alerts are sent
 - `NOODLE_DEV_ALERT_CHANNEL_ID` — channel ID in the official guild for alerts
-- `NOODLE_DEV_ALERT_USER_ID` — user ID to ping when the bot joins a new guild
+- `NOODLE_DEV_ALERT_USER_ID` — user ID that is required for alert mention/ping behavior
 
-When all three values are present, joining a new guild triggers a ping in the configured channel with an embed that only contains the new guild name.
+Store/webhook-related env vars:
+
+- `NOODLE_WEBHOOK_PORT` — enables the webhook HTTP server when set
+- `NOODLE_WEBHOOK_PATH` — Discord entitlement webhook path (default `/discord/entitlements`)
+- `DISCORD_PUBLIC_KEY` — required to verify Discord entitlement signatures
+- `NOODLE_STRIPE_WEBHOOK_PATH` — Stripe webhook path (default `/store/stripe`)
+- `NOODLE_STRIPE_WEBHOOK_SECRET` — Stripe signing secret for webhook validation
+- `NOODLE_STRIPE_PRECHECK_PATH` and `NOODLE_STRIPE_PRECHECK_SECRET` — optional store precheck endpoint
+
+Alert behavior:
+
+- Guild join alerts, Discord entitlement purchase alerts, and Stripe purchase alerts all use a single formatting path.
+- Alerts require `NOODLE_DEV_ALERT_USER_ID` when mention is required.
+- Guild join alerts include current server count in the embed footer.
+- Purchase alerts include specialization purchase count in the embed footer (all-time from durable purchase history).
 
 ## Simulation Harness
 
@@ -102,6 +117,7 @@ See `SIMULATION.md` for every supported flag and how to interpret the generated 
 
 - Persistent SQLite data lives under `data/`; WAL/SHM files are transient and can be regenerated.
 - Backups are written to `data/backups/` by the scheduled job and can be restored manually if needed.
+- Durable store purchase history is stored in `store_purchase_events` and is used for all-time specialization purchase counts in dev purchase alerts.
 
 ## Project Structure
 
