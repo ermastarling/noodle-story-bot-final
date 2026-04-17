@@ -19,6 +19,8 @@ CREATE INDEX IF NOT EXISTS idx_players_server_rep_desc
   ON players(server_id, CAST(json_extract(data_json, '$.rep') AS INTEGER) DESC, last_active_at DESC);
 CREATE INDEX IF NOT EXISTS idx_players_server_bowls_desc
   ON players(server_id, CAST(json_extract(data_json, '$.lifetime.bowls_served_total') AS INTEGER) DESC, last_active_at DESC);
+CREATE INDEX IF NOT EXISTS idx_players_server_last_guild
+  ON players(server_id, json_extract(data_json, '$.notifications.last_noodle_guild_id'), last_active_at DESC);
 
 CREATE TABLE IF NOT EXISTS servers (
   server_id TEXT PRIMARY KEY,

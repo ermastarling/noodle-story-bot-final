@@ -61,6 +61,28 @@ test("B1: detectDeadlock - returns false when player can cook", () => {
   assert.strictEqual(detectDeadlock(player, serverState, content), false);
 });
 
+test("B1: detectDeadlock - treats fish as optional before fishing unlock", () => {
+  const player = {
+    shop_level: 1,
+    coins: 0,
+    known_recipes: ["test_recipe"],
+    inv_ingredients: { noodles_wheat: 2 }
+  };
+  const serverState = { market_prices: { broth_soy: 10 } };
+  const content = {
+    recipes: {
+      test_recipe: {
+        ingredients: [
+          { item_id: "noodles_wheat", qty: 1 },
+          { item_id: "shrimp", qty: 1 }
+        ]
+      }
+    }
+  };
+
+  assert.strictEqual(detectDeadlock(player, serverState, content), false);
+});
+
 test("B1: detectDeadlock - returns true when player only has non-sellable forage items", () => {
   const player = { 
     coins: 0, 

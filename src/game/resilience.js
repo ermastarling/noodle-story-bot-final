@@ -8,7 +8,7 @@
 
 import { nowTs, dayKeyUTC } from "../util/time.js";
 import { MARKET_ITEM_IDS, sellPrice } from "./market.js";
-import { FISHING_ITEM_IDS } from "./fishing.js";
+import { FISHING_ITEM_IDS, isFishingIngredientLocked } from "./fishing.js";
 import { getIcon } from "../ui/icons.js";
 
 // Constants
@@ -39,6 +39,7 @@ export function detectDeadlock(player, serverState, content) {
 
     let canCook = true;
     for (const ing of recipe.ingredients || []) {
+      if (isFishingIngredientLocked(player, ing?.item_id)) continue;
       const have = inventory[ing.item_id] || 0;
       if (have < ing.qty) {
         canCook = false;

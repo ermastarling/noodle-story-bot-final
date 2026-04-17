@@ -127,13 +127,52 @@ function getLeaderboardTypeIndex(typeId) {
 function getLeaderboardPage(serverId, typeIndex, page = 0) {
   const safeIndex = Math.min(Math.max(typeIndex, 0), LEADERBOARD_TYPES.length - 1);
   const type = LEADERBOARD_TYPES[safeIndex];
+  const storageServerId = getPlayerStorageServerId(serverId);
+  const globalStorageEnabled = storageServerId !== serverId;
 
-  const totalPlayers = db.prepare("SELECT COUNT(*) AS count FROM players WHERE server_id = ?").get(serverId)?.count ?? 0;
+  let totalPlayers = 0;
+  let rows = [];
+
+  if (globalStorageEnabled) {
+    totalPlayers = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM players
+      WHERE server_id = ?
+        AND COALESCE(json_extract(data_json, '$.notifications.last_noodle_guild_id'), '') = ?
+    `).get(storageServerId, serverId)?.count ?? 0;
+
+    const totalPages = Math.max(1, Math.ceil(totalPlayers / LEADERBOARD_PAGE_SIZE));
+    const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+    const offset = safePage * LEADERBOARD_PAGE_SIZE;
+
+    rows = db.prepare(`
+      SELECT
+        user_id,
+        COALESCE(CAST(${type.metricExpr} AS INTEGER), 0) AS metric
+      FROM players
+      WHERE server_id = ?
+        AND COALESCE(json_extract(data_json, '$.notifications.last_noodle_guild_id'), '') = ?
+      ORDER BY metric DESC, last_active_at DESC
+      LIMIT ? OFFSET ?
+    `).all(storageServerId, serverId, LEADERBOARD_PAGE_SIZE, offset);
+
+    return {
+      type,
+      safeIndex,
+      safePage,
+      totalPages,
+      totalPlayers,
+      startRank: offset,
+      rows
+    };
+  }
+
+  totalPlayers = db.prepare("SELECT COUNT(*) AS count FROM players WHERE server_id = ?").get(serverId)?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalPlayers / LEADERBOARD_PAGE_SIZE));
   const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
   const offset = safePage * LEADERBOARD_PAGE_SIZE;
 
-  const rows = db.prepare(`
+  rows = db.prepare(`
     SELECT
       user_id,
       COALESCE(CAST(${type.metricExpr} AS INTEGER), 0) AS metric

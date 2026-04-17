@@ -2557,14 +2557,22 @@ function getUnlockedIngredientIds(player, contentBundle) {
   return out;
 }
 
+function isIngredientOptionalForPlayer(player, ingredient) {
+  return Boolean(ingredient?.optional) || isFishingIngredientLocked(player, ingredient?.item_id);
+}
+
+function getRelevantRecipeIngredients(player, recipe) {
+  return (recipe?.ingredients ?? []).filter((ing) => ing?.item_id && !isFishingIngredientLocked(player, ing.item_id));
+}
+
 function formatRecipeNeeds({ recipeId, content: contentBundle, player }) {
 const r = contentBundle.recipes?.[recipeId];
 if (!r) return "";
 
-  const relevantIngredients = (r.ingredients ?? []).filter((ing) => !isFishingIngredientLocked(player, ing?.item_id));
+  const relevantIngredients = getRelevantRecipeIngredients(player, r);
 
   const missing = relevantIngredients
-    .filter((ing) => !ing?.optional)
+    .filter((ing) => !isIngredientOptionalForPlayer(player, ing))
     .map((ing) => {
       const need = ing.qty ?? 0;
       const have = player.inv_ingredients?.[ing.item_id] ?? 0;
@@ -2956,7 +2964,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
     const remaining = Math.max(0, neededCount - ready);
     if (remaining <= 0) continue;
 
-    recipe.ingredients.forEach((ing) => {
+    getRelevantRecipeIngredients(p, recipe).forEach((ing) => {
       allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (ing.qty * remaining);
     });
   }
@@ -3421,19 +3429,20 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     .slice(safePage * 25, (safePage + 1) * 25)
     .map((rid) => {
     const r = content.recipes?.[rid];
+    const relevantIngredients = getRelevantRecipeIngredients(p, r);
     const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
 
     // Show ingredient availability and max cookable for quick glance
-    const ingTokens = (r?.ingredients ?? []).map((ing) => {
+    const ingTokens = relevantIngredients.map((ing) => {
       const have = Math.max(0, p.inv_ingredients?.[ing.item_id] ?? 0);
       const name = displayItemName(ing.item_id);
       const base = `${name}:${have}`;
-      return ing.optional ? `${base} (opt)` : base;
+      return isIngredientOptionalForPlayer(p, ing) ? `${base} (opt)` : base;
     });
 
-    const maxCookable = (r?.ingredients ?? [])
-      .filter((ing) => !ing.optional && (ing?.qty ?? 0) > 0)
+    const maxCookable = relevantIngredients
+      .filter((ing) => !isIngredientOptionalForPlayer(p, ing) && (ing?.qty ?? 0) > 0)
       .map((ing) => Math.floor((p.inv_ingredients?.[ing.item_id] ?? 0) / (ing.qty ?? 1)))
       .reduce((min, cur) => Math.min(min, cur), Infinity);
     const cookable = Number.isFinite(maxCookable) ? Math.max(0, maxCookable) : 0;
@@ -6614,14 +6623,15 @@ ${lines.join("\n")}`;
     let starBrothUsed = 0;
     let brothUnitsPerBowl = null;
     for (const ing of r.ingredients) {
+      const ingredientOptional = isIngredientOptionalForPlayer(p, ing);
       const need = (ing.qty ?? 0) * qtyToCook;
       if (need <= 0) continue;
       const isBroth = normalizeIngredientType(ing.item_id) === "broth";
-      if (isBroth && !ing.optional && brothUnitsPerBowl == null) {
+      if (isBroth && !ingredientOptional && brothUnitsPerBowl == null) {
         brothUnitsPerBowl = Math.max(1, ing.qty ?? 1);
       }
       const haveIng = p.inv_ingredients?.[ing.item_id] ?? 0;
-      if (ing.optional) {
+      if (ingredientOptional) {
         if (haveIng >= need) {
           ingredientsToUse.push({ ...ing, need, isBroth });
         }
@@ -6774,7 +6784,7 @@ ${lines.join("\n")}`;
       const ready = getTotalBowlsForRecipe(p, recipeId);
       const remainingOrders = Math.max(0, neededOrders - ready);
       if (remainingOrders <= 0) continue;
-      for (const ing of recipe.ingredients) {
+      for (const ing of getRelevantRecipeIngredients(p, recipe)) {
         allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (ing.qty * remainingOrders);
       }
     }
@@ -7080,7 +7090,7 @@ ${lines.join("\n")}`;
         let orderCost = 0;
         let orderOk = true;
 
-        for (const ing of recipe.ingredients) {
+        for (const ing of getRelevantRecipeIngredients(p, recipe)) {
           const itemId = ing.item_id;
           const need = Math.max(0, Number(ing.qty) || 0);
           const have = Math.max(0, Number(inventoryAvailable[itemId] || 0));
@@ -7199,7 +7209,7 @@ ${lines.join("\n")}`;
 
       const recipe = content.recipes?.[recipeId];
       if (!recipe?.ingredients) return;
-      recipe.ingredients.forEach((ing) => {
+      getRelevantRecipeIngredients(p, recipe).forEach((ing) => {
         neededByItem[ing.item_id] = (neededByItem[ing.item_id] ?? 0) + (ing.qty ?? 0) * remainingToCook;
       });
     });
