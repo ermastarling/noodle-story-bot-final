@@ -36,7 +36,16 @@ import { getIcon } from "./ui/icons.js";
     loadDecorSetsContent,
     loadEventsContent
   } = await import("./content/index.js");
-  const { openDb, getPlayer, getPlayerLite, withPlayerCache, upsertPlayer, getLatestServerIdForUser } = await import("./db/index.js");
+  const {
+    openDb,
+    getPlayer,
+    getPlayerLite,
+    withPlayerCache,
+    upsertPlayer,
+    getLatestServerIdForUser,
+    recordStorePurchaseEvent,
+    getAllTimeSpecializationPurchaseCount
+  } = await import("./db/index.js");
   const { checkRateLimit } = await import("./infra/rateLimit.js");
   const { emitTelemetry } = await import("./infra/telemetry.js");
   const { getIdempotentResult, putIdempotentResult } = await import("./infra/idempotency.js");
@@ -270,6 +279,34 @@ import { getIcon } from "./ui/icons.js";
   const badgesContent = loadBadgesContent();
   const specializationsContent = loadSpecializationsContent();
   const decorSetsContent = loadDecorSetsContent();
+
+  function seedInitialStorePurchaseHistory() {
+    if (!db) return;
+
+    const baselineRows = [
+      { source: "bootstrap", externalEventId: "baseline-astral-caravan-1", userId: "legacy-seed", serverId: null, specId: "astral_caravan" },
+      { source: "bootstrap", externalEventId: "baseline-astral-caravan-2", userId: "legacy-seed", serverId: null, specId: "astral_caravan" },
+      { source: "bootstrap", externalEventId: "baseline-sakura-sweetheart-1", userId: "legacy-seed", serverId: null, specId: "sakura_sweetheart_noodle_atelier" },
+      { source: "bootstrap", externalEventId: "baseline-bloomwarden-garden-1", userId: "legacy-seed", serverId: null, specId: "bloomwarden_garden_hall" },
+      { source: "bootstrap", externalEventId: "baseline-elderwood-hearth-1", userId: "legacy-seed", serverId: null, specId: "elderwood_hearth" }
+    ];
+
+    let inserted = 0;
+    for (const row of baselineRows) {
+      const didInsert = recordStorePurchaseEvent(db, {
+        ...row,
+        status: "granted",
+        purchasedAt: Date.parse("2026-04-17T00:00:00Z")
+      });
+      if (didInsert) inserted += 1;
+    }
+
+    if (inserted > 0) {
+      console.log(`INFO: Seeded ${inserted} baseline store purchase history rows.`);
+    }
+  }
+
+  seedInitialStorePurchaseHistory();
 
   function getUnlockedIngredientIds(player, content) {
     const LEGACY_RECIPE_ID_ALIASES = {
@@ -527,7 +564,7 @@ import { getIcon } from "./ui/icons.js";
     };
   }
 
-  async function sendDevAlert({ title, description, requireMention = true }) {
+  async function sendDevAlert({ title, description, footerText = "", requireMention = true }) {
     if (!officialGuildId || !devAlertChannelId) return false;
     if (requireMention && !devAlertUserId) {
       console.error("⚠️ Dev alert skipped: NOODLE_DEV_ALERT_USER_ID is required for mention.");
@@ -555,7 +592,8 @@ import { getIcon } from "./ui/icons.js";
         allowedMentions: devAlertUserId ? { users: [devAlertUserId] } : undefined,
         embeds: [
           {
-            description: String(description || "").slice(0, 4096)
+            description: String(description || "").slice(0, 4096),
+            ...(footerText ? { footer: { text: String(footerText).slice(0, 2048) } } : {})
           }
         ]
       });
@@ -773,13 +811,27 @@ import { getIcon } from "./ui/icons.js";
 
           const spec = getSpecializationById(specializationsContent, specId);
           const specName = spec?.name ?? specId;
+          const stripeExternalEventId = sessionId
+            ? `stripe:${sessionId}`
+            : `stripe:raw:${crypto.createHash("sha256").update(rawBody).digest("hex")}`;
+          recordStorePurchaseEvent(db, {
+            source: "stripe_checkout",
+            externalEventId: stripeExternalEventId,
+            userId: discordId,
+            serverId,
+            specId,
+            status: "granted",
+            purchasedAt: Date.now()
+          });
+          const purchaseCount = getAllTimeSpecializationPurchaseCount(db, specId);
           await sendDevAlert({
             title: "Stripe Store Purchase Alert!",
             description:
               `User: <@${discordId}> (${discordId})\n` +
               `Specialization: ${specName} (${specId})\n` +
               `Server: ${serverId}\n` +
-              `Session: ${sessionId ?? "unknown"}`
+              `Session: ${sessionId ?? "unknown"}`,
+            footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`
           });
         }
 
@@ -949,12 +1001,26 @@ import { getIcon } from "./ui/icons.js";
 
         const spec = getSpecializationById(specializationsContent, specId);
         const specName = spec?.name ?? specId;
+        const discordExternalEventId = entitlementId
+          ? `discord:${entitlementId}`
+          : `discord:raw:${crypto.createHash("sha256").update(rawBody).digest("hex")}`;
+        recordStorePurchaseEvent(db, {
+          source: "discord_entitlement",
+          externalEventId: discordExternalEventId,
+          userId,
+          serverId,
+          specId,
+          status: "granted",
+          purchasedAt: Date.now()
+        });
+        const purchaseCount = getAllTimeSpecializationPurchaseCount(db, specId);
         await sendDevAlert({
           title: "Discord Store Purchase Alert!",
           description:
             `User: <@${userId}> (${userId})\n` +
             `Specialization: ${specName} (${specId})\n` +
-            `Server: ${serverId}`
+            `Server: ${serverId}`,
+          footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`
         });
       }
 
@@ -1016,9 +1082,11 @@ import { getIcon } from "./ui/icons.js";
   client.on("guildCreate", async (guild) => {
     try {
       if (guild?.id === officialGuildId) return;
+      const currentServerCount = Number(guild?.client?.guilds?.cache?.size ?? client.guilds.cache.size ?? 0);
       await sendDevAlert({
         title: "New Server Alert!",
         description: `New Server: ${String(guild?.name || "Unknown Server")}`,
+        footerText: `Current Server Count: ${currentServerCount.toLocaleString()}`,
         requireMention: true
       });
     } catch (error) {

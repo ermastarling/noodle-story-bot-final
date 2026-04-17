@@ -47,6 +47,24 @@ CREATE TABLE IF NOT EXISTS idempotency (
 
 CREATE INDEX IF NOT EXISTS idx_idempotency_expires_at ON idempotency(expires_at);
 
+CREATE TABLE IF NOT EXISTS store_purchase_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL,
+  external_event_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  server_id TEXT,
+  spec_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'granted',
+  purchased_at INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_store_purchase_events_source_event
+  ON store_purchase_events(source, external_event_id);
+CREATE INDEX IF NOT EXISTS idx_store_purchase_events_spec_status
+  ON store_purchase_events(spec_id, status);
+CREATE INDEX IF NOT EXISTS idx_store_purchase_events_purchased_at
+  ON store_purchase_events(purchased_at DESC);
+
 CREATE TABLE IF NOT EXISTS jobs (
   job_id TEXT PRIMARY KEY,
   server_id TEXT NOT NULL,

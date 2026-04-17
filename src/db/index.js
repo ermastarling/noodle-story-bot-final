@@ -557,3 +557,40 @@ export function getLatestServerIdForUser(db, userId) {
   if (row.server_id === GLOBAL_PLAYER_SERVER_ID && USE_GLOBAL_PLAYER_DATA) return null;
   return row.server_id;
 }
+
+export function recordStorePurchaseEvent(
+  db,
+  {
+    source,
+    externalEventId,
+    userId,
+    serverId = null,
+    specId,
+    status = "granted",
+    purchasedAt = nowTs()
+  }
+) {
+  if (!db || !source || !externalEventId || !userId || !specId) return false;
+  const res = prepareCached(
+    db,
+    "INSERT OR IGNORE INTO store_purchase_events(source, external_event_id, user_id, server_id, spec_id, status, purchased_at) VALUES (?,?,?,?,?,?,?)"
+  ).run(
+    String(source),
+    String(externalEventId),
+    String(userId),
+    serverId ? String(serverId) : null,
+    String(specId),
+    String(status || "granted"),
+    Number.isFinite(Number(purchasedAt)) ? Number(purchasedAt) : nowTs()
+  );
+  return Number(res?.changes ?? 0) > 0;
+}
+
+export function getAllTimeSpecializationPurchaseCount(db, specId) {
+  if (!db || !specId) return 0;
+  const row = prepareCached(
+    db,
+    "SELECT COUNT(*) AS cnt FROM store_purchase_events WHERE spec_id=? AND status='granted'"
+  ).get(String(specId));
+  return Number(row?.cnt ?? 0);
+}
