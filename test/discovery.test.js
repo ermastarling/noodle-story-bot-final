@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   canDiscoverTier,
   getDiscoverableRecipes,
+  getDiscoveryRecipeWeight,
   applyDiscovery,
   applyNpcDiscoveryBuff
 } from "../src/game/discovery.js";
@@ -223,6 +224,43 @@ test("Discovery: applyNpcDiscoveryBuff - other npcs don't set buff", () => {
   applyNpcDiscoveryBuff(player, "sleepy_traveler");
   
   assert.strictEqual(player.buffs.apprentice_bonus_pending, undefined);
+});
+
+test("Discovery: getDiscoveryRecipeWeight reduces fishing recipes before unlock", () => {
+  const player = { shop_level: 1 };
+  const fishRecipe = {
+    recipe_id: "fish_ramen",
+    tier: "common",
+    ingredients: [
+      { item_id: "soy_broth", qty: 1 },
+      { item_id: "catfish", qty: 1 }
+    ]
+  };
+  const nonFishRecipe = {
+    recipe_id: "veg_ramen",
+    tier: "common",
+    ingredients: [{ item_id: "soy_broth", qty: 1 }]
+  };
+
+  const fishWeight = getDiscoveryRecipeWeight(player, fishRecipe);
+  const nonFishWeight = getDiscoveryRecipeWeight(player, nonFishRecipe);
+
+  assert.ok(fishWeight < nonFishWeight);
+});
+
+test("Discovery: getDiscoveryRecipeWeight restores fishing recipe weight after unlock", () => {
+  const player = { shop_level: 99 };
+  const fishRecipe = {
+    recipe_id: "fish_ramen",
+    tier: "common",
+    ingredients: [
+      { item_id: "soy_broth", qty: 1 },
+      { item_id: "catfish", qty: 1 }
+    ]
+  };
+
+  const fishWeight = getDiscoveryRecipeWeight(player, fishRecipe);
+  assert.strictEqual(fishWeight, 1);
 });
 
 test("Discovery: applyDiscovery clue does not reveal fish before fishing unlock", () => {

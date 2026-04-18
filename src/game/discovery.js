@@ -18,6 +18,8 @@ import { weightedPick } from "../util/rng.js";
 import { grantBadge } from "./badges.js";
 import { getIcon } from "../ui/icons.js";
 
+const LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT = 0.25;
+
 /**
  * Check if player can discover recipes of a given tier
  */
@@ -77,13 +79,21 @@ function pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues = 
 
   const weights = Object.fromEntries(
     discoverableRecipes.map((recipe) => {
-      const weight = DISCOVERY_RECIPE_TIER_WEIGHTS[recipe.tier] ?? 1;
+      const weight = getDiscoveryRecipeWeight(player, recipe);
       return [recipe.recipe_id, Math.max(0.01, weight)];
     })
   );
 
   const pickedId = weightedPick(rng, weights);
   return discoverableRecipes.find((r) => r.recipe_id === pickedId) ?? discoverableRecipes[0];
+}
+
+export function getDiscoveryRecipeWeight(player, recipe) {
+  const baseWeight = DISCOVERY_RECIPE_TIER_WEIGHTS[recipe?.tier] ?? 1;
+  const ingredients = recipe?.ingredients ?? [];
+  const hasLockedFishingIngredient = ingredients.some((ing) => isFishingIngredientLocked(player, ing?.item_id));
+  if (!hasLockedFishingIngredient) return baseWeight;
+  return baseWeight * LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT;
 }
 
 /**
@@ -354,10 +364,12 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     const recipe = recipes[discovery.recipeId];
     let ingredientsText = "";
     if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
-      const ingredientNames = recipe.ingredients
-        .map(ing => items[ing.item_id]?.name || ing.item_id)
+      const ingredientNames = getRevealableIngredientIds(recipe)
+        .map((itemId) => items[itemId]?.name || itemId)
         .join(", ");
-      ingredientsText = `\nIngredients: ${ingredientNames}`;
+      if (ingredientNames) {
+        ingredientsText = `\nIngredients: ${ingredientNames}`;
+      }
     }
     
     // New scroll - learn recipe immediately

@@ -4657,7 +4657,7 @@ if (sub === "recipes") {
       const seasonLabel = evt?.season ? ` ${evt.season.charAt(0).toUpperCase() + evt.season.slice(1)}` : "Event";
       eventTag = ` ${badgeIcon} ${seasonLabel}`;
     }
-    const ingredients = (r.ingredients ?? [])
+    const ingredients = getRelevantRecipeIngredients(p, r)
       .map((ing) => formatIngredientLabel(ing))
       .join(", ");
     const ingredientLine = ingredients ? ingredients : "_No ingredients listed._";
@@ -4675,8 +4675,9 @@ if (sub === "recipes") {
       const eventTag = recipe?.event_id ? ` ${getIcon("event")} Event` : "";
       const count = entry.count ?? 0;
       const revealed = entry.revealed_ingredients ?? [];
-      const revealedNames = revealed.length
-        ? revealed.map((id) => displayItemName(id)).join(", ")
+      const revealedVisible = revealed.filter((id) => !isFishingIngredientLocked(p, id));
+      const revealedNames = revealedVisible.length
+        ? revealedVisible.map((id) => displayItemName(id)).join(", ")
         : "_No ingredients revealed yet._";
       return `• **${name}**${tier}${eventTag}\n **${count}/${CLUES_TO_UNLOCK_RECIPE}** Clues revealed: ${revealedNames}`;
     })

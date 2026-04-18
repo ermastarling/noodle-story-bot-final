@@ -40,6 +40,7 @@ import {
 import { withEventRecipes } from "../game/events.js";
 import { grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import { hasNewShopLevelSpecialization } from "../game/specialization.js";
+import { isFishingIngredientLocked } from "../game/fishing.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { getOrdersMeta } from "../game/orders.js";
@@ -721,8 +722,22 @@ function buildSharedOrderProgress({ recipe, servings, contributions }) {
   return { items, isComplete };
 }
 
-function getSharedOrderIngredientLimit(recipe) {
-  const ingredientCount = Array.isArray(recipe?.ingredients) ? recipe.ingredients.length : 0;
+function getSharedOrderVisibleIngredients(player, recipe) {
+  return (recipe?.ingredients ?? []).filter((ing) => !isFishingIngredientLocked(player, ing?.item_id));
+}
+
+function buildSharedOrderUiProgress({ player, recipe, servings, contributions }) {
+  const progress = buildSharedOrderProgress({ recipe, servings, contributions });
+  const visibleIngredientIds = new Set(getSharedOrderVisibleIngredients(player, recipe).map((ing) => ing.item_id));
+  const items = progress.items.filter((item) => visibleIngredientIds.has(item.ingredientId));
+  const isComplete = items.every((i) => i.remaining <= 0);
+  return { items, isComplete };
+}
+
+function getSharedOrderIngredientLimit(recipe, player = null) {
+  const ingredientCount = player
+    ? getSharedOrderVisibleIngredients(player, recipe).length
+    : (Array.isArray(recipe?.ingredients) ? recipe.ingredients.length : 0);
   if (ingredientCount === 3) return 2;
   if (ingredientCount === 2) return 1;
   return Infinity;
@@ -2092,13 +2107,15 @@ async function handleComponent(interaction) {
           }
 
           const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
-          const progress = buildSharedOrderProgress({
+          const viewer = ensurePlayer(serverId, userId);
+          const progress = buildSharedOrderUiProgress({
+            player: viewer,
             recipe,
             servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
             contributions
           });
 
-          const maxSlots = getSharedOrderIngredientLimit(recipe);
+          const maxSlots = getSharedOrderIngredientLimit(recipe, viewer);
           const userIngredientSlots = getUserIngredientSlots(contributions, userId);
           const userSlotsUsed = userIngredientSlots.size;
 
@@ -2147,7 +2164,8 @@ async function handleComponent(interaction) {
 
           const isLeader = party.leader_user_id === userId;
           const updatedContributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
-          const updatedProgress = buildSharedOrderProgress({
+          const updatedProgress = buildSharedOrderUiProgress({
+            player,
             recipe,
             servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
             contributions: updatedContributions
@@ -2312,10 +2330,12 @@ async function handleComponent(interaction) {
 
           // Create the shared order
           const result = createSharedOrder(db, party.party_id, recipeId, serverId, servings);
+          const viewer = ensurePlayer(serverId, userId);
 
-          const ingredientList = recipe.ingredients
+          const ingredientList = getSharedOrderVisibleIngredients(viewer, recipe)
             .map(ing => `• ${content.items[ing.item_id]?.name || ing.item_id} × ${ing.qty * servings}`)
             .join("\n");
+          const ingredientBlock = ingredientList || "_No visible ingredients required before your current fishing unlock._";
 
             const totalReward = servings * SHARED_ORDER_REWARD.coinsPerServing;
           const embed = new EmbedBuilder()
@@ -2324,7 +2344,7 @@ async function handleComponent(interaction) {
               `**${recipe.name}**\n\n` +
               `${getIcon("ingredient_capacity")} **Servings**: ${servings}\n` +
               `${getIcon("coins")} **Reward**: ${totalReward}c (${SHARED_ORDER_REWARD.coinsPerServing}c per serving)\n` +
-              `${getIcon("group")} **Ingredients Needed**:\n${ingredientList}`
+              `${getIcon("group")} **Ingredients Needed**:\n${ingredientBlock}`
             )
             .addFields({
               name: `${getIcon("idea")} How It Works`,
@@ -2374,13 +2394,15 @@ async function handleComponent(interaction) {
       }
 
       const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
-      const progress = buildSharedOrderProgress({
+      const viewer = ensurePlayer(serverId, userId);
+      const progress = buildSharedOrderUiProgress({
+        player: viewer,
         recipe,
         servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
         contributions
       });
 
-      const maxSlots = getSharedOrderIngredientLimit(recipe);
+      const maxSlots = getSharedOrderIngredientLimit(recipe, viewer);
       const userIngredientSlots = getUserIngredientSlots(contributions, userId);
       const userSlotsUsed = userIngredientSlots.size;
 
@@ -2754,16 +2776,25 @@ async function handleComponent(interaction) {
         const recipe = content.recipes[existingOrder.order_id];
         if (recipe) {
           const contributions = getSharedOrderContributions(db, existingOrder.shared_order_id);
-          const progress = buildSharedOrderProgress({
+          const viewer = ensurePlayer(serverId, userId);
+          const progress = buildSharedOrderUiProgress({
+            player: viewer,
+            recipe,
+            servings: existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+            contributions
+          });
+          const viewer = ensurePlayer(serverId, userId);
+          const uiProgress = buildSharedOrderUiProgress({
+            player: viewer,
             recipe,
             servings: existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
             contributions
           });
           const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
-          canComplete = progress.isComplete && hasOtherContributor;
+          canComplete = uiProgress.isComplete && hasOtherContributor;
 
           // Build ingredient progress display
-          const ingredientLines = progress.items.map(item => {
+          const ingredientLines = uiProgress.items.map(item => {
             const itemData = content.items[item.ingredientId];
             const itemName = itemData?.name || `Item #${item.ingredientId}`;
             const bar = item.remaining > 0 
@@ -2849,15 +2880,17 @@ async function handleComponent(interaction) {
       }
 
       const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
-      const progress = buildSharedOrderProgress({
+      const viewer = ensurePlayer(serverId, userId);
+      const uiProgress = buildSharedOrderUiProgress({
+        player: viewer,
         recipe,
         servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
         contributions
       });
       const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
-      const canComplete = progress.isComplete && hasOtherContributor;
+      const canComplete = uiProgress.isComplete && hasOtherContributor;
 
-      const ingredientLines = progress.items.map((item) => {
+      const ingredientLines = uiProgress.items.map((item) => {
         const itemData = content.items[item.ingredientId];
         const itemName = itemData?.name || `Item #${item.ingredientId}`;
         const bar = item.remaining > 0
@@ -2926,7 +2959,7 @@ async function handleComponent(interaction) {
         .map(([id, recipe]) => ({
           label: recipe.name.length > 100 ? recipe.name.slice(0, 97) + "..." : recipe.name,
           value: id,
-          description: `${recipe.ingredients.length} ingredients`
+          description: `${getSharedOrderVisibleIngredients(ensurePlayer(serverId, userId), recipe).length} ingredients`
         }));
 
       if (!recipeOptions.length) {
@@ -3086,13 +3119,15 @@ async function handleComponent(interaction) {
       }
 
       const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
-      const progress = buildSharedOrderProgress({
+      const viewer = ensurePlayer(serverId, userId);
+      const progress = buildSharedOrderUiProgress({
+        player: viewer,
         recipe,
         servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
         contributions
       });
 
-      const maxSlots = getSharedOrderIngredientLimit(recipe);
+      const maxSlots = getSharedOrderIngredientLimit(recipe, viewer);
       const userIngredientSlots = getUserIngredientSlots(contributions, userId);
       const userSlotsUsed = userIngredientSlots.size;
 
@@ -3177,7 +3212,9 @@ async function handleComponent(interaction) {
       const recipe = content.recipes[sharedOrder.order_id];
       if (recipe) {
         const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
-        const progress = buildSharedOrderProgress({
+        const viewer = ensurePlayer(serverId, userId);
+        const progress = buildSharedOrderUiProgress({
+          player: viewer,
           recipe,
           servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
           contributions
