@@ -337,7 +337,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
 
   return {
     embeds: [embed],
-    components: [navRow]
+    components: [navRow, socialMainMenuRow(userId)]
   };
 }
 
@@ -409,7 +409,7 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
 
   return {
     embeds: [embed],
-    components: [navRow, socialMainMenuRow(userId)]
+    components: [navRow]
   };
 }
 
