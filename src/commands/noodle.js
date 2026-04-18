@@ -5424,7 +5424,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         .setURL(TOPGG_BOT_URL),
       new ButtonBuilder()
         .setCustomId(`noodle:action:quests_vote_claim:${userId}`)
-        .setLabel("Claim Vote Reward")
+        .setLabel("Claim All Vote Rewards")
         .setEmoji(getButtonEmoji("status_complete"))
         .setStyle(status.pendingClaims > 0 ? ButtonStyle.Success : ButtonStyle.Secondary)
         .setDisabled(status.pendingClaims <= 0)
@@ -5473,9 +5473,10 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const gardenLine = gardenUnlockLine(prevShopLevel, latestPlayer.shop_level);
     const fishingLine = fishingUnlockLine(prevShopLevel, latestPlayer.shop_level);
+    const claimedLabel = result.claimsClaimed === 1 ? "1 vote reward" : `${result.claimsClaimed} vote rewards`;
     const embed = buildMenuEmbed({
-      title: `${getIcon("leaderboard")} Vote Reward Claimed`,
-      description: `Rewards: ${rewardLines.join(" · ")}\nPending claims: **${result.pendingClaims}**${levelLine}${gardenLine}${fishingLine}`,
+      title: `${getIcon("leaderboard")} Vote Rewards Claimed`,
+      description: `Claimed: **${claimedLabel}**\nRewards: ${rewardLines.join(" · ")}\nPending claims: **${result.pendingClaims}**${levelLine}${gardenLine}${fishingLine}`,
       user: interaction.member ?? interaction.user
     });
 

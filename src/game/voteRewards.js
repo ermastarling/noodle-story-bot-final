@@ -54,11 +54,15 @@ export function claimTopggVoteReward(player, now = nowTs()) {
   const state = ensureVoteState(player);
   const pendingClaims = Math.max(0, Number(state.pending_claims || 0));
   if (pendingClaims <= 0) {
-    return { ok: false, message: "No vote reward is ready yet. Vote on Top.gg first, then claim." };
+    return { ok: false, message: "No vote rewards are ready yet. Vote on Top.gg first, then claim." };
   }
 
-  const reward = { ...DEFAULT_VOTE_REWARD };
-  state.pending_claims = pendingClaims - 1;
+  const reward = {
+    coins: (DEFAULT_VOTE_REWARD.coins || 0) * pendingClaims,
+    sxp: (DEFAULT_VOTE_REWARD.sxp || 0) * pendingClaims,
+    rep: (DEFAULT_VOTE_REWARD.rep || 0) * pendingClaims
+  };
+  state.pending_claims = 0;
   state.last_claim_at = now;
 
   player.coins = (player.coins || 0) + (reward.coins || 0);
@@ -75,6 +79,7 @@ export function claimTopggVoteReward(player, now = nowTs()) {
 
   return {
     ok: true,
+    claimsClaimed: pendingClaims,
     reward,
     leveledUp,
     pendingClaims: Math.max(0, Number(state.pending_claims || 0))

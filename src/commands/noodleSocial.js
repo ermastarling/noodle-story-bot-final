@@ -337,7 +337,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
 
   return {
     embeds: [embed],
-    components: [navRow, socialMainMenuRow(userId)]
+    components: [navRow]
   };
 }
 
