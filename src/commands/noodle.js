@@ -856,7 +856,9 @@ function noodleForageGardenRow(userId, {
     const gardenPrimary = active === "garden";
     const gardenUnlocked = !gardenLocked;
     const gardenStyleBase = gardenStyleOverride ?? (gardenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
-    const gardenStyle = gardenPrimary ? (gardenStyleOverride ?? ButtonStyle.Success) : gardenStyleBase;
+    const gardenStyle = gardenPrimary
+      ? (gardenUnlocked ? (gardenStyleOverride ?? ButtonStyle.Success) : ButtonStyle.Secondary)
+      : gardenStyleBase;
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:garden:${userId}`)
@@ -871,7 +873,9 @@ function noodleForageGardenRow(userId, {
     const fishingStyleBase = fishingStyleOverride ?? (!fishingUnlocked
       ? ButtonStyle.Secondary
       : (fishingJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary));
-    const fishingStyle = fishingPrimary ? (fishingStyleOverride ?? ButtonStyle.Success) : fishingStyleBase;
+    const fishingStyle = fishingPrimary
+      ? (fishingUnlocked ? (fishingStyleOverride ?? ButtonStyle.Success) : ButtonStyle.Secondary)
+      : fishingStyleBase;
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:fishing:${userId}`)
@@ -884,16 +888,19 @@ function noodleForageGardenRow(userId, {
 
   if (includeKitchenButton) {
     const kitchenPrimary = active === "kitchen";
-    const kitchenStyle = !kitchenUnlocked
+    const kitchenStyleBase = !kitchenUnlocked
       ? ButtonStyle.Secondary
       : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
-    const kitchenEmoji = kitchenPrimary ? getButtonEmoji("refresh") : getButtonEmoji("kitchen");
+    const kitchenStyle = kitchenPrimary
+      ? (kitchenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary)
+      : kitchenStyleBase;
+    const kitchenEmoji = kitchenPrimary && kitchenUnlocked ? getButtonEmoji("refresh") : getButtonEmoji("kitchen");
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:kitchen:${userId}`)
         .setLabel("Kitchen")
         .setEmoji(kitchenEmoji)
-        .setStyle(kitchenPrimary ? ButtonStyle.Success : kitchenStyle)
+        .setStyle(kitchenStyle)
         .setDisabled(!kitchenUnlocked && !allowLockedFeatureInfo)
     );
   }
@@ -1272,7 +1279,7 @@ function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlo
   const kitchenStyle = !kitchenUnlocked
     ? ButtonStyle.Secondary
     : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
-  const kitchenEmoji = active === "kitchen" ? getButtonEmoji("refresh") : getButtonEmoji("kitchen");
+  const kitchenEmoji = active === "kitchen" && kitchenUnlocked ? getButtonEmoji("refresh") : getButtonEmoji("kitchen");
   const recipesStyle = active === "recipes" ? ButtonStyle.Primary : ButtonStyle.Secondary;
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:nav:recipes:${userId}`).setLabel("Recipes").setEmoji(getButtonEmoji("recipes")).setStyle(recipesStyle),
@@ -1283,6 +1290,41 @@ function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlo
       .setEmoji(kitchenEmoji)
       .setStyle(kitchenStyle)
       .setDisabled(!kitchenUnlocked && !allowLockedKitchenInfo)
+  );
+}
+
+function noodleFeatureInfoRow(userId, {
+  active = null,
+  gardenUnlocked = false,
+  kitchenUnlocked = false,
+  kitchenJustUnlocked = false,
+  fishingUnlocked = false,
+  fishingJustUnlocked = false
+} = {}) {
+  const gardenStyle = gardenUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary;
+  const kitchenStyle = kitchenUnlocked
+    ? (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary)
+    : ButtonStyle.Secondary;
+  const fishingStyle = fishingUnlocked
+    ? (fishingJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary)
+    : ButtonStyle.Secondary;
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:garden:${userId}`)
+      .setLabel("Garden")
+      .setEmoji(getButtonEmoji("garden"))
+      .setStyle(active === "garden" && gardenUnlocked ? ButtonStyle.Success : gardenStyle),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:kitchen:${userId}`)
+      .setLabel("Kitchen")
+      .setEmoji(active === "kitchen" && kitchenUnlocked ? getButtonEmoji("refresh") : getButtonEmoji("kitchen"))
+      .setStyle(active === "kitchen" && kitchenUnlocked ? ButtonStyle.Success : kitchenStyle),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:fishing:${userId}`)
+      .setLabel("Fishing")
+      .setEmoji(getButtonEmoji("fishing"))
+      .setStyle(active === "fishing" && fishingUnlocked ? ButtonStyle.Success : fishingStyle)
   );
 }
 
@@ -4312,21 +4354,6 @@ if (sub === "pantry") {
       upsertServer(db, serverId, s, null);
     }
 
-    const kitchenLine = !kitchenUnlocked
-      ? `${getIcon("lock")} Kitchen unlocks at shop level ${KITCHEN_UNLOCK_LEVEL}.`
-      : (kitchenJustUnlocked ? `${getIcon("kitchen")} Kitchen unlocked! Simmer broths with forageables in the Kitchen.` : null);
-
-    const gardenLine = !gardenUnlocked
-      ? `${getIcon("lock")} Garden unlocks at shop level ${GARDEN_UNLOCK_LEVEL}.`
-      : null;
-
-    const fishingLine = !fishingUnlocked
-      ? `${getIcon("lock")} Fishing unlocks at shop level ${FISHING_UNLOCK_LEVEL}.`
-      : (fishingJustUnlocked ? `${getIcon("fishing")} Fishing unlocked! Cast lines from the Pantry.` : null);
-
-    const unlockMessages = [gardenLine, kitchenLine, fishingLine].filter(Boolean);
-    const unlockLine = unlockMessages.length ? unlockMessages.join("\n") : null;
-
     const viewingIngredients = safePage < ingredientPages;
     const spoilageNotice = viewingIngredients
       ? (combinedEffects.spoilage_reduction > 0
@@ -4336,7 +4363,6 @@ if (sub === "pantry") {
 
     const pantryDescription = [
       pendingPantryMessages.length ? pendingPantryMessages.join("\n") : null,
-      unlockLine,
       spoilageNotice
     ].filter(Boolean).join("\n\n");
 
@@ -4403,7 +4429,7 @@ if (sub === "pantry") {
           fishingUnlocked,
           fishingJustUnlocked,
           allowLockedFeatureInfo: true,
-          fishingStyleOverride: ButtonStyle.Primary
+          fishingStyleOverride: fishingUnlocked ? ButtonStyle.Primary : null
         }),
         noodleMainMenuRowNoPantry(userId),
         noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, allowLockedKitchenInfo: true })
@@ -4427,6 +4453,8 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     const now = nowTs();
     const page = opt.getInteger("page") ?? 0;
     const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+    const gardenUnlocked = isGardenUnlocked(p);
+    const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
 
     const set = buildSettingsMap(settingsCatalog, s.settings);
@@ -4498,7 +4526,14 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
         content: " ",
         embeds: [lockedEmbed],
         components: [
-          noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, active: "kitchen", allowLockedKitchenInfo: true }),
+          noodleFeatureInfoRow(userId, {
+            active: "kitchen",
+            gardenUnlocked,
+            kitchenUnlocked,
+            kitchenJustUnlocked,
+            fishingUnlocked,
+            fishingJustUnlocked
+          }),
           noodleMainMenuRow(userId)
         ]
       });
@@ -6008,7 +6043,21 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
+      return commitState({
+        content: " ",
+        embeds: [lockedEmbed],
+        components: [
+          noodleFeatureInfoRow(userId, {
+            active: "fishing",
+            gardenUnlocked,
+            kitchenUnlocked,
+            kitchenJustUnlocked,
+            fishingUnlocked,
+            fishingJustUnlocked
+          }),
+          noodleMainMenuRow(userId)
+        ]
+      });
     }
 
     const baseCooldownMs = applyCooldownReduction(FISHING_BASE_COOLDOWN_MS, combinedEffects);
@@ -6149,6 +6198,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const page = Math.max(0, Math.min(1, opt.getInteger("page") ?? 0));
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     let autoHarvestResult = null;
     if (combinedEffects.garden_autoharvest) {
       autoHarvestResult = autoHarvestReadyPlots(p, content, combinedEffects, {
@@ -6167,13 +6217,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         color: theme.colors.success
       });
       const navRows = [
-        noodleForageGardenRow(userId, {
+        noodleFeatureInfoRow(userId, {
           active: "garden",
-          gardenLocked: !gardenUnlocked,
-          includeKitchenButton: true,
+          gardenUnlocked,
           kitchenUnlocked,
           kitchenJustUnlocked,
-          allowLockedFeatureInfo: true
+          fishingUnlocked,
+          fishingJustUnlocked
         }),
         noodleMainMenuRow(userId)
       ];
