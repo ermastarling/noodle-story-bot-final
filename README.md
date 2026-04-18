@@ -91,6 +91,8 @@ Store/webhook-related env vars:
 
 - `NOODLE_WEBHOOK_PORT` — enables the webhook HTTP server when set
 - `NOODLE_WEBHOOK_PATH` — Discord entitlement webhook path (default `/discord/entitlements`)
+- `NOODLE_TOPGG_TOKEN` (fallbacks: `TOPGG_TOKEN`, `TOPGG_API_TOKEN`) — Top.gg API token used to POST bot stats on guild join/leave
+- `TOPGG_BOT_ID` — optional explicit bot id for Top.gg stats endpoint (defaults to live client id, then `1460058511802105976`)
 - `DISCORD_PUBLIC_KEY` — required to verify Discord entitlement signatures
 - `NOODLE_STRIPE_WEBHOOK_PATH` — Stripe webhook path (default `/store/stripe`)
 - `NOODLE_STRIPE_WEBHOOK_SECRET` — Stripe signing secret for webhook validation
@@ -100,7 +102,8 @@ Alert behavior:
 
 - Guild join alerts, Discord entitlement purchase alerts, and Stripe purchase alerts all use a single formatting path.
 - Alerts require `NOODLE_DEV_ALERT_USER_ID` when mention is required.
-- Guild join alerts include current server count in the embed footer.
+- Guild join/leave alerts include current server count in the embed footer.
+- Guild join/leave events also POST updated `server_count` to Top.gg when a Top.gg API token is configured.
 - Purchase alerts include specialization purchase count in the embed footer (all-time from durable purchase history).
 
 ## Simulation Harness

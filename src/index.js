@@ -256,6 +256,9 @@ import { getIcon } from "./ui/icons.js";
   const officialGuildId = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
   const devAlertChannelId = process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "";
   const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
+  const topggStatsToken = process.env.NOODLE_TOPGG_TOKEN || process.env.TOPGG_TOKEN || process.env.TOPGG_API_TOKEN || "";
+  const topggBotId = process.env.TOPGG_BOT_ID || "1460058511802105976";
+  let topggStatsDisabledLogged = false;
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -600,6 +603,47 @@ import { getIcon } from "./ui/icons.js";
       return true;
     } catch (error) {
       console.error("❌ Failed to send dev alert:", error?.stack ?? error);
+      return false;
+    }
+  }
+
+  async function updateTopggServerCount(serverCount, { reason = "event" } = {}) {
+    if (!topggStatsToken) {
+      if (!topggStatsDisabledLogged) {
+        topggStatsDisabledLogged = true;
+        console.log("INFO: Top.gg server count sync disabled (NOODLE_TOPGG_TOKEN/TOPGG_TOKEN not set).");
+      }
+      return false;
+    }
+
+    const resolvedBotId = String(client.user?.id || topggBotId || "").trim();
+    if (!resolvedBotId) {
+      console.error("❌ Skipping Top.gg server count sync: missing bot id.");
+      return false;
+    }
+
+    try {
+      const response = await fetch(`https://top.gg/api/bots/${encodeURIComponent(resolvedBotId)}/stats`, {
+        method: "POST",
+        headers: {
+          Authorization: topggStatsToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ server_count: Number(serverCount) || 0 })
+      });
+
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => "");
+        console.error(
+          `❌ Top.gg server count sync failed (${reason}): ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
+        );
+        return false;
+      }
+
+      console.log(`✅ Top.gg server count updated (${reason}): ${Number(serverCount) || 0}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Top.gg server count sync threw (${reason}):`, error?.stack ?? error);
       return false;
     }
   }
@@ -1081,8 +1125,10 @@ import { getIcon } from "./ui/icons.js";
 
   client.on("guildCreate", async (guild) => {
     try {
-      if (guild?.id === officialGuildId) return;
       const currentServerCount = Number(guild?.client?.guilds?.cache?.size ?? client.guilds.cache.size ?? 0);
+      await updateTopggServerCount(currentServerCount, { reason: "guildCreate" });
+
+      if (guild?.id === officialGuildId) return;
       await sendDevAlert({
         title: "New Server Alert!",
         description: `New Server: ${String(guild?.name || "Unknown Server")}`,
@@ -1091,6 +1137,23 @@ import { getIcon } from "./ui/icons.js";
       });
     } catch (error) {
       console.error("❌ Failed to send guild join alert:", error?.stack ?? error);
+    }
+  });
+
+  client.on("guildDelete", async (guild) => {
+    try {
+      const currentServerCount = Number(guild?.client?.guilds?.cache?.size ?? client.guilds.cache.size ?? 0);
+      await updateTopggServerCount(currentServerCount, { reason: "guildDelete" });
+
+      if (guild?.id === officialGuildId) return;
+      await sendDevAlert({
+        title: "Server Left Alert!",
+        description: `Left Server: ${String(guild?.name || "Unknown Server")}`,
+        footerText: `Current Server Count: ${currentServerCount.toLocaleString()}`,
+        requireMention: true
+      });
+    } catch (error) {
+      console.error("❌ Failed to send guild leave alert:", error?.stack ?? error);
     }
   });
 
