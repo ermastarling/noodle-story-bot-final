@@ -837,6 +837,7 @@ function noodleForageGardenRow(userId, {
   kitchenJustUnlocked = false,
   fishingUnlocked = false,
   fishingJustUnlocked = false,
+  allowLockedFeatureInfo = false,
   canCompost = false,
   canHarvest = false,
   showGardenActions = false,
@@ -861,7 +862,7 @@ function noodleForageGardenRow(userId, {
         .setCustomId(`noodle:nav:garden:${userId}`)
         .setLabel("Garden").setEmoji(getButtonEmoji("garden"))
         .setStyle(gardenStyle)
-        .setDisabled(gardenLocked)
+        .setDisabled(gardenLocked && !allowLockedFeatureInfo)
     );
   }
 
@@ -877,7 +878,7 @@ function noodleForageGardenRow(userId, {
         .setLabel("Fishing")
         .setEmoji(getButtonEmoji("fishing"))
         .setStyle(fishingStyle)
-        .setDisabled(!fishingUnlocked)
+        .setDisabled(!fishingUnlocked && !allowLockedFeatureInfo)
     );
   }
 
@@ -893,7 +894,7 @@ function noodleForageGardenRow(userId, {
         .setLabel("Kitchen")
         .setEmoji(kitchenEmoji)
         .setStyle(kitchenPrimary ? ButtonStyle.Success : kitchenStyle)
-        .setDisabled(!kitchenUnlocked)
+        .setDisabled(!kitchenUnlocked && !allowLockedFeatureInfo)
     );
   }
 
@@ -1267,7 +1268,7 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 );
 }
 
-function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false, active = null } = {}) {
+function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false, active = null, allowLockedKitchenInfo = false } = {}) {
   const kitchenStyle = !kitchenUnlocked
     ? ButtonStyle.Secondary
     : (kitchenJustUnlocked ? ButtonStyle.Success : ButtonStyle.Secondary);
@@ -1281,7 +1282,7 @@ function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlo
       .setLabel("Kitchen")
       .setEmoji(kitchenEmoji)
       .setStyle(kitchenStyle)
-      .setDisabled(!kitchenUnlocked)
+      .setDisabled(!kitchenUnlocked && !allowLockedKitchenInfo)
   );
 }
 
@@ -4401,10 +4402,11 @@ if (sub === "pantry") {
           includeFishingButton: true,
           fishingUnlocked,
           fishingJustUnlocked,
+          allowLockedFeatureInfo: true,
           fishingStyleOverride: ButtonStyle.Primary
         }),
         noodleMainMenuRowNoPantry(userId),
-        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked })
+        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, allowLockedKitchenInfo: true })
       ]
     };
   });
@@ -4481,6 +4483,26 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       page,
       ...overrides
     });
+
+    if (!kitchenUnlocked && sub === "kitchen") {
+      const lockedEmbed = buildMenuEmbed({
+        title: `${getIcon("kitchen")} Kitchen`,
+        description: [
+          "Simmer gold-star broths with your forageables and proteins to cook higher quality bowls.",
+          `${getIcon("lock")} Unlocks at shop level **${KITCHEN_UNLOCK_LEVEL}**.`
+        ].join("\n\n"),
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+      return finalize({
+        content: " ",
+        embeds: [lockedEmbed],
+        components: [
+          noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, active: "kitchen", allowLockedKitchenInfo: true }),
+          noodleMainMenuRow(userId)
+        ]
+      });
+    }
 
     if (!kitchenUnlocked && sub !== "kitchen") {
       const viewLocked = kitchenView();
@@ -5979,7 +6001,10 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (!fishingUnlocked) {
       const lockedEmbed = buildMenuEmbed({
         title: `${getIcon("fishing")} Fishing`,
-        description: `${getIcon("lock")} Reach shop level ${FISHING_UNLOCK_LEVEL} to unlock fishing and reel in fresh catches.`,
+        description: [
+          "Cast your line to catch fish and seafood for recipes and gold-star broths.",
+          `${getIcon("lock")} Unlocks at shop level **${FISHING_UNLOCK_LEVEL}**.`
+        ].join("\n\n"),
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -6134,12 +6159,22 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (!gardenUnlocked) {
       const lockedEmbed = buildMenuEmbed({
         title: `${getIcon("garden")} Garden`,
-        description: `${getIcon("lock")} Reach shop level 25 to unlock your garden and start collecting seeds.`,
+        description: [
+          "Plant seeds, harvest ingredients, and turn leftovers into compost for steady supplies.",
+          `${getIcon("lock")} Unlocks at shop level **${GARDEN_UNLOCK_LEVEL}**.`
+        ].join("\n\n"),
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
       const navRows = [
-        noodleForageGardenRow(userId, { active: "garden", gardenLocked: !gardenUnlocked, includeKitchenButton: true, kitchenUnlocked, kitchenJustUnlocked }),
+        noodleForageGardenRow(userId, {
+          active: "garden",
+          gardenLocked: !gardenUnlocked,
+          includeKitchenButton: true,
+          kitchenUnlocked,
+          kitchenJustUnlocked,
+          allowLockedFeatureInfo: true
+        }),
         noodleMainMenuRow(userId)
       ];
       return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
