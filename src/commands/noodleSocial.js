@@ -2777,13 +2777,6 @@ async function handleComponent(interaction) {
         if (recipe) {
           const contributions = getSharedOrderContributions(db, existingOrder.shared_order_id);
           const viewer = ensurePlayer(serverId, userId);
-          const progress = buildSharedOrderUiProgress({
-            player: viewer,
-            recipe,
-            servings: existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
-            contributions
-          });
-          const viewer = ensurePlayer(serverId, userId);
           const uiProgress = buildSharedOrderUiProgress({
             player: viewer,
             recipe,
