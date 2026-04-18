@@ -4431,8 +4431,8 @@ if (sub === "pantry") {
           allowLockedFeatureInfo: true,
           fishingStyleOverride: fishingUnlocked ? ButtonStyle.Primary : null
         }),
-        noodleMainMenuRowNoPantry(userId),
-        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, allowLockedKitchenInfo: true })
+        noodleRecipesMenuRow(userId, { kitchenUnlocked, kitchenJustUnlocked, allowLockedKitchenInfo: true }),
+        noodleMainMenuRowNoPantry(userId)
       ]
     };
   });
