@@ -14,7 +14,8 @@ import {
   getAvailableRecipes,
   clearTemporaryRecipes,
   FALLBACK_RECIPE_ID,
-  FAIL_STREAK_TRIGGER
+  FAIL_STREAK_TRIGGER,
+  RECOVERY_COOLDOWN_HOURS
 } from "../src/game/resilience.js";
 
 test("B1: detectDeadlock - returns false when player has coins", () => {
@@ -344,6 +345,79 @@ test("B7: applyResilienceMechanics - sets rep floor bonus when rep is at 0", () 
   
   // Should set the rep floor bonus flag
   assert.strictEqual(player.buffs.rep_floor_bonus, true);
+});
+
+test("B9: applyResilienceMechanics - blocks fallback recipe grant during cooldown", () => {
+  const now = Date.now();
+  const player = {
+    coins: 0,
+    known_recipes: ["test_recipe"],
+    inv_ingredients: {},
+    buffs: {},
+    resilience: {
+      last_rescue_at: now - (60 * 60 * 1000)
+    }
+  };
+  const serverState = {
+    market_prices: { broth_soy: 10 }
+  };
+  const content = {
+    recipes: {
+      test_recipe: {
+        ingredients: [{ item_id: "missing_item", qty: 1 }]
+      },
+      [FALLBACK_RECIPE_ID]: {
+        ingredients: [{ item_id: "scallions", qty: 3 }]
+      }
+    },
+    items: {}
+  };
+
+  const result = applyResilienceMechanics(player, serverState, content);
+
+  assert.strictEqual(result.isDeadlocked, true);
+  assert.strictEqual(result.applied, false);
+  assert.strictEqual(result.messages.length, 0);
+  assert.strictEqual(player.resilience?.temp_recipes?.includes(FALLBACK_RECIPE_ID), undefined);
+});
+
+test("B9: applyResilienceMechanics - grants fallback after cooldown and records rescue timestamp", () => {
+  const now = Date.now();
+  const cooldownMs = RECOVERY_COOLDOWN_HOURS * 60 * 60 * 1000;
+  const player = {
+    coins: 0,
+    known_recipes: ["test_recipe"],
+    inv_ingredients: {},
+    buffs: {},
+    resilience: {
+      last_rescue_at: now - cooldownMs - (60 * 1000)
+    }
+  };
+  const serverState = {
+    market_prices: { broth_soy: 10 }
+  };
+  const content = {
+    recipes: {
+      test_recipe: {
+        ingredients: [{ item_id: "missing_item", qty: 1 }]
+      },
+      [FALLBACK_RECIPE_ID]: {
+        ingredients: [{ item_id: "scallions", qty: 3 }]
+      }
+    },
+    items: {}
+  };
+
+  const before = Date.now();
+  const result = applyResilienceMechanics(player, serverState, content);
+  const after = Date.now();
+
+  assert.strictEqual(result.isDeadlocked, true);
+  assert.strictEqual(result.applied, true);
+  assert.ok(result.messages.length > 0);
+  assert.ok(player.resilience?.temp_recipes?.includes(FALLBACK_RECIPE_ID));
+  assert.ok(player.resilience?.last_rescue_at >= before);
+  assert.ok(player.resilience?.last_rescue_at <= after);
 });
 
 test("B4: updateFailStreak - triggers relief after 3 failures then resets on success", () => {

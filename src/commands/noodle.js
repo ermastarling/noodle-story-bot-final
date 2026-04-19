@@ -81,6 +81,7 @@ import {
   updateFailStreak
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
+import { applySeasonRolloverReward } from "../game/seasonRollover.js";
 import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
 import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
@@ -207,20 +208,6 @@ const multibuyCacheV2 = new Map();
 // Temporary cache for compost selections keyed by message id
 const compostSelectionCache = new Map();
 
-function gardenUnlockLine(prevLevel, newLevel) {
-  if ((prevLevel ?? 0) < GARDEN_UNLOCK_LEVEL && (newLevel ?? 0) >= GARDEN_UNLOCK_LEVEL) {
-    return `\n${getIcon("garden")} Garden unlocked! Find it in Forage or Pantry.`;
-  }
-  return "";
-}
-
-function fishingUnlockLine(prevLevel, newLevel) {
-  if ((prevLevel ?? 0) < FISHING_UNLOCK_LEVEL && (newLevel ?? 0) >= FISHING_UNLOCK_LEVEL) {
-    return `\n${getIcon("fishing")} Fishing unlocked! Head out through the Pantry to start fishing.`;
-  }
-  return "";
-}
-
 function applyUnlockNoticeEmbeds(payload = {}, player, user) {
   if (!player) return payload;
 
@@ -233,7 +220,7 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
     notices.push(
       buildMenuEmbed({
         title: `${getIcon("garden")} Garden Unlocked`,
-        description: "Plant seeds and harvest ingredients with `/noodle garden` (find it through your Pantry).",
+        description: "Plant seeds and harvest ingredients with `/noodle garden` (or find it through your Pantry).",
         user
       })
     );
@@ -242,7 +229,7 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
     notices.push(
       buildMenuEmbed({
         title: `${getIcon("kitchen")} Kitchen Unlocked`,
-        description: "Simmer your own broths with `/noodle kitchen` (find it through your Pantry).",
+        description: "Simmer gold-star broths with `/noodle kitchen` (or find it through your Pantry).",
         user
       })
     );
@@ -251,7 +238,7 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
     notices.push(
       buildMenuEmbed({
         title: `${getIcon("fishing")} Fishing Unlocked`,
-        description: "Catch fish and seafood with `/noodle fishing` (find it through your Pantry).",
+        description: "Catch fish and seafood with `/noodle fishing` (or find it through your Pantry).",
         user
       })
     );
@@ -1094,13 +1081,23 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
 
   const hasHarvestable = readyPlots.length > 0;
   const hasEmptyPlot = plots.some((plot) => !plot?.seed_id || getYieldTotal(getPlotYieldRemaining(plot)) <= 0);
+  const totalSeeds = Object.values(garden.seeds || {}).reduce((sum, qty) => sum + Math.max(0, Number(qty) || 0), 0);
+  const hasNoSeedsNoCompost = totalSeeds <= 0 && compostCount <= 0 && !canCraft;
+  const hasSeedsNoCompost = totalSeeds > 0 && compostCount <= 0;
 
   const plotSummary = `${getIcon("plot")} Plots available: **${getGardenPlotCount(player, combinedEffects)}**`;
+  const gardenStarterHelp = hasNoSeedsNoCompost
+    ? `${getIcon("forage")} No seeds or compost bags yet. Use \`/noodle forage\` for a chance to find seeds, then forage extras (or spoiled items) to craft compost bags.`
+    : (hasSeedsNoCompost
+      ? (canCraft
+        ? `${getIcon("compost_bag")} You have seeds ready to plant, but no compost bags. Tap **Make Compost** to craft bags and start planting.`
+        : `${getIcon("compost_bag")} You have seeds ready to plant, but no compost bags. Forage extras (or collect spoiled items) to craft compost bags.`)
+      : null);
   const plotsLinesRaw = plotsSection ? plotsSection.split("\n").filter(Boolean) : [];
   const plotsLines = plotsLinesRaw.length ? plotsLinesRaw : ["_No plots available yet._"];
 
   const autoHarvestNote = formatAutoHarvestNote(autoHarvestResult, content);
-  const descriptionParts = [autoHarvestNote, plotSummary].filter(Boolean);
+  const descriptionParts = [autoHarvestNote, [plotSummary, gardenStarterHelp].filter(Boolean).join("\n")].filter(Boolean);
   const description = descriptionParts.join("\n\n");
 
   const seedsValue = [
@@ -2299,73 +2296,6 @@ function ensurePlayer(serverId, userId) {
     p.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
   }
   return p;
-}
-
-function applySeasonRolloverReward(player, currentSeason) {
-  if (!player || !currentSeason) return null;
-  if (!player.seasons) {
-    player.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
-  }
-
-  const previousSeason = player.seasons.last_seen ?? null;
-  const seasonChanged = previousSeason && previousSeason !== currentSeason;
-  player.seasons.last_seen = currentSeason;
-
-  const invBowls = player.inv_bowls ?? {};
-  const getRecipeSeason = (recipeId) => eventRecipeSeasonIndex?.[recipeId] ?? content?.recipes?.[recipeId]?.season ?? null;
-
-  let bowlCount = 0;
-  const clearedKeys = [];
-  let fromSeason = previousSeason;
-
-  // Clear any cooked bowls tied to a season that is no longer active.
-  for (const [key, bowl] of Object.entries(invBowls)) {
-    const recipeSeason = getRecipeSeason(bowl?.recipe_id);
-    if (!recipeSeason) continue;
-    if (recipeSeason === currentSeason) continue;
-
-    const qty = Math.max(0, Number(bowl?.qty || 0));
-    if (!qty) continue;
-
-    bowlCount += qty;
-    clearedKeys.push(key);
-    fromSeason = fromSeason ?? recipeSeason;
-  }
-
-  const rewardFromSeason = fromSeason ?? (seasonChanged ? previousSeason : null);
-  if (rewardFromSeason) {
-    player.seasons.last_rewarded_from = rewardFromSeason;
-  }
-
-  if (bowlCount <= 0) return null;
-
-  // Clear event bowls from inventory now that they've been rewarded.
-  for (const key of clearedKeys) {
-    delete invBowls[key];
-  }
-
-  const coins = bowlCount * 5 + 10;
-  const rep = Math.max(1, Math.ceil(bowlCount / 3) + 10);
-  const sxp = bowlCount * 2 + 10;
-
-  player.coins = (player.coins || 0) + coins;
-  player.rep = (player.rep || 0) + rep;
-  player.sxp_total = (player.sxp_total || 0) + sxp;
-  player.sxp_progress = (player.sxp_progress || 0) + sxp;
-  if (!player.lifetime) player.lifetime = {};
-  player.lifetime.coins_earned = (player.lifetime.coins_earned || 0) + coins;
-  const leveled = applySxpLevelUp(player);
-
-  player.seasons.last_rewarded_at = nowTs();
-
-  const friendlyFrom = rewardFromSeason
-    ? rewardFromSeason.charAt(0).toUpperCase() + rewardFromSeason.slice(1)
-    : "Last season";
-  const friendlyCurrent = currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1);
-  const bowlLabel = `Cleared ${bowlCount} bowl${bowlCount === 1 ? "" : "s"}.`;
-  const message = `${getIcon("season")} As ${friendlyFrom} hands the ladle to ${friendlyCurrent}, your event bowls found cozy homes. ${bowlLabel} Reward: **${coins}c**, **${rep} REP**, **${sxp} SXP**.`;
-
-  return { message, leveled, cleared: clearedKeys.length, bowlsCleared: bowlCount };
 }
 
 function isTutorialStep(player, stepId) {
@@ -4099,7 +4029,12 @@ if (player) {
   }
 }
 
-seasonRolloverNotice = player ? applySeasonRolloverReward(player, server.season) : null;
+seasonRolloverNotice = player
+  ? applySeasonRolloverReward(player, server.season, {
+      eventRecipeSeasonIndex,
+      recipes: content?.recipes
+    })
+  : null;
 if (seasonRolloverNotice?.cleared && db) {
   upsertPlayer(db, serverId, userId, player, null, player.schema_version);
 }
@@ -5267,7 +5202,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       }));
     }
     if (rescueEmbeds.length > 0) {
-      finalEmbeds = [...rescueEmbeds, ...(finalEmbeds ?? [])];
+      finalEmbeds = [...(finalEmbeds ?? []), ...rescueEmbeds];
     }
 
     if (!finalEmbeds || finalEmbeds.length === 0) {
@@ -5447,7 +5382,6 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const latestServerId = db ? getLatestServerIdForUser(db, userId) : null;
     const voteServerId = latestServerId || serverId;
     const latestPlayer = voteServerId ? ensurePlayer(voteServerId, userId) : p;
-    const prevShopLevel = latestPlayer.shop_level ?? 1;
     const result = claimTopggVoteReward(latestPlayer, now);
     if (!result.ok) {
       const embed = buildMenuEmbed({
@@ -5471,12 +5405,10 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
-    const gardenLine = gardenUnlockLine(prevShopLevel, latestPlayer.shop_level);
-    const fishingLine = fishingUnlockLine(prevShopLevel, latestPlayer.shop_level);
     const claimedLabel = result.claimsClaimed === 1 ? "1 vote reward" : `${result.claimsClaimed} vote rewards`;
     const embed = buildMenuEmbed({
       title: `${getIcon("leaderboard")} Vote Rewards Claimed`,
-      description: `Claimed: **${claimedLabel}**\nRewards: ${rewardLines.join(" · ")}\nPending claims: **${result.pendingClaims}**${levelLine}${gardenLine}${fishingLine}`,
+      description: `Claimed: **${claimedLabel}**\nRewards: ${rewardLines.join(" · ")}\nPending claims: **${result.pendingClaims}**${levelLine}`,
       user: interaction.member ?? interaction.user
     });
 
@@ -5497,7 +5429,6 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   /* ---------------- QUESTS: DAILY ---------------- */
   if (sub === "quests_daily") {
-    const prevShopLevel = p.shop_level ?? 1;
     const result = claimDailyReward(p, dailyRewards, now);
     if (!result.ok) {
       const embed = buildMenuEmbed({
@@ -5525,11 +5456,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (result.reward.rep) rewardLines.push(`${getIcon("rep")} **${result.reward.rep} REP**`);
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
-    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
-    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
     const embed = buildMenuEmbed({
       title: `${getIcon("daily_reward")} Daily Reward`,
-      description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")} ${levelLine}${gardenLine}${fishingLine}`,
+      description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")} ${levelLine}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -5548,7 +5477,6 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   /* ---------------- QUESTS: CLAIM ---------------- */
   if (sub === "quests_claim") {
-    const prevShopLevel = p.shop_level ?? 1;
     const result = claimCompletedQuests(p);
     const lines = result.claimed.length
       ? result.claimed.map((entry) => {
@@ -5561,11 +5489,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       : ["_No completed quests to claim._"]; 
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
-    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
-    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
     const embed = buildMenuEmbed({
       title: `${getIcon("status_complete")} Quest Rewards`,
-      description: `${lines.join("\n")}${levelLine}${gardenLine}${fishingLine}`,
+      description: `${lines.join("\n")}${levelLine}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -7486,7 +7412,6 @@ ${lines.join("\n")}`;
     const results = [];
     const discoveryMessages = [];
     const missingByRecipe = {};
-    const prevShopLevel = p.shop_level ?? 1;
     let totalCoins = 0;
     let totalRep = 0;
     let totalSxp = 0;
@@ -7830,8 +7755,6 @@ ${lines.join("\n")}`;
 
     const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
     const levelLine = leveledUp ? `\n${getIcon("level_up")} Level up! You're now **Level ${p.shop_level}**.` : "";
-    const gardenLine = gardenUnlockLine(prevShopLevel, p.shop_level);
-    const fishingLine = fishingUnlockLine(prevShopLevel, p.shop_level);
     const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.join("\n")}` : "";
     const tut = advanceTutorial(p, "serve");
     const suffix = tut.finished ? `\n\n${formatTutorialCompletionMessage()}` : `${tutorialSuffix(p)}`;
@@ -7847,7 +7770,7 @@ ${lines.join("\n")}`;
 
     const serveLines = [results.join("\n")];
     if (missingBlock) serveLines.push("", missingBlock);
-  serveLines.push("", `${summary}${levelLine}${gardenLine}${fishingLine}${discoveryLine}${suffix}`);
+  serveLines.push("", `${summary}${levelLine}${discoveryLine}${suffix}`);
 
     const serveEmbed = buildMenuEmbed({
       title: `${getIcon("serve")} Orders Served`,

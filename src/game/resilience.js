@@ -346,12 +346,18 @@ export function applyResilienceMechanics(player, serverState, content) {
   
   if (isDeadlocked) {
     // B1: Deadlock detected - apply recovery in priority order
-    
+
+    const cooldown = checkRecoveryCooldown(player);
+
     // B2: Fallback recipe
-    const fallback = applyFallbackRecipeAccess(player, content);
-    if (fallback.granted) {
-      messages.push(fallback.message);
-      applied = true;
+    if (cooldown.available) {
+      const fallback = applyFallbackRecipeAccess(player, content);
+      if (fallback.granted) {
+        if (!player.resilience) player.resilience = {};
+        player.resilience.last_rescue_at = nowTs();
+        messages.push(fallback.message);
+        applied = true;
+      }
     }
   }
 
