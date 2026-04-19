@@ -1194,6 +1194,7 @@ import { getIcon } from "./ui/icons.js";
         // Check if this button/select will show a modal
           const willShowModal = cid?.includes("pick:cook_select:") ||
               cid?.includes("pick:forage_item_select:") ||
+              cid?.includes("pick:fishing_item_select:") ||
               cid?.includes("action:party_create") ||
               cid?.includes("action:party_join") ||
               cid?.includes("action:party_invite") ||
@@ -1341,6 +1342,23 @@ import { getIcon } from "./ui/icons.js";
           const allowedForage = (FORAGE_ITEM_IDS ?? []).filter(id => allowed.has(id));
 
           const results = allowedForage
+            .map(id => ({ id, name: content.items?.[id]?.name ?? id }))
+            .filter(x =>
+              x.id.toLowerCase().includes(q) ||
+              x.name.toLowerCase().includes(q)
+            )
+            .slice(0, 25)
+            .map(x => ({
+              name: String(x.name).slice(0, 100),
+              value: String(x.id).slice(0, 100)
+            }));
+
+          return interaction.respond(results);
+        }
+
+        // ✅ Fishing autocomplete (fishing table items)
+        if (sub === "fishing" && focused.name === "item") {
+          const results = (FISHING_ITEM_IDS ?? [])
             .map(id => ({ id, name: content.items?.[id]?.name ?? id }))
             .filter(x =>
               x.id.toLowerCase().includes(q) ||

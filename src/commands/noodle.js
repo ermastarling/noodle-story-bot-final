@@ -3626,7 +3626,7 @@ function buildForageMenuPayload({
       ? [
           "Choose how you want to forage:",
           `• Take a forage stroll for surprise finds`,
-          `• Pick a specific ingredient, then enter quantity *(**1-5**)\n**Final amount you receive is increased by your Forager's level*`,
+          `• Pick a specific ingredient, then enter quantity (**1-5**)\n**Final amount you receive is increased by your Forager's level*`,
         ].join("\n")
       : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.",
     user: ownerUser,
@@ -3644,6 +3644,125 @@ function buildForageMenuPayload({
     components: buildForageFishingNavRows({
       userId,
       active: "forage",
+      gardenUnlocked,
+      fishingUnlocked,
+      fishingJustUnlocked,
+      kitchenUnlocked,
+      kitchenJustUnlocked,
+      prependRows: [actionRow, pickerRow, ...(pageRow ? [pageRow] : [])]
+    })
+  };
+}
+
+function getAllowedFishingIdsForPlayer(_player) {
+  return (FISHING_ITEM_IDS ?? []).filter((id) => !!content.items?.[id]);
+}
+
+function buildFishingPickerRows({ userId, player, randomPrimary = true, page = 0 }) {
+  const fishingIds = getAllowedFishingIdsForPlayer(player)
+    .slice()
+    .sort((a, b) => displayItemName(a).localeCompare(displayItemName(b), undefined, { sensitivity: "base" }));
+
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(fishingIds.length / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const pageIds = fishingIds.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  const fishingOptions = pageIds
+    .map((id) => ({
+      label: displayItemName(id).slice(0, 100),
+      value: id
+    }))
+    .slice(0, 25);
+
+  const actionRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:pick:fishing_random:${userId}:${safePage}`)
+      .setLabel("Casual Fishing")
+      .setEmoji(getButtonEmoji("fishing"))
+      .setStyle(randomPrimary ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+
+  const pickerRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`noodle:pick:fishing_item_select:${userId}:${safePage}`)
+      .setPlaceholder(fishingOptions.length ? "Pick a fish/seafood to target" : "No fishing items available")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .setDisabled(!fishingOptions.length)
+      .addOptions(fishingOptions.length ? fishingOptions : [{ label: "No fishing items available", value: "none" }])
+  );
+
+  const pageRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:fishing_page:${userId}:${safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage <= 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:fishing_page:${userId}:${safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage >= totalPages - 1)
+      )
+    : null;
+
+  return {
+    actionRow,
+    pickerRow,
+    pageRow,
+    fishingCount: fishingIds.length,
+    safePage,
+    totalPages
+  };
+}
+
+function buildFishingMenuPayload({
+  userId,
+  player,
+  ownerUser,
+  kitchenUnlocked,
+  kitchenJustUnlocked,
+  fishingUnlocked,
+  fishingJustUnlocked,
+  page = 0
+}) {
+  const gardenUnlocked = isGardenUnlocked(player);
+  const { actionRow, pickerRow, pageRow, fishingCount, safePage, totalPages } = buildFishingPickerRows({
+    userId,
+    player,
+    randomPrimary: true,
+    page
+  });
+
+  const embed = buildMenuEmbed({
+    title: `${getIcon("fishing")} Fishing`,
+    description: fishingCount > 0
+      ? [
+          "Choose how you want to fish:",
+          "• Enjoy a casual fishing trip for surprise catches",
+          "• Pick a specific fish or seafood, then enter quantity (**1-5**)\n**Final amount you receive is increased by your Fisher Crew's level*"
+        ].join("\n")
+      : "No fishing items are available right now.",
+    user: ownerUser,
+    color: theme.colors.success
+  });
+
+  if (fishingCount > 0 && totalPages > 1) {
+    const existingFooter = embed?.data?.footer?.text ?? embed?.footer?.text ?? "";
+    const pageLabel = `Page ${safePage + 1}/${totalPages}`;
+    embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
+  }
+
+  return {
+    content: " ",
+    embeds: [embed],
+    components: buildForageFishingNavRows({
+      userId,
+      active: "fishing",
       gardenUnlocked,
       fishingUnlocked,
       fishingJustUnlocked,
@@ -6119,6 +6238,54 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
   }
 
   /* ---------------- FISHING ---------------- */
+  if (sub === "fishing_menu") {
+    ensureFishingState(p);
+    const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    const rawPickerPage = Number(opt.getInteger("page") ?? 0);
+    const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+
+    if (!fishingUnlocked) {
+      const gardenUnlocked = isGardenUnlocked(p);
+      const lockedEmbed = buildMenuEmbed({
+        title: `${getIcon("fishing")} Fishing`,
+        description: [
+          "Cast your line to catch fish and seafood for recipes and gold-star broths.",
+          `${getIcon("lock")} Unlocks at shop level **${FISHING_UNLOCK_LEVEL}**.`
+        ].join("\n\n"),
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+      return commitState({
+        content: " ",
+        embeds: [lockedEmbed],
+        components: [
+          noodleFeatureInfoRow(userId, {
+            active: "fishing",
+            gardenUnlocked,
+            kitchenUnlocked,
+            kitchenJustUnlocked,
+            fishingUnlocked,
+            fishingJustUnlocked
+          }),
+          noodleMainMenuRow(userId)
+        ]
+      });
+    }
+
+    return commitState(buildFishingMenuPayload({
+      userId,
+      player: p,
+      ownerUser: interaction.member ?? interaction.user,
+      kitchenUnlocked,
+      kitchenJustUnlocked,
+      fishingUnlocked,
+      fishingJustUnlocked,
+      page: pickerPage
+    }));
+  }
+
+  /* ---------------- FISHING ---------------- */
   if (sub === "fishing") {
     ensureFishingState(p);
     unlockNoticePlayer = p;
@@ -6126,7 +6293,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const now = nowTs();
+    const rawPickerPage = Number(opt.getInteger("page") ?? 0);
+    const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+    const itemId = opt.getString("item") ?? null;
+    const qtyRaw = opt.getInteger("quantity") ?? 1;
+    const quantity = Math.max(1, Math.min(5, qtyRaw));
 
+    const fishingPickerRows = buildFishingPickerRows({ userId, player: p, randomPrimary: false, page: pickerPage });
     const navRows = buildForageFishingNavRows({
       userId,
       active: "fishing",
@@ -6134,7 +6307,12 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       fishingUnlocked,
       fishingJustUnlocked,
       kitchenUnlocked,
-      kitchenJustUnlocked
+      kitchenJustUnlocked,
+      prependRows: [
+        fishingPickerRows.actionRow,
+        fishingPickerRows.pickerRow,
+        ...(fishingPickerRows.pageRow ? [fishingPickerRows.pageRow] : [])
+      ]
     });
 
     if (fishingUnlocked && !p.fishing.first_visit_ack) {
@@ -6185,23 +6363,47 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
 
     const bonusItems = Math.max(0, Math.floor(combinedEffects.fishing_bonus_items || 0));
+    const allowedFishing = new Set(getAllowedFishingIdsForPlayer(p));
+    if (itemId && !allowedFishing.has(itemId)) {
+      return commitState({
+        content: "That isn't a valid fishing target.",
+        components: navRows
+      });
+    }
+
     let drops;
     try {
       drops = rollFishingDrops({
         serverId,
         userId: interaction.user.id,
         picks: 2 + bonusItems,
+        itemId,
+        quantity,
+        allowedItemIds: [...allowedFishing],
         effects: combinedEffects
       });
     } catch (err) {
+      const unlockedFishingIds = [...allowedFishing];
+      if (!unlockedFishingIds.length) {
+        return commitState({
+          content: `${getIcon("fishing")} You haven’t unlocked fishing catches yet.`,
+          components: navRows
+        });
+      }
+
+      const suggestions = unlockedFishingIds
+        .map((id) => `\`${displayItemName(id)}\``)
+        .join(", ");
+
       return commitState({
-        content: `${getIcon("error")} Fishing isn’t available right now.`,
-        components: navRows,
-        ephemeral: true
+        content: `That isn't a valid fishing target. Try one of: ${suggestions}`,
+        components: navRows
       });
     }
 
-    if (bonusItems > 0) {
+    if (itemId && bonusItems > 0) {
+      drops[itemId] = (drops[itemId] ?? 0) + bonusItems;
+    } else if (bonusItems > 0) {
       const ids = Object.keys(drops);
       if (ids.length) {
         const first = ids[0];
@@ -6235,12 +6437,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects);
     const { accepted, rejected } = capacityResult;
+    const nextFishingTs = Math.floor((now + fishingCooldownMs) / 1000);
 
     if (!Object.keys(accepted).length) {
       setFishingCooldown(p, now);
       const fullEmbed = buildMenuEmbed({
         title: `${getIcon("fishing")} Fishing`,
-        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
+        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.\n\n${getIcon("cooldown")} You can fish again at <t:${nextFishingTs}:t>, <t:${nextFishingTs}:R>.`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -6260,7 +6463,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         : "";
       const fullEmbed = buildMenuEmbed({
         title: `${getIcon("fishing")} Fishing`,
-        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`,
+        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}\n\n${getIcon("cooldown")} You can fish again at <t:${nextFishingTs}:t>, <t:${nextFishingTs}:R>.`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -6290,10 +6493,17 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         .map(([id, q]) => `**${q}×** ${displayItemName(id)}`)
         .join(", ")}.`
       : "";
+    const header = itemId
+      ? `You cast with care and reel in:\n${groupedLinesText}${rejectedText}`
+      : `You cast your line and reel in:\n${groupedLinesText}${rejectedText}`;
 
     const fishingEmbed = buildMenuEmbed({
       title: `${getIcon("bucket_of_fish")} Fishing`,
-      description: [`You cast your line and reel in:\n${groupedLinesText}${rejectedText}`, unlockLines.join("\n")].filter(Boolean).join("\n\n"),
+      description: [
+        header,
+        unlockLines.join("\n"),
+        `${getIcon("cooldown")} You can fish again at <t:${nextFishingTs}:t>, <t:${nextFishingTs}:R>.`
+      ].filter(Boolean).join("\n\n"),
       user: interaction.member ?? interaction.user,
       color: theme.colors.success
     });
@@ -8318,6 +8528,17 @@ if (kind === "nav" && action === "forage") {
   });
 }
 
+if (kind === "nav" && action === "fishing") {
+  const sourceMessageId = interaction.message?.id ?? null;
+  const rawPage = Number(parts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  return runNoodle(interaction, {
+    sub: "fishing_menu",
+    group: null,
+    overrides: { messageId: sourceMessageId, integers: { page } }
+  });
+}
+
 /* ---------------- NAV BUTTONS ---------------- */
 // Compost button shows picker of compostable items
 function buildCompostSelectOptions(player) {
@@ -8777,6 +8998,24 @@ if (action === "forage_page") {
   });
 }
 
+if (action === "fishing_random") {
+  const rawPage = Number(parts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  return runNoodle(interaction, {
+    sub: "fishing",
+    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+  });
+}
+
+if (action === "fishing_page") {
+  const rawPage = Number(parts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  return runNoodle(interaction, {
+    sub: "fishing_menu",
+    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+  });
+}
+
 if (action === "accept") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
@@ -8988,6 +9227,49 @@ if (cid.startsWith("noodle:pick:forage_item_select:")) {
   }
 }
 
+// fishing picker -> open qty modal
+if (cid.startsWith("noodle:pick:fishing_item_select:")) {
+  const idParts = cid.split(":");
+  const rawPage = Number(idParts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  const itemId = interaction.values?.[0] ?? null;
+  if (!itemId || itemId === "none") {
+    return componentCommit(interaction, { content: "Pick a fishing target first.", ephemeral: true });
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+  }
+
+  const sourceMessageId = interaction.message?.id ?? "none";
+  const modal = new ModalBuilder()
+    .setCustomId(`noodle:pick:fishing_qty:${userId}:${itemId}:${page}:${sourceMessageId}`)
+    .setTitle(`Fish For ${displayItemName(itemId)}`);
+
+  const input = new TextInputBuilder()
+    .setCustomId("qty")
+    .setLabel("Quantity (1-5)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("1");
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+
+  try {
+    return await interaction.showModal(modal);
+  } catch (e) {
+    console.log(`⚠️ showModal failed for fishing:`, e?.message);
+    const code = e?.code ?? e?.message;
+    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+      return;
+    }
+    return componentCommit(interaction, {
+      content: `${getIcon("warning")} Discord couldn't show the modal. Try again.`,
+      ephemeral: true
+    });
+  }
+}
+
 }
 
   /* ---------------- COOK QTY MODAL ---------------- */
@@ -9055,6 +9337,44 @@ if (cid.startsWith("noodle:pick:forage_item_select:")) {
 
     return runNoodle(interaction, {
       sub: "forage",
+      overrides: {
+        strings: { item: itemId },
+        integers: { quantity: qty, page },
+        messageId
+      }
+    });
+  }
+
+  /* ---------------- FISHING QTY MODAL ---------------- */
+  if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:pick:fishing_qty:")) {
+    const parts2 = interaction.customId.split(":");
+    // noodle:pick:fishing_qty:<ownerId>:<itemId>:<page>:<messageId>
+    const owner = parts2[3];
+    const itemId = parts2[4];
+    const rawPage = Number(parts2[5] ?? 0);
+    const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+    const messageId = parts2[6] && parts2[6] !== "none" ? parts2[6] : null;
+
+    if (owner && owner !== interaction.user.id) {
+      return componentCommit(interaction, { content: "That fishing prompt isn’t for you.", ephemeral: true });
+    }
+
+    const rawQty = String(interaction.fields.getTextInputValue("qty") ?? "").trim();
+    const qty = Number(rawQty);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 5) {
+      return componentCommit(interaction, { content: "Enter a whole number quantity (1-5).", ephemeral: true });
+    }
+
+    if (messageId) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return runNoodle(interaction, {
+      sub: "fishing",
       overrides: {
         strings: { item: itemId },
         integers: { quantity: qty, page },
@@ -9768,7 +10088,13 @@ const noodleCommandData = new SlashCommandBuilder()
   )
   .addSubcommand((sc) => sc.setName("season").setDescription("Show the current season."))
   .addSubcommand((sc) => sc.setName("pantry").setDescription("View your ingredient pantry."))
-  .addSubcommand((sc) => sc.setName("fishing").setDescription("Cast a line for fresh catches."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("fishing")
+      .setDescription("Cast a line for fresh catches.")
+      .addStringOption((o) => o.setName("item").setDescription("What to fish for (type to search)").setRequired(false).setAutocomplete(true))
+      .addIntegerOption((o) => o.setName("quantity").setDescription("Quantity (1-5)").setRequired(false).setMinValue(1).setMaxValue(5))
+  )
   .addSubcommand((sc) => sc.setName("recipes").setDescription("View your unlocked recipes and clues."))
   .addSubcommand((sc) => sc.setName("regulars").setDescription("View regular NPCs and their bonuses."))
   .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
