@@ -3607,7 +3607,15 @@ function buildForageMenuPayload({
   page = 0
 }) {
   const gardenUnlocked = isGardenUnlocked(player);
+  const now = nowTs();
   const combinedEffects = calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
+  const forageBaseCooldownMs = 2 * 60 * 1000;
+  const forageCooldownMs = applyCooldownReduction(forageBaseCooldownMs, combinedEffects);
+  const forageCooldown = canForage(player, now, forageCooldownMs);
+  const forageNextTs = Math.floor((forageCooldown.ok ? (now + forageCooldownMs) : forageCooldown.nextAt) / 1000);
+  const forageReadyLine = forageCooldown.ok
+    ? `${getIcon("cooldown")} Ready now. If you forage now, you can forage again at <t:${forageNextTs}:t> (<t:${forageNextTs}:R>).`
+    : `${getIcon("cooldown")} You can forage again at <t:${forageNextTs}:t> (<t:${forageNextTs}:R>).`;
   if (combinedEffects.garden_autoharvest) {
     autoHarvestReadyPlots(player, content, combinedEffects, {
       capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, player, combinedEffects)
@@ -3620,15 +3628,17 @@ function buildForageMenuPayload({
     randomPrimary: true,
     page
   });
+  const forageBaseDescription = forageCount > 0
+    ? [
+        "Choose how you want to forage:",
+        `• Take a forage stroll for surprise finds`,
+        `• Pick a specific ingredient, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Forager's level*`
+      ].join("\n")
+    : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.";
+
   const embed = buildMenuEmbed({
     title: `${getIcon("forage")} Forage`,
-    description: forageCount > 0
-      ? [
-          "Choose how you want to forage:",
-          `• Take a forage stroll for surprise finds`,
-          `• Pick a specific ingredient, then enter quantity (**1-5**)\n**Final amount you receive is increased by your Forager's level*`,
-        ].join("\n")
-      : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.",
+    description: `${forageBaseDescription}\n\n${forageReadyLine}`,
     user: ownerUser,
     color: theme.colors.success
   });
@@ -3686,7 +3696,7 @@ function buildFishingPickerRows({ userId, player, randomPrimary = true, page = 0
   const pickerRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`noodle:pick:fishing_item_select:${userId}:${safePage}`)
-      .setPlaceholder(fishingOptions.length ? "Pick a fish/seafood to target" : "No fishing items available")
+      .setPlaceholder(fishingOptions.length ? "Pick the fish or seafood you're looking for" : "No fishing items available")
       .setMinValues(1)
       .setMaxValues(1)
       .setDisabled(!fishingOptions.length)
@@ -3731,6 +3741,17 @@ function buildFishingMenuPayload({
   page = 0
 }) {
   const gardenUnlocked = isGardenUnlocked(player);
+  const now = nowTs();
+  const combinedEffects = calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
+  const fishingBaseCooldownMs = applyCooldownReduction(FISHING_BASE_COOLDOWN_MS, combinedEffects);
+  const fishingCooldownMs = Math.floor(
+    fishingBaseCooldownMs * (1 - Math.min(0.8, Math.max(0, combinedEffects.fishing_cooldown_reduction || 0)))
+  );
+  const fishingCooldown = canFish(player, now, fishingCooldownMs);
+  const fishingNextTs = Math.floor((fishingCooldown.ok ? (now + fishingCooldownMs) : fishingCooldown.nextAt) / 1000);
+  const fishingReadyLine = fishingCooldown.ok
+    ? `${getIcon("cooldown")} Ready now. If you fish now, you can fish again at <t:${fishingNextTs}:t> (<t:${fishingNextTs}:R>).`
+    : `${getIcon("cooldown")} You can fish again at <t:${fishingNextTs}:t> (<t:${fishingNextTs}:R>).`;
   const { actionRow, pickerRow, pageRow, fishingCount, safePage, totalPages } = buildFishingPickerRows({
     userId,
     player,
@@ -3738,15 +3759,17 @@ function buildFishingMenuPayload({
     page
   });
 
+  const fishingBaseDescription = fishingCount > 0
+    ? [
+        "Choose how you want to fish:",
+        "• Enjoy a casual fishing trip for surprise catches",
+        "• Pick a specific fish or seafood, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Fisher Crew's level*"
+      ].join("\n")
+    : "No fishing items are available right now.";
+
   const embed = buildMenuEmbed({
     title: `${getIcon("fishing")} Fishing`,
-    description: fishingCount > 0
-      ? [
-          "Choose how you want to fish:",
-          "• Enjoy a casual fishing trip for surprise catches",
-          "• Pick a specific fish or seafood, then enter quantity (**1-5**)\n**Final amount you receive is increased by your Fisher Crew's level*"
-        ].join("\n")
-      : "No fishing items are available right now.",
+    description: `${fishingBaseDescription}\n\n${fishingReadyLine}`,
     user: ownerUser,
     color: theme.colors.success
   });
