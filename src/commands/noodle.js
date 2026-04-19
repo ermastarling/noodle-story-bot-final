@@ -3626,7 +3626,7 @@ function buildForageMenuPayload({
       ? [
           "Choose how you want to forage:",
           `• Take a forage stroll for surprise finds`,
-          `• Pick a specific ingredient, then enter quantity (**1-5** - this amount is increased by your forager's level)`,
+          `• Pick a specific ingredient, then enter quantity *(**1-5**)\n*Final amount you receive is increased by your Forager's level*`,
         ].join("\n")
       : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.",
     user: ownerUser,
