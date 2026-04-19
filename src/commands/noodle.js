@@ -1108,11 +1108,11 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
 
   const compostValue = [
     "· · · · · · ·",
-    `Compost: **${compostCount}** bags`,
-    `${getIcon("compost_bag")} **Compost Inputs**`,
+    `${getIcon("compost_bag")} **Compost: ${compostCount} bags (unlimited)**`,
+    `**Compost Inputs:**`,
     `Spoiled saved: **${spoiledTotal}**`,
     `Fresh forageables: **${pantryTotal}**`,
-    `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
+    `*Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag*`
   ].join("\n");
 
   const seedOptions = Object.entries(garden.seeds || {})
@@ -3529,6 +3529,129 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   };
 }
 
+function getAllowedForageIdsForPlayer(player) {
+  const allowed = getUnlockedIngredientIds(player, content);
+  return (FORAGE_ITEM_IDS ?? []).filter((id) => allowed.has(id));
+}
+
+function buildForagePickerRows({ userId, player, randomPrimary = true }) {
+  const forageIds = getAllowedForageIdsForPlayer(player)
+    .slice()
+    .sort((a, b) => displayItemName(a).localeCompare(displayItemName(b), undefined, { sensitivity: "base" }));
+
+  const forageOptions = forageIds
+    .map((id) => ({
+      label: displayItemName(id).slice(0, 100),
+      value: id
+    }))
+    .slice(0, 25);
+
+  const actionRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:pick:forage_random:${userId}`)
+      .setLabel("Forage Stroll")
+      .setEmoji(getButtonEmoji("forage"))
+      .setStyle(randomPrimary ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+
+  const pickerRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`noodle:pick:forage_item_select:${userId}`)
+      .setPlaceholder(forageOptions.length ? "Pick an ingredient to forage" : "No forage ingredients unlocked yet")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .setDisabled(!forageOptions.length)
+      .addOptions(forageOptions.length ? forageOptions : [{ label: "No forage ingredients unlocked yet", value: "none" }])
+  );
+
+  return {
+    actionRow,
+    pickerRow,
+    forageCount: forageOptions.length
+  };
+}
+
+function buildForageMenuPayload({
+  userId,
+  player,
+  ownerUser,
+  kitchenUnlocked,
+  kitchenJustUnlocked,
+  fishingUnlocked,
+  fishingJustUnlocked
+}) {
+  const gardenUnlocked = isGardenUnlocked(player);
+  const combinedEffects = calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
+  if (combinedEffects.garden_autoharvest) {
+    autoHarvestReadyPlots(player, content, combinedEffects, {
+      capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, player, combinedEffects)
+    });
+  }
+
+  const { actionRow, pickerRow, forageCount } = buildForagePickerRows({ userId, player, randomPrimary: true });
+  const embed = buildMenuEmbed({
+    title: `${getIcon("forage")} Forage`,
+    description: forageCount > 0
+      ? [
+          "Choose how you want to forage:",
+          `• Take a forage stroll for surprise finds`,
+          `• Pick a specific ingredient, then enter quantity (**1-5**)`
+        ].join("\n")
+      : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.",
+    user: ownerUser,
+    color: theme.colors.success
+  });
+
+  return {
+    content: " ",
+    embeds: [embed],
+    components: buildForageFishingNavRows({
+      userId,
+      active: "forage",
+      gardenUnlocked,
+      fishingUnlocked,
+      fishingJustUnlocked,
+      kitchenUnlocked,
+      kitchenJustUnlocked,
+      prependRows: [actionRow, pickerRow]
+    })
+  };
+}
+
+function buildForageFishingNavRows({
+  userId,
+  active,
+  gardenUnlocked,
+  fishingUnlocked,
+  fishingJustUnlocked,
+  kitchenUnlocked,
+  kitchenJustUnlocked,
+  prependRows = []
+}) {
+  const rowOptions = {
+    active,
+    gardenLocked: !gardenUnlocked,
+    showGardenActions: false,
+    includeFishingButton: true,
+    fishingUnlocked,
+    fishingJustUnlocked,
+    includeKitchenButton: true,
+    kitchenUnlocked,
+    kitchenJustUnlocked
+  };
+
+  if (active === "fishing") {
+    rowOptions.gardenStyleOverride = ButtonStyle.Secondary;
+    rowOptions.fishingStyleOverride = ButtonStyle.Primary;
+  }
+
+  return [
+    ...prependRows,
+    noodleForageGardenRow(userId, rowOptions),
+    noodleMainMenuRow(userId)
+  ];
+}
+
 async function renderMultiBuyPicker({ interaction, userId, s, p }) {
   const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
   const payload = buildMultiBuyPickerPayload({
@@ -5679,10 +5802,26 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
   }
 
+  /* ---------------- FORAGE MENU ---------------- */
+  if (sub === "forage_menu") {
+    const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
+    return commitState(buildForageMenuPayload({
+      userId,
+      player: p,
+      ownerUser: interaction.member ?? interaction.user,
+      kitchenUnlocked,
+      kitchenJustUnlocked,
+      fishingUnlocked,
+      fishingJustUnlocked
+    }));
+  }
+
   /* ---------------- FORAGE ---------------- */
   if (sub === "forage") {
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
+    const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     ensureGardenState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects, {
@@ -5690,17 +5829,17 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
     }
     const gardenState = getGardenActionState(p, combinedEffects);
-    const navRows = [
-      noodleForageGardenRow(userId, {
-        active: "forage",
-        gardenLocked: !gardenUnlocked,
-        showGardenActions: false,
-        includeKitchenButton: true,
-        kitchenUnlocked,
-        kitchenJustUnlocked
-      }),
-      noodleMainMenuRow(userId)
-    ];
+    const foragePickerRows = buildForagePickerRows({ userId, player: p, randomPrimary: false });
+    const navRows = buildForageFishingNavRows({
+      userId,
+      active: "forage",
+      gardenUnlocked,
+      fishingUnlocked,
+      fishingJustUnlocked,
+      kitchenUnlocked,
+      kitchenJustUnlocked,
+      prependRows: [foragePickerRows.actionRow, foragePickerRows.pickerRow]
+    });
 
     const baseCooldownMs = 2 * 60 * 1000;
     const cooldownMs = applyCooldownReduction(baseCooldownMs, combinedEffects);
@@ -5866,7 +6005,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const header = itemId
       ? `You search carefully and gather:\n`
-      : `You wander into the nearby grove and return with:\n`;
+      : `You take a stroll through the nearby grove and return with:\n`;
 
     const bodyLines = groupedLines.length ? groupedLines : ["_Nothing found._"];
     let description = `${header}${bodyLines.join("\n\n")}`;
@@ -5940,21 +6079,15 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const now = nowTs();
 
-    const navRows = [
-      noodleForageGardenRow(userId, {
-        active: "fishing",
-        gardenLocked: !gardenUnlocked,
-        includeKitchenButton: true,
-        kitchenUnlocked,
-        kitchenJustUnlocked,
-        includeFishingButton: true,
-        fishingUnlocked,
-        fishingJustUnlocked,
-        gardenStyleOverride: ButtonStyle.Secondary,
-        fishingStyleOverride: ButtonStyle.Primary
-      }),
-      noodleMainMenuRow(userId)
-    ];
+    const navRows = buildForageFishingNavRows({
+      userId,
+      active: "fishing",
+      gardenUnlocked,
+      fishingUnlocked,
+      fishingJustUnlocked,
+      kitchenUnlocked,
+      kitchenJustUnlocked
+    });
 
     if (fishingUnlocked && !p.fishing.first_visit_ack) {
       p.fishing.first_visit_ack = true;
@@ -8126,6 +8259,15 @@ if (kind === "nav" && action === "sell") {
   });
 }
 
+if (kind === "nav" && action === "forage") {
+  const sourceMessageId = interaction.message?.id ?? null;
+  return runNoodle(interaction, {
+    sub: "forage_menu",
+    group: null,
+    overrides: { messageId: sourceMessageId }
+  });
+}
+
 /* ---------------- NAV BUTTONS ---------------- */
 // Compost button shows picker of compostable items
 function buildCompostSelectOptions(player) {
@@ -8567,6 +8709,13 @@ if (kind === "action") {
 // Skip modals - they're handled separately below
 if (kind === "pick" && !action.endsWith("_select") && !interaction.isModalSubmit?.()) {
 // noodle:pick:<what>:<ownerId>
+if (action === "forage_random") {
+  return runNoodle(interaction, {
+    sub: "forage",
+    overrides: { messageId: interaction.message?.id ?? null }
+  });
+}
+
 if (action === "accept") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
@@ -8735,6 +8884,46 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   }
 }
 
+// forage picker -> open qty modal
+if (cid.startsWith("noodle:pick:forage_item_select:")) {
+  const itemId = interaction.values?.[0] ?? null;
+  if (!itemId || itemId === "none") {
+    return componentCommit(interaction, { content: "Pick an ingredient first.", ephemeral: true });
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+  }
+
+  const sourceMessageId = interaction.message?.id ?? "none";
+  const modal = new ModalBuilder()
+    .setCustomId(`noodle:pick:forage_qty:${userId}:${itemId}:${sourceMessageId}`)
+    .setTitle(`Forage ${displayItemName(itemId)}`);
+
+  const input = new TextInputBuilder()
+    .setCustomId("qty")
+    .setLabel("Quantity (1-5)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("1");
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+
+  try {
+    return await interaction.showModal(modal);
+  } catch (e) {
+    console.log(`⚠️ showModal failed for forage:`, e?.message);
+    const code = e?.code ?? e?.message;
+    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+      return;
+    }
+    return componentCommit(interaction, {
+      content: `${getIcon("warning")} Discord couldn't show the modal. Try again.`,
+      ephemeral: true
+    });
+  }
+}
+
 }
 
   /* ---------------- COOK QTY MODAL ---------------- */
@@ -8770,6 +8959,42 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
     });
 
     return result;
+  }
+
+  /* ---------------- FORAGE QTY MODAL ---------------- */
+  if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:pick:forage_qty:")) {
+    const parts2 = interaction.customId.split(":");
+    // noodle:pick:forage_qty:<ownerId>:<itemId>:<messageId>
+    const owner = parts2[3];
+    const itemId = parts2[4];
+    const messageId = parts2[5] && parts2[5] !== "none" ? parts2[5] : null;
+
+    if (owner && owner !== interaction.user.id) {
+      return componentCommit(interaction, { content: "That forage prompt isn’t for you.", ephemeral: true });
+    }
+
+    const rawQty = String(interaction.fields.getTextInputValue("qty") ?? "").trim();
+    const qty = Number(rawQty);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 5) {
+      return componentCommit(interaction, { content: "Enter a whole number quantity (1-5).", ephemeral: true });
+    }
+
+    if (messageId) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return runNoodle(interaction, {
+      sub: "forage",
+      overrides: {
+        strings: { item: itemId },
+        integers: { quantity: qty },
+        messageId
+      }
+    });
   }
 
   /* ---------------- PROFILE EDIT MODALS ---------------- */
