@@ -3534,12 +3534,17 @@ function getAllowedForageIdsForPlayer(player) {
   return (FORAGE_ITEM_IDS ?? []).filter((id) => allowed.has(id));
 }
 
-function buildForagePickerRows({ userId, player, randomPrimary = true }) {
+function buildForagePickerRows({ userId, player, randomPrimary = true, page = 0 }) {
   const forageIds = getAllowedForageIdsForPlayer(player)
     .slice()
     .sort((a, b) => displayItemName(a).localeCompare(displayItemName(b), undefined, { sensitivity: "base" }));
 
-  const forageOptions = forageIds
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(forageIds.length / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const pageIds = forageIds.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  const forageOptions = pageIds
     .map((id) => ({
       label: displayItemName(id).slice(0, 100),
       value: id
@@ -3548,7 +3553,7 @@ function buildForagePickerRows({ userId, player, randomPrimary = true }) {
 
   const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:pick:forage_random:${userId}`)
+      .setCustomId(`noodle:pick:forage_random:${userId}:${safePage}`)
       .setLabel("Forage Stroll")
       .setEmoji(getButtonEmoji("forage"))
       .setStyle(randomPrimary ? ButtonStyle.Primary : ButtonStyle.Secondary)
@@ -3556,7 +3561,7 @@ function buildForagePickerRows({ userId, player, randomPrimary = true }) {
 
   const pickerRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`noodle:pick:forage_item_select:${userId}`)
+      .setCustomId(`noodle:pick:forage_item_select:${userId}:${safePage}`)
       .setPlaceholder(forageOptions.length ? "Pick an ingredient to forage" : "No forage ingredients unlocked yet")
       .setMinValues(1)
       .setMaxValues(1)
@@ -3564,10 +3569,30 @@ function buildForagePickerRows({ userId, player, randomPrimary = true }) {
       .addOptions(forageOptions.length ? forageOptions : [{ label: "No forage ingredients unlocked yet", value: "none" }])
   );
 
+  const pageRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:forage_page:${userId}:${safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage <= 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:forage_page:${userId}:${safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage >= totalPages - 1)
+      )
+    : null;
+
   return {
     actionRow,
     pickerRow,
-    forageCount: forageOptions.length
+    pageRow,
+    forageCount: forageIds.length,
+    safePage,
+    totalPages
   };
 }
 
@@ -3578,7 +3603,8 @@ function buildForageMenuPayload({
   kitchenUnlocked,
   kitchenJustUnlocked,
   fishingUnlocked,
-  fishingJustUnlocked
+  fishingJustUnlocked,
+  page = 0
 }) {
   const gardenUnlocked = isGardenUnlocked(player);
   const combinedEffects = calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
@@ -3588,7 +3614,12 @@ function buildForageMenuPayload({
     });
   }
 
-  const { actionRow, pickerRow, forageCount } = buildForagePickerRows({ userId, player, randomPrimary: true });
+  const { actionRow, pickerRow, pageRow, forageCount, safePage, totalPages } = buildForagePickerRows({
+    userId,
+    player,
+    randomPrimary: true,
+    page
+  });
   const embed = buildMenuEmbed({
     title: `${getIcon("forage")} Forage`,
     description: forageCount > 0
@@ -3601,6 +3632,11 @@ function buildForageMenuPayload({
     user: ownerUser,
     color: theme.colors.success
   });
+  if (forageCount > 0 && totalPages > 1) {
+    const existingFooter = embed?.data?.footer?.text ?? embed?.footer?.text ?? "";
+    const pageLabel = `Page ${safePage + 1}/${totalPages}`;
+    embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
+  }
 
   return {
     content: " ",
@@ -3613,7 +3649,7 @@ function buildForageMenuPayload({
       fishingJustUnlocked,
       kitchenUnlocked,
       kitchenJustUnlocked,
-      prependRows: [actionRow, pickerRow]
+      prependRows: [actionRow, pickerRow, ...(pageRow ? [pageRow] : [])]
     })
   };
 }
@@ -5806,6 +5842,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
   if (sub === "forage_menu") {
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
+    const rawPickerPage = Number(opt.getInteger("page") ?? 0);
+    const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
     return commitState(buildForageMenuPayload({
       userId,
       player: p,
@@ -5813,7 +5851,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       kitchenUnlocked,
       kitchenJustUnlocked,
       fishingUnlocked,
-      fishingJustUnlocked
+      fishingJustUnlocked,
+      page: pickerPage
     }));
   }
 
@@ -5822,6 +5861,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
+    const rawPickerPage = Number(opt.getInteger("page") ?? 0);
+    const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
     ensureGardenState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects, {
@@ -5829,7 +5870,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
     }
     const gardenState = getGardenActionState(p, combinedEffects);
-    const foragePickerRows = buildForagePickerRows({ userId, player: p, randomPrimary: false });
+    const foragePickerRows = buildForagePickerRows({ userId, player: p, randomPrimary: false, page: pickerPage });
     const navRows = buildForageFishingNavRows({
       userId,
       active: "forage",
@@ -5838,7 +5879,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       fishingJustUnlocked,
       kitchenUnlocked,
       kitchenJustUnlocked,
-      prependRows: [foragePickerRows.actionRow, foragePickerRows.pickerRow]
+      prependRows: [
+        foragePickerRows.actionRow,
+        foragePickerRows.pickerRow,
+        ...(foragePickerRows.pageRow ? [foragePickerRows.pageRow] : [])
+      ]
     });
 
     const baseCooldownMs = 2 * 60 * 1000;
@@ -8261,10 +8306,12 @@ if (kind === "nav" && action === "sell") {
 
 if (kind === "nav" && action === "forage") {
   const sourceMessageId = interaction.message?.id ?? null;
+  const rawPage = Number(parts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   return runNoodle(interaction, {
     sub: "forage_menu",
     group: null,
-    overrides: { messageId: sourceMessageId }
+    overrides: { messageId: sourceMessageId, integers: { page } }
   });
 }
 
@@ -8710,9 +8757,20 @@ if (kind === "action") {
 if (kind === "pick" && !action.endsWith("_select") && !interaction.isModalSubmit?.()) {
 // noodle:pick:<what>:<ownerId>
 if (action === "forage_random") {
+  const rawPage = Number(parts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   return runNoodle(interaction, {
     sub: "forage",
-    overrides: { messageId: interaction.message?.id ?? null }
+    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+  });
+}
+
+if (action === "forage_page") {
+  const rawPage = Number(parts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  return runNoodle(interaction, {
+    sub: "forage_menu",
+    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
   });
 }
 
@@ -8886,6 +8944,9 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
 // forage picker -> open qty modal
 if (cid.startsWith("noodle:pick:forage_item_select:")) {
+  const idParts = cid.split(":");
+  const rawPage = Number(idParts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   const itemId = interaction.values?.[0] ?? null;
   if (!itemId || itemId === "none") {
     return componentCommit(interaction, { content: "Pick an ingredient first.", ephemeral: true });
@@ -8897,7 +8958,7 @@ if (cid.startsWith("noodle:pick:forage_item_select:")) {
 
   const sourceMessageId = interaction.message?.id ?? "none";
   const modal = new ModalBuilder()
-    .setCustomId(`noodle:pick:forage_qty:${userId}:${itemId}:${sourceMessageId}`)
+    .setCustomId(`noodle:pick:forage_qty:${userId}:${itemId}:${page}:${sourceMessageId}`)
     .setTitle(`Forage ${displayItemName(itemId)}`);
 
   const input = new TextInputBuilder()
@@ -8964,10 +9025,12 @@ if (cid.startsWith("noodle:pick:forage_item_select:")) {
   /* ---------------- FORAGE QTY MODAL ---------------- */
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:pick:forage_qty:")) {
     const parts2 = interaction.customId.split(":");
-    // noodle:pick:forage_qty:<ownerId>:<itemId>:<messageId>
+    // noodle:pick:forage_qty:<ownerId>:<itemId>:<page>:<messageId>
     const owner = parts2[3];
     const itemId = parts2[4];
-    const messageId = parts2[5] && parts2[5] !== "none" ? parts2[5] : null;
+    const rawPage = Number(parts2[5] ?? 0);
+    const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+    const messageId = parts2[6] && parts2[6] !== "none" ? parts2[6] : null;
 
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That forage prompt isn’t for you.", ephemeral: true });
@@ -8991,7 +9054,7 @@ if (cid.startsWith("noodle:pick:forage_item_select:")) {
       sub: "forage",
       overrides: {
         strings: { item: itemId },
-        integers: { quantity: qty },
+        integers: { quantity: qty, page },
         messageId
       }
     });
