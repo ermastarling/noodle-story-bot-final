@@ -93,7 +93,7 @@
     "forager": {
       "staff_id": "forager",
       "name": "Forager",
-      "description": "Knows the best spots for wild ingredients, adds +1 forage item per level and improves seed finds.",
+      "description": "Knows the best spots for wild ingredients, adds +1 forage item & seed find chance per level.",
       "category": "support",
       "rarity": "common",
       "max_level": 20,

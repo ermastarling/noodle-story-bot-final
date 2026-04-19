@@ -3626,7 +3626,7 @@ function buildForageMenuPayload({
       ? [
           "Choose how you want to forage:",
           `• Take a forage stroll for surprise finds`,
-          `• Pick a specific ingredient, then enter quantity (**1-5**)`
+          `• Pick a specific ingredient, then enter quantity (**1-5** - this amount is increased by your forager's level)`,
         ].join("\n")
       : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.",
     user: ownerUser,
@@ -5986,9 +5986,10 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     if (!Object.keys(accepted).length) {
       setForageCooldown(p, now);
+      const nextForageTs = Math.floor((now + cooldownMs) / 1000);
       const forageFullEmbed = buildMenuEmbed({
         title: `${getIcon("forage")} Forage`,
-        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
+        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.\n\n${getIcon("cooldown")} You can forage again at <t:${nextForageTs}:t>, <t:${nextForageTs}:R>.`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -6001,6 +6002,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const inventoryResult = applyDropsToInventory(p, accepted);
     setForageCooldown(p, now);
+    const nextForageTs = Math.floor((now + cooldownMs) / 1000);
     if (!Object.keys(inventoryResult.added).length) {
       const blockedLines = Object.entries(inventoryResult.blocked ?? {}).map(
         ([id, q]) => `**${q}×** ${displayItemName(id)}`
@@ -6010,7 +6012,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         : "";
       const forageFullEmbed = buildMenuEmbed({
         title: `${getIcon("forageables")} Forage`,
-        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}`,
+        description: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.${blockedText}\n\n${getIcon("cooldown")} You can forage again at <t:${nextForageTs}:t>, <t:${nextForageTs}:R>.`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -6098,6 +6100,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         .join(", ")}.`
       : "";
     if (rejectedText) description += rejectedText;
+    description += `\n\n${getIcon("cooldown")} You can forage again at <t:${nextForageTs}:t>, <t:${nextForageTs}:R>.`;
     const forageEmbed = buildMenuEmbed({
       title: `${getIcon("forage")} Forage`,
       description: `${header}${bodyLines.join("\n\n")}${rejectedText}${tutorialSuffix(p)}`,
