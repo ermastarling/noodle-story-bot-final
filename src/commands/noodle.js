@@ -643,19 +643,23 @@ function buildHelpPage({ page, userId, user }) {
     : `Page ${safePage + 1}/${pages.length}`;
   embed.setFooter({ text: footerText });
 
+  const hasMultiplePages = pages.length > 1;
+  const prevPage = safePage <= 0 ? pages.length - 1 : safePage - 1;
+  const nextPage = safePage >= pages.length - 1 ? 0 : safePage + 1;
+
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:help:page:${userId}:${safePage - 1}`)
+      .setCustomId(`noodle:help:page:${userId}:${prevPage}`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage <= 0),
+      .setDisabled(!hasMultiplePages),
     new ButtonBuilder()
-      .setCustomId(`noodle:help:page:${userId}:${safePage + 1}`)
+      .setCustomId(`noodle:help:page:${userId}:${nextPage}`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage >= pages.length - 1)
+      .setDisabled(!hasMultiplePages)
   );
 
   const rows = [row];
@@ -1034,17 +1038,19 @@ function sanitizeEmbedsForDiscord(embeds) {
 function pantryPageRow(userId, page = 0, totalPages = 1, ingredientPages = 1) {
   const clampedTotal = Math.max(1, totalPages);
   const safePage = Math.min(Math.max(page, 0), clampedTotal - 1);
+  const prevPage = safePage <= 0 ? clampedTotal - 1 : safePage - 1;
+  const nextPage = safePage >= clampedTotal - 1 ? 0 : safePage + 1;
   const ingredientsPageCount = Math.max(1, ingredientPages);
   const bowlsStartPage = ingredientsPageCount;
   const viewingIngredients = safePage < ingredientsPageCount;
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:pantry:${userId}:${Math.max(0, safePage - 1)}`)
+      .setCustomId(`noodle:nav:pantry:${userId}:${prevPage}`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage <= 0),
+      .setDisabled(clampedTotal <= 1),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:pantry:${userId}:0`)
       .setLabel("Ingredients")
@@ -1056,11 +1062,11 @@ function pantryPageRow(userId, page = 0, totalPages = 1, ingredientPages = 1) {
       .setEmoji(getButtonEmoji("cook"))
       .setStyle(viewingIngredients ? ButtonStyle.Secondary : ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:pantry:${userId}:${Math.min(clampedTotal - 1, safePage + 1)}`)
+      .setCustomId(`noodle:nav:pantry:${userId}:${nextPage}`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage >= clampedTotal - 1)
+      .setDisabled(clampedTotal <= 1)
   );
 }
 
@@ -1097,7 +1103,8 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const plotsLines = plotsLinesRaw.length ? plotsLinesRaw : ["_No plots available yet._"];
 
   const autoHarvestNote = formatAutoHarvestNote(autoHarvestResult, content);
-  const descriptionParts = [autoHarvestNote, [plotSummary, gardenStarterHelp].filter(Boolean).join("\n")].filter(Boolean);
+  const gardenOverview = `${getIcon("garden")} Plant seeds, craft compost from extras, and harvest ready plots for ingredients.`;
+  const descriptionParts = [gardenOverview, autoHarvestNote, [plotSummary, gardenStarterHelp].filter(Boolean).join("\n")].filter(Boolean);
   const description = descriptionParts.join("\n\n");
 
   const seedsValue = [
@@ -2059,19 +2066,21 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   components.push(selectRow);
 
   if (totalPages > 1) {
+    const prevPage = safePage <= 0 ? totalPages - 1 : safePage - 1;
+    const nextPage = safePage >= totalPages - 1 ? 0 : safePage + 1;
     const navRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`noodle:nav:kitchen:${userId}:${safePage - 1}`)
+        .setCustomId(`noodle:nav:kitchen:${userId}:${prevPage}`)
         .setLabel("Prev")
         .setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage <= 0),
+        .setDisabled(false),
       new ButtonBuilder()
-        .setCustomId(`noodle:nav:kitchen:${userId}:${safePage + 1}`)
+        .setCustomId(`noodle:nav:kitchen:${userId}:${nextPage}`)
         .setLabel("Next")
         .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage >= totalPages - 1)
+        .setDisabled(false)
     );
     components.push(navRow);
   }
@@ -2904,17 +2913,17 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
   const navRow = totalPages > 1
     ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:buy:${userId}:${safePage - 1}`)
+          .setCustomId(`noodle:nav:buy:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
           .setLabel("Prev")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage <= 0),
+          .setDisabled(false),
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:buy:${userId}:${safePage + 1}`)
+          .setCustomId(`noodle:nav:buy:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
           .setLabel("Next")
           .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage >= totalPages - 1)
+          .setDisabled(false)
       )
     : null;
 
@@ -3099,17 +3108,17 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const navRow = totalPages > 1
     ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:sell:${userId}:${safePage - 1}`)
+          .setCustomId(`noodle:nav:sell:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
           .setLabel("Prev")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage <= 0),
+          .setDisabled(false),
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:sell:${userId}:${safePage + 1}`)
+          .setCustomId(`noodle:nav:sell:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
           .setLabel("Next")
           .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage >= totalPages - 1)
+          .setDisabled(false)
       )
     : null;
 
@@ -3232,9 +3241,9 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   if (navigablePages) {
     const currentIndex = Math.max(0, navigablePages.indexOf(safePage));
     const prevIndex = (currentIndex - 1 + navigablePages.length) % navigablePages.length;
-    const hasNext = currentIndex < navigablePages.length - 1;
+    const nextIndex = (currentIndex + 1) % navigablePages.length;
     const prevTarget = navigablePages[prevIndex];
-    const nextTarget = hasNext ? navigablePages[currentIndex + 1] : navigablePages[navigablePages.length - 1];
+    const nextTarget = navigablePages[nextIndex];
     navRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:pick:accept:${userId}:${prevTarget}`)
@@ -3246,7 +3255,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
         .setLabel("Next")
         .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(!hasNext)
+        .setDisabled(false)
     );
   }
 
@@ -3497,17 +3506,17 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const navRow = totalPages > 1
     ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`noodle:pick:cook:${userId}:${safePage - 1}`)
+          .setCustomId(`noodle:pick:cook:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
           .setLabel("Prev")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage <= 0),
+          .setDisabled(false),
         new ButtonBuilder()
-          .setCustomId(`noodle:pick:cook:${userId}:${safePage + 1}`)
+          .setCustomId(`noodle:pick:cook:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
           .setLabel("Next")
           .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage >= totalPages - 1)
+          .setDisabled(false)
       )
     : null;
 
@@ -3572,17 +3581,17 @@ function buildForagePickerRows({ userId, player, randomPrimary = true, page = 0 
   const pageRow = totalPages > 1
     ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`noodle:pick:forage_page:${userId}:${safePage - 1}`)
+          .setCustomId(`noodle:pick:forage_page:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
           .setLabel("Prev")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage <= 0),
+          .setDisabled(false),
         new ButtonBuilder()
-          .setCustomId(`noodle:pick:forage_page:${userId}:${safePage + 1}`)
+          .setCustomId(`noodle:pick:forage_page:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
           .setLabel("Next")
           .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage >= totalPages - 1)
+          .setDisabled(false)
       )
     : null;
 
@@ -3706,17 +3715,17 @@ function buildFishingPickerRows({ userId, player, randomPrimary = true, page = 0
   const pageRow = totalPages > 1
     ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`noodle:pick:fishing_page:${userId}:${safePage - 1}`)
+          .setCustomId(`noodle:pick:fishing_page:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
           .setLabel("Prev")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage <= 0),
+          .setDisabled(false),
         new ButtonBuilder()
-          .setCustomId(`noodle:pick:fishing_page:${userId}:${safePage + 1}`)
+          .setCustomId(`noodle:pick:fishing_page:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
           .setLabel("Next")
           .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(safePage >= totalPages - 1)
+          .setDisabled(false)
       )
     : null;
 
@@ -4286,8 +4295,8 @@ if (inDevPath && sub === "dashboard") {
   const statusEmbed = buildDevStatusEmbed();
   const pageRaw = Number(opt.getInteger("dashboard_page") ?? 0);
   const page = pageRaw === 1 ? 1 : 0;
-  const hasPrevServerPage = clampedServerPage > 0;
-  const hasNextServerPage = clampedServerPage < totalServerPages - 1;
+  const prevServerPage = clampedServerPage <= 0 ? totalServerPages - 1 : clampedServerPage - 1;
+  const nextServerPage = clampedServerPage >= totalServerPages - 1 ? 0 : clampedServerPage + 1;
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -4301,15 +4310,15 @@ if (inDevPath && sub === "dashboard") {
       .setStyle(page === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
       .setDisabled(page === 1),
     new ButtonBuilder()
-      .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${Math.max(0, clampedServerPage - 1)}`)
+      .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${prevServerPage}`)
       .setLabel("Prev")
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page !== 0 || !hasPrevServerPage),
+      .setDisabled(page !== 0 || totalServerPages <= 1),
     new ButtonBuilder()
-      .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${Math.min(totalServerPages - 1, clampedServerPage + 1)}`)
+      .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${nextServerPage}`)
       .setLabel("Next")
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page !== 0 || !hasNextServerPage)
+      .setDisabled(page !== 0 || totalServerPages <= 1)
   );
 
   return commit({
@@ -5019,7 +5028,7 @@ if (sub === "recipes") {
   recipesEmbed.setFooter({ text: footerText });
 
   const hasMultiplePages = totalPages > 1;
-  const prevPage = Math.max(page - 1, 0);
+  const prevPage = page <= 0 ? totalPages - 1 : page - 1;
   const nextPage = page >= totalPages - 1 ? 0 : page + 1;
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -5027,7 +5036,7 @@ if (sub === "recipes") {
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!hasMultiplePages || page <= 0),
+      .setDisabled(!hasMultiplePages),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:recipes:${userId}:${nextPage}`)
       .setLabel("Next")
@@ -5044,7 +5053,7 @@ if (sub === "recipes") {
   return commit({
     content: " ",
     embeds: [recipesEmbed],
-    components: [noodleMainMenuRow(userId), navRow]
+    components: [navRow, noodleMainMenuRow(userId)]
   });
 }
 
@@ -5099,23 +5108,23 @@ if (sub === "regulars") {
 
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:regulars:${userId}:${page - 1}`)
+      .setCustomId(`noodle:nav:regulars:${userId}:${page <= 0 ? totalPages - 1 : page - 1}`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page <= 0),
+      .setDisabled(totalPages <= 1),
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:regulars:${userId}:${page + 1}`)
+      .setCustomId(`noodle:nav:regulars:${userId}:${page >= totalPages - 1 ? 0 : page + 1}`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page >= totalPages - 1)
+      .setDisabled(totalPages <= 1)
   );
 
   return commit({
     content: " ",
     embeds: [regularsEmbed],
-    components: totalPages > 1 ? [noodleMainMenuRow(userId), navRow] : [noodleMainMenuRow(userId)]
+    components: totalPages > 1 ? [navRow, noodleMainMenuRow(userId)] : [noodleMainMenuRow(userId)]
   });
 }
 
@@ -5594,11 +5603,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const pageRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`noodle:nav:quests:${userId}:${page - 1}`)
+          .setCustomId(`noodle:nav:quests:${userId}:${page <= 0 ? pages.length - 1 : page - 1}`)
         .setLabel("Prev")
         .setEmoji(getButtonEmoji("back"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page <= 0),
+          .setDisabled(pages.length <= 1),
       new ButtonBuilder()
         .setCustomId(`noodle:nav:quests:${userId}:0`)
         .setLabel("Daily")
@@ -5612,11 +5621,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         .setLabel("Story/Seasonal")
         .setStyle(page === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(`noodle:nav:quests:${userId}:${page + 1}`)
+          .setCustomId(`noodle:nav:quests:${userId}:${page >= pages.length - 1 ? 0 : page + 1}`)
         .setLabel("Next")
         .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page >= pages.length - 1)
+          .setDisabled(pages.length <= 1)
     );
 
     return commitState({
@@ -5833,11 +5842,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(false),
           new ButtonBuilder()
-            .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
+              .setCustomId(`noodle:nav:specialize:${userId}:${page >= totalPages - 1 ? 0 : page + 1}`)
             .setLabel("Next")
             .setEmoji(getButtonEmoji("next"))
             .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page >= totalPages - 1)
+              .setDisabled(false)
         ));
       }
       components.push(
@@ -5922,17 +5931,17 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (totalPages > 1) {
       components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:decor:${userId}:${page - 1}`)
+            .setCustomId(`noodle:nav:decor:${userId}:${page <= 0 ? totalPages - 1 : page - 1}`)
           .setLabel("Prev")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(page <= 0),
+            .setDisabled(false),
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:decor:${userId}:${page + 1}`)
+            .setCustomId(`noodle:nav:decor:${userId}:${page >= totalPages - 1 ? 0 : page + 1}`)
           .setLabel("Next")
           .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(page >= totalPages - 1)
+            .setDisabled(false)
       ));
     }
     components.push(noodleDecorBackRow(userId));
@@ -8454,11 +8463,11 @@ if (kind === "profile" && action === "specialize_cancel") {
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(false),
       new ButtonBuilder()
-        .setCustomId(`noodle:nav:specialize:${userId}:${page + 1}`)
+          .setCustomId(`noodle:nav:specialize:${userId}:${page >= totalPages - 1 ? 0 : page + 1}`)
         .setLabel("Next")
         .setEmoji(getButtonEmoji("next"))
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page >= totalPages - 1)
+          .setDisabled(false)
     ));
   }
   components.push(
