@@ -1103,7 +1103,7 @@ function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocke
   const plotsLines = plotsLinesRaw.length ? plotsLinesRaw : ["_No plots available yet._"];
 
   const autoHarvestNote = formatAutoHarvestNote(autoHarvestResult, content);
-  const gardenOverview = `${getIcon("garden")} Plant seeds, craft compost from extras, and harvest ready plots for ingredients.`;
+  const gardenOverview = `Plant seeds, craft compost from extras, and harvest ready plots for ingredients.`;
   const descriptionParts = [gardenOverview, autoHarvestNote, [plotSummary, gardenStarterHelp].filter(Boolean).join("\n")].filter(Boolean);
   const description = descriptionParts.join("\n\n");
 
@@ -8621,7 +8621,7 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
     `Compost: **${compostCount}** bags`,
     `Spoiled saved: **${gardenState.spoiledTotal}**`,
     `Fresh forageables: **${gardenState.pantryTotal}**`,
-    `Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag`
+    `*Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag*`
   ].join("\n");
 
   const compostEmbed = buildMenuEmbed({
