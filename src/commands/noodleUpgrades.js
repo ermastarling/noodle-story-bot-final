@@ -248,13 +248,14 @@ export async function noodleUpgradesHandler(interaction) {
     let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
-      upsertPlayer(db, serverId, userId, p, null);
-      p = getPlayer(db, serverId, userId);
+      const rev = upsertPlayer(db, serverId, userId, p, null);
+      p.state_rev = rev;
     }
 
     const touched = trackLastKitchen(p, serverId, interaction.channelId);
     if (touched && db) {
-      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      const rev = upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      p.state_rev = rev;
     }
 
     const embed = buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user);
@@ -701,13 +702,14 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       let p = getPlayer(db, serverId, userId);
       if (!p) {
         p = newPlayerProfile(userId);
-        upsertPlayer(db, serverId, userId, p, null);
-        p = getPlayer(db, serverId, userId);
+        const rev = upsertPlayer(db, serverId, userId, p, null);
+        p.state_rev = rev;
       }
 
       const touched = trackLastKitchen(p, serverId, interaction.channelId);
       if (touched && db) {
-        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+        const rev = upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+        p.state_rev = rev;
       }
 
     const resolveCategory = () => {
@@ -758,13 +760,12 @@ export async function noodleUpgradesInteractionHandler(interaction) {
     const categoryId = resolveCategory();
     const staffRarity = resolveStaffRarity();
     const source = resolveSource();
-    const refreshed = getPlayer(db, serverId, userId) ?? p;
     const embed = categoryId && categoryId !== "all"
-      ? buildUpgradesCategoryEmbed(refreshed, interaction.member ?? interaction.user, categoryId, { staffRarity })
+      ? buildUpgradesCategoryEmbed(p, interaction.member ?? interaction.user, categoryId, { staffRarity })
       : (source === "profile"
-        ? buildUpgradesManagementEmbed(refreshed, interaction.member ?? interaction.user)
-        : buildUpgradesOverviewEmbed(refreshed, interaction.member ?? interaction.user));
-    const components = buildUpgradesComponents(userId, refreshed, {
+        ? buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user)
+        : buildUpgradesOverviewEmbed(p, interaction.member ?? interaction.user));
+    const components = buildUpgradesComponents(userId, p, {
       categoryId: categoryId && categoryId !== "all" ? categoryId : null,
       staffRarity,
       source
@@ -778,16 +779,16 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       
       const result = purchaseUpgrade(p, upgradeId, upgradesContent);
       if (result.success) {
-        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+        const rev = upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+        p.state_rev = rev;
       }
 
-      const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
       const updatedEmbed = categoryId && categoryId !== "all"
-        ? buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, categoryId, { staffRarity })
+        ? buildUpgradesCategoryEmbed(p, interaction.member ?? interaction.user, categoryId, { staffRarity })
         : (source === "profile"
-          ? buildUpgradesManagementEmbed(updatedPlayer, interaction.member ?? interaction.user)
-          : buildUpgradesOverviewEmbed(updatedPlayer, interaction.member ?? interaction.user));
-      const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, {
+          ? buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user)
+          : buildUpgradesOverviewEmbed(p, interaction.member ?? interaction.user));
+      const updatedComponents = buildUpgradesComponents(userId, p, {
         categoryId: categoryId && categoryId !== "all" ? categoryId : null,
         staffRarity,
         source
@@ -815,12 +816,12 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       const staffId = interaction.values[0];
       const result = levelUpStaff(p, staffId, staffContent);
       if (result.success) {
-        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+        const rev = upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+        p.state_rev = rev;
       }
 
-      const updatedPlayer = getPlayer(db, serverId, userId) ?? p;
-      const updatedEmbed = buildUpgradesCategoryEmbed(updatedPlayer, interaction.member ?? interaction.user, "staff", { staffRarity });
-      const updatedComponents = buildUpgradesComponents(userId, updatedPlayer, { categoryId: "staff", staffRarity, source });
+      const updatedEmbed = buildUpgradesCategoryEmbed(p, interaction.member ?? interaction.user, "staff", { staffRarity });
+      const updatedComponents = buildUpgradesComponents(userId, p, { categoryId: "staff", staffRarity, source });
 
       const response = {
         embeds: [updatedEmbed],

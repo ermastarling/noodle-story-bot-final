@@ -170,20 +170,21 @@ export async function noodleStaffHandler(interaction) {
     let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
-      upsertPlayer(db, serverId, userId, p, null);
-      p = getPlayer(db, serverId, userId);
+      const rev = upsertPlayer(db, serverId, userId, p, null);
+      p.state_rev = rev;
     }
 
     let s = getServer(db, serverId);
     if (!s) {
       s = newServerState(serverId);
-      upsertServer(db, serverId, s, null);
-      s = getServer(db, serverId);
+      const rev = upsertServer(db, serverId, s, null);
+      s.state_rev = rev;
     }
 
     const touched = trackLastKitchen(p, serverId, interaction.channelId);
     if (touched && db) {
-      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      const rev = upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      p.state_rev = rev;
     }
 
     const embed = buildStaffOverviewEmbed(p, s, interaction.user);
@@ -366,20 +367,21 @@ export async function noodleStaffInteractionHandler(interaction) {
     let p = getPlayer(db, serverId, userId);
     if (!p) {
       p = newPlayerProfile(userId);
-      upsertPlayer(db, serverId, userId, p, null);
-      p = getPlayer(db, serverId, userId);
+      const rev = upsertPlayer(db, serverId, userId, p, null);
+      p.state_rev = rev;
     }
 
     let s = getServer(db, serverId);
     if (!s) {
       s = newServerState(serverId);
-      upsertServer(db, serverId, s, null);
-      s = getServer(db, serverId);
+      const rev = upsertServer(db, serverId, s, null);
+      s.state_rev = rev;
     }
 
     const touched = trackLastKitchen(p, serverId, interaction.channelId);
     if (touched && db) {
-      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      const rev = upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      p.state_rev = rev;
     }
 
     // Handle level up

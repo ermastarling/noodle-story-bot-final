@@ -953,8 +953,8 @@ function ensureServer(serverId) {
   let s = getServer(db, serverId);
   if (!s) {
     s = newServerState(serverId);
-    upsertServer(db, serverId, s, null);
-    s = getServer(db, serverId);
+    const rev = upsertServer(db, serverId, s, null);
+    s.state_rev = rev;
   }
   return s;
 }
@@ -964,8 +964,8 @@ function ensurePlayer(serverId, userId) {
   let p = getPlayer(db, serverId, userId);
   if (!p) {
     p = newPlayerProfile(userId);
-    upsertPlayer(db, serverId, userId, p, null, p.schema_version);
-    p = getPlayer(db, serverId, userId);
+    const rev = upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+    p.state_rev = rev;
   }
   clearExpiredBlessings(p);
   grantEventBadgesForKnownRecipes(p, content, badgesContent);
@@ -975,7 +975,8 @@ function ensurePlayer(serverId, userId) {
 function touchLastKitchen(player, serverId, channelId, userId) {
   const touched = trackLastKitchen(player, serverId, channelId);
   if (touched && db) {
-    upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+    const rev = upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+    player.state_rev = rev;
   }
 }
 

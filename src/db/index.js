@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { nowTs } from "../util/time.js";
+import { recordDbRead, recordDbWrite } from "../infra/perfMetrics.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +22,7 @@ const SHARED_SERVER_TTL_MS = 30_000;
 const SHARED_SERVER_MAX = 500;
 const GLOBAL_PLAYER_SERVER_ID = "__global__";
 const USE_GLOBAL_PLAYER_DATA = process.env.NOODLE_GLOBAL_PLAYER_DATA !== "0";
+let dbSingleton = null;
 
 export function getPlayerStorageServerId(serverId) {
   if (USE_GLOBAL_PLAYER_DATA) return GLOBAL_PLAYER_SERVER_ID;
@@ -47,6 +49,24 @@ function prepareCached(db, sql) {
     cache.set(sql, stmt);
   }
   return stmt;
+}
+
+function measureDbRead(fn) {
+  const start = Date.now();
+  try {
+    return fn();
+  } finally {
+    recordDbRead(Date.now() - start);
+  }
+}
+
+function measureDbWrite(fn) {
+  const start = Date.now();
+  try {
+    return fn();
+  } finally {
+    recordDbWrite(Date.now() - start);
+  }
 }
 
 function makePlayerCacheKey(serverId, userId) {
@@ -147,10 +167,10 @@ function isWeakGlobalPlayer(player) {
 }
 
 function loadBestLegacyPlayerRow(db, userId) {
-  const rows = prepareCached(
+  const rows = measureDbRead(() => prepareCached(
     db,
     "SELECT server_id, data_json, state_rev, schema_version, last_active_at FROM players WHERE user_id=? AND server_id<>?"
-  ).all(userId, GLOBAL_PLAYER_SERVER_ID);
+  ).all(userId, GLOBAL_PLAYER_SERVER_ID));
   if (!rows?.length) return null;
 
   let best = null;
@@ -197,9 +217,10 @@ export function repairGlobalPlayerProfileFromLegacy(db, userId, { force = false 
   const globalRow = prepareCached(
     db,
     "SELECT data_json, state_rev, schema_version, last_active_at FROM players WHERE server_id=? AND user_id=?"
-  ).get(GLOBAL_PLAYER_SERVER_ID, userId);
-  const globalPlayer = parsePlayerRow(globalRow, userId);
-  const globalScore = globalPlayer ? getPlayerProgressScore(globalPlayer, globalRow?.last_active_at) : -1;
+  );
+  const globalRowData = measureDbRead(() => globalRow.get(GLOBAL_PLAYER_SERVER_ID, userId));
+  const globalPlayer = parsePlayerRow(globalRowData, userId);
+  const globalScore = globalPlayer ? getPlayerProgressScore(globalPlayer, globalRowData?.last_active_at) : -1;
 
   const bestLegacy = loadBestLegacyPlayerRow(db, userId);
   if (!bestLegacy?.player) {
@@ -255,6 +276,9 @@ export function openDb() {
   if (process.env.NOODLE_SKIP_DB === "1") {
     return null;
   }
+  if (dbSingleton) {
+    return dbSingleton;
+  }
   // Load the native SQLite module dynamically using require() to keep openDb synchronous while allowing conditional skipping via NOODLE_SKIP_DB.
   const Database = require("better-sqlite3");
   const dataDir = path.join(__dirname, "..", "..", "data");
@@ -263,6 +287,7 @@ export function openDb() {
   const db = new Database(dbPath);
   const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf-8");
   db.exec(schema);
+  dbSingleton = db;
   return db;
 }
 
@@ -272,7 +297,7 @@ export function getServer(db, serverId) {
     return cached.server;
   }
 
-  const row = prepareCached(db, "SELECT data_json, state_rev FROM servers WHERE server_id=?").get(serverId);
+  const row = measureDbRead(() => prepareCached(db, "SELECT data_json, state_rev FROM servers WHERE server_id=?").get(serverId));
   if (!row) return null;
   const server = { ...JSON.parse(row.data_json), state_rev: row.state_rev };
   sharedServerCache.set(serverId, { server, expiresAt: Date.now() + SHARED_SERVER_TTL_MS });
@@ -298,7 +323,7 @@ export function upsertServer(db, serverId, serverData, expectedRev=null) {
       .run(newRev, JSON.stringify(serverData), serverId);
     return newRev;
   });
-  const rev = tx();
+  const rev = measureDbWrite(() => tx());
   sharedServerCache.delete(serverId);
   return rev;
 }
@@ -313,19 +338,11 @@ export function getPlayer(db, serverId, userId) {
 
   const shared = getSharedPlayer(storageServerId, userId);
   if (shared) {
-    const revRow = prepareCached(db, "SELECT state_rev FROM players WHERE server_id=? AND user_id=?")
-      .get(storageServerId, userId);
-    const dbRev = Number(revRow?.state_rev ?? 0);
-    const cachedRev = Number(shared?.state_rev ?? 0);
-    if (dbRev > 0 && cachedRev === dbRev) {
-      if (cache && cacheKey) cache.set(cacheKey, shared);
-      return shared;
-    }
-    invalidateSharedPlayer(storageServerId, userId);
-    if (cache && cacheKey) cache.delete(cacheKey);
+    if (cache && cacheKey) cache.set(cacheKey, shared);
+    return shared;
   }
-  const row = prepareCached(db, "SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
-    .get(storageServerId, userId);
+  const row = measureDbRead(() => prepareCached(db, "SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
+    .get(storageServerId, userId));
 
   if (!row && USE_GLOBAL_PLAYER_DATA && storageServerId === GLOBAL_PLAYER_SERVER_ID) {
     const bestLegacy = loadBestLegacyPlayerRow(db, userId);
@@ -412,8 +429,8 @@ export function getPlayerLite(db, serverId, userId) {
     return lite;
   }
 
-  const row = db.prepare("SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
-    .get(storageServerId, userId);
+  const row = measureDbRead(() => prepareCached(db, "SELECT data_json, state_rev, schema_version FROM players WHERE server_id=? AND user_id=?")
+    .get(storageServerId, userId));
   if (!row) {
     const full = getPlayer(db, serverId, userId);
     if (!full) return null;
@@ -521,17 +538,17 @@ export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null,
       .run(newRev, nowTs(), JSON.stringify(playerData), storageServerId, userId);
     return newRev;
   });
-  const rev = tx();
+  const rev = measureDbWrite(() => tx());
   invalidateSharedPlayer(storageServerId, userId);
   return rev;
 }
 
 export function getLastActiveAt(db, serverId, userId) {
   const storageServerId = getPlayerStorageServerId(serverId);
-  const row = prepareCached(db, "SELECT last_active_at FROM players WHERE server_id=? AND user_id=?").get(storageServerId, userId);
+  const row = measureDbRead(() => prepareCached(db, "SELECT last_active_at FROM players WHERE server_id=? AND user_id=?").get(storageServerId, userId));
   if (!row && USE_GLOBAL_PLAYER_DATA && storageServerId === GLOBAL_PLAYER_SERVER_ID) {
-    const fallback = prepareCached(db, "SELECT last_active_at FROM players WHERE user_id=? ORDER BY last_active_at DESC LIMIT 1")
-      .get(userId);
+    const fallback = measureDbRead(() => prepareCached(db, "SELECT last_active_at FROM players WHERE user_id=? ORDER BY last_active_at DESC LIMIT 1")
+      .get(userId));
     return fallback?.last_active_at || null;
   }
   return row?.last_active_at || null;
@@ -539,8 +556,8 @@ export function getLastActiveAt(db, serverId, userId) {
 
 export function getLatestServerIdForUser(db, userId) {
   if (USE_GLOBAL_PLAYER_DATA) {
-    const globalRow = prepareCached(db, "SELECT data_json FROM players WHERE server_id=? AND user_id=?")
-      .get(GLOBAL_PLAYER_SERVER_ID, userId);
+    const globalRow = measureDbRead(() => prepareCached(db, "SELECT data_json FROM players WHERE server_id=? AND user_id=?")
+      .get(GLOBAL_PLAYER_SERVER_ID, userId));
     if (globalRow?.data_json) {
       try {
         const parsed = JSON.parse(globalRow.data_json);
@@ -551,8 +568,8 @@ export function getLatestServerIdForUser(db, userId) {
       }
     }
   }
-  const row = prepareCached(db, "SELECT server_id FROM players WHERE user_id=? ORDER BY last_active_at DESC LIMIT 1")
-    .get(userId);
+  const row = measureDbRead(() => prepareCached(db, "SELECT server_id FROM players WHERE user_id=? ORDER BY last_active_at DESC LIMIT 1")
+    .get(userId));
   if (!row?.server_id) return null;
   if (row.server_id === GLOBAL_PLAYER_SERVER_ID && USE_GLOBAL_PLAYER_DATA) return null;
   return row.server_id;
@@ -571,7 +588,7 @@ export function recordStorePurchaseEvent(
   }
 ) {
   if (!db || !source || !externalEventId || !userId || !specId) return false;
-  const res = prepareCached(
+  const res = measureDbWrite(() => prepareCached(
     db,
     "INSERT OR IGNORE INTO store_purchase_events(source, external_event_id, user_id, server_id, spec_id, status, purchased_at) VALUES (?,?,?,?,?,?,?)"
   ).run(
@@ -582,15 +599,15 @@ export function recordStorePurchaseEvent(
     String(specId),
     String(status || "granted"),
     Number.isFinite(Number(purchasedAt)) ? Number(purchasedAt) : nowTs()
-  );
+  ));
   return Number(res?.changes ?? 0) > 0;
 }
 
 export function getAllTimeSpecializationPurchaseCount(db, specId) {
   if (!db || !specId) return 0;
-  const row = prepareCached(
+  const row = measureDbRead(() => prepareCached(
     db,
     "SELECT COUNT(*) AS cnt FROM store_purchase_events WHERE spec_id=? AND status='granted'"
-  ).get(String(specId));
+  ).get(String(specId)));
   return Number(row?.cnt ?? 0);
 }

@@ -28,6 +28,7 @@ import { getIcon } from "./ui/icons.js";
   const { startDailyRewardReminderScheduler } = await import("./jobs/dailyRewardReminders.js");
   const { startEventSyncScheduler } = await import("./jobs/eventSync.js");
   const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
+  const { startDbMaintenanceScheduler } = await import("./jobs/dbMaintenance.js");
   const {
     loadContentBundle,
     loadSettingsCatalog,
@@ -48,6 +49,7 @@ import { getIcon } from "./ui/icons.js";
   } = await import("./db/index.js");
   const { checkRateLimit } = await import("./infra/rateLimit.js");
   const { emitTelemetry } = await import("./infra/telemetry.js");
+  const { withInteractionPerf, getInteractionPerfSnapshot } = await import("./infra/perfMetrics.js");
   const { getIdempotentResult, putIdempotentResult } = await import("./infra/idempotency.js");
   const { newPlayerProfile } = await import("./game/player.js");
   const { STARTER_PROFILE } = await import("./constants.js");
@@ -1114,6 +1116,7 @@ import { getIcon } from "./ui/icons.js";
     startDailyRewardReminderScheduler(client, getKnownServerIds);
     startEventSyncScheduler(getKnownServerIds);
     startDbBackupScheduler(db);
+    startDbMaintenanceScheduler(db);
 
     const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";
     if (backupOnStart) {
@@ -1162,16 +1165,21 @@ import { getIcon } from "./ui/icons.js";
   /* ------------------------------------------------------------------ */
 
   client.on("interactionCreate", async (interaction) => {
-    return withPlayerCache(async () => {
+    return withInteractionPerf(() => withPlayerCache(async () => {
     const startTime = Date.now();
-    
-    // Check interaction age - Discord invalidates after 3 seconds
-    const createdAt = interaction.createdTimestamp;
+    const createdAt = Number(interaction.createdTimestamp ?? startTime);
     const age = Date.now() - createdAt;
-    if (age > 2800) {
-      console.error(`Interaction is ${age}ms old, likely to expire. Skipping.`);
-      return;
-    }
+    let telemetryRoute = "unknown";
+    let deferMs = null;
+    let telemetryError = null;
+
+    try {
+      // Check interaction age - Discord invalidates after 3 seconds
+      if (age > 2800) {
+        telemetryRoute = "skip_stale";
+        console.error(`Interaction is ${age}ms old, likely to expire. Skipping.`);
+        return;
+      }
     
     // IMMEDIATELY defer buttons/selects/modals FIRST, before ANY other logic
     // Note: Discord.js v13 uses isSelectMenu(), not isStringSelectMenu()
@@ -1214,7 +1222,9 @@ import { getIcon } from "./ui/icons.js";
           const deferStart = Date.now();
           try {
             await interaction.deferUpdate();
+            deferMs = Date.now() - deferStart;
           } catch (e) {
+            deferMs = Date.now() - deferStart;
             console.error(`Button/select defer failed (age was ${age}ms):`, e?.message);
             // If defer failed due to unknown interaction, skip processing
             if (e?.message?.includes("Unknown interaction") || e?.code === 10062) {
@@ -1229,6 +1239,7 @@ import { getIcon } from "./ui/icons.js";
 
     /* ---------- AUTOCOMPLETE ---------- */
     if (interaction.isAutocomplete()) {
+      telemetryRoute = "autocomplete";
       try {
         if (interaction.commandName !== "noodle") return;
 
@@ -1238,6 +1249,7 @@ import { getIcon } from "./ui/icons.js";
 
         // ✅ Cook autocomplete (known recipes only)
         if (sub === "cook" && focused.name === "recipe") {
+          telemetryRoute = "autocomplete:cook";
           const serverId = interaction.guildId;
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
@@ -1269,6 +1281,7 @@ import { getIcon } from "./ui/icons.js";
 
         // ✅ Badge autocomplete (owned badges)
         if (sub === "badge_set" && focused.name === "badge_id") {
+          telemetryRoute = "autocomplete:badge_set";
           const serverId = interaction.guildId;
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
@@ -1295,6 +1308,7 @@ import { getIcon } from "./ui/icons.js";
 
         // ✅ Specialization autocomplete
         if (sub === "specialize" && focused.name === "spec") {
+          telemetryRoute = "autocomplete:specialize";
           const results = (specializationsContent?.specializations ?? [])
             .map((spec) => ({ id: spec.spec_id, name: spec.name }))
             .filter((x) =>
@@ -1311,6 +1325,7 @@ import { getIcon } from "./ui/icons.js";
 
         // ✅ Market autocomplete (buy/sell) — only ingredients used by unlocked recipes
         if ((sub === "buy" || sub === "sell") && focused.name === "item") {
+          telemetryRoute = `autocomplete:${sub}`;
           const serverId = interaction.guildId;
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
@@ -1333,6 +1348,7 @@ import { getIcon } from "./ui/icons.js";
 
         // ✅ Forage autocomplete (unlocked forage items only)
         if (sub === "forage" && focused.name === "item") {
+          telemetryRoute = "autocomplete:forage";
           const serverId = interaction.guildId;
           const userId = interaction.user.id;
           if (!serverId) return interaction.respond([]);
@@ -1358,6 +1374,7 @@ import { getIcon } from "./ui/icons.js";
 
         // ✅ Fishing autocomplete (fishing table items)
         if (sub === "fishing" && focused.name === "item") {
+          telemetryRoute = "autocomplete:fishing";
           const results = (FISHING_ITEM_IDS ?? [])
             .map(id => ({ id, name: content.items?.[id]?.name ?? id }))
             .filter(x =>
@@ -1375,6 +1392,7 @@ import { getIcon } from "./ui/icons.js";
 
         return interaction.respond([]);
       } catch (e) {
+        telemetryError = e?.code ?? e?.name ?? "autocomplete_error";
         console.error("AUTOCOMPLETE ERROR:", e?.stack ?? e);
         try { return interaction.respond([]); } catch { return; }
       }
@@ -1390,6 +1408,7 @@ import { getIcon } from "./ui/icons.js";
     });
 
     if (!rateLimit.allowed) {
+      telemetryRoute = "rate_limited";
       emitTelemetry("rate_limited", {
         scope: rateLimit.scope,
         userId,
@@ -1412,21 +1431,26 @@ import { getIcon } from "./ui/icons.js";
 
     /* ---------- NOODLE UI COMPONENTS ---------- */
     if (interaction.isButton?.() || interaction.isSelectMenu?.() || interaction.isModalSubmit?.()) {
+      telemetryRoute = "component";
       try {
         const id = interaction.customId || "";
         if (id.startsWith("noodle:")) {
+          telemetryRoute = "component:noodle";
           // Already deferred at the top of interactionCreate handler
           return await noodleCommand.handleComponent(interaction);
         }
         if (id.startsWith("noodle-dev:")) {
+          telemetryRoute = "component:noodle-dev";
           // Already deferred at the top of interactionCreate handler
           return await noodleDevCommand.handleComponent(interaction);
         }
         if (id.startsWith("noodle-social:")) {
+          telemetryRoute = "component:noodle-social";
           // Already deferred at the top of interactionCreate handler
           return await noodleSocialCommand.handleComponent(interaction);
         }
         if (id.startsWith("noodle-staff:")) {
+          telemetryRoute = "component:noodle-staff";
           const result = sanitizeResultEmbeds(await noodleStaffInteractionHandler(interaction));
           if (result) {
             if (result.ephemeral) {
@@ -1442,6 +1466,7 @@ import { getIcon } from "./ui/icons.js";
           }
         }
         if (id.startsWith("noodle-upgrades:")) {
+          telemetryRoute = "component:noodle-upgrades";
           const result = sanitizeResultEmbeds(await noodleUpgradesInteractionHandler(interaction));
           if (result) {
             if (result.ephemeral) {
@@ -1457,6 +1482,7 @@ import { getIcon } from "./ui/icons.js";
           }
         }
       } catch (e) {
+        telemetryError = e?.code ?? e?.name ?? "component_error";
         const detail = e?.stack ?? String(e);
         console.error("NOODLE COMPONENT ERROR:", detail);
         logUserError(interaction, "component_error", detail);
@@ -1484,14 +1510,22 @@ import { getIcon } from "./ui/icons.js";
 
     /* ---------- SLASH COMMANDS ---------- */
     const isChatInput = interaction.isChatInputCommand?.() || interaction.isCommand?.();
-    if (!isChatInput) return;
+    if (!isChatInput) {
+      telemetryRoute = "ignored_non_chat_input";
+      return;
+    }
 
     const cmd = commandMap.get(interaction.commandName);
-    if (!cmd) return;
+    if (!cmd) {
+      telemetryRoute = `unknown_command:${interaction.commandName ?? "none"}`;
+      return;
+    }
+    telemetryRoute = `slash:${interaction.commandName}`;
 
     try {
       await cmd.execute(interaction);
     } catch (e) {
+      telemetryError = e?.code ?? e?.name ?? "command_error";
       const detail = e?.stack ?? String(e);
       console.error("COMMAND ERROR:", detail);
       logUserError(interaction, "command_error", detail);
@@ -1519,7 +1553,34 @@ import { getIcon } from "./ui/icons.js";
         console.error("❌ Failed to send error reply:", replyErr?.message ?? replyErr);
       }
     }
-    });
+    } finally {
+      const perf = getInteractionPerfSnapshot();
+      emitTelemetry("interaction_latency", {
+        route: telemetryRoute,
+        commandName: interaction.commandName ?? null,
+        interactionType: interaction.type,
+        isAutocomplete: interaction.isAutocomplete?.() ?? false,
+        isButton: interaction.isButton?.() ?? false,
+        isSelectMenu: interaction.isSelectMenu?.() ?? false,
+        isModalSubmit: interaction.isModalSubmit?.() ?? false,
+        ageMs: age,
+        deferMs,
+        totalMs: Date.now() - startTime,
+        deferred: interaction.deferred ?? false,
+        replied: interaction.replied ?? false,
+        error: telemetryError,
+        dbReadMs: perf?.dbReadMs ?? 0,
+        dbReadCount: perf?.dbReadCount ?? 0,
+        dbWriteMs: perf?.dbWriteMs ?? 0,
+        dbWriteCount: perf?.dbWriteCount ?? 0,
+        lockAcquireMs: perf?.lockAcquireMs ?? 0,
+        lockAcquireCount: perf?.lockAcquireCount ?? 0,
+        lockReleaseMs: perf?.lockReleaseMs ?? 0,
+        lockReleaseCount: perf?.lockReleaseCount ?? 0,
+        lockBusyCount: perf?.lockBusyCount ?? 0
+      });
+    }
+    }));
   });
 
   startEntitlementWebhookServer();

@@ -1,13 +1,10 @@
 import crypto from "crypto";
 import { nowTs } from "../util/time.js";
 
-const IDEMPOTENCY_CLEANUP_INTERVAL_MS = 60_000;
-let lastIdempotencyCleanupAt = 0;
-
-function maybeCleanupExpiredIdempotency(db, now) {
-  if (now - lastIdempotencyCleanupAt < IDEMPOTENCY_CLEANUP_INTERVAL_MS) return;
-  db.prepare("DELETE FROM idempotency WHERE expires_at <= ?").run(now);
-  lastIdempotencyCleanupAt = now;
+export function cleanupExpiredIdempotency(db, now = nowTs()) {
+  if (!db) return 0;
+  const result = db.prepare("DELETE FROM idempotency WHERE expires_at <= ?").run(now);
+  return Number(result?.changes ?? 0);
 }
 
 export function makeIdempotencyKey({ serverId, userId, action, interactionId }) {
@@ -17,7 +14,6 @@ export function makeIdempotencyKey({ serverId, userId, action, interactionId }) 
 
 export function getIdempotentResult(db, key) {
   const now = nowTs();
-  maybeCleanupExpiredIdempotency(db, now);
   const row = db.prepare("SELECT result_json, expires_at FROM idempotency WHERE key=?").get(key);
   if (!row) return null;
   if ((row.expires_at ?? 0) <= now) {
@@ -29,7 +25,6 @@ export function getIdempotentResult(db, key) {
 
 export function putIdempotentResult(db, { key, userId, action, ttlSeconds, result }) {
   const now = nowTs();
-  maybeCleanupExpiredIdempotency(db, now);
   const expiresAt = now + ttlSeconds*1000;
   db.prepare("INSERT OR REPLACE INTO idempotency(key,user_id,action,expires_at,result_json) VALUES (?,?,?,?,?)")
     .run(key, userId, action, expiresAt, JSON.stringify(result));
