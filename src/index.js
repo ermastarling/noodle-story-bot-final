@@ -4,6 +4,7 @@ import fs from "fs";
 import http from "http";
 import path from "path";
 import zlib from "zlib";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "url";
 import { REST } from "@discordjs/rest";
 import { getIcon } from "./ui/icons.js";
@@ -1166,9 +1167,10 @@ import { getIcon } from "./ui/icons.js";
 
   client.on("interactionCreate", async (interaction) => {
     return withInteractionPerf(() => withPlayerCache(async () => {
-    const startTime = Date.now();
-    const createdAt = Number(interaction.createdTimestamp ?? startTime);
-    const age = Date.now() - createdAt;
+    const startWallMs = Date.now();
+    const startPerfMs = performance.now();
+    const createdAt = Number(interaction.createdTimestamp ?? startWallMs);
+    const age = startWallMs - createdAt;
     let telemetryRoute = "unknown";
     let deferMs = null;
     let telemetryError = null;
@@ -1219,12 +1221,12 @@ import { getIcon } from "./ui/icons.js";
                 cid?.includes("action:shared_order_cancel_complete");
         
         if (!willShowModal && !skipDeferButtons && !isNoodleStaff) {
-          const deferStart = Date.now();
+          const deferStart = performance.now();
           try {
             await interaction.deferUpdate();
-            deferMs = Date.now() - deferStart;
+            deferMs = performance.now() - deferStart;
           } catch (e) {
-            deferMs = Date.now() - deferStart;
+            deferMs = performance.now() - deferStart;
             console.error(`Button/select defer failed (age was ${age}ms):`, e?.message);
             // If defer failed due to unknown interaction, skip processing
             if (e?.message?.includes("Unknown interaction") || e?.code === 10062) {
@@ -1565,7 +1567,7 @@ import { getIcon } from "./ui/icons.js";
         isModalSubmit: interaction.isModalSubmit?.() ?? false,
         ageMs: age,
         deferMs,
-        totalMs: Date.now() - startTime,
+        totalMs: performance.now() - startPerfMs,
         deferred: interaction.deferred ?? false,
         replied: interaction.replied ?? false,
         error: telemetryError,

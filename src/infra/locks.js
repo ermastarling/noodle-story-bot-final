@@ -1,4 +1,5 @@
 import { nowTs } from "../util/time.js";
+import { performance } from "node:perf_hooks";
 import { recordLockAcquire, recordLockBusy, recordLockRelease } from "./perfMetrics.js";
 
 export function cleanupExpiredLocks(db, now = nowTs()) {
@@ -9,7 +10,7 @@ export function cleanupExpiredLocks(db, now = nowTs()) {
 
 export async function withLock(db, key, owner, ttlMs, fn) {
   const now = nowTs();
-  const acquireStart = Date.now();
+  const acquireStart = performance.now();
   const expiresAt = now + ttlMs;
 
   const inserted = db.prepare("INSERT OR IGNORE INTO locks(key,owner,expires_at) VALUES (?,?,?)")
@@ -19,7 +20,7 @@ export async function withLock(db, key, owner, ttlMs, fn) {
     const takeover = db.prepare("UPDATE locks SET owner=?, expires_at=? WHERE key=? AND expires_at<=?")
       .run(owner, expiresAt, key, now);
     if ((Number(takeover?.changes ?? 0)) === 0) {
-      recordLockAcquire(Date.now() - acquireStart);
+      recordLockAcquire(performance.now() - acquireStart);
       recordLockBusy();
       const err = new Error("LOCK_BUSY");
       err.code = "ERR_LOCK_BUSY";
@@ -28,13 +29,13 @@ export async function withLock(db, key, owner, ttlMs, fn) {
     }
   }
 
-  recordLockAcquire(Date.now() - acquireStart);
+  recordLockAcquire(performance.now() - acquireStart);
 
   try {
     return await fn();
   } finally {
-    const releaseStart = Date.now();
+    const releaseStart = performance.now();
     db.prepare("DELETE FROM locks WHERE key=? AND owner=?").run(key, owner);
-    recordLockRelease(Date.now() - releaseStart);
+    recordLockRelease(performance.now() - releaseStart);
   }
 }

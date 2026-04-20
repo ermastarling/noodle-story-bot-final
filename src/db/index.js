@@ -1,5 +1,6 @@
 import { createRequire } from "module";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { performance } from "node:perf_hooks";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -52,20 +53,20 @@ function prepareCached(db, sql) {
 }
 
 function measureDbRead(fn) {
-  const start = Date.now();
+  const start = performance.now();
   try {
     return fn();
   } finally {
-    recordDbRead(Date.now() - start);
+    recordDbRead(performance.now() - start);
   }
 }
 
 function measureDbWrite(fn) {
-  const start = Date.now();
+  const start = performance.now();
   try {
     return fn();
   } finally {
-    recordDbWrite(Date.now() - start);
+    recordDbWrite(performance.now() - start);
   }
 }
 
