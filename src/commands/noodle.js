@@ -18,6 +18,12 @@ import {
   resetTutorialProgress
 } from "../game/tutorial.js";
 import {
+  resolveNavSubForTutorial,
+  resolveTutorialGateValue,
+  isTutorialStep as isTutorialStepFromRouting,
+  resolveTutorialProgressRowKey
+} from "../game/tutorialRouting.js";
+import {
   loadContentBundle,
   loadSettingsCatalog,
   loadStaffContent,
@@ -1241,21 +1247,16 @@ new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve")
 }
 
 function getTutorialProgressRows(player, userId, { highlightAccept = false, disableAccept = false } = {}) {
-  if (isTutorialStep(player, "intro_order")) {
+  const rowKey = resolveTutorialProgressRowKey(player);
+  if (!rowKey) return null;
+
+  if (rowKey === "accept_only") {
     return [noodleOrdersAcceptOnlyRow(userId, { highlightAccept, disableAccept })];
   }
-  if (isTutorialStep(player, "intro_market")) {
-    return [noodleTutorialBuyRow(userId)];
-  }
-  if (isTutorialStep(player, "intro_forage")) {
-    return [noodleTutorialForageRow(userId)];
-  }
-  if (isTutorialStep(player, "intro_cook")) {
-    return [noodleTutorialCookRow(userId)];
-  }
-  if (isTutorialStep(player, "intro_serve")) {
-    return [noodleTutorialServeRow(userId)];
-  }
+  if (rowKey === "buy") return [noodleTutorialBuyRow(userId)];
+  if (rowKey === "forage") return [noodleTutorialForageRow(userId)];
+  if (rowKey === "cook") return [noodleTutorialCookRow(userId)];
+  if (rowKey === "serve") return [noodleTutorialServeRow(userId)];
   return null;
 }
 
@@ -2308,8 +2309,7 @@ function ensurePlayer(serverId, userId) {
 }
 
 function isTutorialStep(player, stepId) {
-  const step = getCurrentTutorialStep(player);
-  return step?.id === stepId;
+  return isTutorialStepFromRouting(player, stepId);
 }
 
 function displayItemName(id) {
@@ -3261,8 +3261,12 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   const rows = [new ActionRowBuilder().addComponents(menu)];
   if (navRow) rows.push(navRow);
-  const tutorialOnlyAccept = isTutorialStep(p, "intro_order");
-  if (!tutorialOnlyAccept) {
+  const showBackButton = resolveTutorialGateValue({
+    player: p,
+    gate: "acceptPickerShowBackButton",
+    fallbackValue: true
+  });
+  if (showBackButton) {
     rows.push(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -3356,16 +3360,17 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     : actionDesc;
 
   const actionEmbed = buildMenuEmbed({ title: actionTitle, description: descWithMissing, user: ownerUser });
-  const tutorialOnlyServeMenu = action === "serve" && isTutorialStep(p, "intro_serve");
+  const showOrdersActions = action === "serve"
+    ? resolveTutorialGateValue({ player: p, gate: "servePickerShowOrdersActions", fallbackValue: true })
+    : true;
 
   return {
     content: " ",
     embeds: [actionEmbed],
     components: [
       new ActionRowBuilder().addComponents(menu),
-      ...(tutorialOnlyServeMenu
-        ? []
-        : [
+      ...(showOrdersActions
+        ? [
             action === "serve"
               ? noodleOrdersActionRowWithBack(userId, {
                   highlightAccept: !hasAcceptedOrders,
@@ -3374,7 +3379,8 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
                   disableServeAll: !canServeAll
                 })
               : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
-          ])
+          ]
+        : [])
     ]
   };
 }
@@ -3502,7 +3508,11 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     cookEmbed.setDescription(combined);
   }
 
-  const tutorialOnlyMenu = isTutorialStep(p, "intro_cook");
+  const showOrdersActions = resolveTutorialGateValue({
+    player: p,
+    gate: "cookPickerShowOrdersActions",
+    fallbackValue: true
+  });
   const navRow = totalPages > 1
     ? new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -3523,7 +3533,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const components = [];
   components.push(new ActionRowBuilder().addComponents(menu));
   if (navRow) components.push(navRow);
-  if (!tutorialOnlyMenu) {
+  if (showOrdersActions) {
     components.push(noodleOrdersActionRowWithBack(userId, {
       highlightAccept,
       disableAccept,
@@ -3840,13 +3850,17 @@ function buildForageFishingNavRows({
 }
 
 async function renderMultiBuyPicker({ interaction, userId, s, p }) {
-  const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
+  const showSellButton = resolveTutorialGateValue({
+    player: p,
+    gate: "buyMenuShowSellButton",
+    fallbackValue: true
+  });
   const payload = buildMultiBuyPickerPayload({
     userId,
     p,
     s,
     ownerUser: interaction.member ?? interaction.user,
-    showSellButton: !tutorialOnlyBuy
+    showSellButton
   });
 
   return componentCommit(interaction, payload);
@@ -6259,7 +6273,12 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       color: theme.colors.success
     });
     forageEmbed.setDescription(description);
-    const components = isTutorialStep(p, "intro_cook")
+    const showTutorialCookRowAfterForage = resolveTutorialGateValue({
+      player: p,
+      gate: "showTutorialCookRowAfterForage",
+      fallbackValue: false
+    });
+    const components = showTutorialCookRowAfterForage
       ? [noodleTutorialCookRow(userId)]
       : navRows;
     return commitState({
@@ -6896,14 +6915,18 @@ ${lines.join("\n")}`;
 
     // Multi-buy entry
     if (!itemId) {
-      const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
+      const showSellButton = resolveTutorialGateValue({
+        player: p,
+        gate: "buyMenuShowSellButton",
+        fallbackValue: true
+      });
       const payload = buildMultiBuyPickerPayload({
         userId,
         p,
         s,
         ownerUser: interaction.member ?? interaction.user,
         page,
-        showSellButton: !tutorialOnlyBuy
+        showSellButton
       });
 
       return payload;
@@ -6970,7 +6993,11 @@ ${lines.join("\n")}`;
     applyQuestProgress(p, questsContent, userId, { type: "buy", amount: qtyToBuy }, now);
 
     advanceTutorial(p, "buy");
-    const tutorialOnlyForage = isTutorialStep(p, "intro_forage");
+    const showTutorialForageRowAfterBuy = resolveTutorialGateValue({
+      player: p,
+      gate: "showTutorialForageRowAfterBuy",
+      fallbackValue: false
+    });
 
     const capacityNote = qtyToBuy < qty ? `\n${getIcon("pantry")} Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
     const buyEmbed = buildMenuEmbed({
@@ -6981,7 +7008,7 @@ ${lines.join("\n")}`;
     return commitState({
       content: " ",
       embeds: [buyEmbed],
-      components: tutorialOnlyForage ? [noodleTutorialForageRow(userId)] : undefined
+      components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : undefined
     });
   }
 
@@ -7226,13 +7253,17 @@ ${lines.join("\n")}`;
       user: interaction.member ?? interaction.user
     });
 
-    const tutorialOnlyServe = isTutorialStep(p, "intro_serve");
+    const showTutorialServeRowAfterCook = resolveTutorialGateValue({
+      player: p,
+      gate: "showTutorialServeRowAfterCook",
+      fallbackValue: false
+    });
     const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
 
     return commitState({
       content: " ",
       embeds: [cookEmbed],
-      components: tutorialOnlyServe
+      components: showTutorialServeRowAfterCook
         ? [noodleTutorialServeRow(userId)]
         : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })]
     });
@@ -7734,11 +7765,15 @@ ${lines.join("\n")}`;
       user: interaction.member ?? interaction.user
     });
     const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
-    const tutorialOnlyBuy = isTutorialStep(p, "intro_market");
+    const showTutorialBuyRowAfterAccept = resolveTutorialGateValue({
+      player: p,
+      gate: "showTutorialBuyRowAfterAccept",
+      fallbackValue: false
+    });
     return commitState({
       content: " ",
       embeds: [acceptEmbed],
-      components: tutorialOnlyBuy
+      components: showTutorialBuyRowAfterAccept
         ? [noodleTutorialBuyRow(userId)]
         : [
             noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders }),
@@ -8549,28 +8584,6 @@ if (kind === "nav" && action === "sell") {
   });
 }
 
-if (kind === "nav" && action === "forage") {
-  const sourceMessageId = interaction.message?.id ?? null;
-  const rawPage = Number(parts[4] ?? 0);
-  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
-  return runNoodle(interaction, {
-    sub: "forage_menu",
-    group: null,
-    overrides: { messageId: sourceMessageId, integers: { page } }
-  });
-}
-
-if (kind === "nav" && action === "fishing") {
-  const sourceMessageId = interaction.message?.id ?? null;
-  const rawPage = Number(parts[4] ?? 0);
-  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
-  return runNoodle(interaction, {
-    sub: "fishing_menu",
-    group: null,
-    overrides: { messageId: sourceMessageId, integers: { page } }
-  });
-}
-
 /* ---------------- NAV BUTTONS ---------------- */
 // Compost button shows picker of compostable items
 function buildCompostSelectOptions(player) {
@@ -8989,10 +9002,12 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
 if (kind === "nav") {
 const sub = action;
+const p = ensurePlayer(serverId, userId);
+const resolvedSub = resolveNavSubForTutorial({ player: p, action: sub, fallbackSub: sub });
 const sourceMessageId = interaction.message?.id;
 const page = parts[4] ? Number(parts[4]) : null;
 return runNoodle(interaction, {
-  sub,
+  sub: resolvedSub,
   group: null,
   overrides: {
     messageId: sourceMessageId,
@@ -9541,8 +9556,17 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     });
 
     const p = ensurePlayer(serverId, interaction.user.id);
-    const tutorialOnlyBuy1 = isTutorialStep(p, "intro_market");
-    const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId, { limitToBuy1: tutorialOnlyBuy1 });
+    const limitMultiBuyToBuy1 = resolveTutorialGateValue({
+      player: p,
+      gate: "limitMultiBuyToBuy1",
+      fallbackValue: false
+    });
+    const showSellButton = resolveTutorialGateValue({
+      player: p,
+      gate: "multiBuySelectionShowSellButton",
+      fallbackValue: true
+    });
+    const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId, { limitToBuy1: limitMultiBuyToBuy1 });
 
     const sellButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -9563,7 +9587,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     return componentCommit(interaction, {
       content: " ",
       embeds: [selectionEmbed],
-      components: tutorialOnlyBuy1 ? [btnRow] : [btnRow, sellButton]
+      components: showSellButton ? [btnRow, sellButton] : [btnRow]
     });
   }
 
@@ -9679,8 +9703,17 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (mode === "qty") {
       const sourceId = cacheEntry.sourceMessageId || interaction.message?.id || "none";
       const p = ensurePlayer(serverId, userId);
-      const tutorialOnlyBuy1 = isTutorialStep(p, "intro_market");
-      const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceId, { limitToBuy1: tutorialOnlyBuy1 });
+      const limitMultiBuyToBuy1 = resolveTutorialGateValue({
+        player: p,
+        gate: "limitMultiBuyToBuy1",
+        fallbackValue: false
+      });
+      const showSellButton = resolveTutorialGateValue({
+        player: p,
+        gate: "multiBuySelectionShowSellButton",
+        fallbackValue: true
+      });
+      const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceId, { limitToBuy1: limitMultiBuyToBuy1 });
       const sellButton = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
@@ -9698,7 +9731,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       return componentCommit(interaction, {
         content: " ",
         embeds: [selectionEmbed],
-        components: tutorialOnlyBuy1 ? [btnRow] : [btnRow, sellButton],
+        components: showSellButton ? [btnRow, sellButton] : [btnRow],
         targetMessageId: sourceId !== "none" ? sourceId : undefined
       });
     }
@@ -9851,13 +9884,17 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
           text: `Coins: ${p2.coins || 0}c\n${ownerFooterText(interaction.member ?? interaction.user)}`
         });
 
-        const tutorialOnlyForage = isTutorialStep(p2, "intro_forage");
+        const showTutorialForageRowAfterMultiBuyPurchase = resolveTutorialGateValue({
+          player: p2,
+          gate: "showTutorialForageRowAfterMultiBuyPurchase",
+          fallbackValue: false
+        });
         const tutorialActive = Boolean(p2.tutorial?.active && getCurrentTutorialStep(p2));
 
         let components;
         if (tutorialActive) {
           const questsAvailable = hasDailyRewardAvailable(p2, nowTs()) || hasClaimableQuests(p2);
-          components = tutorialOnlyForage
+          components = showTutorialForageRowAfterMultiBuyPurchase
             ? [noodleTutorialForageRow(userId)]
             : [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })];
         } else {
@@ -10204,4 +10241,10 @@ export const noodleCommand = {
   }
 };
 
-export { runNoodle, noodleMainMenuRow, noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed };
+export {
+  runNoodle,
+  noodleMainMenuRow,
+  noodleMainMenuRowNoProfile,
+  displayItemName,
+  renderProfileEmbed
+};

@@ -82,7 +82,7 @@ export function formatTutorialMessage(step) {
 
 export function formatTutorialCompletionMessage() {
   return [
-    "✨ **Your noodle shop is officially open!**",
+    `${getIcon("sparkle")} **Your noodle shop is officially open!**`,
     "From here, you can play freely:",
     "",
     "• Start each day with `/noodle orders` to accept, cook and serve customers.",
