@@ -7,6 +7,25 @@ const telemetryDisabled = process.env.NOODLE_TELEMETRY_LOG_DISABLED === "1";
 let telemetryStream = null;
 let telemetryInitFailed = false;
 
+function roundTelemetryNumber(value) {
+  if (!Number.isFinite(value)) return value;
+  if (Number.isInteger(value)) return value;
+  return Math.round(value * 1000) / 1000;
+}
+
+function normalizeTelemetryValue(value) {
+  if (typeof value === "number") return roundTelemetryNumber(value);
+  if (Array.isArray(value)) return value.map((item) => normalizeTelemetryValue(item));
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [key, inner] of Object.entries(value)) {
+      out[key] = normalizeTelemetryValue(inner);
+    }
+    return out;
+  }
+  return value;
+}
+
 function getTelemetryStream() {
   if (telemetryDisabled) return null;
   if (telemetryStream) return telemetryStream;
@@ -33,7 +52,7 @@ export function emitTelemetry(event, payload = {}) {
   const stream = getTelemetryStream();
   if (!stream) return;
 
-  const safePayload = payload ? { ...payload } : {};
+  const safePayload = normalizeTelemetryValue(payload ? { ...payload } : {});
   const line = JSON.stringify({
     ts: new Date().toISOString(),
     event,
