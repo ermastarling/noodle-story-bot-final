@@ -2,7 +2,7 @@ import { strict as assert } from "assert";
 import { test } from "node:test";
 
 import { newPlayerProfile } from "../src/game/player.js";
-import { getCurrentTutorialStep, resetTutorialProgress } from "../src/game/tutorial.js";
+import { advanceTutorial, getCurrentTutorialStep, resetTutorialProgress } from "../src/game/tutorial.js";
 
 test("Tutorial reset: keeps inventory and core progress data", () => {
   const player = newPlayerProfile("user1");
@@ -67,4 +67,27 @@ test("Tutorial reset: keeps inventory and core progress data", () => {
   assert.deepEqual(player.known_recipes, before.knownRecipes);
   assert.deepEqual(player.inv_ingredients, before.invIngredients);
   assert.deepEqual(player.inv_bowls, before.invBowls);
+});
+
+test("Tutorial reset: can replay full tutorial chain to completion", () => {
+  const player = newPlayerProfile("user-replay");
+
+  // Progress some steps, then reset and verify a full replay is possible.
+  advanceTutorial(player, "accept");
+  advanceTutorial(player, "buy");
+  assert.equal(getCurrentTutorialStep(player)?.id, "intro_forage");
+
+  resetTutorialProgress(player);
+  assert.equal(getCurrentTutorialStep(player)?.id, "intro_order");
+
+  const sequence = ["accept", "buy", "forage", "cook", "serve"];
+  let last = null;
+  for (const eventName of sequence) {
+    last = advanceTutorial(player, eventName);
+    assert.equal(last.progressed, true);
+  }
+
+  assert.equal(last?.finished, true);
+  assert.equal(player.tutorial?.active, false);
+  assert.equal(getCurrentTutorialStep(player), null);
 });
