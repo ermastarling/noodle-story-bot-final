@@ -68,6 +68,8 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 - `npm run register:prod` — register slash commands for production
 - `npm run test` — execute the automated test suite
 - `npm run sim` — exercise the simulation harness (see below)
+- `npm run mobile:baseline` — run tests and create a baseline migration tag (`mobile-base-v1` by default)
+- `npm run mobile:bootstrap` — clone and bootstrap a dedicated mobile repository with `gh`
 
 ## Command Registration Notes
 
@@ -145,3 +147,4 @@ The suite exercises discovery, inventory flow, NPC modifiers, order boards, resi
 
 - Detailed simulation options: `SIMULATION.md`
 - Team workflow guidelines: `GIT_WORKFLOW.md`
+- Mobile migration kickoff: `MOBILE_MIGRATION.md`

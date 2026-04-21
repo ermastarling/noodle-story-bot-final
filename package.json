@@ -13,7 +13,9 @@
     "register:prod": "NODE_ENV=production node src/register-commands.js",
     "test": "node --test",
     "test:no-sqlite": "node --test $(ls test/*.test.js | grep -v social.test.js)",
-    "sim": "node src/sim/runSimulation.js"
+    "sim": "node src/sim/runSimulation.js",
+    "mobile:baseline": "bash scripts/mobile/cut-mobile-baseline.sh",
+    "mobile:bootstrap": "bash scripts/mobile/bootstrap-mobile-repo.sh"
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.0",
