@@ -252,6 +252,7 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
 export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, activeEventId = null) {
   const dayKey = dayKeyUTC();
   const orderSeedVersion = 5; // Increment when seed logic changes
+  const previousOrdersDay = playerState.orders_day;
 
   if (playerState.orders_depleted_day && playerState.orders_depleted_day !== dayKey) {
     playerState.orders_depleted_day = null;
@@ -274,6 +275,9 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
     playerState.orders_pool_sig = poolSig;
     playerState.orders_consumed_indices = [];
     playerState.orders_total_count = totalCount;
+    if (previousOrdersDay && dayChanged && playerState.orders && typeof playerState.orders === "object") {
+      playerState.orders.accepted = {};
+    }
     delete playerState.order_board; // free memory from legacy storage
   } else {
     // Keep consumed indices when the recipe pool grows; trim if the max count shrinks.
@@ -371,12 +375,14 @@ export function findOrderByToken({
 
 export function markOrderConsumed(playerState, orderIndex) {
   if (!Number.isFinite(orderIndex)) return;
+  if (orderIndex < 0) return;
+  const totalCount = Number(playerState.orders_total_count ?? 0) || 0;
+  if (totalCount > 0 && orderIndex >= totalCount) return;
   if (!Array.isArray(playerState.orders_consumed_indices)) playerState.orders_consumed_indices = [];
   const existing = new Set(playerState.orders_consumed_indices);
   if (existing.has(orderIndex)) return;
   playerState.orders_consumed_indices.push(orderIndex);
 
-  const totalCount = Number(playerState.orders_total_count ?? 0) || 0;
   if (playerState.orders_day && playerState.orders_consumed_indices.length >= totalCount) {
     playerState.orders_depleted_day = playerState.orders_day;
   }

@@ -28,6 +28,16 @@ const settings = {
 	LIMITED_TIME_CHANCE: 0
 };
 
+function withMockedNow(ts, fn) {
+	const realNow = Date.now;
+	Date.now = () => ts;
+	try {
+		return fn();
+	} finally {
+		Date.now = realNow;
+	}
+}
+
 test("Orders: unlocking recipe keeps consumed orders and adds to pool", () => {
 	const playerState = {
 		shop_level: 1,
@@ -69,4 +79,82 @@ test("Orders: unlocking recipe keeps consumed orders and adds to pool", () => {
 
 	const recipeIds = page.orders.map((o) => o.recipe_id);
 	assert.ok(recipeIds.includes("shrimp_special"), "Unlocked recipe should appear in the order board");
+});
+
+test("Orders: day rollover clears stale accepted pointers and resets consumed indices", () => {
+	const day1 = Date.UTC(2026, 3, 21, 10, 0, 0, 0);
+	const day2 = day1 + (24 * 60 * 60 * 1000);
+	const playerState = {
+		shop_level: 1,
+		rep: 0,
+		coins: 0,
+		known_recipes: ["classic_soy_ramen", "veggie_ramen"],
+		orders: { accepted: {} },
+		orders_consumed_indices: []
+	};
+
+	withMockedNow(day1, () => {
+		ensureDailyOrdersForPlayer(playerState, settings, content, "spring", "s1", "u1");
+		const page = generateOrderPageForPlayer({
+			playerState,
+			settings,
+			content,
+			activeSeason: "spring",
+			serverId: "s1",
+			userId: "u1",
+			page: 0,
+			pageSize: 1
+		});
+		const first = page.orders[0];
+		playerState.orders.accepted[first.order_id] = {
+			accepted_at: day1,
+			order: {
+				order_id: first.order_id,
+				order_index: first.order_index,
+				recipe_id: first.recipe_id,
+				tier: first.tier,
+				npc_archetype: first.npc_archetype
+			}
+		};
+		markOrderConsumed(playerState, 0);
+		markOrderConsumed(playerState, 2);
+	});
+
+	assert.equal(Object.keys(playerState.orders.accepted).length, 1);
+	assert.deepEqual(playerState.orders_consumed_indices, [0, 2]);
+
+	withMockedNow(day2, () => {
+		ensureDailyOrdersForPlayer(playerState, settings, content, "spring", "s1", "u1");
+	});
+
+	assert.deepEqual(playerState.orders_consumed_indices, []);
+	assert.equal(Object.keys(playerState.orders.accepted).length, 0);
+});
+
+test("Orders: consumed indices are trimmed to valid range when board count shrinks", () => {
+	const day = Date.UTC(2026, 3, 21, 12, 0, 0, 0);
+	const playerState = {
+		shop_level: 1,
+		rep: 0,
+		coins: 0,
+		known_recipes: ["classic_soy_ramen", "veggie_ramen"],
+		orders: { accepted: {} },
+		orders_consumed_indices: []
+	};
+
+	withMockedNow(day, () => {
+		ensureDailyOrdersForPlayer(playerState, settings, content, "spring", "s1", "u1");
+	});
+
+	playerState.orders_consumed_indices = [0, 1, 3, 4, 9];
+	const smallerSettings = { ...settings, ORDERS_BASE_COUNT: 3 };
+
+	withMockedNow(day, () => {
+		ensureDailyOrdersForPlayer(playerState, smallerSettings, content, "spring", "s1", "u1");
+	});
+
+	assert.equal(playerState.orders_total_count, 3);
+	assert.deepEqual(playerState.orders_consumed_indices, [0, 1]);
+	markOrderConsumed(playerState, 99);
+	assert.deepEqual(playerState.orders_consumed_indices, [0, 1]);
 });
