@@ -46,7 +46,24 @@ When the new mobile repository is created, include a baseline reference in that 
 - Source baseline tag: `mobile-base-v1`
 - Source baseline commit: `<commit-sha from baseline script output>`
 
-## 4) Initial Migration Inventory (Keep/Replace)
+## 4) Create Sync Policy In The Mobile Repo
+
+Before extraction work begins, create `SYNC_POLICY.md` in `noodle-story-mobile` and commit it on `mobile-bootstrap`.
+
+Minimum policy content:
+
+- Scope ownership:
+   - `noodle-story-bot-final` owns Discord runtime, commands, schedulers, and bot operations.
+   - `noodle-story-mobile` owns mobile entrypoints, adapters, and platform-specific integrations.
+- Shared-logic handling (`src/game`, `src/util`, `content`):
+   - During early migration, use targeted cherry-picks from bot repo fixes.
+   - Record each sync in a short changelog section (date, source commit, reason).
+- Conflict rule:
+   - If behavior diverges for platform reasons, keep implementations separate and document why.
+- Cadence:
+   - Review cross-repo sync needs at least once per sprint.
+
+## 5) Initial Migration Inventory (Keep/Replace)
 
 Keep/reuse first:
 
@@ -64,10 +81,11 @@ Replace/remove first:
 - Discord-specific `src/jobs/`
 - Discord-specific portions of `src/infra/`
 
-## 5) Suggested First Mobile Extraction Order
+## 6) Suggested First Mobile Extraction Order
 
 1. Copy baseline into the mobile repo using the tagged commit.
-2. Keep `src/game/`, `src/util/`, `src/constants.js`, and `content/` intact.
-3. Replace Discord entry/command layers with mobile app entry points.
-4. Remove or stub Discord scheduler and infra integrations.
-5. Add mobile-facing adapters around game state and progression APIs.
+2. Add `SYNC_POLICY.md` and commit it before any major extraction.
+3. Keep `src/game/`, `src/util/`, `src/constants.js`, and `content/` intact.
+4. Replace Discord entry/command layers with mobile app entry points.
+5. Remove or stub Discord scheduler and infra integrations.
+6. Add mobile-facing adapters around game state and progression APIs.
