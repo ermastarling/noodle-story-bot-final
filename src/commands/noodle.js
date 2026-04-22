@@ -3683,8 +3683,8 @@ function buildForageMenuPayload({
   const forageCooldown = canForage(player, now, forageCooldownMs);
   const forageNextTs = Math.floor((forageCooldown.ok ? (now + forageCooldownMs) : forageCooldown.nextAt) / 1000);
   const forageReadyLine = forageCooldown.ok
-    ? `${getIcon("cooldown")} Ready now. If you forage now, you can forage again at <t:${forageNextTs}:t> (<t:${forageNextTs}:R>).`
-    : `${getIcon("cooldown")} You can forage again at <t:${forageNextTs}:t> (<t:${forageNextTs}:R>).`;
+    ? `${getIcon("forage")} You're ready to forage. Choose how you'd like to forage below.`
+    : `${getIcon("cooldown")} You can forage again <t:${forageNextTs}:R>.`;
   if (combinedEffects.garden_autoharvest) {
     autoHarvestReadyPlots(player, content, combinedEffects, {
       capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, player, combinedEffects)
@@ -3701,7 +3701,7 @@ function buildForageMenuPayload({
     ? [
         "Choose how you want to forage:",
         `• Take a forage stroll for surprise finds`,
-        `• Pick a specific ingredient, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Forager's level*`
+        `• **OR** Pick a specific ingredient, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Forager's level*`
       ].join("\n")
     : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.";
 
@@ -3832,7 +3832,7 @@ function buildFishingMenuPayload({
     ? [
         "Choose how you want to fish:",
         "• Enjoy a casual fishing trip for surprise catches",
-        "• Pick a specific fish or seafood, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Fisher Crew's level*"
+        "• **OR** Pick a specific fish or seafood, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Fisher Crew's level*"
       ].join("\n")
     : "No fishing items are available right now.";
 
@@ -7448,7 +7448,7 @@ ${lines.join("\n")}`;
       if (a?.expires_at) {
         const msLeft = a.expires_at - now2;
         if (msLeft <= 0) timeLeft = " *(expired)*";
-        else timeLeft = ` *(<t:${Math.floor(a.expires_at / 1000)}:R>)*`;
+        else timeLeft = ` *(expires <t:${Math.floor(a.expires_at / 1000)}:R>)*`;
       } else timeLeft = " *(no rush)*";
 
       const order = snap;
@@ -7625,7 +7625,7 @@ ${lines.join("\n")}`;
 
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const timeNote = expiresAt
-        ? `${getIcon("hourglass")} <t:${Math.floor(expiresAt / 1000)}:R> to serve.`
+        ? `${getIcon("hourglass")} expires <t:${Math.floor(expiresAt / 1000)}:R>.`
         : `${getIcon("forage")} No rush.`;
 
       const extendedNote = order.is_limited_time && speedWindowSeconds !== baseSpeedWindowSeconds
