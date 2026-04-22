@@ -3819,7 +3819,7 @@ function buildFishingMenuPayload({
   const fishingCooldown = canFish(player, now, fishingCooldownMs);
   const fishingNextTs = Math.floor((fishingCooldown.ok ? (now + fishingCooldownMs) : fishingCooldown.nextAt) / 1000);
   const fishingReadyLine = fishingCooldown.ok
-    ? `${getIcon("cooldown")} Ready now. If you fish now, you can fish again at <t:${fishingNextTs}:t> (<t:${fishingNextTs}:R>).`
+    ? `${getIcon("fishing")} You're ready to fish. Choose how you'd like to fish below.`
     : `${getIcon("cooldown")} You can fish again at <t:${fishingNextTs}:t> (<t:${fishingNextTs}:R>).`;
   const { actionRow, pickerRow, pageRow, fishingCount, safePage, totalPages } = buildFishingPickerRows({
     userId,
