@@ -4499,7 +4499,7 @@ if (sub === "profile_edit") {
   const specializationsAvailable = getSpecializationAlert(p);
   const embed = buildMenuEmbed({
     title: `${getIcon("customize")} Customize Profile`,
-    description: "You can unlock specializations based on your shop level! When you change the active specialization, that will update your shop's decor!\n\nPurchase a **premium shop specialization that includes 10,000c** for your shop, head to the **store** now!",
+    description: "• Change your shop name & give it a tagline here.\n\n• You will unlock specializations based on your shop level, when you change your active specialization, it will update your shop's decor!\n\n• Purchase a **premium shop specialization that includes 10,000c** for your shop, head to the **store** now!",
     user: interaction.member ?? interaction.user
   });
   return commit({
