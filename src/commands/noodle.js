@@ -384,7 +384,13 @@ const DECOR_SET_SPECIALIZATION_MAP = {
   imperial_silk_noodle_court: "imperial_silk_noodle_court",
   elderwood_hearth: "elderwood_hearth",
   celestial_archive_kitchen: "celestial_archive_kitchen",
-  sakura_sweetheart_noodle_atelier: "sakura_sweetheart_noodle_atelier"
+  sakura_sweetheart_noodle_atelier: "sakura_sweetheart_noodle_atelier",
+  midnight_noodle_atelier: "midnight_noodle_atelier",
+  rainy_alley_ramen: "rainy_alley_ramen",
+  ironclad_noodle_foundry: "ironclad_noodle_foundry",
+  playful_panda_snack_stand: "playful_panda_snack_stand",
+  alchemists_broth_lab: "alchemists_broth_lab",
+  backstreet_brick_noodle_bar: "backstreet_brick_noodle_bar"
 };
 
 function getDecorSetSpecId(setId) {

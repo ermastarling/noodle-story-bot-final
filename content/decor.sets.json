@@ -389,6 +389,84 @@
         { "slot": "frame", "item_id": "decor_sakura_scalloped_frame" }
       ],
       "completion_rewards": []
+    },
+    {
+      "set_id": "midnight_noodle_atelier",
+      "name": "Midnight Noodle Atelier",
+      "description": "A softly shadowed noodle shop lit by candlelight and quiet warmth.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_midnight_candle_arch" },
+        { "slot": "counter", "item_id": "decor_midnight_oak_counter" },
+        { "slot": "wall", "item_id": "decor_midnight_shadow_wall" },
+        { "slot": "sign", "item_id": "decor_midnight_script_sign" },
+        { "slot": "frame", "item_id": "decor_midnight_warm_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "rainy_alley_ramen",
+      "name": "Rainy Alley Ramen",
+      "description": "A quiet street-side noodle shop glowing against the rain.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_rainy_alley_awning" },
+        { "slot": "counter", "item_id": "decor_rainy_alley_counter" },
+        { "slot": "wall", "item_id": "decor_rainy_alley_brick_wall" },
+        { "slot": "sign", "item_id": "decor_rainy_alley_neon_sign" },
+        { "slot": "frame", "item_id": "decor_rainy_alley_window_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "ironclad_noodle_foundry",
+      "name": "Ironclad Noodle Foundry",
+      "description": "A powerful, industrial kitchen built for relentless cooking.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_ironclad_foundry_gate" },
+        { "slot": "counter", "item_id": "decor_ironclad_steel_counter" },
+        { "slot": "wall", "item_id": "decor_ironclad_rivet_wall" },
+        { "slot": "sign", "item_id": "decor_ironclad_plated_sign" },
+        { "slot": "frame", "item_id": "decor_ironclad_bolted_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "playful_panda_snack_stand",
+      "name": "Playful Panda Snack Stand",
+      "description": "A cheerful, lighthearted shop full of charm and warmth.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_panda_bamboo_entry" },
+        { "slot": "counter", "item_id": "decor_panda_snack_counter" },
+        { "slot": "wall", "item_id": "decor_panda_cheerful_wall" },
+        { "slot": "sign", "item_id": "decor_panda_lantern_sign" },
+        { "slot": "frame", "item_id": "decor_panda_playful_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "alchemists_broth_lab",
+      "name": "Alchemist's Broth Lab",
+      "description": "A curious kitchen where cooking meets experimentation.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_alchemist_copper_arch" },
+        { "slot": "counter", "item_id": "decor_alchemist_lab_counter" },
+        { "slot": "wall", "item_id": "decor_alchemist_formula_wall" },
+        { "slot": "sign", "item_id": "decor_alchemist_glyph_sign" },
+        { "slot": "frame", "item_id": "decor_alchemist_vial_frame" }
+      ],
+      "completion_rewards": []
+    },
+    {
+      "set_id": "backstreet_brick_noodle_bar",
+      "name": "Backstreet Brick Noodle Bar",
+      "description": "A compact, no-frills noodle shop built into the heart of the city.",
+      "pieces": [
+        { "slot": "front", "item_id": "decor_backstreet_steel_doorway" },
+        { "slot": "counter", "item_id": "decor_backstreet_brick_counter" },
+        { "slot": "wall", "item_id": "decor_backstreet_exposed_brick_wall" },
+        { "slot": "sign", "item_id": "decor_backstreet_painted_sign" },
+        { "slot": "frame", "item_id": "decor_backstreet_metal_frame" }
+      ],
+      "completion_rewards": []
     }
   ]
 }

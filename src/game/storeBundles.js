@@ -8,7 +8,13 @@ export const STORE_BUNDLE_SKU_MAP = {
   "1473891076879290533": "imperial_silk_noodle_court",
   "1473891555302572092": "elderwood_hearth",
   "1473891710516986040": "celestial_archive_kitchen",
-  "1473891940293546068": "sakura_sweetheart_noodle_atelier"
+  "1473891940293546068": "sakura_sweetheart_noodle_atelier",
+  "1496312514399436942": "midnight_noodle_atelier",
+  "1496330875913371688": "rainy_alley_ramen",
+  "1496331964251373588": "ironclad_noodle_foundry",
+  "1496332473385353289": "playful_panda_snack_stand",
+  "1496333015415263263": "alchemists_broth_lab",
+  "1496333224417296484": "backstreet_brick_noodle_bar"
 };
 
 export function resolveStoreBundleSpecId(skuId) {

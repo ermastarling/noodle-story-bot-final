@@ -52,7 +52,13 @@
       "spec_imperial_silk_court": "<:spec_imperial_silk_court:1473562984617087018>",
       "spec_elderwood_hearth": "<:spec_elderwood_hearth:1473562982796623966>",
       "spec_celestial_archive_kitchen": "<:spec_celestial_archive_kitchen:1473562981378818058>",
-      "spec_sakura_sweetheart_noodle_atelier": "<:spec_sakura_sweetheart_noodle_at:1473562980053680366>"
+      "spec_sakura_sweetheart_noodle_atelier": "<:spec_sakura_sweetheart_noodle_at:1473562980053680366>",
+      "spec_midnight_noodle_atelier": "<:spec_midnight_noodle_atelier:1496364659853492324>",
+      "spec_rainy_alley_ramen": "<:spec_rainy_alley_ramen:1496364658335158342>",
+      "spec_ironclad_noodle_foundry": "<:spec_ironclad_noodle_foundry:1496364655176581180>",
+      "spec_playful_panda_snack_stand": "<:spec_playful_panda_snack_stand:1496364653725618176>",
+      "spec_alchemists_broth_lab": "<:spec_alchemists_broth_lab:1496364652400214156>",
+      "spec_backstreet_brick_noodle_bar": "<:spec_backstreet_brick_noodle_bar:1496364650630221834>"
     },
     "decor_sets": {
       "decor_set_placeholder": "https://media.discordapp.net/attachments/1469954324753809599/1470232819253907660/1decor_set_placeholder.png?ex=698a8c83&is=69893b03&hm=971e1d90675ef9d8a82db64727ecaaafbcb787934f4a47d5df3a07ccc89d92d3&=&format=webp&quality=lossless&width=1141&height=612",
@@ -85,7 +91,13 @@
       "decor_set_imperial_silk_court": "https://media.discordapp.net/attachments/1469954324753809599/1473583212038197258/decor_set_imperial_silk_court.png?ex=6998b70f&is=6997658f&hm=34db0a96c892a2ce15bfefa4c97ca3ec24327051f1845bf5b7356841d081908b&=&format=webp&quality=lossless&width=1131&height=607",
       "decor_set_elderwood_hearth": "https://media.discordapp.net/attachments/1469954324753809599/1473583212490915840/decor_set_elderwood_hearth.png?ex=6998b70f&is=6997658f&hm=1f28495e8ed3302e00fc09fc7368de1ff620f7a242f2dd93ae232b90efead3c0&=&format=webp&quality=lossless&width=1131&height=607",
       "decor_set_celestial_archive_kitchen": "https://media.discordapp.net/attachments/1469954324753809599/1473583213078384720/decor_set_celestial_archive_kitchen.png?ex=6998b70f&is=6997658f&hm=c45867cea5154ec488d6f5a8548c9793cbba77dd54db87ba3fec604ec63ce1e3&=&format=webp&quality=lossless&width=1131&height=607",
-      "decor_set_sakura_sweetheart_noodle_atelier": "https://media.discordapp.net/attachments/1469954324753809599/1473583211475898533/decor_set_sakura_sweetheart_noodle_atelier.png?ex=6998b70f&is=6997658f&hm=099562938f5547f83a9d9bdc23617f22711dd6f7ef3e373116130c328acf655f&=&format=webp&quality=lossless&width=1131&height=607"
+      "decor_set_sakura_sweetheart_noodle_atelier": "https://media.discordapp.net/attachments/1469954324753809599/1473583211475898533/decor_set_sakura_sweetheart_noodle_atelier.png?ex=6998b70f&is=6997658f&hm=099562938f5547f83a9d9bdc23617f22711dd6f7ef3e373116130c328acf655f&=&format=webp&quality=lossless&width=1131&height=607",
+      "decor_set_midnight_noodle_atelier": "https://media.discordapp.net/attachments/1469954324753809599/1496365590401650828/decor_set_midnight_noodle_atelier.png?ex=69e99e8d&is=69e84d0d&hm=afd8e44b4fb238129b6e41967328b4fb914f326ffbfe221e9cbbd899c38d7f85&=&format=webp&quality=lossless&width=1484&height=797",
+      "decor_set_rainy_alley_ramen": "https://media.discordapp.net/attachments/1469954324753809599/1496365590019964969/decor_set_rainy_alley_ramen.png?ex=69e99e8d&is=69e84d0d&hm=61d9795a5aa7a0fba1929a26f21fb8a8ff7e06d7d34f160e12555efed7a720ef&=&format=webp&quality=lossless&width=1484&height=797",
+      "decor_set_ironclad_noodle_foundry": "https://media.discordapp.net/attachments/1469954324753809599/1496365589621375118/decor_set_ironclad_noodle_foundry.png?ex=69e99e8d&is=69e84d0d&hm=f5e909a6eb2a58d22eeb7de00efaf5fd302bc8ff192b9ed114da3f0b3b7dbd09&=&format=webp&quality=lossless&width=1484&height=797",
+      "decor_set_playful_panda_snack_stand": "https://media.discordapp.net/attachments/1469954324753809599/1496365588375801976/decor_set_playful_panda_snack_stand.png?ex=69e99e8d&is=69e84d0d&hm=8bdd1d838e24e6982bcc704ba9fa868f3df83655a9050886c8b30497e41ed49d&=&format=webp&quality=lossless&width=1484&height=797",
+      "decor_set_alchemists_broth_lab": "https://media.discordapp.net/attachments/1469954324753809599/1496365587985727528/decor_set_alchemists_broth_lab.png?ex=69e99e8d&is=69e84d0d&hm=ab2aff3d13a6f1b3ae758b0a0dbf8f5ccd74e0c106e99368c5fb0e696fa483d6&=&format=webp&quality=lossless&width=1484&height=797",
+      "decor_set_backstreet_brick_noodle_bar": "https://media.discordapp.net/attachments/1469954324753809599/1496365587549388831/decor_set_backstreet_brick_noodle_bar.png?ex=69e99e8d&is=69e84d0d&hm=3857c5bb4ca914f0a0053c2de9452fe37c93b8d23fade96a15687f6e83c81599&=&format=webp&quality=lossless&width=1484&height=797"
     },
     "menus_navigation": {
       "back": "<:back:1470315380731019388>",

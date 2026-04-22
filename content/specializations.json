@@ -272,6 +272,60 @@
       "summary": "Blush tones, scalloped rooflines, and heart motifs create a charming boutique aesthetic. Grants 10,000c on purchase.",
       "requirements": { "purchase_required": true },
       "is_permanent": true
+    },
+    {
+      "spec_id": "midnight_noodle_atelier",
+      "name": "Midnight Noodle Atelier",
+      "icon": "spec_midnight_noodle_atelier",
+      "description": "A softly shadowed noodle shop lit by candlelight and quiet warmth.",
+      "summary": "A moody candlelit atelier with hushed ambience and cozy service. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "rainy_alley_ramen",
+      "name": "Rainy Alley Ramen",
+      "icon": "spec_rainy_alley_ramen",
+      "description": "A quiet street-side noodle shop glowing against the rain.",
+      "summary": "A rain-soaked alley kitchen with reflective lights and calm late-night energy. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "ironclad_noodle_foundry",
+      "name": "Ironclad Noodle Foundry",
+      "icon": "spec_ironclad_noodle_foundry",
+      "description": "A powerful, industrial kitchen built for relentless cooking.",
+      "summary": "An industrial foundry-style kitchen of steel, heat, and relentless output. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "playful_panda_snack_stand",
+      "name": "Playful Panda Snack Stand",
+      "icon": "spec_playful_panda_snack_stand",
+      "description": "A cheerful, lighthearted shop full of charm and warmth.",
+      "summary": "A bright snack stand with friendly accents, cozy tones, and playful spirit. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "alchemists_broth_lab",
+      "name": "Alchemist's Broth Lab",
+      "icon": "spec_alchemists_broth_lab",
+      "description": "A curious kitchen where cooking meets experimentation.",
+      "summary": "An experimental broth lab with curious tools and crafted precision. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
+    },
+    {
+      "spec_id": "backstreet_brick_noodle_bar",
+      "name": "Backstreet Brick Noodle Bar",
+      "icon": "spec_backstreet_brick_noodle_bar",
+      "description": "A compact, no-frills noodle shop built into the heart of the city.",
+      "summary": "A tight urban noodle bar with exposed brick, grit, and dependable comfort. Grants 10,000c on purchase.",
+      "requirements": { "purchase_required": true },
+      "is_permanent": true
     }
   ]
 }
