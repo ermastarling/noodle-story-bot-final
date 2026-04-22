@@ -4499,7 +4499,7 @@ if (sub === "profile_edit") {
   const specializationsAvailable = getSpecializationAlert(p);
   const embed = buildMenuEmbed({
     title: `${getIcon("customize")} Customize Profile`,
-    description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!\n\nOr if you want to purchase a unique shop specialization that includes 10,000c, head to the store now!",
+    description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!\n\nOr if you want to purchase a unique shop specialization that includes 10,000c, head to the **store** now!",
     user: interaction.member ?? interaction.user
   });
   return commit({
@@ -4517,25 +4517,26 @@ if (sub === "store") {
   const purchasableSpecs = (specializationsContent?.specializations ?? [])
     .filter((spec) => spec?.requirements?.purchase_required)
     .sort((a, b) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")));
-  const purchasableLines = purchasableSpecs.map((spec, index) => {
+  const purchasableLines = purchasableSpecs.map((spec) => {
     const isPurchased = unlockedSpecIds.has(spec.spec_id);
+    const specIcon = resolveIcon(spec.icon, getIcon("sparkle"));
     return isPurchased
-      ? `${getIcon("status_complete")} ${index + 1}. ${spec.name} (Purchased)`
-      : `${index + 1}. ${spec.name}`;
+      ? `${getIcon("status_complete")} ${specIcon} ${spec.name} (Purchased)`
+      : `${specIcon} ${spec.name}`;
   });
 
   const storeEmbed = buildMenuEmbed({
-    title: `${getIcon("cart")} Noodle Story Shop Specialization Store`,
+    title: `${getIcon("cart")} Shop Specialization Store`,
     description:
       `Visit the store to purchase **premium shop specializations** that include **10,000c** for your shop.\n` +
-      `[Open Store](${DISCORD_STORE_URL})`,
+      `**[Open Store](${DISCORD_STORE_URL})**`,
     user: interaction.member ?? interaction.user
   });
   storeEmbed.setURL(DISCORD_STORE_URL);
   storeEmbed.setFields(
     chunkLinesIntoEmbedFields(purchasableLines, {
-      firstFieldName: `${getIcon("sparkle")} Purchasable Specializations`,
-      continuationFieldName: `${getIcon("sparkle")} Purchasable Specializations (cont.)`,
+      firstFieldName: `${getIcon("sparkle")} Available Specializations`,
+      continuationFieldName: `${getIcon("sparkle")} Available Specializations (cont.)`,
       maxFieldLength: 1000,
       maxFields: 10
     })
