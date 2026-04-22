@@ -352,7 +352,7 @@ const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
 const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
-const DISCORD_STORE_URL = "https://noodlestory.lol/home/shop/";
+const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
