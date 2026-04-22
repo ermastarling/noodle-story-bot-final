@@ -4461,7 +4461,7 @@ if (sub === "profile_edit") {
   return commit({
     content: " ",
     embeds: [embed],
-    components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRodw(userId)]
+    components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
 
