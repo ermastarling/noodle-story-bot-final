@@ -4458,27 +4458,25 @@ if (sub === "profile_edit") {
     description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!\n\nOr if you want to purchase a unique shop specialization that includes 10,000c, head to the store now!",
     user: interaction.member ?? interaction.user
   });
+  return commit({
+    content: " ",
+    embeds: [embed],
+    components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRodw(userId)]
+  });
+}
 
 if (sub === "store") {
+  const p = ensurePlayer(serverId, userId);
+  const specializationsAvailable = getSpecializationAlert(p);
   const storeEmbed = buildMenuEmbed({
     title: `${getIcon("cart")} Noodle Story Shop Specialization Store`,
     description: `Visit the store here:\n${DISCORD_STORE_URL}`,
     user: interaction.member ?? interaction.user
   });
 
-  const storeRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel("Store")
-      .setEmoji(getButtonEmoji("cart"))
-      .setStyle(ButtonStyle.Link)
-      .setURL(DISCORD_STORE_URL)
-  );
-
-  return commitState({ content: " ", embeds: [storeEmbed], components: [storeRow], ephemeral: true });
-}
   return commit({
     content: " ",
-    embeds: [embed],
+    embeds: [storeEmbed],
     components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
