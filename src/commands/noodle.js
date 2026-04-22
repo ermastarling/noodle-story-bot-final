@@ -5683,6 +5683,31 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       .filter((q) => current.cadences.includes(q.cadence))
       .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
 
+    const playerLevel = Math.max(1, Number(p?.shop_level ?? 1));
+    const getFirstQuestUnlockLevel = (cadence) => {
+      const levels = (questsContent?.quests ?? [])
+        .filter((quest) => quest?.cadence === cadence)
+        .map((quest) => Number(quest?.min_shop_level ?? 0))
+        .filter((level) => Number.isFinite(level) && level > 0);
+      if (!levels.length) return null;
+      return Math.min(...levels);
+    };
+
+    const storyFirstUnlockLevel = getFirstQuestUnlockLevel("story");
+    const seasonalFirstUnlockLevel = getFirstQuestUnlockLevel("seasonal");
+
+    const storyUnlockText = storyFirstUnlockLevel == null
+      ? `${getIcon("scroll")} Story quests are not available right now.`
+      : (playerLevel >= storyFirstUnlockLevel
+          ? `${getIcon("scroll")} Story quests unlock at shop level **${storyFirstUnlockLevel}**.`
+          : `${getIcon("scroll")} Story quests unlock at shop level **${storyFirstUnlockLevel}** (in **${storyFirstUnlockLevel - playerLevel}** level${storyFirstUnlockLevel - playerLevel === 1 ? "" : "s"}).`);
+
+    const seasonalUnlockText = seasonalFirstUnlockLevel == null
+      ? `${getIcon("season")} Seasonal quests are not available right now.`
+      : (playerLevel >= seasonalFirstUnlockLevel
+          ? `${getIcon("season")} Seasonal quests unlock at shop level **${seasonalFirstUnlockLevel}**.`
+          : `${getIcon("season")} Seasonal quests unlock at shop level **${seasonalFirstUnlockLevel}** (in **${seasonalFirstUnlockLevel - playerLevel}** level${seasonalFirstUnlockLevel - playerLevel === 1 ? "" : "s"}).`);
+
     const lines = pageQuests.length
       ? pageQuests.flatMap((q) => {
           const status = q.completed_at ? getIcon("status_complete") : getIcon("status_pending");
@@ -5700,7 +5725,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
             ""
           ];
         }).slice(0, -1)
-      : ["_No quests available on this page right now._"]; 
+      : (page === 2
+          ? [
+              "_No story or seasonal quests available yet._",
+              storyUnlockText,
+              seasonalUnlockText
+            ]
+          : ["_No quests available on this page right now._"]);
 
     const questsEmbed = buildMenuEmbed({
       title: `${getIcon("quests")} Quests — ${current.title}`,
