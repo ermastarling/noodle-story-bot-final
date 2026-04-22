@@ -1351,7 +1351,7 @@ function noodleProfileEditRow(userId, { specializationsAvailable = false } = {})
     new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Link).setURL(DISCORD_STORE_URL)
+    new ButtonBuilder().setCustomId(`noodle:action:store:${userId}`).setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Success)
   );
 }
 
@@ -4455,10 +4455,27 @@ if (sub === "profile_edit") {
   const specializationsAvailable = getSpecializationAlert(p);
   const embed = buildMenuEmbed({
     title: `${getIcon("customize")} Customize Profile`,
-    description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!",
+    description: "Once you unlock specializations based on your shop level, you can change the active specialization and that will update your shop's decor!\n\nOr if you want to purchase a unique shop specialization that includes 10,000c, head to the store now!",
     user: interaction.member ?? interaction.user
   });
 
+if (sub === "store") {
+  const storeEmbed = buildMenuEmbed({
+    title: `${getIcon("cart")} Noodle Story Shop Specialization Store`,
+    description: `Visit the store here:\n${DISCORD_STORE_URL}`,
+    user: interaction.member ?? interaction.user
+  });
+
+  const storeRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("Store")
+      .setEmoji(getButtonEmoji("cart"))
+      .setStyle(ButtonStyle.Link)
+      .setURL(DISCORD_STORE_URL)
+  );
+
+  return commitState({ content: " ", embeds: [storeEmbed], components: [storeRow], ephemeral: true });
+}
   return commit({
     content: " ",
     embeds: [embed],
