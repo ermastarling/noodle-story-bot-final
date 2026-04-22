@@ -466,6 +466,50 @@ function buildMenuEmbed({ title, description, user, color = theme.colors.primary
   return applyOwnerFooter(embed, user);
 }
 
+function chunkLinesIntoEmbedFields(lines, {
+  firstFieldName = "Items",
+  continuationFieldName = "Items (cont.)",
+  maxFieldLength = 1000,
+  maxFields = 10
+} = {}) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return [{ name: firstFieldName, value: "No items available.", inline: false }];
+  }
+
+  const fields = [];
+  let buffer = [];
+  let currentLength = 0;
+
+  const flush = () => {
+    if (!buffer.length || fields.length >= maxFields) return;
+    fields.push({
+      name: fields.length === 0 ? firstFieldName : continuationFieldName,
+      value: buffer.join("\n"),
+      inline: false
+    });
+    buffer = [];
+    currentLength = 0;
+  };
+
+  for (const rawLine of lines) {
+    if (fields.length >= maxFields) break;
+    const line = String(rawLine ?? "").trim();
+    if (!line) continue;
+    const lineLengthWithSeparator = line.length + (buffer.length ? 1 : 0);
+
+    if (currentLength + lineLengthWithSeparator > maxFieldLength) {
+      flush();
+      if (fields.length >= maxFields) break;
+    }
+
+    buffer.push(line);
+    currentLength += line.length + (buffer.length > 1 ? 1 : 0);
+  }
+
+  flush();
+  return fields.length ? fields : [{ name: firstFieldName, value: "No items available.", inline: false }];
+}
+
 function hasGreenButton(components) {
   const rows = Array.isArray(components) ? components : (components ? [components] : []);
   for (const row of rows) {
@@ -4468,16 +4512,47 @@ if (sub === "profile_edit") {
 if (sub === "store") {
   const p = ensurePlayer(serverId, userId);
   const specializationsAvailable = getSpecializationAlert(p);
+  const specState = ensureSpecializationState(p);
+  const unlockedSpecIds = new Set(specState?.unlocked_spec_ids ?? []);
+  const purchasableSpecs = (specializationsContent?.specializations ?? [])
+    .filter((spec) => spec?.requirements?.purchase_required)
+    .sort((a, b) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")));
+  const purchasableLines = purchasableSpecs.map((spec, index) => {
+    const isPurchased = unlockedSpecIds.has(spec.spec_id);
+    return isPurchased
+      ? `${getIcon("status_complete")} ${index + 1}. ${spec.name} (Purchased)`
+      : `${index + 1}. ${spec.name}`;
+  });
+
   const storeEmbed = buildMenuEmbed({
     title: `${getIcon("cart")} Noodle Story Shop Specialization Store`,
-    description: `Visit the store here:\n${DISCORD_STORE_URL}`,
+    description:
+      `Visit the store to purchase **premium shop specializations** that include **10,000c** for your shop.\n` +
+      `[Open Store](${DISCORD_STORE_URL})`,
     user: interaction.member ?? interaction.user
   });
+  storeEmbed.setURL(DISCORD_STORE_URL);
+  storeEmbed.setFields(
+    chunkLinesIntoEmbedFields(purchasableLines, {
+      firstFieldName: `${getIcon("sparkle")} Purchasable Specializations`,
+      continuationFieldName: `${getIcon("sparkle")} Purchasable Specializations (cont.)`,
+      maxFieldLength: 1000,
+      maxFields: 10
+    })
+  );
+
+  const storeLinkRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("Open Store")
+      .setEmoji(getButtonEmoji("cart"))
+      .setStyle(ButtonStyle.Link)
+      .setURL(DISCORD_STORE_URL)
+  );
 
   return commit({
     content: " ",
     embeds: [storeEmbed],
-    components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
+    components: [storeLinkRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
 
