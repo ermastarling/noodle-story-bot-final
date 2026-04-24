@@ -1165,13 +1165,44 @@ import { getIcon } from "./ui/icons.js";
   /*  Interaction handling                                               */
   /* ------------------------------------------------------------------ */
 
+  function getCustomIdPrefix(customId, maxSegments = 3) {
+    const id = String(customId || "").trim();
+    if (!id) return null;
+    const parts = id.split(":").filter(Boolean);
+    if (!parts.length) return null;
+    return parts.slice(0, maxSegments).join(":");
+  }
+
+  function getNoodleSubroute(customId) {
+    const id = String(customId || "").trim();
+    if (!id.startsWith("noodle:")) return null;
+    const parts = id.split(":");
+    const kind = parts[1] || "unknown";
+    const action = parts[2] || "unknown";
+    return `${kind}:${action}`;
+  }
+
+  function getSlashSubroute(interaction) {
+    if (!interaction?.isChatInputCommand?.() && !interaction?.isCommand?.()) return null;
+    if (interaction?.commandName !== "noodle") return null;
+    try {
+      const sub = interaction.options?.getSubcommand?.(false);
+      return sub ? `subcommand:${sub}` : null;
+    } catch {
+      return null;
+    }
+  }
+
   client.on("interactionCreate", async (interaction) => {
     return withInteractionPerf(() => withPlayerCache(async () => {
     const startWallMs = Date.now();
     const startPerfMs = performance.now();
+    const slowThresholdMs = 3000;
     const createdAt = Number(interaction.createdTimestamp ?? startWallMs);
     const age = startWallMs - createdAt;
     let telemetryRoute = "unknown";
+    let telemetrySubroute = null;
+    let telemetryCustomIdPrefix = null;
     let deferMs = null;
     let telemetryError = null;
 
@@ -1189,11 +1220,16 @@ import { getIcon } from "./ui/icons.js";
     const isSelect = interaction.isSelectMenu?.();
     const isModal = interaction.isModalSubmit?.();
     const cid = interaction.customId;
+    telemetryCustomIdPrefix = getCustomIdPrefix(cid);
     const isNoodle = cid?.startsWith("noodle:");
     const isNoodleDev = cid?.startsWith("noodle-dev:");
     const isNoodleSocial = cid?.startsWith("noodle-social:");
     const isNoodleStaff = cid?.startsWith("noodle-staff:");
     const isNoodleUpgrades = cid?.startsWith("noodle-upgrades:");
+
+    if (isNoodle) {
+      telemetrySubroute = getNoodleSubroute(cid);
+    }
     
     const alreadyAck = interaction.deferred || interaction.replied;
 
@@ -1438,6 +1474,8 @@ import { getIcon } from "./ui/icons.js";
         const id = interaction.customId || "";
         if (id.startsWith("noodle:")) {
           telemetryRoute = "component:noodle";
+          telemetrySubroute = getNoodleSubroute(id);
+          telemetryCustomIdPrefix = getCustomIdPrefix(id);
           // Already deferred at the top of interactionCreate handler
           return await noodleCommand.handleComponent(interaction);
         }
@@ -1523,6 +1561,7 @@ import { getIcon } from "./ui/icons.js";
       return;
     }
     telemetryRoute = `slash:${interaction.commandName}`;
+    telemetrySubroute = getSlashSubroute(interaction);
 
     try {
       await cmd.execute(interaction);
@@ -1557,8 +1596,11 @@ import { getIcon } from "./ui/icons.js";
     }
     } finally {
       const perf = getInteractionPerfSnapshot();
+      const totalMs = performance.now() - startPerfMs;
       emitTelemetry("interaction_latency", {
         route: telemetryRoute,
+        subroute: telemetrySubroute,
+        customIdPrefix: telemetryCustomIdPrefix,
         commandName: interaction.commandName ?? null,
         interactionType: interaction.type,
         isAutocomplete: interaction.isAutocomplete?.() ?? false,
@@ -1567,7 +1609,7 @@ import { getIcon } from "./ui/icons.js";
         isModalSubmit: interaction.isModalSubmit?.() ?? false,
         ageMs: age,
         deferMs,
-        totalMs: performance.now() - startPerfMs,
+        totalMs,
         deferred: interaction.deferred ?? false,
         replied: interaction.replied ?? false,
         error: telemetryError,
@@ -1581,6 +1623,23 @@ import { getIcon } from "./ui/icons.js";
         lockReleaseCount: perf?.lockReleaseCount ?? 0,
         lockBusyCount: perf?.lockBusyCount ?? 0
       });
+
+      if (totalMs > slowThresholdMs) {
+        emitTelemetry("interaction_slow_event", {
+          route: telemetryRoute,
+          subroute: telemetrySubroute,
+          customIdPrefix: telemetryCustomIdPrefix,
+          commandName: interaction.commandName ?? null,
+          totalMs,
+          deferMs,
+          error: telemetryError,
+          dbReadCount: perf?.dbReadCount ?? 0,
+          dbWriteCount: perf?.dbWriteCount ?? 0,
+          lockAcquireCount: perf?.lockAcquireCount ?? 0,
+          lockReleaseCount: perf?.lockReleaseCount ?? 0,
+          lockBusyCount: perf?.lockBusyCount ?? 0
+        });
+      }
     }
     }));
   });
