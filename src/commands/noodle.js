@@ -19,11 +19,11 @@ import {
   resetTutorialProgress
 } from "../game/tutorial.js";
 import {
-  resolveNavSubForTutorial,
   resolveTutorialGateValue,
   isTutorialStep as isTutorialStepFromRouting,
   resolveTutorialProgressRowKey
 } from "../game/tutorialRouting.js";
+import { resolveComponentNavSub } from "./navDispatch.js";
 import {
   loadContentBundle,
   loadSettingsCatalog,
@@ -9289,9 +9289,7 @@ let telemetryError = null;
 try {
   const resolveStartMs = performance.now();
   const p = ensurePlayer(serverId, userId);
-  const tutorialResolvedSub = resolveNavSubForTutorial({ player: p, action: sub, fallbackSub: sub });
-  // Keep nav:forage as a render-only path; gathering actions run via explicit pick:* interactions.
-  resolvedSub = tutorialResolvedSub === "forage" ? "forage_menu" : tutorialResolvedSub;
+  resolvedSub = resolveComponentNavSub({ player: p, sub });
   resolveMs = performance.now() - resolveStartMs;
 
   const sourceMessageId = interaction.message?.id;
@@ -10555,5 +10553,6 @@ export {
   noodleMainMenuRow,
   noodleMainMenuRowNoProfile,
   displayItemName,
-  renderProfileEmbed
+  renderProfileEmbed,
+  resolveComponentNavSub
 };
