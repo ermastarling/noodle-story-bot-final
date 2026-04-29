@@ -8,6 +8,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "url";
 import { REST } from "@discordjs/rest";
 import { getIcon } from "./ui/icons.js";
+import { theme } from "./ui/theme.js";
 
 (async () => {
   // Import discord.js
@@ -570,7 +571,7 @@ import { getIcon } from "./ui/icons.js";
     };
   }
 
-  async function sendDevAlert({ title, description, footerText = "", requireMention = true }) {
+  async function sendDevAlert({ title, description, footerText = "", requireMention = true, color }) {
     if (!officialGuildId || !devAlertChannelId) return false;
     if (requireMention && !devAlertUserId) {
       console.error("⚠️ Dev alert skipped: NOODLE_DEV_ALERT_USER_ID is required for mention.");
@@ -599,6 +600,7 @@ import { getIcon } from "./ui/icons.js";
         embeds: [
           {
             description: String(description || "").slice(0, 4096),
+            ...(typeof color === "number" ? { color } : {}),
             ...(footerText ? { footer: { text: String(footerText).slice(0, 2048) } } : {})
           }
         ]
@@ -878,7 +880,8 @@ import { getIcon } from "./ui/icons.js";
               `Specialization: ${specName} (${specId})\n` +
               `Server: ${serverId}\n` +
               `Session: ${sessionId ?? "unknown"}`,
-            footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`
+            footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`,
+            color: theme.colors.success
           });
         }
 
@@ -1067,7 +1070,8 @@ import { getIcon } from "./ui/icons.js";
             `User: <@${userId}> (${userId})\n` +
             `Specialization: ${specName} (${specId})\n` +
             `Server: ${serverId}`,
-          footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`
+          footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`,
+          color: theme.colors.success
         });
       }
 
@@ -1133,10 +1137,14 @@ import { getIcon } from "./ui/icons.js";
       await updateTopggServerCount(currentServerCount, { reason: "guildCreate" });
 
       if (guild?.id === officialGuildId) return;
+      const memberCount = Number(guild?.memberCount ?? 0);
       await sendDevAlert({
         title: "New Server Alert!",
-        description: `New Server: ${String(guild?.name || "Unknown Server")}`,
+        description:
+          `New Server: ${String(guild?.name || "Unknown Server")}\n` +
+          `Members: ${memberCount.toLocaleString()}`,
         footerText: `Current Server Count: ${currentServerCount.toLocaleString()}`,
+        color: theme.colors.success,
         requireMention: true
       });
     } catch (error) {
@@ -1154,6 +1162,7 @@ import { getIcon } from "./ui/icons.js";
         title: "Server Left Alert!",
         description: `Left Server: ${String(guild?.name || "Unknown Server")}`,
         footerText: `Current Server Count: ${currentServerCount.toLocaleString()}`,
+        color: theme.colors.warning,
         requireMention: true
       });
     } catch (error) {

@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { performance } from "node:perf_hooks";
 import {
   canForage,
   rollForageDrops,
@@ -50,6 +51,7 @@ import {
   repairGlobalPlayerProfileFromLegacy
 } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
+import { emitTelemetry } from "../infra/telemetry.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
@@ -1049,6 +1051,60 @@ function chunkTextByLength(text, maxLen = 900) {
   }
   if (buf) chunks.push(buf);
   return chunks.filter(Boolean);
+}
+
+function getChunkPageByLines(lines, targetPage = 0, maxLen = 900) {
+  const safeTarget = Math.max(0, Number.isFinite(targetPage) ? Math.floor(targetPage) : 0);
+  const sourceLines = Array.isArray(lines) && lines.length ? lines : ["_None yet._"];
+
+  let page = 0;
+  let totalPages = 1;
+  let selected = null;
+  let buffer = "";
+
+  const flush = () => {
+    if (!buffer) return;
+    if (page === safeTarget) selected = buffer;
+    page += 1;
+    totalPages = Math.max(totalPages, page);
+    buffer = "";
+  };
+
+  for (const line of sourceLines) {
+    const text = String(line ?? "");
+    const next = buffer ? `${buffer}\n${text}` : text;
+    if (next.length <= maxLen) {
+      buffer = next;
+      continue;
+    }
+
+    if (buffer) flush();
+
+    if (text.length <= maxLen) {
+      buffer = text;
+      continue;
+    }
+
+    let start = 0;
+    while (start < text.length) {
+      const part = text.slice(start, start + maxLen);
+      if (page === safeTarget && selected == null) selected = part;
+      page += 1;
+      totalPages = Math.max(totalPages, page);
+      start += maxLen;
+    }
+    buffer = "";
+  }
+
+  if (buffer) flush();
+  if (selected == null) {
+    selected = sourceLines.join("\n").slice(0, maxLen) || "_None yet._";
+  }
+
+  return {
+    text: selected,
+    totalPages: Math.max(1, totalPages)
+  };
 }
 
 function sanitizeEmbedsForDiscord(embeds) {
@@ -4003,6 +4059,21 @@ overrides?.users?.[name] ??
 (interaction.options?.getUser ? interaction.options.getUser(name) : null)
 };
 
+const navSource = overrides?.navSource ? String(overrides.navSource) : null;
+const navCustomIdPrefix = navSource ? `noodle:nav:${navSource}` : null;
+
+const emitNavSubroutePhase = (subroute, phases = {}, extra = {}) => {
+  if (!navSource) return;
+  emitTelemetry("component_nav_subroute_phase", {
+    route: "component:noodle",
+    subroute,
+    navSource,
+    customIdPrefix: navCustomIdPrefix,
+    ...phases,
+    ...extra
+  });
+};
+
 const withSeasonNotice = (payload = {}) => {
   if (payload?.__seasonNoticeApplied) return payload;
   if (!seasonRolloverNotice?.message) return payload;
@@ -4568,6 +4639,8 @@ if (sub === "pantry") {
     const s = ensureServer(serverId);
     unlockNoticePlayer = p;
     const rawPage = opt.getInteger("page") ?? overrides?.integers?.page ?? 0;
+    const pantryStartMs = performance.now();
+    const phaseMs = {};
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
@@ -4582,6 +4655,7 @@ if (sub === "pantry") {
     const spoilageTickHours = Number(set.SPOILAGE_TICK_HOURS ?? 1);
     const spoilageTickMs = Math.max(1, spoilageTickHours * 60 * 60 * 1000);
     const shouldRunCatchup = elapsedMs >= spoilageTickMs || elapsedMs >= (7 * 24 * 60 * 60 * 1000);
+    const catchupStartMs = performance.now();
     const timeCatchup = shouldRunCatchup
       ? applyTimeCatchup(p, s, set, content, lastActiveAt, now, combinedEffects)
       : { applied: false, messages: [], spoilage: { messages: [] }, cooldownStatus: { expired: [], hasExpired: false } };
@@ -4601,7 +4675,9 @@ if (sub === "pantry") {
       }
       p.notifications.pending_pantry_messages.push(...spoilageMessages);
     }
+    phaseMs.catchupMs = performance.now() - catchupStartMs;
 
+    const scanStartMs = performance.now();
     const grouped = new Map();
     for (const [id, qty] of Object.entries(p.inv_ingredients ?? {})) {
       if (!qty || qty <= 0) continue;
@@ -4625,36 +4701,58 @@ if (sub === "pantry") {
       spice: "Spice",
       topping: "Topping"
     };
+    const itemNameCache = new Map();
+    const recipeNameCache = new Map();
+    const getItemNameCached = (itemId) => {
+      if (itemNameCache.has(itemId)) return itemNameCache.get(itemId);
+      const value = displayItemName(itemId);
+      itemNameCache.set(itemId, value);
+      return value;
+    };
+    const getRecipeNameCached = (recipeId) => {
+      if (recipeNameCache.has(recipeId)) return recipeNameCache.get(recipeId);
+      const value = displayRecipeName(recipeId);
+      recipeNameCache.set(recipeId, value);
+      return value;
+    };
 
-    const categoryBlocks = typeOrder
-      .map((category) => {
-        const items = grouped.get(category) ?? new Map();
-        const lines = [...items.values()]
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map(({ name, qty, id }) => {
-            const starQty = category === "broth" ? Math.min(qty, getStarBrothCount(p, id)) : 0;
-            const starPart = starQty > 0 ? ` ${getIcon("star", "⭐")} (${starQty})` : "";
-            return `• ${name}: **${qty}**${starPart}`;
-          })
-          .join("\n");
-        const have = countsByType[category] ?? 0;
-        const cap = perTypeCap[category] ?? perTypeCap.topping ?? 0;
-        const title = `${typeLabels[category]} (${have}/${cap})`;
-        return lines ? `**${title}**\n${lines}` : `**${title}**\n_None yet._`;
-      })
-      .filter(Boolean);
+    const categoryLinesByType = new Map();
+    const getCategoryLines = (category) => {
+      if (categoryLinesByType.has(category)) return categoryLinesByType.get(category);
+      const items = grouped.get(category) ?? new Map();
+      const lines = [...items.values()]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(({ qty, id }) => {
+          const name = getItemNameCached(id);
+          const starQty = category === "broth" ? Math.min(qty, getStarBrothCount(p, id)) : 0;
+          const starPart = starQty > 0 ? ` ${getIcon("star", "⭐")} (${starQty})` : "";
+          return `• ${name}: **${qty}**${starPart}`;
+        });
+      const have = countsByType[category] ?? 0;
+      const cap = perTypeCap[category] ?? perTypeCap.topping ?? 0;
+      const title = `**${typeLabels[category]} (${have}/${cap})**`;
+      const value = [title, ...(lines.length ? lines : ["_None yet._"])];
+      categoryLinesByType.set(category, value);
+      return value;
+    };
 
-    const brothBlock = categoryBlocks[0] || "No broths yet.";
-    const noodleSpiceBlock = [categoryBlocks[1], categoryBlocks[2]].filter(Boolean).join("\n\n") || "No noodles or spices yet.";
-    const toppingProteinBlock = [categoryBlocks[3], categoryBlocks[4]].filter(Boolean).join("\n\n") || "No toppings or proteins yet.";
+    const buildMergedCategoryLines = (categories) => {
+      const merged = [];
+      for (const category of categories) {
+        if (merged.length) merged.push("");
+        merged.push(...getCategoryLines(category));
+      }
+      return merged;
+    };
 
-    const brothChunks = chunkTextByLength(brothBlock, 900);
-    const noodleSpiceChunks = chunkTextByLength(noodleSpiceBlock, 900);
-    const toppingProteinChunks = chunkTextByLength(toppingProteinBlock, 900);
-    if (!brothChunks.length) brothChunks.push("No broths yet.");
-    if (!noodleSpiceChunks.length) noodleSpiceChunks.push("No noodles or spices yet.");
-    if (!toppingProteinChunks.length) toppingProteinChunks.push("No toppings or proteins yet.");
-    const ingredientPages = Math.max(brothChunks.length, noodleSpiceChunks.length, toppingProteinChunks.length);
+    const brothBaseLines = getCategoryLines("broth");
+    const noodleSpiceBaseLines = buildMergedCategoryLines(["noodles", "spice"]);
+    const toppingProteinBaseLines = buildMergedCategoryLines(["topping", "protein"]);
+
+    const brothProbe = getChunkPageByLines(brothBaseLines, 0, 900);
+    const noodleSpiceProbe = getChunkPageByLines(noodleSpiceBaseLines, 0, 900);
+    const toppingProteinProbe = getChunkPageByLines(toppingProteinBaseLines, 0, 900);
+    const ingredientPages = Math.max(brothProbe.totalPages, noodleSpiceProbe.totalPages, toppingProteinProbe.totalPages);
 
     const bowlGroups = new Map();
     for (const [, bowl] of Object.entries(p.inv_bowls ?? {})) {
@@ -4668,14 +4766,14 @@ if (sub === "pantry") {
       bowlGroups.set(recipeId, list);
     }
 
-    const bowlLines = [...bowlGroups.entries()]
+    const bowlLineEntries = [...bowlGroups.entries()]
       .sort(([a], [b]) => {
-        const nameA = displayRecipeName(a);
-        const nameB = displayRecipeName(b);
+        const nameA = getRecipeNameCached(a);
+        const nameB = getRecipeNameCached(b);
         return String(nameA).localeCompare(String(nameB));
       })
       .map(([recipeId, entries]) => {
-        const recipeName = displayRecipeName(recipeId);
+        const recipeName = getRecipeNameCached(recipeId);
         const counts = entries.reduce((acc, entry) => {
           const q = normalizeQuality(entry.quality);
           acc[q] = (acc[q] ?? 0) + Number(entry.qty || 0);
@@ -4686,29 +4784,41 @@ if (sub === "pantry") {
           .filter((q) => counts[q])
           .map((q) => `${formatQualityLabel(q)} (${counts[q]})`);
         return `• ${recipeName}: **${parts.join(" · ")}**`;
-      })
-      .join("\n");
+      });
     const bowlCount = getBowlCount(p);
     const bowlCap = getBowlCapacity(p, combinedEffects);
-    const bowlsBlock = bowlLines
-    ? `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n${bowlLines}`
-    : `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`;
-    const bowlChunks = chunkTextByLength(bowlsBlock, 900);
-    if (!bowlChunks.length) bowlChunks.push(`**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**\n_None yet._`);
-    const bowlPages = Math.max(1, bowlChunks.length);
+    const bowlBaseLines = [
+      `**${getIcon("cook")} Cooked Bowls (${bowlCount}/${bowlCap})**`,
+      ...(bowlLineEntries.length ? bowlLineEntries : ["_None yet._"])
+    ];
+    const bowlProbe = getChunkPageByLines(bowlBaseLines, 0, 900);
+    const bowlPages = Math.max(1, bowlProbe.totalPages);
+
+    phaseMs.inventoryScanMs = performance.now() - scanStartMs;
 
     const totalPages = ingredientPages + bowlPages;
     const safePage = Math.min(Math.max(rawPage, 0), totalPages - 1);
+    const ingredientPage = Math.min(safePage, ingredientPages - 1);
+    const bowlPage = Math.min(Math.max(safePage - ingredientPages, 0), bowlPages - 1);
+
+    const paginationStartMs = performance.now();
+    const brothValue = getChunkPageByLines(brothBaseLines, ingredientPage, 900).text;
+    const noodleSpiceValue = getChunkPageByLines(noodleSpiceBaseLines, ingredientPage, 900).text;
+    const toppingProteinValue = getChunkPageByLines(toppingProteinBaseLines, ingredientPage, 900).text;
+    const bowlsValue = getChunkPageByLines(bowlBaseLines, bowlPage, 900).text;
+    phaseMs.paginationMs = performance.now() - paginationStartMs;
 
     const pendingPantryMessages = p.notifications?.pending_pantry_messages ?? [];
     if (pendingPantryMessages.length > 0) {
       p.notifications.pending_pantry_messages = [];
     }
 
+    const persistStartMs = performance.now();
     if (db) {
       upsertPlayer(db, serverId, userId, p, null, p.schema_version);
       upsertServer(db, serverId, s, null);
     }
+    phaseMs.persistMs = performance.now() - persistStartMs;
 
     const viewingIngredients = safePage < ingredientPages;
     const spoilageNotice = viewingIngredients
@@ -4722,6 +4832,7 @@ if (sub === "pantry") {
       spoilageNotice
     ].filter(Boolean).join("\n\n");
 
+    const renderStartMs = performance.now();
     const pantryEmbed = buildMenuEmbed({
       title: `${getIcon("pantry")} Pantry`,
       description: pantryDescription,
@@ -4729,10 +4840,6 @@ if (sub === "pantry") {
     });
 
     if (safePage < ingredientPages) {
-      const ingredientPage = Math.min(safePage, ingredientPages - 1);
-      const brothValue = brothChunks[Math.min(ingredientPage, brothChunks.length - 1)] ?? "No broths yet.";
-      const noodleSpiceValue = noodleSpiceChunks[Math.min(ingredientPage, noodleSpiceChunks.length - 1)] ?? "No noodles or spices yet.";
-      const toppingProteinValue = toppingProteinChunks[Math.min(ingredientPage, toppingProteinChunks.length - 1)] ?? "No toppings or proteins yet.";
       pantryEmbed.addFields(
         {
           name: " ",
@@ -4754,8 +4861,6 @@ if (sub === "pantry") {
       const existingFooter = pantryEmbed?.data?.footer?.text ?? pantryEmbed?.footer?.text ?? "";
       pantryEmbed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
     } else {
-      const bowlPage = Math.min(safePage - ingredientPages, bowlPages - 1);
-      const bowlsValue = bowlChunks[Math.min(bowlPage, bowlChunks.length - 1)] ?? bowlsBlock;
       pantryEmbed.addFields(
         {
           name: " ",
@@ -4772,6 +4877,15 @@ if (sub === "pantry") {
       const existingFooter = pantryEmbed?.data?.footer?.text ?? pantryEmbed?.footer?.text ?? "";
       pantryEmbed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
     }
+
+    phaseMs.renderMs = performance.now() - renderStartMs;
+
+    emitNavSubroutePhase("nav:pantry", phaseMs, {
+      ingredientPages,
+      bowlPages,
+      safePage,
+      totalMs: performance.now() - pantryStartMs
+    });
 
     return {
       content: " ",
@@ -6133,11 +6247,12 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   /* ---------------- FORAGE MENU ---------------- */
   if (sub === "forage_menu") {
+    const forageMenuStartMs = performance.now();
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
-    return commitState(buildForageMenuPayload({
+    const payload = buildForageMenuPayload({
       userId,
       player: p,
       ownerUser: interaction.member ?? interaction.user,
@@ -6146,11 +6261,18 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       fishingUnlocked,
       fishingJustUnlocked,
       page: pickerPage
-    }));
+    });
+    emitNavSubroutePhase("nav:forage", {
+      renderMs: performance.now() - forageMenuStartMs
+    }, {
+      mode: "menu"
+    });
+    return commitState(payload);
   }
 
   /* ---------------- FORAGE ---------------- */
   if (sub === "forage") {
+    const forageActionStartMs = performance.now();
     const gardenUnlocked = isGardenUnlocked(p);
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
@@ -6205,6 +6327,22 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const allowed = getUnlockedIngredientIds(p, content);
     const allowedForage = new Set((FORAGE_ITEM_IDS ?? []).filter((id) => allowed.has(id)));
+    const itemNameCache = new Map();
+    const itemMetaCache = new Map();
+    const getItemNameCached = (itemId) => {
+      if (itemNameCache.has(itemId)) return itemNameCache.get(itemId);
+      const value = displayItemName(itemId);
+      itemNameCache.set(itemId, value);
+      return value;
+    };
+    const getItemTagsCached = (itemId) => {
+      if (itemMetaCache.has(itemId)) return itemMetaCache.get(itemId);
+      const tags = Array.isArray(content.items?.[itemId]?.tags)
+        ? content.items[itemId].tags.map((t) => String(t).toLowerCase())
+        : [];
+      itemMetaCache.set(itemId, tags);
+      return tags;
+    };
 
     if (itemId && !allowedForage.has(itemId)) {
       return commitState({
@@ -6233,7 +6371,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       }
 
       const suggestions = unlockedForageIds
-        .map((id) => `\`${displayItemName(id)}\``)
+        .map((id) => `\`${getItemNameCached(id)}\``)
         .join(", ");
 
       return commitState({
@@ -6298,7 +6436,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const nextForageTs = Math.floor((now + cooldownMs) / 1000);
     if (!Object.keys(inventoryResult.added).length) {
       const blockedLines = Object.entries(inventoryResult.blocked ?? {}).map(
-        ([id, q]) => `**${q}×** ${displayItemName(id)}`
+        ([id, q]) => `**${q}×** ${getItemNameCached(id)}`
       );
       const blockedText = blockedLines.length
         ? ` Could not collect: ${blockedLines.join(", ")}.`
@@ -6323,10 +6461,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const otherLines = [];
 
     for (const [id, q] of Object.entries(inventoryResult.added)) {
-      const name = displayItemName(id);
-      const tags = Array.isArray(content.items?.[id]?.tags)
-        ? content.items[id].tags.map((t) => String(t).toLowerCase())
-        : [];
+      const name = getItemNameCached(id);
+      const tags = getItemTagsCached(id);
       const line = `• **${q}×** ${name}`;
       if (tags.includes("fish")) {
         fishLines.push(line);
@@ -6380,7 +6516,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     if (!inventoryResult.success && Object.keys(inventoryResult.blocked).length > 0) {
       const blockedLines = Object.entries(inventoryResult.blocked).map(
-        ([id, q]) => `**${q}×** ${displayItemName(id)}`
+        ([id, q]) => `**${q}×** ${getItemNameCached(id)}`
       );
       description += `\n\n${getIcon("warning")} **Pantry Full!** Could not collect: ${blockedLines.join(", ")}\n_Upgrade your Pantry to increase capacity._`;
     }
@@ -6389,7 +6525,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const rejectedText = Object.keys(rejected).length
       ? `\n\n${getIcon("pantry")} Pantry full — left behind ${Object.entries(rejected)
-        .map(([id, q]) => `**${q}×** ${displayItemName(id)}`)
+        .map(([id, q]) => `**${q}×** ${getItemNameCached(id)}`)
         .join(", ")}.`
       : "";
     if (rejectedText) description += rejectedText;
@@ -6409,6 +6545,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const components = showTutorialCookRowAfterForage
       ? [noodleTutorialCookRow(userId)]
       : navRows;
+    emitNavSubroutePhase("action:forage", {
+      totalMs: performance.now() - forageActionStartMs
+    }, {
+      mode: "action"
+    });
     return commitState({
       content: " ",
       embeds: [forageEmbed],
@@ -8385,6 +8526,14 @@ return commit({ content: cozyError(e), ephemeral: true });
 /*  Component routing                                                  */
 /* ------------------------------------------------------------------ */
 
+function getCustomIdPrefix(customId, maxSegments = 3) {
+  const id = String(customId || "").trim();
+  if (!id) return null;
+  const parts = id.split(":").filter(Boolean);
+  if (!parts.length) return null;
+  return parts.slice(0, maxSegments).join(":");
+}
+
 async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
 
@@ -9129,19 +9278,51 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 }
 
 if (kind === "nav") {
+const navStartMs = performance.now();
 const sub = action;
-const p = ensurePlayer(serverId, userId);
-const resolvedSub = resolveNavSubForTutorial({ player: p, action: sub, fallbackSub: sub });
-const sourceMessageId = interaction.message?.id;
-const page = parts[4] ? Number(parts[4]) : null;
-return runNoodle(interaction, {
-  sub: resolvedSub,
-  group: null,
-  overrides: {
-    messageId: sourceMessageId,
-    integers: page !== null && Number.isFinite(page) ? { page } : undefined
-  }
-});
+const customIdPrefix = getCustomIdPrefix(id);
+let resolvedSub = sub;
+let runMs = 0;
+let resolveMs = 0;
+let telemetryError = null;
+
+try {
+  const resolveStartMs = performance.now();
+  const p = ensurePlayer(serverId, userId);
+  const tutorialResolvedSub = resolveNavSubForTutorial({ player: p, action: sub, fallbackSub: sub });
+  // Keep nav:forage as a render-only path; gathering actions run via explicit pick:* interactions.
+  resolvedSub = tutorialResolvedSub === "forage" ? "forage_menu" : tutorialResolvedSub;
+  resolveMs = performance.now() - resolveStartMs;
+
+  const sourceMessageId = interaction.message?.id;
+  const page = parts[4] ? Number(parts[4]) : null;
+  const runStartMs = performance.now();
+  const result = await runNoodle(interaction, {
+    sub: resolvedSub,
+    group: null,
+    overrides: {
+      messageId: sourceMessageId,
+      navSource: sub,
+      integers: page !== null && Number.isFinite(page) ? { page } : undefined
+    }
+  });
+  runMs = performance.now() - runStartMs;
+  return result;
+} catch (error) {
+  telemetryError = error?.code ?? error?.name ?? "nav_dispatch_error";
+  throw error;
+} finally {
+  emitTelemetry("component_nav_phase", {
+    route: "component:noodle",
+    subroute: `nav:${sub || "unknown"}`,
+    resolvedSubroute: `sub:${resolvedSub || "unknown"}`,
+    customIdPrefix,
+    resolveMs,
+    runMs,
+    totalMs: performance.now() - navStartMs,
+    error: telemetryError
+  });
+}
 }
 
 /* ---------------- LEGACY ACTION BUTTONS ---------------- */
