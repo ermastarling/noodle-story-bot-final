@@ -4025,9 +4025,7 @@ let seasonRolloverNotice = null;
 
 // Check commands that should defer ephemerally before heavy work/permission gates
 const subCmd = interaction.options?.getSubcommand?.();
-const isStatusCmd = subCmd === "status";
-const isDashboardCmd = subCmd === "dashboard";
-const shouldDeferEphemeral = isStatusCmd || isDashboardCmd || (group === "dev" && !isDevAdmin(userId));
+const shouldDeferEphemeral = group === "dev" && !isDevAdmin(userId);
 
 // Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
@@ -5516,7 +5514,7 @@ if (sub === "status") {
   return commit({
     content: " ",
     embeds: [statusEmbed],
-    ephemeral: true
+    ephemeral: false
   });
 }
 
