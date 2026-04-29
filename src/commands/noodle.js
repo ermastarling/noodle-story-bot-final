@@ -4241,13 +4241,30 @@ const buildDevStatusEmbed = () => {
   });
 };
 
+const buildDevMessageEmbed = ({ message, isError = false }) =>
+  buildMenuEmbed({
+    title: isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`,
+    description: message,
+    user: interaction.member ?? interaction.user
+  });
+
 if (inDevPath) {
   if (!isDevAdmin(userId)) {
-    return commit({ content: "You don’t have access to that command.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })],
+      ephemeral: true
+    });
   }
   if (OFFICIAL_DEV_GUILD_ID && serverId !== OFFICIAL_DEV_GUILD_ID) {
     return commit({
-      content: "Developer commands are only available in the official server.",
+      content: " ",
+      embeds: [
+        buildDevMessageEmbed({
+          message: "Developer commands are only available in the official server.",
+          isError: true
+        })
+      ],
       ephemeral: true
     });
   }
@@ -4262,11 +4279,19 @@ if (inDevPath) {
 if (inDevPath && sub === "reset_tutorial") {
   const target = opt.getUser("user") ?? interaction.user;
   if (target?.bot || (interaction.client?.user?.id && target.id === interaction.client.user.id)) {
-    return commit({ content: "Pick a real player account (non-bot) to reset.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Pick a real player account (non-bot) to reset.", isError: true })],
+      ephemeral: true
+    });
   }
 
   if (!db) {
-    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ephemeral: true
+    });
   }
   return await withLock(db, `lock:user:${target.id}`, owner, 8000, async () => {
     const storageServerId = getPlayerStorageServerId(serverId);
@@ -4297,7 +4322,12 @@ if (inDevPath && sub === "reset_tutorial") {
     const mention = `<@${target.id}>`;
 
     return commit({
-      content: `${getIcon("status_complete")} Complete reset for ${mention} (${target.id}) (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`,
+      content: " ",
+      embeds: [
+        buildDevMessageEmbed({
+          message: `${getIcon("status_complete")} Complete reset for ${mention} (${target.id}) (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`
+        })
+      ],
       ephemeral: true
     });
   });
@@ -4308,10 +4338,18 @@ if (inDevPath && sub === "wipe_user") {
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim();
   const targetServerId = opt.getString("server_id")?.trim() || serverId;
   if (!targetUserId) {
-    return commit({ content: "Provide a user or user ID to wipe.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to wipe.", isError: true })],
+      ephemeral: true
+    });
   }
   if (!db) {
-    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ephemeral: true
+    });
   }
 
   const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
@@ -4321,9 +4359,26 @@ if (inDevPath && sub === "wipe_user") {
     const deleted = result?.changes ?? 0;
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
-      return commit({ content: `${getIcon("error")} No profile found for ${mention} on server ${targetServerId}.`, ephemeral: true });
+      return commit({
+        content: " ",
+        embeds: [
+          buildDevMessageEmbed({
+            message: `${getIcon("error")} No profile found for ${mention} on server ${targetServerId}.`,
+            isError: true
+          })
+        ],
+        ephemeral: true
+      });
     }
-    return commit({ content: `${getIcon("status_complete")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`, ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [
+        buildDevMessageEmbed({
+          message: `${getIcon("status_complete")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`
+        })
+      ],
+      ephemeral: true
+    });
   });
 }
 
@@ -4332,10 +4387,18 @@ if (inDevPath && sub === "repair_profile") {
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
   const force = opt.getBoolean("force") === true;
   if (!targetUserId) {
-    return commit({ content: "Provide a user or user ID to repair.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to repair.", isError: true })],
+      ephemeral: true
+    });
   }
   if (!db) {
-    return commit({ content: "Database unavailable in this environment.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ephemeral: true
+    });
   }
 
   const lockKey = `lock:user:${targetUserId}`;
@@ -4345,22 +4408,39 @@ if (inDevPath && sub === "repair_profile") {
 
     if (!result.ok) {
       return commit({
-        content: `${getIcon("error")} Repair failed for ${mention}: ${result.reason}.`,
+        content: " ",
+        embeds: [
+          buildDevMessageEmbed({
+            message: `${getIcon("error")} Repair failed for ${mention}: ${result.reason}.`,
+            isError: true
+          })
+        ],
         ephemeral: true
       });
     }
 
     if (!result.repaired) {
       return commit({
-        content: `${getIcon("error")} No repair needed for ${mention} (${result.reason}).`,
+        content: " ",
+        embeds: [
+          buildDevMessageEmbed({
+            message: `${getIcon("error")} No repair needed for ${mention} (${result.reason}).`,
+            isError: true
+          })
+        ],
         ephemeral: true
       });
     }
 
     return commit({
-      content:
-        `${getIcon("status_complete")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
-        `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`,
+      content: " ",
+      embeds: [
+        buildDevMessageEmbed({
+          message:
+            `${getIcon("status_complete")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
+            `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`
+        })
+      ],
       ephemeral: true
     });
   });
@@ -4373,11 +4453,16 @@ if (inDevPath && sub === "dashboard") {
       id: guild?.id ?? "unknown",
       members: Number.isFinite(guild?.memberCount) ? guild.memberCount : null
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    .sort((a, b) => {
+      const aMembers = Number.isFinite(a.members) ? a.members : -1;
+      const bMembers = Number.isFinite(b.members) ? b.members : -1;
+      if (bMembers !== aMembers) return bMembers - aMembers;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
 
-  const headerLine = "Server name | Server ID | Member count";
+  const headerLine = "Member count | Server ID | Server name";
   const maxDescriptionChars = 3800;
-  const serverLines = guilds.map((guild) => `• ${guild.name} | ${guild.id} | ${guild.members ?? "unknown"}`);
+  const serverLines = guilds.map((guild) => `• ${guild.members ?? "unknown"} | ${guild.id} | ${guild.name}`);
 
   const serverPages = [];
   let currentPageLines = [];
@@ -4460,7 +4545,7 @@ if (inDevPath && sub === "dashboard") {
     content: " ",
     embeds: [page === 0 ? serversEmbed : statusEmbed],
     components: [navRow],
-    ephemeral: true
+    ephemeral: false
   });
 }
 
@@ -5420,7 +5505,11 @@ if (sub === "season") {
 /* ---------------- STATUS (DEBUG) ------------ */
 if (sub === "status") {
   if (!isDevAdmin(userId)) {
-    return commit({ content: "You don’t have access to that command.", ephemeral: true });
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })],
+      ephemeral: true
+    });
   }
   const statusEmbed = buildDevStatusEmbed();
 
