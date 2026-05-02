@@ -596,6 +596,13 @@ function formatRecentUserOptionLabel(interaction, targetUserId) {
   return name.length > 100 ? `${name.slice(0, 97)}...` : name;
 }
 
+function formatRecentUserHandle(interaction, targetUserId) {
+  const cached = interaction.client?.users?.cache?.get(targetUserId);
+  const base = cached?.username || `player_${String(targetUserId).slice(-6)}`;
+  const handle = `@${base}`;
+  return handle.length > 100 ? `${handle.slice(0, 97)}...` : handle;
+}
+
 function buildRecentUserOptions(interaction, targetUserIds, { descriptionPrefix = "Pick" } = {}) {
   return targetUserIds
     .filter((id) => id && String(id).length > 0)
@@ -603,7 +610,7 @@ function buildRecentUserOptions(interaction, targetUserIds, { descriptionPrefix 
     .map((id) => ({
       label: formatRecentUserOptionLabel(interaction, id),
       value: String(id),
-      description: `${descriptionPrefix} <@${id}>`.slice(0, 100)
+      description: `${descriptionPrefix} ${formatRecentUserHandle(interaction, id)}`.slice(0, 100)
     }));
 }
 
