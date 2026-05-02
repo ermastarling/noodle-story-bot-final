@@ -582,6 +582,20 @@ async function resolveUserIdFromInput(input, interaction) {
   // Mention-only targeting keeps social actions independent of member cache/search.
   const mentionMatch = raw.match(/^<@!?([0-9]{17,20})>$/);
   if (mentionMatch) return mentionMatch[1];
+
+  // Modal inputs do not create true mention tokens; support @handle against recent server users.
+  const handle = raw.startsWith("@") ? raw.slice(1).trim().toLowerCase() : "";
+  if (handle && db && interaction?.guildId) {
+    const recentIds = getRecentSocialUserIds(db, interaction.guildId, { limit: 50 });
+    for (const id of recentIds) {
+      const user = interaction.client?.users?.cache?.get(id) ?? null;
+      if (!user) continue;
+      const username = String(user.username ?? "").toLowerCase();
+      const globalName = String(user.globalName ?? "").toLowerCase();
+      if (handle === username || handle === globalName) return id;
+    }
+  }
+
   return null;
 }
 
@@ -603,7 +617,7 @@ function formatRecentUserHandle(interaction, targetUserId) {
   return handle.length > 100 ? `${handle.slice(0, 97)}...` : handle;
 }
 
-function buildRecentUserOptions(interaction, targetUserIds, { descriptionPrefix = "Pick" } = {}) {
+function buildRecentUserOptions(interaction, targetUserIds, { descriptionPrefix = "Pick recent player" } = {}) {
   return targetUserIds
     .filter((id) => id && String(id).length > 0)
     .slice(0, RECENT_SOCIAL_PICKER_LIMIT)
@@ -1252,7 +1266,7 @@ async function handleParty(interaction) {
           .map((m) => String(m.user_id))
           .filter((id) => id !== String(userId));
         const targetIds = getRecentTargetIds(serverId, userId, { allowedIds: memberIds });
-        const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Transfer to" });
+        const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Transfer to recent player" });
         if (!options.length) {
           return { ok: false, error: `${getIcon("error")} No eligible party members found to transfer leadership.` };
         }
@@ -1318,7 +1332,7 @@ async function handleParty(interaction) {
           .map((m) => String(m.user_id))
           .filter((id) => id !== String(userId));
         const targetIds = getRecentTargetIds(serverId, userId, { allowedIds: memberIds });
-        const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Kick" });
+        const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Kick recent player" });
         if (!options.length) {
           return { ok: false, error: `${getIcon("error")} No kick-eligible party members found.` };
         }
@@ -3061,7 +3075,7 @@ async function handleComponent(interaction) {
     if (action === "tip") {
       const sourceMessageId = interaction.message?.id ?? "none";
       const targetIds = getRecentTargetIds(serverId, userId, {});
-      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Tip" });
+      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Tip recent player" });
 
       const embed = new EmbedBuilder()
         .setTitle(`${getIcon("tips")} Tip`)
@@ -3073,7 +3087,7 @@ async function handleComponent(interaction) {
 
       const menu = new StringSelectMenuBuilder()
         .setCustomId(`noodle-social:select:recent_target:${userId}:tip:${sourceMessageId}`)
-        .setPlaceholder(options.length ? "Choose player to tip" : "No recent players yet")
+        .setPlaceholder(options.length ? "Choose recent player to tip" : "No recent players yet")
         .setMinValues(1)
         .setMaxValues(1)
         .setDisabled(!options.length)
@@ -3095,7 +3109,7 @@ async function handleComponent(interaction) {
     if (action === "bless") {
       const sourceMessageId = interaction.message?.id ?? "none";
       const targetIds = getRecentTargetIds(serverId, userId, {});
-      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Bless" });
+      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Bless recent player" });
 
       const embed = new EmbedBuilder()
         .setTitle(`${getIcon("bless")} Bless`)
@@ -3107,7 +3121,7 @@ async function handleComponent(interaction) {
 
       const menu = new StringSelectMenuBuilder()
         .setCustomId(`noodle-social:select:recent_target:${userId}:bless:${sourceMessageId}`)
-        .setPlaceholder(options.length ? "Choose player to bless" : "No recent players yet")
+        .setPlaceholder(options.length ? "Choose recent player to bless" : "No recent players yet")
         .setMinValues(1)
         .setMaxValues(1)
         .setDisabled(!options.length)
@@ -3509,7 +3523,7 @@ async function handleComponent(interaction) {
 
       const sourceMessageId = interaction.message?.id ?? "none";
       const targetIds = getRecentTargetIds(serverId, userId, {});
-      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Invite" });
+      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Invite recent player" });
 
       const embed = new EmbedBuilder()
         .setTitle(`${getIcon("party")} Invite User`)
@@ -3521,7 +3535,7 @@ async function handleComponent(interaction) {
 
       const menu = new StringSelectMenuBuilder()
         .setCustomId(`noodle-social:select:recent_target:${userId}:invite:${sourceMessageId}`)
-        .setPlaceholder(options.length ? "Choose player to invite" : "No recent players yet")
+        .setPlaceholder(options.length ? "Choose recent player to invite" : "No recent players yet")
         .setMinValues(1)
         .setMaxValues(1)
         .setDisabled(!options.length)
