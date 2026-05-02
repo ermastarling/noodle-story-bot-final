@@ -130,11 +130,20 @@ CREATE TABLE IF NOT EXISTS tips (
   message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS recent_social_users (
+  server_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  PRIMARY KEY (server_id, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_guild_parties_server ON guild_parties(server_id, status);
 CREATE INDEX IF NOT EXISTS idx_party_members_user ON party_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_shared_orders_party ON shared_orders(party_id, status);
 CREATE INDEX IF NOT EXISTS idx_tips_server ON tips(server_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_tips_users ON tips(from_user_id, to_user_id);
+CREATE INDEX IF NOT EXISTS idx_recent_social_users_server_last_seen
+  ON recent_social_users(server_id, last_seen_at DESC);
 
 -- Recipe Discovery Tables (Phase 15)
 

@@ -612,3 +612,41 @@ export function getAllTimeSpecializationPurchaseCount(db, specId) {
   ).get(String(specId)));
   return Number(row?.cnt ?? 0);
 }
+
+export function recordRecentSocialInteraction(db, serverId, userId, seenAt = nowTs()) {
+  if (!db || !serverId || !userId) return false;
+  const ts = Number.isFinite(Number(seenAt)) ? Number(seenAt) : nowTs();
+  const res = measureDbWrite(() => prepareCached(
+    db,
+    `INSERT INTO recent_social_users(server_id, user_id, last_seen_at)
+     VALUES (?,?,?)
+     ON CONFLICT(server_id, user_id) DO UPDATE SET last_seen_at=excluded.last_seen_at`
+  ).run(String(serverId), String(userId), ts));
+  return Number(res?.changes ?? 0) > 0;
+}
+
+export function getRecentSocialUserIds(db, serverId, { excludeUserId = null, limit = 25 } = {}) {
+  if (!db || !serverId) return [];
+  const safeLimit = Math.min(50, Math.max(1, Number(limit) || 25));
+  if (excludeUserId) {
+    const rows = measureDbRead(() => prepareCached(
+      db,
+      `SELECT user_id
+       FROM recent_social_users
+       WHERE server_id = ? AND user_id <> ?
+       ORDER BY last_seen_at DESC
+       LIMIT ?`
+    ).all(String(serverId), String(excludeUserId), safeLimit));
+    return rows.map((row) => String(row.user_id));
+  }
+
+  const rows = measureDbRead(() => prepareCached(
+    db,
+    `SELECT user_id
+     FROM recent_social_users
+     WHERE server_id = ?
+     ORDER BY last_seen_at DESC
+     LIMIT ?`
+  ).all(String(serverId), safeLimit));
+  return rows.map((row) => String(row.user_id));
+}

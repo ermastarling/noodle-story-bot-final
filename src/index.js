@@ -46,6 +46,7 @@ import { theme } from "./ui/theme.js";
     withPlayerCache,
     upsertPlayer,
     getLatestServerIdForUser,
+    recordRecentSocialInteraction,
     recordStorePurchaseEvent,
     getAllTimeSpecializationPurchaseCount
   } = await import("./db/index.js");
@@ -272,8 +273,7 @@ import { theme } from "./ui/theme.js";
     intents: [
       Intents.FLAGS.GUILDS,
       Intents.FLAGS.GUILD_MESSAGES,
-      Intents.FLAGS.DIRECT_MESSAGES,
-      Intents.FLAGS.MESSAGE_CONTENT
+      Intents.FLAGS.DIRECT_MESSAGES
     ]
   });
 
@@ -1253,8 +1253,11 @@ import { theme } from "./ui/theme.js";
               cid?.includes("action:party_create") ||
               cid?.includes("action:party_join") ||
               cid?.includes("action:party_invite") ||
+              cid?.includes("action:invite_mention") ||
                 cid?.includes("action:tip") ||
+                cid?.includes("action:tip_mention") ||
                 cid?.includes("action:bless") ||
+                cid?.includes("action:bless_mention") ||
             cid?.includes("profile:edit_shop_name") ||
             cid?.includes("profile:edit_tagline") ||
               cid?.includes("action:shared_order_contribute") ||
@@ -1473,6 +1476,16 @@ import { theme } from "./ui/theme.js";
       } catch (e) {
         console.error("RATE LIMIT REPLY ERROR:", e?.message ?? e);
         return;
+      }
+    }
+
+    const isAnyComponent = interaction.isButton?.() || interaction.isSelectMenu?.() || interaction.isModalSubmit?.();
+    const isAnySlash = interaction.isChatInputCommand?.() || interaction.isCommand?.();
+    if (db && serverId && userId && (isAnyComponent || isAnySlash)) {
+      try {
+        recordRecentSocialInteraction(db, serverId, userId);
+      } catch (e) {
+        console.error("Failed to record recent interaction user:", e?.message ?? e);
       }
     }
 

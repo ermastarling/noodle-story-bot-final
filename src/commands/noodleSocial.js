@@ -1,7 +1,16 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import discordPkg from "discord.js";
 import crypto from "node:crypto";
-import { openDb, getPlayer, upsertPlayer, getServer, upsertServer, getPlayerStorageServerId } from "../db/index.js";
+import {
+  openDb,
+  getPlayer,
+  upsertPlayer,
+  getServer,
+  upsertServer,
+  getPlayerStorageServerId,
+  getRecentSocialUserIds,
+  recordRecentSocialInteraction
+} from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
@@ -93,6 +102,7 @@ const SHARED_ORDER_REWARD = {
 const SHARED_ORDER_MODAL_PREFIX = "noodle-social:modal:shared_order:";
 const SHARED_ORDER_MODAL_TTL_MS = 5 * 60 * 1000;
 const sharedOrderModalState = new Map();
+const RECENT_SOCIAL_PICKER_LIMIT = 25;
 
 const LEADERBOARD_TYPES = [
   {
@@ -569,34 +579,56 @@ function socialMainMenuRowNoProfile(userId, { questsAvailable = false, specializ
 async function resolveUserIdFromInput(input, interaction) {
   const raw = String(input ?? "").trim();
   if (!raw) return null;
-  // Try mention/id first (for safety)
+  // Mention-only targeting keeps social actions independent of member cache/search.
   const mentionMatch = raw.match(/^<@!?([0-9]{17,20})>$/);
   if (mentionMatch) return mentionMatch[1];
-  const idMatch = raw.match(/^([0-9]{17,20})$/);
-  if (idMatch) return idMatch[1];
+  return null;
+}
 
-  const guild = interaction.guild;
-  if (!guild) return null;
+function noteRecentSocialUser(serverId, userId) {
+  if (!db || !serverId || !userId) return;
+  recordRecentSocialInteraction(db, serverId, userId);
+}
 
-  const query = raw.toLowerCase();
-  const cached = guild.members.cache.find((m) => {
-    const nick = m.nickname?.toLowerCase();
-    const user = m.user?.username?.toLowerCase();
-    const global = m.user?.globalName?.toLowerCase();
-    return nick === query || user === query || global === query;
+function formatRecentUserOptionLabel(interaction, targetUserId) {
+  const cached = interaction.client?.users?.cache?.get(targetUserId);
+  const name = cached?.username || `Player ${String(targetUserId).slice(-6)}`;
+  return name.length > 100 ? `${name.slice(0, 97)}...` : name;
+}
+
+function buildRecentUserOptions(interaction, targetUserIds, { descriptionPrefix = "Pick" } = {}) {
+  return targetUserIds
+    .filter((id) => id && String(id).length > 0)
+    .slice(0, RECENT_SOCIAL_PICKER_LIMIT)
+    .map((id) => ({
+      label: formatRecentUserOptionLabel(interaction, id),
+      value: String(id),
+      description: `${descriptionPrefix} <@${id}>`.slice(0, 100)
+    }));
+}
+
+function getRecentTargetIds(serverId, requesterUserId, { allowedIds = null, limit = RECENT_SOCIAL_PICKER_LIMIT } = {}) {
+  const recentIds = getRecentSocialUserIds(db, serverId, {
+    excludeUserId: requesterUserId,
+    limit: Math.max(limit * 2, limit)
   });
-  if (cached) return cached.user.id;
+  const allowed = allowedIds ? new Set(allowedIds.map((id) => String(id))) : null;
 
-  // Fallback: search by username/nickname
-  const results = await guild.members.search({ query: raw, limit: 5 }).catch(() => null);
-  if (!results || results.size === 0) return null;
-  const exact = results.find((m) => {
-    const nick = m.nickname?.toLowerCase();
-    const user = m.user?.username?.toLowerCase();
-    const global = m.user?.globalName?.toLowerCase();
-    return nick === query || user === query || global === query;
-  });
-  return (exact ?? results.first())?.user?.id ?? null;
+  const filteredRecent = allowed
+    ? recentIds.filter((id) => allowed.has(String(id)))
+    : recentIds;
+
+  if (!allowed) {
+    return filteredRecent.slice(0, limit);
+  }
+
+  const appended = [];
+  for (const id of allowed.values()) {
+    if (id === String(requesterUserId)) continue;
+    if (!filteredRecent.includes(id)) appended.push(id);
+  }
+
+  return [...filteredRecent, ...appended].slice(0, limit);
 }
 
 /**
@@ -1023,6 +1055,8 @@ async function handleParty(interaction) {
   const partyId = interaction.options.getString("party_id");
   const ownerLock = `discord:${interaction.id}`;
 
+  noteRecentSocialUser(serverId, userId);
+
   const ensurePublicReply = async () => {
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ ephemeral: false });
@@ -1207,7 +1241,35 @@ async function handleParty(interaction) {
 
       const targetUser = interaction.options.getUser("user");
       if (!targetUser) {
-        return { ok: false, error: `${getIcon("error")} Please select a party member.` };
+        const memberIds = currentParty.members
+          .map((m) => String(m.user_id))
+          .filter((id) => id !== String(userId));
+        const targetIds = getRecentTargetIds(serverId, userId, { allowedIds: memberIds });
+        const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Transfer to" });
+        if (!options.length) {
+          return { ok: false, error: `${getIcon("error")} No eligible party members found to transfer leadership.` };
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle(`${getIcon("party")} Transfer Leadership`)
+          .setDescription("Pick a party member from recent players.")
+          .setColor(theme.colors.info);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+        const menu = new StringSelectMenuBuilder()
+          .setCustomId(`noodle-social:select:recent_target:${userId}:transfer`)
+          .setPlaceholder("Choose a new leader")
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(options);
+
+        return {
+          ok: true,
+          response: {
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
+          }
+        };
       }
       if (targetUser.id === userId) {
         return { ok: false, error: `${getIcon("error")} You are already the leader.` };
@@ -1222,6 +1284,7 @@ async function handleParty(interaction) {
 
       try {
         transferPartyLeadership(db, currentParty.party_id, targetUser.id);
+        noteRecentSocialUser(serverId, targetUser.id);
         return {
           ok: true,
           response: {
@@ -1244,7 +1307,35 @@ async function handleParty(interaction) {
 
       const targetUser = interaction.options.getUser("user");
       if (!targetUser) {
-        return { ok: false, error: `${getIcon("error")} Please select a party member to kick.` };
+        const memberIds = currentParty.members
+          .map((m) => String(m.user_id))
+          .filter((id) => id !== String(userId));
+        const targetIds = getRecentTargetIds(serverId, userId, { allowedIds: memberIds });
+        const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Kick" });
+        if (!options.length) {
+          return { ok: false, error: `${getIcon("error")} No kick-eligible party members found.` };
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle(`${getIcon("party")} Kick Party Member`)
+          .setDescription("Pick a party member from recent players.")
+          .setColor(theme.colors.warning);
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+        const menu = new StringSelectMenuBuilder()
+          .setCustomId(`noodle-social:select:recent_target:${userId}:kick`)
+          .setPlaceholder("Choose member to remove")
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(options);
+
+        return {
+          ok: true,
+          response: {
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
+          }
+        };
       }
       if (targetUser.id === userId) {
         return { ok: false, error: `${getIcon("error")} You cannot kick yourself.` };
@@ -1257,6 +1348,7 @@ async function handleParty(interaction) {
 
       try {
         kickPartyMember(db, currentParty.party_id, targetUser.id);
+        noteRecentSocialUser(serverId, targetUser.id);
         return {
           ok: true,
           ephemeral: true,
@@ -1313,6 +1405,8 @@ async function handleTip(interaction) {
   const amount = interaction.options.getInteger("amount");
   const message = interaction.options.getString("message");
 
+  noteRecentSocialUser(serverId, userId);
+
   if (!targetUser) {
     return interaction.reply({ content: `${getIcon("error")} Please specify a user to tip.`, ephemeral: true });
   }
@@ -1349,6 +1443,7 @@ async function handleTip(interaction) {
           upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
           upsertPlayer(db, serverId, targetUser.id, result.receiver, null, result.receiver.schema_version);
         }
+        noteRecentSocialUser(serverId, targetUser.id);
 
         const embed = new EmbedBuilder()
           .setTitle(`${getIcon("tips")} Tip Sent!`)
@@ -1392,6 +1487,8 @@ async function handleVisit(interaction) {
   const channelId = interaction.channelId ?? interaction.channel?.id;
   const targetUser = interaction.options.getUser("user");
 
+  noteRecentSocialUser(serverId, userId);
+
   if (!targetUser) {
     return interaction.reply({ content: `${getIcon("error")} Please specify a user to visit.`, ephemeral: true });
   }
@@ -1432,6 +1529,7 @@ async function handleVisit(interaction) {
           upsertPlayer(db, serverId, targetUser.id, targetPlayer, null, targetPlayer.schema_version);
           upsertServer(db, serverId, serverState, null);
         }
+        noteRecentSocialUser(serverId, targetUser.id);
 
         const blessing = getActiveBlessing(targetPlayer);
         const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
@@ -1553,6 +1651,8 @@ async function handleStats(interaction) {
   const userId = interaction.user.id;
   const channelId = interaction.channelId ?? interaction.channel?.id;
 
+  noteRecentSocialUser(serverId, userId);
+
   await interaction.deferReply({ ephemeral: false });
 
   try {
@@ -1643,6 +1743,7 @@ async function handleComponent(interaction) {
   }
 
   const userId = interaction.user.id;
+  noteRecentSocialUser(serverId, userId);
 
   /* ---------------- MODAL HANDLERS (checked first) ---------------- */
   if (interaction.isModalSubmit?.()) {
@@ -1777,44 +1878,15 @@ async function handleComponent(interaction) {
       const nameInput = interaction.fields.getTextInputValue("name");
 
       if (!nameInput || nameInput.trim().length === 0) {
-        return errorReply(interaction, `${getIcon("error")} Name cannot be empty.`);
+        return errorReply(interaction, `${getIcon("error")} Mention cannot be empty.`);
       }
 
-      const searchName = nameInput.trim().toLowerCase();
+      const targetId = await resolveUserIdFromInput(nameInput, interaction);
+      if (!targetId) {
+        return errorReply(interaction, `${getIcon("error")} Mention a user with @mention format (example: <@123456789012345678>).`);
+      }
+
       const ownerLock = `discord:${interaction.id}`;
-
-      // Resolve target member outside lock to avoid holding DB lock during Discord API lookups.
-      const guild = interaction.guild;
-      if (!guild) {
-        return errorReply(interaction, `${getIcon("error")} This command only works in a server.`);
-      }
-
-      let targetMember = null;
-      for (const member of guild.members.cache.values()) {
-        const nickname = member.nickname?.toLowerCase();
-        const username = member.user.username?.toLowerCase();
-        const displayName = member.displayName?.toLowerCase();
-        const globalName = member.user.globalName?.toLowerCase();
-        if (nickname === searchName || username === searchName || displayName === searchName || globalName === searchName) {
-          targetMember = member;
-          break;
-        }
-      }
-
-      if (!targetMember) {
-        try {
-          const searchResults = await guild.members.search({ query: searchName, limit: 10 });
-          if (searchResults.size > 0) {
-            targetMember = searchResults.first();
-          }
-        } catch (e) {
-          console.log(`⚠️ Member search failed:`, e?.message);
-        }
-      }
-
-      if (!targetMember) {
-        return errorReply(interaction, `${getIcon("error")} User **${searchName}** not found. Make sure they're in this server and try their exact username or nickname.`);
-      }
 
       try {
         if (!db) {
@@ -1822,17 +1894,17 @@ async function handleComponent(interaction) {
         }
         const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
           try {
-            const inviteTargetId = targetMember.user.id;
             const currentParty = getUserActiveParty(db, userId, serverId);
             if (!currentParty) {
               return { ok: false, error: `${getIcon("error")} You're not in a party anymore.` };
             }
 
-            const inviteResult = inviteUserToParty(db, serverId, currentParty.party_id, inviteTargetId);
+            const inviteResult = inviteUserToParty(db, serverId, currentParty.party_id, targetId);
+            noteRecentSocialUser(serverId, targetId);
             
             const embed = new EmbedBuilder()
               .setTitle(`${getIcon("status_complete")} User Invited!`)
-              .setDescription(`**${targetMember.displayName}** has been invited to **${inviteResult.partyName}**`)
+              .setDescription(`<@${targetId}> has been invited to **${inviteResult.partyName}**`)
               .setColor(theme.colors.success);
 
             applyOwnerFooter(embed, interaction.member ?? interaction.user);
@@ -1873,7 +1945,7 @@ async function handleComponent(interaction) {
 
       const targetId = await resolveUserIdFromInput(targetInput, interaction);
       if (!targetId) {
-        return errorReply(interaction, `${getIcon("error")} Enter a nickname or username.`);
+        return errorReply(interaction, `${getIcon("error")} Mention a user with @mention format (example: <@123456789012345678>).`);
       }
       if (targetId === userId) {
         return errorReply(interaction, `${getIcon("error")} You cannot tip yourself!`);
@@ -1908,6 +1980,87 @@ async function handleComponent(interaction) {
               upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
               upsertPlayer(db, serverId, targetId, result.receiver, null, result.receiver.schema_version);
             }
+            noteRecentSocialUser(serverId, targetId);
+
+            const party = getUserActiveParty(db, userId);
+            const isLeader = party?.leader_user_id === userId;
+            const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
+            const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
+
+            const embed = new EmbedBuilder()
+              .setTitle(`${getIcon("tips")} Tip Sent!`)
+              .setDescription(`<@${userId}> tipped <@${targetId}> **${amount}c**!`)
+              .setColor(theme.colors.highlight);
+
+            embed.addFields(
+              { name: "Your Balance", value: `${result.sender.coins}c`, inline: true },
+              { name: "Their Balance", value: `${result.receiver.coins}c`, inline: true }
+            );
+
+            applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+            return {
+              ok: true,
+              payload: {
+                embeds: [embed],
+                components: [partyRow, socialMainMenuRow(userId)],
+                targetMessageId: sourceMessageId
+              }
+            };
+          } catch (err) {
+            return { ok: false, error: `${getIcon("error")} ${err.message}` };
+          }
+        });
+      });
+
+      if (!lockedResult?.ok) {
+        return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to send tip.`);
+      }
+      return componentCommit(interaction, lockedResult.payload);
+    }
+
+    if (customId.startsWith("noodle-social:modal:tip_amount:")) {
+      const parts = customId.split(":");
+      const targetId = String(parts[4] ?? "");
+      const sourceMessageId = parts[5] && parts[5] !== "none" ? parts[5] : null;
+      const amountInput = interaction.fields.getTextInputValue("amount");
+
+      if (!targetId) {
+        return errorReply(interaction, `${getIcon("error")} Invalid target.`);
+      }
+      if (targetId === userId) {
+        return errorReply(interaction, `${getIcon("error")} You cannot tip yourself!`);
+      }
+
+      const amount = Number.parseInt(String(amountInput ?? "").trim(), 10);
+      if (!Number.isFinite(amount)) {
+        return errorReply(interaction, `${getIcon("error")} Enter a valid amount.`);
+      }
+
+      const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
+      if (!targetUser) {
+        return errorReply(interaction, `${getIcon("error")} User not found.`);
+      }
+
+      const ownerLock = `discord:${interaction.id}`;
+
+      if (!db) {
+        return errorReply(interaction, "Database unavailable in this environment.");
+      }
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+        return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
+          let sender = ensurePlayer(serverId, userId);
+          let receiver = ensurePlayer(serverId, targetId);
+
+          try {
+            const result = transferTip(db, serverId, sender, receiver, amount, null);
+            applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
+
+            if (db) {
+              upsertPlayer(db, serverId, userId, result.sender, null, result.sender.schema_version);
+              upsertPlayer(db, serverId, targetId, result.receiver, null, result.receiver.schema_version);
+            }
+            noteRecentSocialUser(serverId, targetId);
 
             const party = getUserActiveParty(db, userId);
             const isLeader = party?.leader_user_id === userId;
@@ -1952,7 +2105,7 @@ async function handleComponent(interaction) {
       const targetInput = interaction.fields.getTextInputValue("target_user");
       const targetId = await resolveUserIdFromInput(targetInput, interaction);
       if (!targetId) {
-        return componentCommit(interaction, { content: `${getIcon("error")} Enter a nickname or username.`, ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} Mention a user with @mention format (example: <@123456789012345678>).`, ephemeral: true });
       }
       if (targetId === userId) {
         return componentCommit(interaction, { content: `${getIcon("error")} You cannot bless yourself!`, ephemeral: true });
@@ -1986,6 +2139,7 @@ async function handleComponent(interaction) {
               upsertPlayer(db, serverId, targetId, targetPlayer, null, targetPlayer.schema_version);
               upsertServer(db, serverId, serverState, null);
             }
+            noteRecentSocialUser(serverId, targetId);
 
             const blessing = getActiveBlessing(targetPlayer);
             const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
@@ -2214,6 +2368,228 @@ async function handleComponent(interaction) {
 
   /* ---------------- SELECT MENUS ---------------- */
   if (kind === "select") {
+    if (action === "recent_target") {
+      const mode = parts[4] ?? "";
+      const sourceMessageId = parts[5] && parts[5] !== "none" ? parts[5] : null;
+      const targetId = String(interaction.values?.[0] ?? "").trim();
+
+      if (!targetId) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} Please choose a player.`,
+          ephemeral: true
+        });
+      }
+      if (targetId === userId) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} You cannot target yourself.`,
+          ephemeral: true
+        });
+      }
+
+      if (mode === "tip") {
+        if (interaction.deferred || interaction.replied) {
+          return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+        }
+
+        try {
+          return await interaction.showModal({
+            customId: `noodle-social:modal:tip_amount:${userId}:${targetId}:${sourceMessageId ?? "none"}`,
+            title: "Send a Tip",
+            components: [
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 4,
+                    customId: "amount",
+                    label: "Amount (coins up to 100)",
+                    style: 1,
+                    required: true,
+                    maxLength: 8
+                  }
+                ]
+              }
+            ]
+          });
+        } catch (e) {
+          return componentCommit(interaction, {
+            content: `${getIcon("warning")} Discord couldn't show the modal.`,
+            ephemeral: true
+          });
+        }
+      }
+
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
+
+      if (mode === "invite") {
+        const ownerLock = `discord:${interaction.id}`;
+        const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+          try {
+            const currentParty = getUserActiveParty(db, userId, serverId);
+            if (!currentParty) {
+              return { ok: false, payload: { content: `${getIcon("error")} You're not in a party anymore.`, ephemeral: true } };
+            }
+            if (currentParty.leader_user_id !== userId) {
+              return { ok: false, payload: { content: `${getIcon("error")} Only the party leader can invite members.`, ephemeral: true } };
+            }
+
+            const inviteResult = inviteUserToParty(db, serverId, currentParty.party_id, targetId);
+            noteRecentSocialUser(serverId, targetId);
+
+            const embed = new EmbedBuilder()
+              .setTitle(`${getIcon("status_complete")} User Invited!`)
+              .setDescription(`<@${targetId}> has been invited to **${inviteResult.partyName}**`)
+              .setColor(theme.colors.success);
+            applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+            const existingOrder = getActiveSharedOrderByParty(db, currentParty.party_id);
+            return {
+              ok: true,
+              payload: {
+                embeds: [embed],
+                components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)],
+                targetMessageId: sourceMessageId
+              }
+            };
+          } catch (err) {
+            return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
+          }
+        });
+
+        return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to invite user.`, ephemeral: true });
+      }
+
+      if (mode === "bless") {
+        const ownerLock = `discord:${interaction.id}`;
+        const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+          return await withLock(db, `lock:user:${targetId}`, ownerLock, 8000, async () => {
+            let serverState = ensureServer(serverId);
+            let targetPlayer = ensurePlayer(serverId, targetId);
+            let visitor = ensurePlayer(serverId, userId);
+
+            try {
+              const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
+              targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+              serverState = logVisitActivity(serverState, userId, targetId);
+              applyQuestProgress(visitor, questsContent, userId, { type: "bless_player", amount: 1 }, nowTs());
+
+              if (db) {
+                upsertPlayer(db, serverId, userId, visitor, null, visitor.schema_version);
+                upsertPlayer(db, serverId, targetId, targetPlayer, null, targetPlayer.schema_version);
+                upsertServer(db, serverId, serverState, null);
+              }
+              noteRecentSocialUser(serverId, targetId);
+
+              const blessing = getActiveBlessing(targetPlayer);
+              const expiresInHours = blessing ? Math.round((blessing.expires_at - nowTs()) / (60 * 60 * 1000)) : BLESSING_DURATION_HOURS;
+              const cooldownEnds = (blessing?.expires_at ?? nowTs()) + (BLESSING_COOLDOWN_HOURS * 60 * 60 * 1000);
+              const blessingNames = {
+                discovery_chance_add: "Enhanced Discovery",
+                limited_time_window_add: "Extended Time Window",
+                quality_shift: "Quality Boost",
+                npc_weight_mult: "Customer Favor",
+                coin_bonus: "Coin Bonus",
+                rep_bonus: "Reputation Bonus"
+              };
+              const blessingName = blessingNames[blessingType] || blessingType;
+
+              const party = getUserActiveParty(db, userId);
+              const isLeader = party?.leader_user_id === userId;
+              const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
+              const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
+
+              const embed = new EmbedBuilder()
+                .setTitle(`${getIcon("star")} Blessing Granted!`)
+                .setDescription(
+                  `<@${userId}> blessed <@${targetId}>!\n\n` +
+                  `${getIcon("effect")} **Effect**: ${blessingName}\n` +
+                  `${getIcon("time")} **Duration**: ${expiresInHours} hours\n` +
+                  `${getIcon("cooldown")} **Cooldown ends**: <t:${Math.floor(cooldownEnds / 1000)}:F>`
+                )
+                .setColor(theme.colors.warning);
+              applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+              return {
+                ok: true,
+                payload: {
+                  embeds: [embed],
+                  components: [partyRow, socialMainMenuRow(userId)],
+                  targetMessageId: sourceMessageId
+                }
+              };
+            } catch (err) {
+              if (err?.code === "BLESSING_ACTIVE") {
+                return { ok: false, payload: { content: `${getIcon("error")} They already have an active blessing.`, ephemeral: true } };
+              }
+              if (err?.code === "BLESSING_COOLDOWN" && err?.cooldownEnds) {
+                const ts = Math.floor(err.cooldownEnds / 1000);
+                return { ok: false, payload: { content: `${getIcon("error")} Blessing cooldown active. Try again <t:${ts}:F>.`, ephemeral: true } };
+              }
+              return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
+            }
+          });
+        });
+
+        return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to grant blessing.`, ephemeral: true });
+      }
+
+      if (mode === "transfer" || mode === "kick") {
+        const ownerLock = `discord:${interaction.id}`;
+        const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+          try {
+            const currentParty = getUserActiveParty(db, userId);
+            if (!currentParty) {
+              return { ok: false, payload: { content: `${getIcon("error")} You're not in any party.`, ephemeral: true } };
+            }
+            if (currentParty.leader_user_id !== userId) {
+              return { ok: false, payload: { content: `${getIcon("error")} Only the party leader can do that.`, ephemeral: true } };
+            }
+            if (targetId === userId) {
+              return { ok: false, payload: { content: mode === "transfer" ? `${getIcon("error")} You are already the leader.` : `${getIcon("error")} You cannot kick yourself.`, ephemeral: true } };
+            }
+
+            const isMember = currentParty.members.some((m) => String(m.user_id) === String(targetId));
+            if (!isMember) {
+              return { ok: false, payload: { content: `${getIcon("error")} That user is not in your party.`, ephemeral: true } };
+            }
+
+            if (mode === "transfer") {
+              transferPartyLeadership(db, currentParty.party_id, targetId);
+              noteRecentSocialUser(serverId, targetId);
+              return {
+                ok: true,
+                payload: {
+                  content: `${getIcon("status_complete")} Leadership transferred to <@${targetId}>.`,
+                  components: [socialMainMenuRow(userId)]
+                }
+              };
+            }
+
+            kickPartyMember(db, currentParty.party_id, targetId);
+            noteRecentSocialUser(serverId, targetId);
+            return {
+              ok: true,
+              payload: {
+                content: `${getIcon("status_complete")} Removed <@${targetId}> from the party.`,
+                components: [socialMainMenuRow(userId)]
+              }
+            };
+          } catch (err) {
+            return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
+          }
+        });
+
+        return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to process action.`, ephemeral: true });
+      }
+
+      return componentCommit(interaction, {
+        content: `${getIcon("error")} Unsupported recent-player action.`,
+        ephemeral: true
+      });
+    }
+
     if (action === "shared_order_recipe") {
       const party = getUserActiveParty(db, userId);
       if (!party) {
@@ -2676,12 +3052,80 @@ async function handleComponent(interaction) {
   /* ---------------- ACTION BUTTONS ---------------- */
   if (kind === "action") {
     if (action === "tip") {
+      const sourceMessageId = interaction.message?.id ?? "none";
+      const targetIds = getRecentTargetIds(serverId, userId, {});
+      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Tip" });
+
+      const embed = new EmbedBuilder()
+        .setTitle(`${getIcon("tips")} Tip`)
+        .setDescription(options.length
+          ? "Pick a recent player to tip, or enter an @mention."
+          : "No recent players yet. Enter an @mention to tip someone.")
+        .setColor(theme.colors.info);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`noodle-social:select:recent_target:${userId}:tip:${sourceMessageId}`)
+        .setPlaceholder(options.length ? "Choose player to tip" : "No recent players yet")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .setDisabled(!options.length)
+        .addOptions(options.length ? options : [{ label: "No recent players", value: "none", description: "Use Enter @mention instead" }]);
+
+      const manualRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:tip_mention:${userId}:${sourceMessageId}`)
+          .setLabel("Enter @mention")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(menu), manualRow, socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "bless") {
+      const sourceMessageId = interaction.message?.id ?? "none";
+      const targetIds = getRecentTargetIds(serverId, userId, {});
+      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Bless" });
+
+      const embed = new EmbedBuilder()
+        .setTitle(`${getIcon("bless")} Bless`)
+        .setDescription(options.length
+          ? "Pick a recent player to bless, or enter an @mention."
+          : "No recent players yet. Enter an @mention to bless someone.")
+        .setColor(theme.colors.info);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`noodle-social:select:recent_target:${userId}:bless:${sourceMessageId}`)
+        .setPlaceholder(options.length ? "Choose player to bless" : "No recent players yet")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .setDisabled(!options.length)
+        .addOptions(options.length ? options : [{ label: "No recent players", value: "none", description: "Use Enter @mention instead" }]);
+
+      const manualRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:bless_mention:${userId}:${sourceMessageId}`)
+          .setLabel("Enter @mention")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(menu), manualRow, socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "tip_mention") {
       if (interaction.deferred || interaction.replied) {
         return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
       }
 
+      const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : (interaction.message?.id ?? "none");
       try {
-        const sourceMessageId = interaction.message?.id ?? "none";
         return await interaction.showModal({
           customId: `noodle-social:modal:tip:${userId}:${sourceMessageId}`,
           title: "Send a Tip",
@@ -2692,7 +3136,7 @@ async function handleComponent(interaction) {
                 {
                   type: 4,
                   customId: "target_user",
-                  label: "Nickname or username",
+                  label: "User @mention",
                   style: 1,
                   required: true,
                   maxLength: 32
@@ -2715,21 +3159,20 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for tip:`, e?.message);
-        return componentCommit(interaction, { 
-          content: `${getIcon("warning")} Discord couldn't show the modal.`, 
-          ephemeral: true 
+        return componentCommit(interaction, {
+          content: `${getIcon("warning")} Discord couldn't show the modal.`,
+          ephemeral: true
         });
       }
     }
 
-    if (action === "bless") {
+    if (action === "bless_mention") {
       if (interaction.deferred || interaction.replied) {
         return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
       }
 
+      const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : (interaction.message?.id ?? "none");
       try {
-        const sourceMessageId = interaction.message?.id ?? "none";
         return await interaction.showModal({
           customId: `noodle-social:modal:bless:${userId}:${sourceMessageId}`,
           title: "Grant a Blessing",
@@ -2740,7 +3183,7 @@ async function handleComponent(interaction) {
                 {
                   type: 4,
                   customId: "target_user",
-                  label: "Nickname or username",
+                  label: "User @mention",
                   style: 1,
                   required: true,
                   maxLength: 32
@@ -2750,10 +3193,9 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for bless:`, e?.message);
-        return componentCommit(interaction, { 
-          content: `${getIcon("warning")} Discord couldn't show the modal.`, 
-          ephemeral: true 
+        return componentCommit(interaction, {
+          content: `${getIcon("warning")} Discord couldn't show the modal.`,
+          ephemeral: true
         });
       }
     }
@@ -3058,6 +3500,44 @@ async function handleComponent(interaction) {
         });
       }
 
+      const sourceMessageId = interaction.message?.id ?? "none";
+      const targetIds = getRecentTargetIds(serverId, userId, {});
+      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Invite" });
+
+      const embed = new EmbedBuilder()
+        .setTitle(`${getIcon("party")} Invite User`)
+        .setDescription(options.length
+          ? "Pick a recent player to invite, or enter an @mention."
+          : "No recent players yet. Enter an @mention to invite someone.")
+        .setColor(theme.colors.info);
+      applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`noodle-social:select:recent_target:${userId}:invite:${sourceMessageId}`)
+        .setPlaceholder(options.length ? "Choose player to invite" : "No recent players yet")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .setDisabled(!options.length)
+        .addOptions(options.length ? options : [{ label: "No recent players", value: "none", description: "Use Enter @mention instead" }]);
+
+      const manualRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle-social:action:invite_mention:${userId}`)
+          .setLabel("Enter @mention")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      return componentCommit(interaction, {
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(menu), manualRow, socialMainMenuRow(userId)]
+      });
+    }
+
+    if (action === "invite_mention") {
+      if (interaction.deferred || interaction.replied) {
+        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+      }
+
       try {
         return await interaction.showModal({
           customId: `noodle-social:modal:invite_user:${userId}`,
@@ -3069,7 +3549,7 @@ async function handleComponent(interaction) {
                 {
                   type: 4,
                   customId: "name",
-                  label: "Nickname or Username",
+                  label: "User @mention",
                   style: 1,
                   required: true,
                   maxLength: 32
@@ -3079,10 +3559,9 @@ async function handleComponent(interaction) {
           ]
         });
       } catch (e) {
-        console.log(`⚠️ showModal failed for party_invite:`, e?.message);
-        return componentCommit(interaction, { 
-          content: `${getIcon("warning")} Discord couldn't show the modal.`, 
-          ephemeral: true 
+        return componentCommit(interaction, {
+          content: `${getIcon("warning")} Discord couldn't show the modal.`,
+          ephemeral: true
         });
       }
     }
