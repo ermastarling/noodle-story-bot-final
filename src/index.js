@@ -1255,6 +1255,7 @@ import { theme } from "./ui/theme.js";
               cid?.includes("action:party_invite") ||
                 cid?.includes("action:tip") ||
                 cid?.includes("action:bless") ||
+              (cid?.startsWith("noodle-social:select:recent_target:") && cid?.includes(":tip:")) ||
             cid?.includes("profile:edit_shop_name") ||
             cid?.includes("profile:edit_tagline") ||
               cid?.includes("action:shared_order_contribute") ||
