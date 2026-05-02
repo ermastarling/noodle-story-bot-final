@@ -133,6 +133,7 @@ const LEADERBOARD_TYPES = [
 ];
 
 const LEADERBOARD_PAGE_SIZE = 10;
+const GLOBAL_LEADERBOARD_MAX_PLAYERS = 100;
 const CONTRIBUTOR_LOCK_CONCURRENCY = 3;
 const CONTRIBUTOR_LOCK_RETRY_DELAYS_MS = [25, 75, 150];
 const GLOBAL_LEADERBOARD_PROBE_SERVER_ID = "__leaderboard_probe__";
@@ -221,9 +222,10 @@ function getGlobalLeaderboardPage(typeIndex, page = 0) {
   let rows = [];
 
   if (globalStorageEnabled) {
-    totalPlayers = db
+    const totalPlayersRaw = db
       .prepare("SELECT COUNT(*) AS count FROM players WHERE server_id = ?")
       .get(probeStorageServerId)?.count ?? 0;
+    totalPlayers = Math.min(Number(totalPlayersRaw) || 0, GLOBAL_LEADERBOARD_MAX_PLAYERS);
 
     const totalPages = Math.max(1, Math.ceil(totalPlayers / LEADERBOARD_PAGE_SIZE));
     const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
@@ -238,7 +240,7 @@ function getGlobalLeaderboardPage(typeIndex, page = 0) {
       WHERE server_id = ?
       ORDER BY metric DESC, last_active_at DESC
       LIMIT ? OFFSET ?
-    `).all(probeStorageServerId, LEADERBOARD_PAGE_SIZE, offset);
+    `).all(probeStorageServerId, LEADERBOARD_PAGE_SIZE, Math.min(offset, GLOBAL_LEADERBOARD_MAX_PLAYERS));
 
     return {
       type,
@@ -252,7 +254,7 @@ function getGlobalLeaderboardPage(typeIndex, page = 0) {
   }
 
   const totalUsersRow = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
-  totalPlayers = Number(totalUsersRow?.count ?? 0);
+  totalPlayers = Math.min(Number(totalUsersRow?.count ?? 0), GLOBAL_LEADERBOARD_MAX_PLAYERS);
   const totalPages = Math.max(1, Math.ceil(totalPlayers / LEADERBOARD_PAGE_SIZE));
   const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
   const offset = safePage * LEADERBOARD_PAGE_SIZE;
@@ -274,7 +276,7 @@ function getGlobalLeaderboardPage(typeIndex, page = 0) {
     WHERE rn = 1
     ORDER BY metric DESC, last_active_at DESC
     LIMIT ? OFFSET ?
-  `).all(LEADERBOARD_PAGE_SIZE, offset);
+  `).all(LEADERBOARD_PAGE_SIZE, Math.min(offset, GLOBAL_LEADERBOARD_MAX_PLAYERS));
 
   return {
     type,
