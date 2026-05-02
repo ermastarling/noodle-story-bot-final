@@ -103,6 +103,7 @@ const SHARED_ORDER_MODAL_PREFIX = "noodle-social:modal:shared_order:";
 const SHARED_ORDER_MODAL_TTL_MS = 5 * 60 * 1000;
 const sharedOrderModalState = new Map();
 const RECENT_SOCIAL_PICKER_LIMIT = 25;
+const RECENT_SOCIAL_PICKER_MAX_RESULTS = 250;
 
 const LEADERBOARD_TYPES = [
   {
@@ -122,6 +123,12 @@ const LEADERBOARD_TYPES = [
     title: () => `${getIcon("bowl")} Most Bowls Served`,
     metricExpr: "json_extract(data_json, '$.lifetime.bowls_served_total')",
     formatMetric: (value) => `${value || 0} bowls`
+  },
+  {
+    id: "shop_level",
+    title: () => `${getIcon("level_up")} Top Shop Levels`,
+    metricExpr: "json_extract(data_json, '$.shop_level')",
+    formatMetric: (value) => `Lv. ${Math.max(1, Number(value) || 1)}`
   }
 ];
 
@@ -330,7 +337,10 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!canNavigate),
+      .setDisabled(!canNavigate)
+  );
+
+  const typeRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:leaderboard:${userId}:${getLeaderboardTypeIndex("bowls")}:${safePage}`)
       .setLabel("Bowls Served")
@@ -342,12 +352,16 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:leaderboard:${userId}:${getLeaderboardTypeIndex("rep")}:${safePage}`)
       .setLabel("Top Rep")
-      .setStyle(safeIndex === getLeaderboardTypeIndex("rep") ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setStyle(safeIndex === getLeaderboardTypeIndex("rep") ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:leaderboard:${userId}:${getLeaderboardTypeIndex("shop_level")}:${safePage}`)
+      .setLabel("Shop Level")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("shop_level") ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 
   return {
     embeds: [embed],
-    components: [navRow, socialMainMenuRow(userId)]
+    components: [navRow, typeRow, socialMainMenuRow(userId)]
   };
 }
 
@@ -402,7 +416,10 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!canNavigate),
+      .setDisabled(!canNavigate)
+  );
+
+  const typeRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${getLeaderboardTypeIndex("bowls")}:${safePage}`)
       .setLabel("Bowls Served")
@@ -414,12 +431,16 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${getLeaderboardTypeIndex("rep")}:${safePage}`)
       .setLabel("Top Rep")
-      .setStyle(safeIndex === getLeaderboardTypeIndex("rep") ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setStyle(safeIndex === getLeaderboardTypeIndex("rep") ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:nav:global_leaderboard:${userId}:${getLeaderboardTypeIndex("shop_level")}:${safePage}`)
+      .setLabel("Shop Level")
+      .setStyle(safeIndex === getLeaderboardTypeIndex("shop_level") ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
 
   return {
     embeds: [embed],
-    components: [navRow]
+    components: [navRow, typeRow]
   };
 }
 
@@ -650,6 +671,88 @@ function getRecentTargetIds(serverId, requesterUserId, { allowedIds = null, limi
   }
 
   return [...filteredRecent, ...appended].slice(0, limit);
+}
+
+function getRecentPickerPage(targetIds, page = 0, pageSize = RECENT_SOCIAL_PICKER_LIMIT) {
+  const totalPages = Math.max(1, Math.ceil((targetIds?.length ?? 0) / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const start = safePage * pageSize;
+  return {
+    safePage,
+    totalPages,
+    pageIds: (targetIds ?? []).slice(start, start + pageSize)
+  };
+}
+
+function recentPickerNavRow(userId, mode, sourceMessageId, safePage, totalPages) {
+  const prevPage = safePage <= 0 ? totalPages - 1 : safePage - 1;
+  const nextPage = safePage >= totalPages - 1 ? 0 : safePage + 1;
+  const source = sourceMessageId ?? "none";
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:recent_page:${userId}:${mode}:${source}:${prevPage}`)
+      .setLabel("Prev")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(totalPages <= 1),
+    new ButtonBuilder()
+      .setCustomId(`noodle-social:action:recent_page:${userId}:${mode}:${source}:${nextPage}`)
+      .setLabel("Next")
+      .setEmoji(getButtonEmoji("next"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(totalPages <= 1)
+  );
+}
+
+function buildRecentPickerPayload(interaction, {
+  serverId,
+  userId,
+  mode,
+  title,
+  verb,
+  sourceMessageId,
+  page = 0,
+  color = theme.colors.info
+}) {
+  const targetIds = getRecentTargetIds(serverId, userId, { limit: RECENT_SOCIAL_PICKER_MAX_RESULTS });
+  const { safePage, totalPages, pageIds } = getRecentPickerPage(targetIds, page);
+  const options = buildRecentUserOptions(interaction, pageIds, { descriptionPrefix: `${verb} recent player` });
+  const hasOptions = options.length > 0;
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(hasOptions
+      ? `Pick a recent player to ${verb.toLowerCase()}.`
+      : "No recent players yet.")
+    .setColor(color);
+  applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+  if (totalPages > 1) {
+    const footerText = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
+    const pageText = `Page ${safePage + 1}/${totalPages}`;
+    embed.setFooter({ text: footerText ? `${footerText} • ${pageText}` : pageText });
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`noodle-social:select:recent_target:${userId}:${mode}:${sourceMessageId ?? "none"}`)
+    .setPlaceholder(hasOptions ? `Choose recent player to ${verb.toLowerCase()}` : "No recent players yet")
+    .setMinValues(1)
+    .setMaxValues(1)
+    .setDisabled(!hasOptions)
+    .addOptions(hasOptions
+      ? options
+      : [{ label: "No recent players", value: "none", description: "Players appear after interactions" }]);
+
+  const components = [new ActionRowBuilder().addComponents(select)];
+  if (totalPages > 1) {
+    components.push(recentPickerNavRow(userId, mode, sourceMessageId, safePage, totalPages));
+  }
+  components.push(socialMainMenuRow(userId));
+
+  return {
+    embeds: [embed],
+    components
+  };
 }
 
 /**
@@ -1904,7 +2007,7 @@ async function handleComponent(interaction) {
 
       const targetId = await resolveUserIdFromInput(nameInput, interaction);
       if (!targetId) {
-        return errorReply(interaction, `${getIcon("error")} Mention a user with @mention format (example: <@123456789012345678>).`);
+        return errorReply(interaction, `${getIcon("error")} Could not resolve that player. Use the recent player picker from the menu.`);
       }
 
       const ownerLock = `discord:${interaction.id}`;
@@ -1966,7 +2069,7 @@ async function handleComponent(interaction) {
 
       const targetId = await resolveUserIdFromInput(targetInput, interaction);
       if (!targetId) {
-        return errorReply(interaction, `${getIcon("error")} Mention a user with @mention format (example: <@123456789012345678>).`);
+        return errorReply(interaction, `${getIcon("error")} Could not resolve that player. Use the recent player picker from the menu.`);
       }
       if (targetId === userId) {
         return errorReply(interaction, `${getIcon("error")} You cannot tip yourself!`);
@@ -2126,7 +2229,7 @@ async function handleComponent(interaction) {
       const targetInput = interaction.fields.getTextInputValue("target_user");
       const targetId = await resolveUserIdFromInput(targetInput, interaction);
       if (!targetId) {
-        return componentCommit(interaction, { content: `${getIcon("error")} Mention a user with @mention format (example: <@123456789012345678>).`, ephemeral: true });
+        return componentCommit(interaction, { content: `${getIcon("error")} Could not resolve that player. Use the recent player picker from the menu.`, ephemeral: true });
       }
       if (targetId === userId) {
         return componentCommit(interaction, { content: `${getIcon("error")} You cannot bless yourself!`, ephemeral: true });
@@ -3074,151 +3177,61 @@ async function handleComponent(interaction) {
   if (kind === "action") {
     if (action === "tip") {
       const sourceMessageId = interaction.message?.id ?? "none";
-      const targetIds = getRecentTargetIds(serverId, userId, {});
-      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Tip recent player" });
-
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("tips")} Tip`)
-        .setDescription(options.length
-          ? "Pick a recent player to tip, or enter an @mention."
-          : "No recent players yet. Enter an @mention to tip someone.")
-        .setColor(theme.colors.info);
-      applyOwnerFooter(embed, interaction.member ?? interaction.user);
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`noodle-social:select:recent_target:${userId}:tip:${sourceMessageId}`)
-        .setPlaceholder(options.length ? "Choose recent player to tip" : "No recent players yet")
-        .setMinValues(1)
-        .setMaxValues(1)
-        .setDisabled(!options.length)
-        .addOptions(options.length ? options : [{ label: "No recent players", value: "none", description: "Use Enter @mention instead" }]);
-
-      const manualRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`noodle-social:action:tip_mention:${userId}:${sourceMessageId}`)
-          .setLabel("Enter @mention")
-          .setStyle(ButtonStyle.Secondary)
-      );
-
-      return componentCommit(interaction, {
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(menu), manualRow, socialMainMenuRow(userId)]
+      const payload = buildRecentPickerPayload(interaction, {
+        serverId,
+        userId,
+        mode: "tip",
+        title: `${getIcon("tips")} Tip`,
+        verb: "Tip",
+        sourceMessageId,
+        page: 0,
+        color: theme.colors.info
       });
+      return componentCommit(interaction, payload);
     }
 
     if (action === "bless") {
       const sourceMessageId = interaction.message?.id ?? "none";
-      const targetIds = getRecentTargetIds(serverId, userId, {});
-      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Bless recent player" });
-
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("bless")} Bless`)
-        .setDescription(options.length
-          ? "Pick a recent player to bless, or enter an @mention."
-          : "No recent players yet. Enter an @mention to bless someone.")
-        .setColor(theme.colors.info);
-      applyOwnerFooter(embed, interaction.member ?? interaction.user);
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`noodle-social:select:recent_target:${userId}:bless:${sourceMessageId}`)
-        .setPlaceholder(options.length ? "Choose recent player to bless" : "No recent players yet")
-        .setMinValues(1)
-        .setMaxValues(1)
-        .setDisabled(!options.length)
-        .addOptions(options.length ? options : [{ label: "No recent players", value: "none", description: "Use Enter @mention instead" }]);
-
-      const manualRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`noodle-social:action:bless_mention:${userId}:${sourceMessageId}`)
-          .setLabel("Enter @mention")
-          .setStyle(ButtonStyle.Secondary)
-      );
-
-      return componentCommit(interaction, {
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(menu), manualRow, socialMainMenuRow(userId)]
+      const payload = buildRecentPickerPayload(interaction, {
+        serverId,
+        userId,
+        mode: "bless",
+        title: `${getIcon("bless")} Bless`,
+        verb: "Bless",
+        sourceMessageId,
+        page: 0,
+        color: theme.colors.info
       });
+      return componentCommit(interaction, payload);
     }
 
-    if (action === "tip_mention") {
-      if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+    if (action === "recent_page") {
+      const mode = String(parts[4] ?? "");
+      const sourceMessageId = parts[5] && parts[5] !== "none" ? parts[5] : null;
+      const requestedPage = Number(parts[6] ?? 0);
+
+      if (!mode || !["tip", "bless", "invite"].includes(mode)) {
+        return componentCommit(interaction, { content: `${getIcon("error")} Unknown recent-player list.`, ephemeral: true });
       }
 
-      const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : (interaction.message?.id ?? "none");
-      try {
-        return await interaction.showModal({
-          customId: `noodle-social:modal:tip:${userId}:${sourceMessageId}`,
-          title: "Send a Tip",
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "target_user",
-                  label: "User @mention",
-                  style: 1,
-                  required: true,
-                  maxLength: 32
-                }
-              ]
-            },
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "amount",
-                  label: "Amount (coins up to 100)",
-                  style: 1,
-                  required: true,
-                  maxLength: 8
-                }
-              ]
-            }
-          ]
-        });
-      } catch (e) {
-        return componentCommit(interaction, {
-          content: `${getIcon("warning")} Discord couldn't show the modal.`,
-          ephemeral: true
-        });
-      }
-    }
+      const configByMode = {
+        tip: { title: `${getIcon("tips")} Tip`, verb: "Tip", color: theme.colors.info },
+        bless: { title: `${getIcon("bless")} Bless`, verb: "Bless", color: theme.colors.info },
+        invite: { title: `${getIcon("party")} Invite User`, verb: "Invite", color: theme.colors.info }
+      };
 
-    if (action === "bless_mention") {
-      if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-      }
-
-      const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : (interaction.message?.id ?? "none");
-      try {
-        return await interaction.showModal({
-          customId: `noodle-social:modal:bless:${userId}:${sourceMessageId}`,
-          title: "Grant a Blessing",
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "target_user",
-                  label: "User @mention",
-                  style: 1,
-                  required: true,
-                  maxLength: 32
-                }
-              ]
-            }
-          ]
-        });
-      } catch (e) {
-        return componentCommit(interaction, {
-          content: `${getIcon("warning")} Discord couldn't show the modal.`,
-          ephemeral: true
-        });
-      }
+      const cfg = configByMode[mode];
+      const payload = buildRecentPickerPayload(interaction, {
+        serverId,
+        userId,
+        mode,
+        title: cfg.title,
+        verb: cfg.verb,
+        sourceMessageId,
+        page: Number.isFinite(requestedPage) ? requestedPage : 0,
+        color: cfg.color
+      });
+      return componentCommit(interaction, payload);
     }
 
     if (action === "shared_order") {
@@ -3522,69 +3535,17 @@ async function handleComponent(interaction) {
       }
 
       const sourceMessageId = interaction.message?.id ?? "none";
-      const targetIds = getRecentTargetIds(serverId, userId, {});
-      const options = buildRecentUserOptions(interaction, targetIds, { descriptionPrefix: "Invite recent player" });
-
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("party")} Invite User`)
-        .setDescription(options.length
-          ? "Pick a recent player to invite, or enter an @mention."
-          : "No recent players yet. Enter an @mention to invite someone.")
-        .setColor(theme.colors.info);
-      applyOwnerFooter(embed, interaction.member ?? interaction.user);
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`noodle-social:select:recent_target:${userId}:invite:${sourceMessageId}`)
-        .setPlaceholder(options.length ? "Choose recent player to invite" : "No recent players yet")
-        .setMinValues(1)
-        .setMaxValues(1)
-        .setDisabled(!options.length)
-        .addOptions(options.length ? options : [{ label: "No recent players", value: "none", description: "Use Enter @mention instead" }]);
-
-      const manualRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`noodle-social:action:invite_mention:${userId}`)
-          .setLabel("Enter @mention")
-          .setStyle(ButtonStyle.Secondary)
-      );
-
-      return componentCommit(interaction, {
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(menu), manualRow, socialMainMenuRow(userId)]
+      const payload = buildRecentPickerPayload(interaction, {
+        serverId,
+        userId,
+        mode: "invite",
+        title: `${getIcon("party")} Invite User`,
+        verb: "Invite",
+        sourceMessageId,
+        page: 0,
+        color: theme.colors.info
       });
-    }
-
-    if (action === "invite_mention") {
-      if (interaction.deferred || interaction.replied) {
-        return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-      }
-
-      try {
-        return await interaction.showModal({
-          customId: `noodle-social:modal:invite_user:${userId}`,
-          title: "Invite User to Party",
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 4,
-                  customId: "name",
-                  label: "User @mention",
-                  style: 1,
-                  required: true,
-                  maxLength: 32
-                }
-              ]
-            }
-          ]
-        });
-      } catch (e) {
-        return componentCommit(interaction, {
-          content: `${getIcon("warning")} Discord couldn't show the modal.`,
-          ephemeral: true
-        });
-      }
+      return componentCommit(interaction, payload);
     }
 
     if (action === "shared_order_contribute") {
@@ -4272,7 +4233,8 @@ export const noodleSocialCommand = {
             .addChoices(
               { name: "Coins", value: "coins" },
               { name: "Reputation", value: "rep" },
-              { name: "Bowls Served", value: "bowls" }
+              { name: "Bowls Served", value: "bowls" },
+              { name: "Shop Level", value: "shop_level" }
             )
         )
     )
@@ -4288,7 +4250,8 @@ export const noodleSocialCommand = {
             .addChoices(
               { name: "Coins", value: "coins" },
               { name: "Reputation", value: "rep" },
-              { name: "Bowls Served", value: "bowls" }
+              { name: "Bowls Served", value: "bowls" },
+              { name: "Shop Level", value: "shop_level" }
             )
         )
     )

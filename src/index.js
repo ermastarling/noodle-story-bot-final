@@ -1253,11 +1253,8 @@ import { theme } from "./ui/theme.js";
               cid?.includes("action:party_create") ||
               cid?.includes("action:party_join") ||
               cid?.includes("action:party_invite") ||
-              cid?.includes("action:invite_mention") ||
                 cid?.includes("action:tip") ||
-                cid?.includes("action:tip_mention") ||
                 cid?.includes("action:bless") ||
-                cid?.includes("action:bless_mention") ||
             cid?.includes("profile:edit_shop_name") ||
             cid?.includes("profile:edit_tagline") ||
               cid?.includes("action:shared_order_contribute") ||
