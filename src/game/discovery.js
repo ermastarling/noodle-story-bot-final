@@ -4,8 +4,9 @@ import {
   DISCOVERY_SCROLL_CHANCE_BASE,
   CLUES_TO_UNLOCK_RECIPE,
   CLUE_DUPLICATE_COINS,
-  SCROLL_DUPLICATE_TOKEN_CHANCE,
+  CLUE_DUPLICATE_WHILE_UNDISCOVERED_CHANCE,
   SCROLL_DUPLICATE_COINS,
+  SCROLL_DUPLICATE_WHILE_UNDISCOVERED_CHANCE,
   DISCOVERY_TIER_UNLOCK_LEVEL,
   DISCOVERY_TIER_UNLOCK_REP,
   DISCOVERY_RECIPE_TIER_WEIGHTS
@@ -86,6 +87,26 @@ function pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues = 
 
   const pickedId = weightedPick(rng, weights);
   return discoverableRecipes.find((r) => r.recipe_id === pickedId) ?? discoverableRecipes[0];
+}
+
+function pickDuplicateEligibleRecipe(player, content, rng, { mode = "clue", activeSeason = null, activeEventId = null } = {}) {
+  const allRecipes = Object.values(content.recipes || {});
+  const ownedRecipeIds = mode === "scroll"
+    ? new Set(Object.keys(player.scrolls_owned || {}))
+    : new Set(player.known_recipes || []);
+
+  const candidates = allRecipes.filter((recipe) => {
+    if (!recipe || recipe.recipe_id === FALLBACK_RECIPE_ID) return false;
+    if (!ownedRecipeIds.has(recipe.recipe_id)) return false;
+    if (recipe.event_id && (!activeEventId || recipe.event_id !== activeEventId)) return false;
+    if (recipe.tier === "seasonal" && (!activeSeason || recipe.season !== activeSeason)) return false;
+    if (!canDiscoverTier(player, recipe.tier)) return false;
+    return true;
+  });
+
+  if (candidates.length === 0) return null;
+  const idx = Math.floor(rng() * candidates.length);
+  return candidates[Math.max(0, Math.min(candidates.length - 1, idx))];
 }
 
 export function getDiscoveryRecipeWeight(player, recipe) {
@@ -178,7 +199,19 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
  * Roll a recipe clue
  */
 function rollClue(player, content, rng, activeSeason = null, activeEventId = null) {
-  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason, activeEventId });
+  const discoverableRecipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason, activeEventId });
+  const duplicateRecipe = pickDuplicateEligibleRecipe(player, content, rng, { mode: "clue", activeSeason, activeEventId });
+
+  let recipe = discoverableRecipe;
+  if (discoverableRecipe && duplicateRecipe) {
+    // Allow duplicate clue outcomes before full completion.
+    recipe = rng() < CLUE_DUPLICATE_WHILE_UNDISCOVERED_CHANCE
+      ? duplicateRecipe
+      : discoverableRecipe;
+  } else if (!recipe) {
+    // Endgame fallback: allow duplicate clue compensation when no new clues remain.
+    recipe = duplicateRecipe;
+  }
   if (!recipe) return null;
   const clueId = `clue_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   
@@ -195,7 +228,19 @@ function rollClue(player, content, rng, activeSeason = null, activeEventId = nul
  * Roll a recipe scroll
  */
 function rollScroll(player, content, rng, activeSeason = null, activeEventId = null) {
-  const recipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason, activeEventId });
+  const discoverableRecipe = pickDiscoverableRecipe(player, content, rng, { excludeCompletedClues: true, activeSeason, activeEventId });
+  const duplicateRecipe = pickDuplicateEligibleRecipe(player, content, rng, { mode: "scroll", activeSeason, activeEventId });
+
+  let recipe = discoverableRecipe;
+  if (discoverableRecipe && duplicateRecipe) {
+    // Allow duplicate scroll outcomes before full completion.
+    recipe = rng() < SCROLL_DUPLICATE_WHILE_UNDISCOVERED_CHANCE
+      ? duplicateRecipe
+      : discoverableRecipe;
+  } else if (!recipe) {
+    // Endgame fallback: allow duplicate scroll compensation when no new scroll targets remain.
+    recipe = duplicateRecipe;
+  }
   if (!recipe) return null;
   const scrollId = `scroll_${recipe.recipe_id}_${Date.now()}_${Math.floor(rng() * 1000)}`;
   
@@ -343,21 +388,11 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
     
     const scrollKey = discovery.recipeId;
     if (player.scrolls_owned[scrollKey]) {
-      // Duplicate scroll - 50% chance for token, otherwise coins
-      const tokenRoll = rng();
-      if (tokenRoll < SCROLL_DUPLICATE_TOKEN_CHANCE) {
-        // Add cosmetic token (not implemented yet, just return message)
-        return { 
-          isDuplicate: true, 
-          reward: `cosmetic token chance (duplicate scroll)` 
-        };
-      } else {
-        player.coins = (player.coins || 0) + SCROLL_DUPLICATE_COINS;
-          return { 
-            isDuplicate: true, 
-            reward: `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)` 
-          };
-      }
+      player.coins = (player.coins || 0) + SCROLL_DUPLICATE_COINS;
+      return {
+        isDuplicate: true,
+        reward: `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)`
+      };
     }
     
     // Get recipe details to show ingredients

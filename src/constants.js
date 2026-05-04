@@ -7,7 +7,7 @@ export const STARTER_PROFILE = {
   sxp_total: 0,
   sxp_progress: 0,
   known_recipes: ["classic_soy_ramen"],
-  inv_ingredients: { broth_soy: 3, noodles_wheat: 3, scallions: 2 },
+  inv_ingredients: { broth_soy: 1, noodles_wheat: 1, scallions: 1 },
 };
 
 export const INGREDIENT_CAPACITY_BASE = 50;
@@ -43,8 +43,9 @@ export const DISCOVERY_SCROLL_CHANCE_BASE = {
 
 export const CLUES_TO_UNLOCK_RECIPE = 3;
 export const CLUE_DUPLICATE_COINS = 25;
-export const SCROLL_DUPLICATE_TOKEN_CHANCE = 0.50;
-export const SCROLL_DUPLICATE_COINS = 80;
+export const CLUE_DUPLICATE_WHILE_UNDISCOVERED_CHANCE = 0.10;
+export const SCROLL_DUPLICATE_COINS = Math.round(CLUE_DUPLICATE_COINS * 3.2);
+export const SCROLL_DUPLICATE_WHILE_UNDISCOVERED_CHANCE = 0.10;
 
 export const PROFILE_DEFAULT_TAGLINE = "A tiny shop with a big simmer.";
 export const PROFILE_BADGES_SHOWN = 12;

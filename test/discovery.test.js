@@ -4,12 +4,15 @@ import {
   canDiscoverTier,
   getDiscoverableRecipes,
   getDiscoveryRecipeWeight,
+  rollRecipeDiscovery,
   applyDiscovery,
   applyNpcDiscoveryBuff
 } from "../src/game/discovery.js";
 import {
+  CLUE_DUPLICATE_COINS,
   DISCOVERY_TIER_UNLOCK_LEVEL,
-  DISCOVERY_TIER_UNLOCK_REP
+  DISCOVERY_TIER_UNLOCK_REP,
+  SCROLL_DUPLICATE_COINS
 } from "../src/constants.js";
 
 // Mock content bundle
@@ -159,8 +162,8 @@ test("Discovery: applyDiscovery - duplicate clue gives coins", () => {
   const result = applyDiscovery(player, discovery, mockContent);
   
   assert.strictEqual(result.isDuplicate, true);
-  assert.ok(result.reward.includes("25c"));
-  assert.strictEqual(player.coins, 125);
+  assert.strictEqual(result.reward, `+${CLUE_DUPLICATE_COINS}c (duplicate clue)`);
+  assert.strictEqual(player.coins, 100 + CLUE_DUPLICATE_COINS);
 });
 
 test("Discovery: applyDiscovery - new scroll learns recipe", () => {
@@ -186,7 +189,7 @@ test("Discovery: applyDiscovery - new scroll learns recipe", () => {
   assert.ok(player.known_recipes.includes("fancy_ramen"));
 });
 
-test("Discovery: applyDiscovery - duplicate scroll gives coins", () => {
+test("Discovery: applyDiscovery - duplicate scroll gives coins branch", () => {
   const player = {
     scrolls_owned: {
       fancy_ramen: { scroll_id: "scroll_old", recipe_id: "fancy_ramen", obtained_at: 123 }
@@ -203,11 +206,35 @@ test("Discovery: applyDiscovery - duplicate scroll gives coins", () => {
     rarity: "rare"
   };
   
-  const result = applyDiscovery(player, discovery, mockContent);
+  const result = applyDiscovery(player, discovery, mockContent, () => 0.9);
   
   assert.strictEqual(result.isDuplicate, true);
-  // 50% chance for token or coins, but we'll just check it's a duplicate
-  assert.ok(result.reward);
+  assert.strictEqual(result.reward, `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)`);
+  assert.strictEqual(player.coins, 100 + SCROLL_DUPLICATE_COINS);
+});
+
+test("Discovery: applyDiscovery - duplicate scroll always gives coins", () => {
+  const player = {
+    scrolls_owned: {
+      fancy_ramen: { scroll_id: "scroll_old", recipe_id: "fancy_ramen", obtained_at: 123 }
+    },
+    known_recipes: ["classic_soy_ramen", "fancy_ramen"],
+    coins: 100
+  };
+  const discovery = {
+    type: "scroll",
+    scrollId: "scroll_new",
+    recipeId: "fancy_ramen",
+    recipeName: "Fancy Ramen",
+    recipeTier: "rare",
+    rarity: "rare"
+  };
+
+  const result = applyDiscovery(player, discovery, mockContent, () => 0.1);
+
+  assert.strictEqual(result.isDuplicate, true);
+  assert.strictEqual(result.reward, `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)`);
+  assert.strictEqual(player.coins, 100 + SCROLL_DUPLICATE_COINS);
 });
 
 test("Discovery: applyNpcDiscoveryBuff - curious apprentice sets buff", () => {
@@ -337,4 +364,212 @@ test("Discovery: applyDiscovery clue can reveal fish after fishing unlock", () =
   assert.strictEqual(result.isDuplicate, false);
   assert.ok(player.clues_owned.fish_ramen);
   assert.deepEqual(player.clues_owned.fish_ramen.revealed_ingredients, ["shrimp"]);
+});
+
+test("Discovery: rollRecipeDiscovery base serve roll yields at most one drop", () => {
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: [],
+    scrolls_owned: {},
+    clues_owned: {}
+  };
+
+  const rng = (() => {
+    let x = 123456789;
+    return () => {
+      x = (1664525 * x + 1013904223) % 4294967296;
+      return x / 4294967296;
+    };
+  })();
+
+  for (let i = 0; i < 500; i++) {
+    const discoveries = rollRecipeDiscovery({
+      player,
+      content: mockContent,
+      npcArchetype: null,
+      tier: "common",
+      rng
+    });
+    assert.ok(discoveries.length <= 1, `Expected <=1 base discovery drop, got ${discoveries.length}`);
+  }
+});
+
+test("Discovery: serve roll can produce duplicate clue when no new discoveries remain", () => {
+  const content = {
+    recipes: {
+      known_recipe: {
+        recipe_id: "known_recipe",
+        name: "Known Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: ["known_recipe"],
+    clues_owned: {},
+    scrolls_owned: {},
+    coins: 100
+  };
+
+  const seq = [0, 0, 0, 0];
+  const rng = () => (seq.length ? seq.shift() : 0);
+
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content,
+    npcArchetype: null,
+    tier: "common",
+    rng
+  });
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "clue");
+
+  const result = applyDiscovery(player, discoveries[0], content, () => 0.9);
+  assert.equal(result.isDuplicate, true);
+  assert.equal(result.reward, `+${CLUE_DUPLICATE_COINS}c (duplicate clue)`);
+});
+
+test("Discovery: serve roll can produce duplicate scroll when no new discoveries remain", () => {
+  const content = {
+    recipes: {
+      scroll_recipe: {
+        recipe_id: "scroll_recipe",
+        name: "Scroll Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: ["scroll_recipe"],
+    clues_owned: {},
+    scrolls_owned: {
+      scroll_recipe: { scroll_id: "scroll_old", recipe_id: "scroll_recipe", obtained_at: 123 }
+    },
+    coins: 100
+  };
+
+  const seq = [0, 0.999, 0, 0];
+  const rng = () => (seq.length ? seq.shift() : 0);
+
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content,
+    npcArchetype: null,
+    tier: "common",
+    rng
+  });
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "scroll");
+
+  const result = applyDiscovery(player, discoveries[0], content, () => 0.9);
+  assert.equal(result.isDuplicate, true);
+  assert.equal(result.reward, `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)`);
+});
+
+test("Discovery: serve clue roll can produce duplicate even when undiscovered recipes exist", () => {
+  const content = {
+    recipes: {
+      known_recipe: {
+        recipe_id: "known_recipe",
+        name: "Known Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      unknown_recipe: {
+        recipe_id: "unknown_recipe",
+        name: "Unknown Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: ["known_recipe"],
+    clues_owned: {},
+    scrolls_owned: {},
+    coins: 100
+  };
+
+  const rng = () => 0;
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content,
+    npcArchetype: null,
+    tier: "common",
+    rng
+  });
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "clue");
+  assert.equal(discoveries[0].recipeId, "known_recipe");
+
+  const result = applyDiscovery(player, discoveries[0], content, () => 0.9);
+  assert.equal(result.isDuplicate, true);
+  assert.equal(result.reward, `+${CLUE_DUPLICATE_COINS}c (duplicate clue)`);
+});
+
+test("Discovery: serve scroll roll can produce duplicate even when undiscovered recipes exist", () => {
+  const content = {
+    recipes: {
+      known_scroll_recipe: {
+        recipe_id: "known_scroll_recipe",
+        name: "Known Scroll Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      unknown_scroll_recipe: {
+        recipe_id: "unknown_scroll_recipe",
+        name: "Unknown Scroll Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: ["known_scroll_recipe"],
+    clues_owned: {},
+    scrolls_owned: {
+      known_scroll_recipe: { scroll_id: "scroll_old", recipe_id: "known_scroll_recipe", obtained_at: 123 }
+    },
+    coins: 100
+  };
+
+  const seq = [0, 0.999, 0, 0, 0, 0, 0];
+  const rng = () => (seq.length ? seq.shift() : 0);
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content,
+    npcArchetype: null,
+    tier: "common",
+    rng
+  });
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "scroll");
+  assert.equal(discoveries[0].recipeId, "known_scroll_recipe");
+
+  const result = applyDiscovery(player, discoveries[0], content, () => 0.9);
+  assert.equal(result.isDuplicate, true);
+  assert.equal(result.reward, `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)`);
 });
