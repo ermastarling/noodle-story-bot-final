@@ -8243,6 +8243,7 @@ ${lines.join("\n")}`;
     const servedByNpc = {};
     let seasonalServedCount = 0;
     let seasonalServedCoins = 0;
+    let duplicateDiscoveryCoins = 0;
     let leveledUp = false;
     let recipeUnlocked = false;
     const unlockedRecipeNames = [];
@@ -8396,7 +8397,22 @@ ${lines.join("\n")}`;
           if (result.message) {
             discoveryMessages.push(result.message);
           } else if (result.isDuplicate && result.reward) {
-            discoveryMessages.push(`${getIcon("sparkle")} ${result.reward}`);
+            const rewardMatch = String(result.reward).match(/\+(\d+)c/i);
+            const duplicateCoins = rewardMatch ? Number(rewardMatch[1] || 0) : 0;
+            duplicateDiscoveryCoins += duplicateCoins;
+
+            const recipeLabel = discovery.recipeName || discovery.recipeId || "that recipe";
+            const duplicateType = discovery.type === "scroll" ? "scroll" : "clue";
+
+            if (duplicateCoins > 0) {
+              discoveryMessages.push(
+                `${getIcon("sparkle")} You already found a **${duplicateType}** for **${recipeLabel}**, so you got **+${duplicateCoins}c** bonus coins.`
+              );
+            } else {
+              discoveryMessages.push(
+                `${getIcon("sparkle")} You already found a **${duplicateType}** for **${recipeLabel}**.`
+              );
+            }
           }
           
           // Track if a new recipe was unlocked
@@ -8460,9 +8476,9 @@ ${lines.join("\n")}`;
           const minsLeft = Math.ceil((auraExpiry - now3_aura) / 1000 / 60);
           const ts = Math.floor(auraExpiry / 1000);
           if (rewards.repAuraAlreadyActive) {
-            serveMsg += ` ${getIcon("sparkle")} Aura buff already active (<t:${ts}:R>)`;
+            serveMsg += ` ${getIcon("sparkle")} Aura buff already active (expires <t:${ts}:R>)`;
           } else {
-            serveMsg += ` ${getIcon("sparkle")} +2 REP for 15 min (<t:${ts}:R>)`;
+            serveMsg += ` ${getIcon("sparkle")} +2 REP for 15 min (expires <t:${ts}:R>)`;
           }
         } else if (rewards.repAuraGranted) {
           serveMsg += ` ${getIcon("sparkle")} +2 REP for 15 min`;
@@ -8577,7 +8593,10 @@ ${lines.join("\n")}`;
       results.push(`${getIcon("regulars")} Regulars are already asking for **${friendlyNames}**.`);
     }
 
-    const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
+    const duplicateSummary = duplicateDiscoveryCoins > 0
+      ? ` (includes **+${duplicateDiscoveryCoins}c** from duplicate clues/scrolls)`
+      : "";
+    const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**${duplicateSummary}.`;
     const levelLine = leveledUp ? `\n${getIcon("level_up")} Level up! You're now **Level ${p.shop_level}**.` : "";
     const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.join("\n")}` : "";
     const tut = advanceTutorial(p, "serve");
