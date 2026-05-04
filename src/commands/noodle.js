@@ -574,7 +574,7 @@ function buildMarketRefreshFooterText(existingFooterText, marketRestockMs, nowMs
     relativeText = `${hourPart}${minPart} ${diffMs >= 0 ? "from now" : "ago"}`;
   }
 
-  const marketText = `Market Restock: ${dateText}${relativeText ? ` (${relativeText})` : ""}`;
+  const marketText = `New Orders Arrive: ${dateText}`;
   return existingFooterText ? `${existingFooterText} • ${marketText}` : marketText;
 }
 
@@ -4184,9 +4184,18 @@ const buildDevStatusEmbed = () => {
   const guildCount = interaction.client?.guilds?.cache?.size ?? 0;
   const shardId = interaction.guild?.shardId ?? null;
   const shardCount = interaction.client?.shard?.count ?? null;
+  const shardHealth = interaction.client?.noodleShardHealth ?? {};
+  const recommendedShardCount = Number(shardHealth.recommendedShardCount);
+  const shardThreshold = Number(shardHealth.threshold);
   const shardText = Number.isFinite(shardId) && Number.isFinite(shardCount)
     ? `${shardId + 1}/${shardCount}`
     : "n/a";
+  const recommendedShardText = Number.isFinite(recommendedShardCount) && recommendedShardCount > 0
+    ? recommendedShardCount.toLocaleString()
+    : "unknown";
+  const shardThresholdText = Number.isFinite(shardThreshold) && shardThreshold > 0
+    ? shardThreshold.toLocaleString()
+    : "2,500";
   const mem = process.memoryUsage();
   const rssMb = (mem.rss / (1024 * 1024)).toFixed(1);
   const heapMb = (mem.heapUsed / (1024 * 1024)).toFixed(1);
@@ -4229,6 +4238,7 @@ const buildDevStatusEmbed = () => {
     `${getIcon("profile")} Global active users (${activeWindowHours}h): ${activeUsers}`,
     `${getIcon("stats")} Memory: ${rssMb} MB RSS / ${heapMb} MB heap`,
     `${getIcon("leaderboard")} Shard: ${shardText}`,
+    `${getIcon("leaderboard")} Recommended shards: ${recommendedShardText} (threshold ${shardThresholdText}/shard)`,
     `${getIcon("refresh")} Last backup: ${lastBackup}`
   ].join("\n");
 

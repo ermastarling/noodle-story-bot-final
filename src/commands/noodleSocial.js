@@ -528,7 +528,7 @@ function buildMarketRefreshFooterText(existingFooterText, marketRestockMs, nowMs
     relativeText = `${hourPart}${minPart} ${diffMs >= 0 ? "from now" : "ago"}`;
   }
 
-  const marketText = `Market Restock: ${dateText}${relativeText ? ` (${relativeText})` : ""}`;
+  const marketText = `New Orders Arrive: ${dateText}`;
   return existingFooterText ? `${existingFooterText} • ${marketText}` : marketText;
 }
 

@@ -263,7 +263,19 @@ import { theme } from "./ui/theme.js";
   const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
   const topggStatsToken = process.env.NOODLE_TOPGG_TOKEN || process.env.TOPGG_TOKEN || process.env.TOPGG_API_TOKEN || "";
   const topggBotId = process.env.TOPGG_BOT_ID || "1460058511802105976";
+  const DEFAULT_SHARD_GUILD_THRESHOLD = 2500;
+  const shardThresholdRaw = Number(process.env.NOODLE_SHARD_GUILD_THRESHOLD || DEFAULT_SHARD_GUILD_THRESHOLD);
+  const shardAlertRatioRaw = Number(process.env.NOODLE_SHARD_ALERT_RATIO || 0.8);
+  const shardGuildThreshold = Number.isFinite(shardThresholdRaw) && shardThresholdRaw > 0
+    ? Math.floor(shardThresholdRaw)
+    : DEFAULT_SHARD_GUILD_THRESHOLD;
+  const shardAlertRatio = Number.isFinite(shardAlertRatioRaw) && shardAlertRatioRaw > 0 && shardAlertRatioRaw <= 1
+    ? shardAlertRatioRaw
+    : 0.8;
+  const shardAlertThreshold = Math.max(1, Math.floor(shardGuildThreshold * shardAlertRatio));
   let topggStatsDisabledLogged = false;
+  let shardNearThresholdAlertSent = false;
+  let shardRecommendedAlertSent = false;
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -276,6 +288,14 @@ import { theme } from "./ui/theme.js";
       Intents.FLAGS.DIRECT_MESSAGES
     ]
   });
+
+  client.noodleShardHealth = {
+    guildCount: 0,
+    recommendedShardCount: null,
+    threshold: shardGuildThreshold,
+    alertThreshold: shardAlertThreshold,
+    lastCheckedAt: null
+  };
 
   const db = openDb();
   const { withEventRecipes } = await import("./game/events.js");
@@ -650,6 +670,80 @@ import { theme } from "./ui/theme.js";
     } catch (error) {
       console.error(`❌ Top.gg server count sync threw (${reason}):`, error?.stack ?? error);
       return false;
+    }
+  }
+
+  async function fetchRecommendedShardCount() {
+    try {
+      const response = await fetch("https://discord.com/api/v10/gateway/bot", {
+        method: "GET",
+        headers: {
+          Authorization: `Bot ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => "");
+        console.error(
+          `❌ Failed to fetch recommended shard count: ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
+        );
+        return null;
+      }
+
+      const data = await response.json().catch(() => ({}));
+      const recommended = Number(data?.shards);
+      if (!Number.isFinite(recommended) || recommended <= 0) return null;
+      return Math.floor(recommended);
+    } catch (error) {
+      console.error("❌ Failed to fetch recommended shard count:", error?.stack ?? error);
+      return null;
+    }
+  }
+
+  async function refreshShardHealth({ reason = "event" } = {}) {
+    const guildCount = Number(client.guilds.cache.size ?? 0);
+    const recommendedShardCount = await fetchRecommendedShardCount();
+    client.noodleShardHealth = {
+      guildCount,
+      recommendedShardCount,
+      threshold: shardGuildThreshold,
+      alertThreshold: shardAlertThreshold,
+      lastCheckedAt: Date.now()
+    };
+
+    const nearThreshold = guildCount >= shardAlertThreshold;
+    const multiShardRecommended = Number.isFinite(recommendedShardCount) && recommendedShardCount > 1;
+
+    if (nearThreshold && !shardNearThresholdAlertSent) {
+      shardNearThresholdAlertSent = true;
+      await sendDevAlert({
+        title: "Shard Threshold Nearing",
+        description:
+          `Guild count is **${guildCount.toLocaleString()}**.\n` +
+          `Configured shard threshold: **${shardGuildThreshold.toLocaleString()}** guilds.\n` +
+          `Near-threshold alert fires at **${Math.round(shardAlertRatio * 100)}%** (${shardAlertThreshold.toLocaleString()} guilds).\n` +
+          `Discord recommended shards: **${Number.isFinite(recommendedShardCount) ? recommendedShardCount.toLocaleString() : "unknown"}**.`,
+        footerText: `Reason: ${reason}`,
+        color: theme.colors.warning,
+        requireMention: true
+      });
+    } else if (!nearThreshold && shardNearThresholdAlertSent) {
+      shardNearThresholdAlertSent = false;
+    }
+
+    if (multiShardRecommended && !shardRecommendedAlertSent) {
+      shardRecommendedAlertSent = true;
+      await sendDevAlert({
+        title: "Discord Recommends Sharding",
+        description:
+          `Discord gateway now recommends **${recommendedShardCount.toLocaleString()}** shards.\n` +
+          `Current guild count: **${guildCount.toLocaleString()}**.`,
+        footerText: `Reason: ${reason}`,
+        color: theme.colors.warning,
+        requireMention: true
+      });
+    } else if (!multiShardRecommended && shardRecommendedAlertSent) {
+      shardRecommendedAlertSent = false;
     }
   }
 
@@ -1092,6 +1186,7 @@ import { theme } from "./ui/theme.js";
 
     const customEmojis = getCustomEmojiEntries();
     const { ids: accessibleEmojiIds, applicationEmojiCount } = await resolveAccessibleEmojiIds(client, token);
+    await refreshShardHealth({ reason: "ready" });
     const missingEmojis = customEmojis.filter((emoji) => !accessibleEmojiIds.has(emoji.id));
     if (missingEmojis.length) {
       const missingList = missingEmojis
@@ -1135,6 +1230,7 @@ import { theme } from "./ui/theme.js";
     try {
       const currentServerCount = Number(guild?.client?.guilds?.cache?.size ?? client.guilds.cache.size ?? 0);
       await updateTopggServerCount(currentServerCount, { reason: "guildCreate" });
+      await refreshShardHealth({ reason: "guildCreate" });
 
       if (guild?.id === officialGuildId) return;
       const memberCount = Number(guild?.memberCount ?? 0);
@@ -1156,6 +1252,7 @@ import { theme } from "./ui/theme.js";
     try {
       const currentServerCount = Number(guild?.client?.guilds?.cache?.size ?? client.guilds.cache.size ?? 0);
       await updateTopggServerCount(currentServerCount, { reason: "guildDelete" });
+      await refreshShardHealth({ reason: "guildDelete" });
 
       if (guild?.id === officialGuildId) return;
       await sendDevAlert({
