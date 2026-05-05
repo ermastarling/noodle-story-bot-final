@@ -3168,25 +3168,42 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
 function buildSellQuantityRow(userId, selectedIds, page, selectionToken = null) {
   const ids = (selectedIds ?? []).filter(Boolean).slice(0, 5);
   const safePage = Number.isFinite(page) ? Number(page) : 0;
-  const token = selectionToken || makeSelectionToken();
-  sellSelectionCacheV2.set(token, {
-    userId,
-    selectedIds: ids,
-    page: safePage,
-    expiresAt: Date.now() + SELECTION_CACHE_TTL_MS
-  });
+  const joined = ids.join(",");
+
+  const legacySell1Id = `noodle:sell:sell1:${userId}:${safePage}:${joined}`;
+  const legacySell5Id = `noodle:sell:sell5:${userId}:${safePage}:${joined}`;
+  const legacySell10Id = `noodle:sell:sell10:${userId}:${safePage}:${joined}`;
+  const canUseEmbeddedIds = [legacySell1Id, legacySell5Id, legacySell10Id].every((id) => id.length <= 100);
+
+  let sell1Id = legacySell1Id;
+  let sell5Id = legacySell5Id;
+  let sell10Id = legacySell10Id;
+
+  if (!canUseEmbeddedIds) {
+    const token = selectionToken || makeSelectionToken();
+    sellSelectionCacheV2.set(token, {
+      userId,
+      selectedIds: ids,
+      page: safePage,
+      expiresAt: Date.now() + SELECTION_CACHE_TTL_MS
+    });
+
+    sell1Id = `noodle:sell:sell1:${userId}:${token}`;
+    sell5Id = `noodle:sell:sell5:${userId}:${token}`;
+    sell10Id = `noodle:sell:sell10:${userId}:${token}`;
+  }
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:sell:sell1:${userId}:${token}`)
+      .setCustomId(sell1Id)
       .setLabel("Sell 1 each")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`noodle:sell:sell5:${userId}:${token}`)
+      .setCustomId(sell5Id)
       .setLabel("Sell 5 each")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle:sell:sell10:${userId}:${token}`)
+      .setCustomId(sell10Id)
       .setLabel("Sell 10 each")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
