@@ -105,6 +105,48 @@ test("Staff: kitchen-effect staff are gated by kitchen unlock level", () => {
   assert.strictEqual(unlocked.unlocked, true);
 });
 
+test("Staff: Forager remains upgradeable before garden but seed effect is locked", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 10;
+  player.coins = 999999;
+
+  const status = getStaffUnlockStatus(player, staffContent.staff_members.forager);
+  assert.strictEqual(status.unlocked, true);
+
+  const result = levelUpStaff(player, "forager", staffContent);
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(player.staff_levels.forager, 1);
+
+  const preGarden = calculateStaffEffects(player, staffContent);
+  assert.strictEqual(preGarden.forage_bonus_items, 1);
+  assert.strictEqual(preGarden.forage_seed_chance, 0);
+
+  player.shop_level = 25;
+  const postGarden = calculateStaffEffects(player, staffContent);
+  assert.ok(postGarden.forage_seed_chance > 0);
+});
+
+test("Staff: Forage Manager remains upgradeable before garden but harvest cooldown effect is locked", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 10;
+  player.coins = 999999;
+
+  const status = getStaffUnlockStatus(player, staffContent.staff_members.manager);
+  assert.strictEqual(status.unlocked, true);
+
+  const result = levelUpStaff(player, "manager", staffContent);
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(player.staff_levels.manager, 1);
+
+  const preGarden = calculateStaffEffects(player, staffContent);
+  assert.ok(preGarden.cooldown_reduction > 0);
+  assert.strictEqual(preGarden.harvest_cooldown_reduction, 0);
+
+  player.shop_level = 25;
+  const postGarden = calculateStaffEffects(player, staffContent);
+  assert.ok(postGarden.harvest_cooldown_reduction > 0);
+});
+
 test("Staff: levelUpStaff fails at max level", () => {
   const player = makeTestPlayer();
   player.coins = 999999;

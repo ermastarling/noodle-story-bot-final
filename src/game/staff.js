@@ -10,7 +10,7 @@ const STAFF_UNLOCK_RULES = [
   {
     featureName: "Garden",
     requiredLevel: GARDEN_UNLOCK_LEVEL,
-    effectKeys: new Set(["garden_autoharvest", "garden_harvest_seed_chance", "harvest_cooldown_reduction"]),
+    effectKeys: new Set(["forage_seed_chance", "garden_autoharvest", "garden_harvest_seed_chance", "harvest_cooldown_reduction"]),
     isUnlocked: isGardenUnlocked
   },
   {
@@ -27,19 +27,49 @@ const STAFF_UNLOCK_RULES = [
   }
 ];
 
+function getStaffUnlockRuleForEffect(effectKey) {
+  if (!effectKey) return null;
+  return STAFF_UNLOCK_RULES.find((rule) => rule.effectKeys.has(effectKey)) || null;
+}
+
+export function isStaffEffectUnlocked(player, effectKey) {
+  const rule = getStaffUnlockRuleForEffect(effectKey);
+  if (!rule) return true;
+  return rule.isUnlocked(player);
+}
+
+export function filterUnlockedStaffEffects(player, effectsPerLevel = {}) {
+  const visible = {};
+  for (const [effectKey, value] of Object.entries(effectsPerLevel || {})) {
+    if (!isStaffEffectUnlocked(player, effectKey)) continue;
+    visible[effectKey] = value;
+  }
+  return visible;
+}
+
 export function getStaffUnlockStatus(player, staff) {
   const effects = staff?.effects_per_level ?? {};
-  for (const rule of STAFF_UNLOCK_RULES) {
-    const gatedByRule = Object.keys(effects).some((key) => rule.effectKeys.has(key));
-    if (!gatedByRule) continue;
-    const unlocked = rule.isUnlocked(player);
+  const effectKeys = Object.keys(effects);
+  if (!effectKeys.length) {
+    return { unlocked: true, featureName: null, requiredLevel: null, requirementLabel: null };
+  }
+
+  const hasAnyActiveEffect = effectKeys.some((effectKey) => isStaffEffectUnlocked(player, effectKey));
+  if (hasAnyActiveEffect) {
+    return { unlocked: true, featureName: null, requiredLevel: null, requirementLabel: null };
+  }
+
+  for (const effectKey of effectKeys) {
+    const rule = getStaffUnlockRuleForEffect(effectKey);
+    if (!rule || rule.isUnlocked(player)) continue;
     return {
-      unlocked,
+      unlocked: false,
       featureName: rule.featureName,
       requiredLevel: rule.requiredLevel,
       requirementLabel: `Unlocks at shop level ${rule.requiredLevel}`
     };
   }
+
   return { unlocked: true, featureName: null, requiredLevel: null, requirementLabel: null };
 }
 
@@ -203,6 +233,7 @@ export function calculateStaffEffects(player, staffContent) {
     if (!staff || !staff.effects_per_level) continue;
     
     for (const [effectKey, effectPerLevel] of Object.entries(staff.effects_per_level)) {
+      if (!isStaffEffectUnlocked(player, effectKey)) continue;
       if (effects.hasOwnProperty(effectKey)) {
         effects[effectKey] += effectPerLevel * level * staffMultiplier;
       }
