@@ -248,7 +248,7 @@ function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = 
   return `${truncatedVisible}${suffix}`;
 }
 
-function applyUnlockNoticeEmbeds(payload = {}, player, user) {
+function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false } = {}) {
   if (!player) return payload;
 
   const garden = getGardenUnlockState(player);
@@ -299,8 +299,6 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
     && playerRep >= firstSeatingRepThreshold
     && !seatingNoticeAlreadySeen;
 
-  let consumedSeatingNotice = false;
-
   if (shouldShowSeatingNotice) {
     notices.push(
       buildMenuEmbed({
@@ -309,17 +307,18 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
         user
       })
     );
-    if (!player.notifications) {
-      player.notifications = {
-        pending_pantry_messages: [],
-        dm_reminders_opt_out: false,
-        last_daily_reminder_day: null,
-        last_noodle_channel_id: null,
-        last_noodle_guild_id: null
-      };
+    if (consumeSeatingNotice) {
+      if (!player.notifications) {
+        player.notifications = {
+          pending_pantry_messages: [],
+          dm_reminders_opt_out: false,
+          last_daily_reminder_day: null,
+          last_noodle_channel_id: null,
+          last_noodle_guild_id: null
+        };
+      }
+      player.notifications.seating_unlock_notice_seen = true;
     }
-    player.notifications.seating_unlock_notice_seen = true;
-    consumedSeatingNotice = true;
   }
 
   if (!notices.length) return payload;
@@ -340,10 +339,6 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
   if (existingEmbeds.length) {
     updated.embeds = existingEmbeds;
     if (updated.content === undefined) updated.content = " ";
-  }
-
-  if (consumedSeatingNotice) {
-    Object.defineProperty(updated, "__persistUnlockNoticeState", { value: true, enumerable: false });
   }
 
   Object.defineProperty(updated, "__unlockNoticeApplied", { value: true, enumerable: false });
@@ -4196,10 +4191,9 @@ const withSeasonNotice = (payload = {}) => {
 const commit = async (payload) => {
   const unlockApplied = payload?.__unlockNoticeApplied;
   if (!unlockApplied) {
-    payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user);
-  }
-  if (payload?.__persistUnlockNoticeState && unlockNoticePlayer && db) {
-    upsertPlayer(db, serverId, userId, unlockNoticePlayer, null, unlockNoticePlayer.schema_version);
+    payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user, {
+      consumeSeatingNotice: false
+    });
   }
   payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
@@ -5860,7 +5854,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   const commitState = async (replyObj) => {
 
-    const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user);
+    const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user, {
+      consumeSeatingNotice: true
+    });
     if (replyWithUnlock && typeof replyWithUnlock === "object") {
       Object.defineProperty(replyWithUnlock, "__unlockNoticeApplied", { value: true, enumerable: false });
     }
