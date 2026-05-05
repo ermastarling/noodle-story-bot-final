@@ -485,6 +485,9 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
         if (!effectSummary && staff.staff_id === "prep_chef") {
           effectSummary = "auto-buy missing ingredients (+1 order per level)";
         }
+        if (!effectSummary) {
+          effectSummary = staff.description || "";
+        }
         const description = effectSummary ? `\n  _${effectSummary}_` : "";
         return `• ${emoji}**${staff.name}** (${currentLevel}/${staff.max_level}) — ${status}${description}`.trim();
       })
