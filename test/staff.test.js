@@ -85,7 +85,7 @@ test("Staff: Garden staff stay locked until garden unlock level", () => {
   assert.strictEqual(player.staff_levels.gardener, 1);
 });
 
-test("Staff: kitchen-effect staff are gated by kitchen unlock level", () => {
+test("Staff: kitchen-effect staff are not staff-gated", () => {
   const player = makeTestPlayer();
   player.shop_level = 44;
 
@@ -96,13 +96,8 @@ test("Staff: kitchen-effect staff are gated by kitchen unlock level", () => {
     effects_per_level: { kitchen_simmer_time_reduction: 0.05 }
   };
 
-  const locked = getStaffUnlockStatus(player, kitchenOnlyStaff);
-  assert.strictEqual(locked.unlocked, false);
-  assert.strictEqual(locked.requiredLevel, 45);
-
-  player.shop_level = 45;
-  const unlocked = getStaffUnlockStatus(player, kitchenOnlyStaff);
-  assert.strictEqual(unlocked.unlocked, true);
+  const status = getStaffUnlockStatus(player, kitchenOnlyStaff);
+  assert.strictEqual(status.unlocked, true);
 });
 
 test("Staff: Forager remains upgradeable before garden but seed effect is locked", () => {

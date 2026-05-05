@@ -1,7 +1,6 @@
 import { loadUpgradesContent } from "../content/index.js";
 import { calculateUpgradeEffects } from "./upgrades.js";
 import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "./garden.js";
-import { isKitchenUnlocked, KITCHEN_UNLOCK_LEVEL } from "./kitchen.js";
 import { isFishingUnlocked, FISHING_UNLOCK_LEVEL } from "./fishing.js";
 
 const upgradesContent = loadUpgradesContent();
@@ -12,12 +11,6 @@ const STAFF_UNLOCK_RULES = [
     requiredLevel: GARDEN_UNLOCK_LEVEL,
     effectKeys: new Set(["forage_seed_chance", "garden_autoharvest", "garden_harvest_seed_chance", "harvest_cooldown_reduction"]),
     isUnlocked: isGardenUnlocked
-  },
-  {
-    featureName: "Kitchen",
-    requiredLevel: KITCHEN_UNLOCK_LEVEL,
-    effectKeys: new Set(["kitchen_simmer_capacity", "kitchen_simmer_time_reduction"]),
-    isUnlocked: isKitchenUnlocked
   },
   {
     featureName: "Fishing",
