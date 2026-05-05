@@ -248,7 +248,7 @@ function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = 
   return `${truncatedVisible}${suffix}`;
 }
 
-function applyUnlockNoticeEmbeds(payload = {}, player, user) {
+function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false } = {}) {
   if (!player) return payload;
 
   const garden = getGardenUnlockState(player);
@@ -282,6 +282,43 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
         user
       })
     );
+  }
+
+  const seatingUpgrade = upgradesContent?.upgrades?.u_seating;
+  const seatingLevel = Math.max(0, Number(player?.upgrades?.u_seating || 0));
+  const seatingRepRequirements = Array.isArray(seatingUpgrade?.requirements?.rep)
+    ? seatingUpgrade.requirements.rep
+    : (typeof seatingUpgrade?.requirements?.rep === "number" ? [seatingUpgrade.requirements.rep] : []);
+  const firstSeatingRepThreshold = seatingRepRequirements.length
+    ? Math.max(0, Number(seatingRepRequirements[0]) || 0)
+    : 0;
+  const playerRep = Math.max(0, Number(player?.rep || 0));
+  const seatingNoticeAlreadySeen = Boolean(player?.notifications?.seating_unlock_notice_seen);
+  const shouldShowSeatingNotice = seatingLevel <= 0
+    && firstSeatingRepThreshold > 0
+    && playerRep >= firstSeatingRepThreshold
+    && !seatingNoticeAlreadySeen;
+
+  if (shouldShowSeatingNotice) {
+    notices.push(
+      buildMenuEmbed({
+        title: `${getIcon("orders")} More Orders Available`,
+        description: `${getIcon("rep")} You have enough REP to unlock more seating & **Daily Orders**.\nOpen **/noodle-upgrades** and unlock **Seating** in the **Service** category using your earned REP.`,
+        user
+      })
+    );
+    if (consumeSeatingNotice) {
+      if (!player.notifications) {
+        player.notifications = {
+          pending_pantry_messages: [],
+          dm_reminders_opt_out: false,
+          last_daily_reminder_day: null,
+          last_noodle_channel_id: null,
+          last_noodle_guild_id: null
+        };
+      }
+      player.notifications.seating_unlock_notice_seen = true;
+    }
   }
 
   if (!notices.length) return payload;
@@ -4154,7 +4191,9 @@ const withSeasonNotice = (payload = {}) => {
 const commit = async (payload) => {
   const unlockApplied = payload?.__unlockNoticeApplied;
   if (!unlockApplied) {
-    payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user);
+    payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user, {
+      consumeSeatingNotice: false
+    });
   }
   payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
@@ -5815,7 +5854,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   const commitState = async (replyObj) => {
 
-    const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user);
+    const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user, {
+      consumeSeatingNotice: true
+    });
     if (replyWithUnlock && typeof replyWithUnlock === "object") {
       Object.defineProperty(replyWithUnlock, "__unlockNoticeApplied", { value: true, enumerable: false });
     }
