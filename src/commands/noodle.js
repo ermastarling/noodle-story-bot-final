@@ -284,6 +284,44 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
     );
   }
 
+  const seatingUpgrade = upgradesContent?.upgrades?.u_seating;
+  const seatingLevel = Math.max(0, Number(player?.upgrades?.u_seating || 0));
+  const seatingRepRequirements = Array.isArray(seatingUpgrade?.requirements?.rep)
+    ? seatingUpgrade.requirements.rep
+    : (typeof seatingUpgrade?.requirements?.rep === "number" ? [seatingUpgrade.requirements.rep] : []);
+  const firstSeatingRepThreshold = seatingRepRequirements.length
+    ? Math.max(0, Number(seatingRepRequirements[0]) || 0)
+    : 0;
+  const playerRep = Math.max(0, Number(player?.rep || 0));
+  const seatingNoticeAlreadySeen = Boolean(player?.notifications?.seating_unlock_notice_seen);
+  const shouldShowSeatingNotice = seatingLevel <= 0
+    && firstSeatingRepThreshold > 0
+    && playerRep >= firstSeatingRepThreshold
+    && !seatingNoticeAlreadySeen;
+
+  let consumedSeatingNotice = false;
+
+  if (shouldShowSeatingNotice) {
+    notices.push(
+      buildMenuEmbed({
+        title: `${getIcon("orders")} More Orders Available`,
+        description: `${getIcon("rep")} You have enough REP to unlock more seating & **Daily Orders**.\nOpen **/noodle-upgrades** and unlock **Seating** in the **Service** category using your earned REP.`,
+        user
+      })
+    );
+    if (!player.notifications) {
+      player.notifications = {
+        pending_pantry_messages: [],
+        dm_reminders_opt_out: false,
+        last_daily_reminder_day: null,
+        last_noodle_channel_id: null,
+        last_noodle_guild_id: null
+      };
+    }
+    player.notifications.seating_unlock_notice_seen = true;
+    consumedSeatingNotice = true;
+  }
+
   if (!notices.length) return payload;
 
   const updated = { ...(payload ?? {}) };
@@ -302,6 +340,10 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
   if (existingEmbeds.length) {
     updated.embeds = existingEmbeds;
     if (updated.content === undefined) updated.content = " ";
+  }
+
+  if (consumedSeatingNotice) {
+    Object.defineProperty(updated, "__persistUnlockNoticeState", { value: true, enumerable: false });
   }
 
   Object.defineProperty(updated, "__unlockNoticeApplied", { value: true, enumerable: false });
@@ -4155,6 +4197,9 @@ const commit = async (payload) => {
   const unlockApplied = payload?.__unlockNoticeApplied;
   if (!unlockApplied) {
     payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user);
+  }
+  if (payload?.__persistUnlockNoticeState && unlockNoticePlayer && db) {
+    upsertPlayer(db, serverId, userId, unlockNoticePlayer, null, unlockNoticePlayer.schema_version);
   }
   payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
