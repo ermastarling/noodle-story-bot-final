@@ -299,6 +299,8 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
     && playerRep >= firstSeatingRepThreshold
     && !seatingNoticeAlreadySeen;
 
+  let consumedSeatingNotice = false;
+
   if (shouldShowSeatingNotice) {
     notices.push(
       buildMenuEmbed({
@@ -307,6 +309,7 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
         user
       })
     );
+
     if (consumeSeatingNotice) {
       if (!player.notifications) {
         player.notifications = {
@@ -318,6 +321,7 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
         };
       }
       player.notifications.seating_unlock_notice_seen = true;
+      consumedSeatingNotice = true;
     }
   }
 
@@ -339,6 +343,10 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
   if (existingEmbeds.length) {
     updated.embeds = existingEmbeds;
     if (updated.content === undefined) updated.content = " ";
+  }
+
+  if (consumedSeatingNotice) {
+    Object.defineProperty(updated, "__persistUnlockNoticeState", { value: true, enumerable: false });
   }
 
   Object.defineProperty(updated, "__unlockNoticeApplied", { value: true, enumerable: false });
@@ -4194,6 +4202,9 @@ const commit = async (payload) => {
     payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user, {
       consumeSeatingNotice: false
     });
+  }
+  if (payload?.__persistUnlockNoticeState && unlockNoticePlayer && db) {
+    upsertPlayer(db, serverId, userId, unlockNoticePlayer, null, unlockNoticePlayer.schema_version);
   }
   payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
