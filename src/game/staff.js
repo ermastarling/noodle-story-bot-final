@@ -1,7 +1,47 @@
 import { loadUpgradesContent } from "../content/index.js";
 import { calculateUpgradeEffects } from "./upgrades.js";
+import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "./garden.js";
+import { isKitchenUnlocked, KITCHEN_UNLOCK_LEVEL } from "./kitchen.js";
+import { isFishingUnlocked, FISHING_UNLOCK_LEVEL } from "./fishing.js";
 
 const upgradesContent = loadUpgradesContent();
+
+const STAFF_UNLOCK_RULES = [
+  {
+    featureName: "Garden",
+    requiredLevel: GARDEN_UNLOCK_LEVEL,
+    effectKeys: new Set(["garden_autoharvest", "garden_harvest_seed_chance", "harvest_cooldown_reduction"]),
+    isUnlocked: isGardenUnlocked
+  },
+  {
+    featureName: "Kitchen",
+    requiredLevel: KITCHEN_UNLOCK_LEVEL,
+    effectKeys: new Set(["kitchen_simmer_capacity", "kitchen_simmer_time_reduction"]),
+    isUnlocked: isKitchenUnlocked
+  },
+  {
+    featureName: "Fishing",
+    requiredLevel: FISHING_UNLOCK_LEVEL,
+    effectKeys: new Set(["fishing_bonus_items"]),
+    isUnlocked: isFishingUnlocked
+  }
+];
+
+export function getStaffUnlockStatus(player, staff) {
+  const effects = staff?.effects_per_level ?? {};
+  for (const rule of STAFF_UNLOCK_RULES) {
+    const gatedByRule = Object.keys(effects).some((key) => rule.effectKeys.has(key));
+    if (!gatedByRule) continue;
+    const unlocked = rule.isUnlocked(player);
+    return {
+      unlocked,
+      featureName: rule.featureName,
+      requiredLevel: rule.requiredLevel,
+      requirementLabel: `Unlocks at shop level ${rule.requiredLevel}`
+    };
+  }
+  return { unlocked: true, featureName: null, requiredLevel: null, requirementLabel: null };
+}
 
 /**
  * Roll a daily staff pool for a server
@@ -39,6 +79,16 @@ export function levelUpStaff(player, staffId, staffContent) {
   const staff = staffContent.staff_members?.[staffId];
   if (!staff) {
     return { success: false, message: "Staff member not found.", cost: 0, newLevel: 0 };
+  }
+
+  const unlockStatus = getStaffUnlockStatus(player, staff);
+  if (!unlockStatus.unlocked) {
+    return {
+      success: false,
+      message: `${unlockStatus.requirementLabel}.`,
+      cost: 0,
+      newLevel: 0
+    };
   }
   
   // Ensure staff_levels object exists

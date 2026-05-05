@@ -11,7 +11,8 @@ import {
   getStaffLevels,
   getMaxStaffCapacity,
   getStaffSlotsUsed,
-  calculateStaffCost
+  calculateStaffCost,
+  getStaffUnlockStatus
 } from "../game/staff.js";
 import { calculateUpgradeEffects } from "../game/upgrades.js";
 import { theme } from "../ui/theme.js";
@@ -310,6 +311,8 @@ function buildStaffComponents(userId, player, server) {
     .map(staff => {
       const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
       if (currentLevel >= staff.max_level) return null; // Already maxed
+      const unlockStatus = getStaffUnlockStatus(player, staff);
+      if (!unlockStatus.unlocked) return null;
 
       const cost = calculateStaffCost(staff, currentLevel);
       const effectStr = formatEffects(staff.effects_per_level);
