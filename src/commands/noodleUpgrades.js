@@ -473,11 +473,18 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
       })
       .map((staff) => {
         const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
+        const unlockStatus = getStaffUnlockStatus(player, staff);
+        const isLocked = !unlockStatus.unlocked;
         const cost = calculateStaffCost(staff, currentLevel);
-        const status = currentLevel >= staff.max_level ? `${getIcon("status_complete")} MAX` : `${cost}c`;
+        const status = isLocked
+          ? `${getIcon("lock")} ${unlockStatus.requirementLabel}`
+          : (currentLevel >= staff.max_level ? `${getIcon("status_complete")} MAX` : `${cost}c`);
         const emoji = shouldHideRarityEmoji(staff) ? "" : `${rarityEmoji(staff.rarity)} `;
         const visibleEffects = filterUnlockedStaffEffects(player, staff.effects_per_level ?? {});
-        const effectSummary = formatEffects(visibleEffects);
+        let effectSummary = formatEffects(visibleEffects);
+        if (!effectSummary && staff.staff_id === "prep_chef") {
+          effectSummary = "auto-buy missing ingredients (+1 order per level)";
+        }
         const description = effectSummary ? `\n  _${effectSummary}_` : "";
         return `• ${emoji}**${staff.name}** (${currentLevel}/${staff.max_level}) — ${status}${description}`.trim();
       })
