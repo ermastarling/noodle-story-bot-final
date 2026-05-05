@@ -10450,12 +10450,13 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     const mode = parts2[2];
     const owner = parts2[3];
     const tokenOrLegacyPage = parts2[4] ?? null;
+    const isLegacyShape = Number.isFinite(Number(tokenOrLegacyPage)) && parts2.length > 5;
 
     let page = 0;
     let selectedIds = [];
     let selectionToken = null;
 
-    const cacheEntry = tokenOrLegacyPage ? sellSelectionCacheV2.get(tokenOrLegacyPage) : null;
+    const cacheEntry = tokenOrLegacyPage && !isLegacyShape ? sellSelectionCacheV2.get(tokenOrLegacyPage) : null;
     if (cacheEntry) {
       if (cacheEntry.expiresAt < Date.now()) {
         sellSelectionCacheV2.delete(tokenOrLegacyPage);
@@ -10471,6 +10472,9 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       cacheEntry.expiresAt = Date.now() + SELECTION_CACHE_TTL_MS;
       sellSelectionCacheV2.set(tokenOrLegacyPage, cacheEntry);
     } else {
+      if (tokenOrLegacyPage && !isLegacyShape) {
+        return componentCommit(interaction, { content: `${getIcon("warning")} Selection expired. Please reselect items and try again.`, ephemeral: true });
+      }
       // Backward-compat fallback for older component IDs in already-rendered messages.
       const maybePage = Number(tokenOrLegacyPage);
       const hasLegacyPage = Number.isFinite(maybePage);
