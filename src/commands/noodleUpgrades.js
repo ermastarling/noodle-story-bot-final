@@ -16,7 +16,7 @@ import {
   getUpgradesByCategory,
   calculateUpgradeEffects
 } from "../game/upgrades.js";
-import { calculateStaffCost, levelUpStaff, getStaffUnlockStatus } from "../game/staff.js";
+import { calculateStaffCost, levelUpStaff, getStaffUnlockStatus, filterUnlockedStaffEffects } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 
@@ -134,6 +134,7 @@ function formatEffects(effects) {
     else if (key === "fishing_cooldown_reduction") lines.push(`-${(value * 100).toFixed(2)}% fishing cooldown`);
     else if (key === "fishing_rare_weight_bonus") lines.push(`+${(value * 100).toFixed(2)}% rare catch weight`);
     else if (key === "fishing_bonus_items") lines.push(`+${formatTwoDecimals(value)} bonus catch per trip`);
+    else if (key === "harvest_cooldown_reduction") lines.push(`-${(value * 100).toFixed(2)}% harvest cooldown`);
   }
   return lines.join(", ");
 }
@@ -475,7 +476,9 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
         const cost = calculateStaffCost(staff, currentLevel);
         const status = currentLevel >= staff.max_level ? `${getIcon("status_complete")} MAX` : `${cost}c`;
         const emoji = shouldHideRarityEmoji(staff) ? "" : `${rarityEmoji(staff.rarity)} `;
-        const description = staff.description ? `\n  _${staff.description}_` : "";
+        const visibleEffects = filterUnlockedStaffEffects(player, staff.effects_per_level ?? {});
+        const effectSummary = formatEffects(visibleEffects);
+        const description = effectSummary ? `\n  _${effectSummary}_` : "";
         return `• ${emoji}**${staff.name}** (${currentLevel}/${staff.max_level}) — ${status}${description}`.trim();
       })
       .filter(Boolean);
@@ -566,7 +569,8 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
           const unlockStatus = getStaffUnlockStatus(player, staff);
           if (!unlockStatus.unlocked) return null;
           const cost = calculateStaffCost(staff, currentLevel);
-          let effectStr = formatEffects(staff.effects_per_level);
+          const visibleEffects = filterUnlockedStaffEffects(player, staff.effects_per_level ?? {});
+          let effectStr = formatEffects(visibleEffects);
           if (!effectStr && staff.staff_id === "prep_chef") {
             effectStr = "auto-buy missing ingredients (+1 order per level)";
           }
