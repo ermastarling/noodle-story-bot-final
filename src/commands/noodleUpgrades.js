@@ -16,7 +16,7 @@ import {
   getUpgradesByCategory,
   calculateUpgradeEffects
 } from "../game/upgrades.js";
-import { calculateStaffCost, levelUpStaff } from "../game/staff.js";
+import { calculateStaffCost, levelUpStaff, getStaffUnlockStatus } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 
@@ -563,6 +563,8 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
         .map((staff) => {
           const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
           if (currentLevel >= staff.max_level) return null;
+          const unlockStatus = getStaffUnlockStatus(player, staff);
+          if (!unlockStatus.unlocked) return null;
           const cost = calculateStaffCost(staff, currentLevel);
           let effectStr = formatEffects(staff.effects_per_level);
           if (!effectStr && staff.staff_id === "prep_chef") {
