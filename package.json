@@ -8,6 +8,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "NODE_ENV=development nodemon --watch src --ext js,json --signal SIGTERM src/index.js",
+    "check:actions-pinned": "bash scripts/check-actions-pinned.sh",
+    "setup:hooks": "git config core.hooksPath .githooks",
     "register": "node src/register-commands.js",
     "register:dev": "NODE_ENV=development node src/register-commands.js",
     "register:prod": "NODE_ENV=production node src/register-commands.js",
