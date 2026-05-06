@@ -1,0 +1,89 @@
+name: PR Checklist Enforcement
+
+"on":
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enforce-checklist:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - name: Validate required PR checklist items
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+
+            function esc(s) {
+              return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function checked(snippet) {
+              const re = new RegExp(`-\\s*\\[[xX]\\]\\s*[^\\n]*${esc(snippet)}`, "i");
+              return re.test(body);
+            }
+
+            const errors = [];
+
+            const targetDevelop = checked("Target is develop");
+            const targetMain = checked("Target is main");
+
+            if (targetDevelop && targetMain) {
+              errors.push("Choose only one target branch checkbox (develop or main).");
+            } else if (!targetDevelop && !targetMain) {
+              errors.push("Select a target branch checkbox (develop or main).");
+            }
+
+            const commonRequired = [
+              "This PR contains one focused change only",
+              "Branch was started/synced from the correct upstream target",
+              "I reviewed staged changes before commit",
+              "Each commit is a logical unit with a clear conventional message",
+              "I checked branch divergence",
+              "I cleaned up commit history"
+            ];
+
+            for (const item of commonRequired) {
+              if (!checked(item)) errors.push(`Missing required checklist item: ${item}`);
+            }
+
+            if (targetDevelop) {
+              const developRequired = [
+                "I rebased this branch on latest origin/develop",
+                "This PR is intended for integration/QA testing",
+                "Any release notes or rollout impact are captured for later promotion to main"
+              ];
+              for (const item of developRequired) {
+                if (!checked(item)) errors.push(`Missing develop-target item: ${item}`);
+              }
+            }
+
+            if (targetMain) {
+              const mainRequired = [
+                "I rebased this branch on latest origin/main",
+                "This change is release-ready and already validated at appropriate level",
+                "Merge plan keeps main history clean"
+              ];
+              for (const item of mainRequired) {
+                if (!checked(item)) errors.push(`Missing main-target item: ${item}`);
+              }
+            }
+
+            if (errors.length) {
+              core.summary
+                .addHeading("PR checklist enforcement failed")
+                .addList(errors)
+                .write();
+              core.setFailed(`Checklist requirements not met:\n- ${errors.join("\n- ")}`);
+              return;
+            }
+
+            core.summary
+              .addHeading("PR checklist enforcement passed")
+              .addRaw("All required checklist items are complete for the selected target branch.")
+              .write();
