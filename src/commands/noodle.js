@@ -2810,6 +2810,21 @@ function normalizeComponents(rows) {
   return normalized.length ? normalized : [];
 }
 
+function getCustomIdPrefix(customId) {
+  if (!customId || typeof customId !== "string") return null;
+  const idx = customId.indexOf(":");
+  return idx === -1 ? customId : customId.slice(0, idx);
+}
+
+function buildInteractionFailureContext(interaction, messageId = null) {
+  return {
+    guildId: interaction?.guildId ?? null,
+    channelId: interaction?.channelId ?? interaction?.channel?.id ?? null,
+    messageId: messageId ?? interaction?.message?.id ?? null,
+    customIdPrefix: getCustomIdPrefix(interaction?.customId ?? null)
+  };
+}
+
 async function componentCommit(interaction, payload) {
 const { ephemeral, targetMessageId, ...rest } = payload ?? {};
 
@@ -2859,7 +2874,11 @@ if (targetMessageId && !ephemeral) {
       return target.edit(editPayload);
     }
   } catch (e) {
-    console.log(`⚠️ Failed to edit target message ${targetMessageId}:`, e?.message);
+    console.error("Failed to edit target message", {
+      ...buildInteractionFailureContext(interaction, targetMessageId),
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? String(e)
+    });
     // Fall through to normal response
   }
 }
@@ -2976,12 +2995,20 @@ if (interaction.deferred || interaction.replied) {
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
-    console.error(`Component editReply failed:`, e?.message);
+    console.error("Component editReply failed", {
+      ...buildInteractionFailureContext(interaction),
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? String(e)
+    });
     // Try followUp as fallback
     try {
       return await interaction.followUp({ ...finalOptions, ephemeral: true });
     } catch (e2) {
-      console.error(`Component followUp fallback also failed:`, e2?.message);
+      console.error("Component followUp fallback also failed", {
+        ...buildInteractionFailureContext(interaction),
+        errorCode: e2?.code ?? null,
+        errorMessage: e2?.message ?? String(e2)
+      });
       return;
     }
   }
@@ -2991,7 +3018,11 @@ if (interaction.deferred || interaction.replied) {
 try {
   return await interaction.update(finalOptions);
 } catch (e) {
-  console.error(`Component update failed:`, e?.message);
+  console.error("Component update failed", {
+    ...buildInteractionFailureContext(interaction),
+    errorCode: e?.code ?? null,
+    errorMessage: e?.message ?? String(e)
+  });
   return;
 }
 }
@@ -4249,6 +4280,11 @@ if (overrides?.messageId && !payload?.ephemeral) {
       return result;
     }
   } catch (e) {
+    console.error("Modal override target edit failed", {
+      ...buildInteractionFailureContext(interaction, overrides.messageId),
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? String(e)
+    });
     // fall through to componentCommit
   }
 }
