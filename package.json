@@ -9,6 +9,8 @@
     "start": "node src/index.js",
     "dev": "NODE_ENV=development nodemon --watch src --ext js,json --signal SIGTERM src/index.js",
     "check:actions-pinned": "bash scripts/check-actions-pinned.sh",
+    "check:syntax": "find src test scripts -type f -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "lint": "eslint src test scripts",
     "setup:hooks": "git config core.hooksPath .githooks",
     "register": "node src/register-commands.js",
     "register:dev": "NODE_ENV=development node src/register-commands.js",
@@ -30,6 +32,7 @@
     "undici": "^6.23.0"
   },
   "devDependencies": {
+    "eslint": "^9.39.4",
     "nodemon": "^3.1.11"
   }
 }
