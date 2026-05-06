@@ -2810,12 +2810,6 @@ function normalizeComponents(rows) {
   return normalized.length ? normalized : [];
 }
 
-function getCustomIdPrefix(customId) {
-  if (!customId || typeof customId !== "string") return null;
-  const idx = customId.indexOf(":");
-  return idx === -1 ? customId : customId.slice(0, idx);
-}
-
 function buildInteractionFailureContext(interaction, messageId = null) {
   return {
     guildId: interaction?.guildId ?? null,
