@@ -1,0 +1,58 @@
+{
+  "intro": "This feed is updated with each release so players can quickly see what changed.",
+  "standards": {
+    "versioning": {
+      "format": "vMAJOR.MINOR.PATCH[-tag]",
+      "examples": ["v0.1.2", "v1.4.0-hotfix.1"],
+      "notes": [
+        "MAJOR = breaking player-facing structure or progression resets.",
+        "MINOR = new features/content visible to players.",
+        "PATCH = fixes, balancing, and polish with no major feature rollout.",
+        "Optional -tag for pre-release or rollout labels."
+      ]
+    },
+    "classification": {
+      "allowed": ["player_update", "internal_update"],
+      "player_update_criteria": [
+        "Gameplay, progression, economy, or reward behavior changed.",
+        "Menus, UX flows, or social systems players directly use changed.",
+        "New or updated content/events/decor/recipes visible in game."
+      ],
+      "internal_update_criteria": [
+        "Dev tooling, refactor, test harness, infra, or cleanup only.",
+        "No player-visible behavior change in normal gameplay."
+      ]
+    }
+  },
+  "pinned": {
+    "label": "Pinned: Latest Update",
+    "version": "0.1.0-test-about-news",
+    "date": "2026-05-06",
+    "classification": "player_update",
+    "summary": "Added the new About menu, connected News navigation, and introduced the first structured News feed for tester-bot validation."
+  },
+  "sections": [
+    {
+      "title": "May 2026",
+      "entries": [
+        {
+          "version": "0.1.0-test-about-news",
+          "date": "2026-05-06",
+          "classification": "player_update",
+          "changes": [
+            "Added About menu from Profile.",
+            "Added News view with release-note sections."
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Upcoming",
+      "items": [
+        "More polished update notes format (highlights plus balance changes).",
+        "Additional cozy About copy refinements.",
+        "Iterative tester-bot polish before main deployment."
+      ]
+    }
+  ]
+}

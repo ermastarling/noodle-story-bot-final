@@ -36,7 +36,8 @@ import {
   loadSpecializationsContent,
   loadDecorContent,
   loadDecorSetsContent,
-  loadEventsContent
+  loadEventsContent,
+  loadNewsContent
 } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import {
@@ -346,6 +347,7 @@ const specializationsContent = loadSpecializationsContent();
 const decorContent = loadDecorContent();
 const decorSetsContent = loadDecorSetsContent();
 const eventsContent = loadEventsContent();
+const newsContent = loadNewsContent();
 const content = withEventRecipes(baseContent, eventsContent);
 const eventRecipeSeasonIndex = buildEventRecipeSeasonMap(eventsContent);
 const db = openDb();
@@ -1382,7 +1384,8 @@ function noodleMainMenuRowNoProfile(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("pantry")).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("pantry")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:news:${userId}`).setLabel("News").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Secondary)
 );
 }
 
@@ -4654,6 +4657,232 @@ if (sub === "profile") {
   return commit({
     embeds: embedsWithFooter,
     components: profileComponents
+  });
+}
+
+/* ---------------- ABOUT ---------------- */
+if (sub === "about") {
+  const aboutProfileImageUrl = getIconUrl("about_profile");
+  const aboutEmbed = buildMenuEmbed({
+    title: `${getIcon("sparkle")} About Noodle Story`,
+    description:
+      "**Creator: Erma Starling**\n\n" +
+      "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
+      "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
+      "And yes, noodles are absolutely the creator's favorite dish.",
+    user: interaction.member ?? interaction.user,
+    color: theme.colors.info
+  });
+
+  if (aboutProfileImageUrl) {
+    aboutEmbed.setThumbnail(aboutProfileImageUrl);
+  }
+
+  const aboutRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}`)
+      .setLabel("News")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:profile:${userId}`)
+      .setLabel("Back")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return commit({
+    content: " ",
+    embeds: [aboutEmbed],
+    components: [aboutRow]
+  });
+}
+
+/* ---------------- NEWS ---------------- */
+if (sub === "news") {
+  const formatVersion = (rawValue, fallback = "v0.0.0") => {
+    const raw = String(rawValue ?? "").trim();
+    if (!raw) return fallback;
+
+    const candidate = raw.startsWith("v") ? raw : `v${raw}`;
+    const match = candidate.match(/^v(\d+)\.(\d+)\.(\d+)(?:-([A-Za-z0-9.-]+))?$/);
+    if (!match) return candidate;
+
+    const [, major, minor, patch, tag] = match;
+    return tag
+      ? `v${Number(major)}.${Number(minor)}.${Number(patch)}-${String(tag).toLowerCase()}`
+      : `v${Number(major)}.${Number(minor)}.${Number(patch)}`;
+  };
+
+  const parseDateMs = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return 0;
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const normalizeClassification = (value) => {
+    const raw = String(value ?? "player_update").trim().toLowerCase();
+    if (raw === "internal_update") return "internal_update";
+    return "player_update";
+  };
+
+  const classificationLabel = (classification) => {
+    if (classification === "internal_update") {
+      return `${getIcon("customize")} Internal Update`;
+    }
+    return `${getIcon("sparkle")} Player Update`;
+  };
+
+  const showInternalUpdates = false;
+  const isVisibleEntry = (entry) => {
+    const cls = normalizeClassification(entry?.classification);
+    return showInternalUpdates || cls !== "internal_update";
+  };
+
+  const pinned = newsContent?.pinned ?? {};
+  const pinnedClassification = normalizeClassification(pinned?.classification);
+
+  const latestVisibleEntry = (Array.isArray(newsContent?.sections) ? newsContent.sections : [])
+    .flatMap((section) => {
+      const entries = Array.isArray(section?.entries) ? section.entries : [];
+      return entries
+        .filter((entry) => isVisibleEntry(entry))
+        .map((entry) => ({ section, entry }));
+    })
+    .sort((a, b) => {
+      const diff = parseDateMs(b.entry?.date) - parseDateMs(a.entry?.date);
+      if (diff !== 0) return diff;
+      return 0;
+    })[0] ?? null;
+
+  const usePinnedAsIs = showInternalUpdates || pinnedClassification !== "internal_update";
+  const pinnedLabel = usePinnedAsIs
+    ? (String(pinned?.label ?? "Pinned: Latest Update").trim() || "Pinned: Latest Update")
+    : "Pinned: Latest Player Update";
+  const pinnedVersion = usePinnedAsIs
+    ? formatVersion(pinned?.version, "v0.0.0")
+    : formatVersion(latestVisibleEntry?.entry?.version, "v0.0.0");
+  const pinnedDate = usePinnedAsIs
+    ? (String(pinned?.date ?? "TBD").trim() || "TBD")
+    : (String(latestVisibleEntry?.entry?.date ?? "TBD").trim() || "TBD");
+  const pinnedSummary = usePinnedAsIs
+    ? (String(pinned?.summary ?? "No update summary yet.").trim() || "No update summary yet.")
+    : (() => {
+        const changes = Array.isArray(latestVisibleEntry?.entry?.changes) ? latestVisibleEntry.entry.changes : [];
+        if (changes.length) return String(changes[0] ?? "No player-facing updates yet.").trim() || "No player-facing updates yet.";
+        return latestVisibleEntry ? "Latest player-facing update available in sections below." : "No player-facing updates yet.";
+      })();
+  const pinnedClassificationLabel = usePinnedAsIs
+    ? classificationLabel(pinnedClassification)
+    : classificationLabel(normalizeClassification(latestVisibleEntry?.entry?.classification));
+  const introText = String(newsContent?.intro ?? "This feed is updated with each release so players can quickly see what changed.").trim();
+  const playerRules = Array.isArray(newsContent?.standards?.classification?.player_update_criteria)
+    ? newsContent.standards.classification.player_update_criteria.filter(Boolean)
+    : [];
+  const playerRuleText = playerRules.length ? `\n${getIcon("idea")} Player Update means: ${playerRules.join("; ")}.` : "";
+
+  const newsEmbed = buildMenuEmbed({
+    title: `${getIcon("note")} News`,
+    description:
+      `${getIcon("note")} **${pinnedLabel}**\n` +
+      `**${pinnedVersion}** · ${pinnedDate} · ${pinnedClassificationLabel}\n` +
+      `${pinnedSummary}\n\n` +
+      `${getIcon("idea")} ${introText}${playerRuleText}`,
+    user: interaction.member ?? interaction.user,
+    color: theme.colors.success
+  });
+
+  const sectionFields = (Array.isArray(newsContent?.sections) ? newsContent.sections : [])
+    .map((section, sectionIndex) => {
+      const sectionTitle = String(section?.title ?? "Updates").trim() || "Updates";
+
+      let value = "";
+      const entries = Array.isArray(section?.entries) ? section.entries : [];
+      const items = Array.isArray(section?.items) ? section.items : [];
+      const sortedEntries = entries
+        .filter((entry) => isVisibleEntry(entry))
+        .map((entry, entryIndex) => ({ entry, entryIndex }))
+        .sort((a, b) => {
+          const diff = parseDateMs(b.entry?.date) - parseDateMs(a.entry?.date);
+          if (diff !== 0) return diff;
+          return a.entryIndex - b.entryIndex;
+        })
+        .map(({ entry }) => entry);
+
+      const sectionDateMs = Math.max(
+        parseDateMs(section?.date),
+        ...sortedEntries.map((entry) => parseDateMs(entry?.date))
+      );
+
+      if (sortedEntries.length) {
+        value = sortedEntries
+          .map((entry) => {
+            const version = formatVersion(entry?.version, "v0.0.0");
+            const date = String(entry?.date ?? "TBD").trim() || "TBD";
+            const classification = normalizeClassification(entry?.classification);
+            const classLabel = classificationLabel(classification);
+            const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+            const changeLines = changes.length
+              ? changes.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
+              : "• No changes listed.";
+            return `**${version}** · ${date} · ${classLabel}\n${changeLines}`;
+          })
+          .join("\n\n");
+      } else if (items.length) {
+        value = items
+          .map((item) => `• ${String(item ?? "").trim()}`)
+          .join("\n");
+      } else {
+        const body = String(section?.body ?? "").trim();
+        value = body || "• No updates yet.";
+      }
+
+      if (value.length > 1024) {
+        value = `${value.slice(0, 1021)}...`;
+      }
+
+      if (!value.trim()) {
+        return null;
+      }
+
+      return {
+        name: `${getIcon("calendar")} ${sectionTitle}`,
+        value,
+        inline: false,
+        sectionDateMs,
+        sectionIndex
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const diff = b.sectionDateMs - a.sectionDateMs;
+      if (diff !== 0) return diff;
+      return a.sectionIndex - b.sectionIndex;
+    })
+    .map(({ name, value, inline }) => ({ name, value, inline }))
+    .slice(0, 10);
+
+  if (sectionFields.length) {
+    newsEmbed.addFields(sectionFields);
+  }
+
+  const newsRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:about:${userId}`)
+      .setLabel("About")
+      .setEmoji(getButtonEmoji("sparkle"))
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:profile:${userId}`)
+      .setLabel("Back")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return commit({
+    content: " ",
+    embeds: [newsEmbed],
+    components: [newsRow]
   });
 }
 

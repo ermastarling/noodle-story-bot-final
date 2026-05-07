@@ -64,3 +64,8 @@ export function loadEventsContent() {
   const p = path.join(__dirname, "..", "..", "content", "events.json");
   return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
+
+export function loadNewsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "news.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}

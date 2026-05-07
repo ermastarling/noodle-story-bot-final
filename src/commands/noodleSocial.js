@@ -1020,6 +1020,11 @@ function statsViewButtons(userId) {
       .setLabel("Pantry").setEmoji(getButtonEmoji("pantry"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}`)
+      .setLabel("News")
+      .setEmoji(getButtonEmoji("note"))
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
       .setStyle(ButtonStyle.Secondary)
