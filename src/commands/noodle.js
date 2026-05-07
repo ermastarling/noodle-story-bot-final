@@ -79,6 +79,7 @@ import {
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
 import {
+  formatNewsVersion,
   hasUnreadNewsUpdate,
   markNewsAsSeen,
   normalizeNewsClassification,
@@ -366,6 +367,8 @@ const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
 const SUPPORT_SERVER_URL = process.env.NOODLE_SUPPORT_SERVER_URL || "https://discord.gg/uue7K92pwj";
 // Look a bit over a year ahead so annual event windows still resolve a future start date.
 const NEXT_EVENT_LOOKAHEAD_MS = 370 * 24 * 60 * 60 * 1000;
+const ABOUT_SHOP_COUNT_CACHE_TTL_MS = 5 * 60 * 1000;
+let aboutShopCountCache = { value: null, fetchedAt: 0 };
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -465,6 +468,28 @@ function getSpecializationAlert(player) {
   const hiddenUnseen = getUnseenHiddenSpecializations(player, specializationsContent);
   if (hiddenUnseen.length) return true;
   return hasNewShopLevelSpecialization(player, specializationsContent);
+}
+
+function getCachedDistinctShopCount(dbHandle) {
+  if (!dbHandle) return null;
+
+  const nowMs = Date.now();
+  if (
+    aboutShopCountCache.value !== null
+    && Number.isFinite(aboutShopCountCache.fetchedAt)
+    && nowMs - aboutShopCountCache.fetchedAt < ABOUT_SHOP_COUNT_CACHE_TTL_MS
+  ) {
+    return aboutShopCountCache.value;
+  }
+
+  const row = dbHandle.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
+  const count = Number(row?.count ?? 0);
+  if (!Number.isFinite(count)) {
+    return null;
+  }
+
+  aboutShopCountCache = { value: count, fetchedAt: nowMs };
+  return count;
 }
 
 function applyOwnerFooter(embed, user) {
@@ -4702,11 +4727,7 @@ if (sub === "about") {
   let liveShopCount = null;
   if (db) {
     try {
-      const row = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
-      const count = Number(row?.count ?? 0);
-      if (Number.isFinite(count)) {
-        liveShopCount = count;
-      }
+      liveShopCount = getCachedDistinctShopCount(db);
     } catch {
       // Ignore count query issues for About view.
     }
@@ -4767,20 +4788,6 @@ if (sub === "news") {
     upsertPlayer(db, serverId, userId, viewerPlayer, null, viewerPlayer.schema_version);
   }
 
-  const formatVersion = (rawValue, fallback = "v0.0.0") => {
-    const raw = String(rawValue ?? "").trim();
-    if (!raw) return fallback;
-
-    const candidate = raw.startsWith("v") ? raw : `v${raw}`;
-    const match = candidate.match(/^v(\d+)\.(\d+)\.(\d+)(?:-([A-Za-z0-9.-]+))?$/);
-    if (!match) return candidate;
-
-    const [, major, minor, patch, tag] = match;
-    return tag
-      ? `v${Number(major)}.${Number(minor)}.${Number(patch)}-${String(tag).toLowerCase()}`
-      : `v${Number(major)}.${Number(minor)}.${Number(patch)}`;
-  };
-
   const classificationLabel = (classification) => {
     if (classification === "internal_update") {
       return `${getIcon("customize")} Internal Update`;
@@ -4823,8 +4830,8 @@ if (sub === "news") {
   const previous = visibleEntries[1] ?? null;
 
   const latestVersion = latest
-    ? formatVersion(latest.entry?.version, "v0.0.0")
-    : (includePinned ? formatVersion(pinned?.version, "v0.0.0") : "v0.0.0");
+    ? formatNewsVersion(latest.entry?.version, "v0.0.0")
+    : (includePinned ? formatNewsVersion(pinned?.version, "v0.0.0") : "v0.0.0");
   const latestDate = latest
     ? (String(latest.entry?.date ?? "TBD").trim() || "TBD")
     : (includePinned ? (String(pinned?.date ?? "TBD").trim() || "TBD") : "TBD");
@@ -4858,7 +4865,7 @@ if (sub === "news") {
 
   let previousSectionText = "**Previous Update**\nNo previous update yet.";
   if (previous) {
-    const previousVersion = formatVersion(previous.entry?.version, "v0.0.0");
+    const previousVersion = formatNewsVersion(previous.entry?.version, "v0.0.0");
     const previousDate = String(previous.entry?.date ?? "TBD").trim() || "TBD";
     const previousClassLabel = classificationLabel(normalizeNewsClassification(previous.entry?.classification));
     const previousChanges = Array.isArray(previous.entry?.changes) ? previous.entry.changes : [];
