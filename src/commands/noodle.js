@@ -80,10 +80,10 @@ import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
 import {
   formatNewsVersion,
+  getVisibleSortedNewsEntries,
   hasUnreadNewsUpdate,
   markNewsAsSeen,
   normalizeNewsClassification,
-  parseNewsDateMs
 } from "../util/news.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
@@ -364,11 +364,38 @@ const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
 const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
-const SUPPORT_SERVER_URL = process.env.NOODLE_SUPPORT_SERVER_URL || "https://discord.gg/uue7K92pwj";
+const DEFAULT_SUPPORT_SERVER_URL = "https://discord.gg/uue7K92pwj";
+const SUPPORT_SERVER_URL_ALLOWED_HOSTS = new Set([
+  "discord.gg",
+  "www.discord.gg",
+  "discord.com",
+  "www.discord.com",
+  "discordapp.com",
+  "www.discordapp.com"
+]);
 // Look a bit over a year ahead so annual event windows still resolve a future start date.
 const NEXT_EVENT_LOOKAHEAD_MS = 370 * 24 * 60 * 60 * 1000;
 const ABOUT_SHOP_COUNT_CACHE_TTL_MS = 5 * 60 * 1000;
 let aboutShopCountCache = { value: null, fetchedAt: 0 };
+
+function resolveSupportServerUrl(rawValue) {
+  const candidate = String(rawValue ?? "").trim();
+  if (!candidate) return DEFAULT_SUPPORT_SERVER_URL;
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "https:") return DEFAULT_SUPPORT_SERVER_URL;
+    const host = String(parsed.hostname ?? "").toLowerCase();
+    if (!SUPPORT_SERVER_URL_ALLOWED_HOSTS.has(host)) {
+      return DEFAULT_SUPPORT_SERVER_URL;
+    }
+    return parsed.toString();
+  } catch {
+    return DEFAULT_SUPPORT_SERVER_URL;
+  }
+}
+
+const SUPPORT_SERVER_URL = resolveSupportServerUrl(process.env.NOODLE_SUPPORT_SERVER_URL);
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -4796,35 +4823,13 @@ if (sub === "news") {
   };
 
   const showInternalUpdates = false;
-  const isVisibleEntry = (entry) => {
-    const cls = normalizeNewsClassification(entry?.classification);
-    return showInternalUpdates || cls !== "internal_update";
-  };
 
   const sections = Array.isArray(newsContent?.sections) ? newsContent.sections : [];
   const pinned = newsContent?.pinned ?? {};
   const pinnedClassification = normalizeNewsClassification(pinned?.classification);
   const includePinned = showInternalUpdates || pinnedClassification !== "internal_update";
 
-  const visibleEntries = sections
-    .flatMap((section, sectionIndex) => {
-      const entries = Array.isArray(section?.entries) ? section.entries : [];
-      return entries
-        .filter((entry) => isVisibleEntry(entry))
-        .map((entry, entryIndex) => ({
-          entry,
-          sectionTitle: String(section?.title ?? "Updates").trim() || "Updates",
-          sectionIndex,
-          entryIndex
-        }));
-    })
-    .sort((a, b) => {
-      const diff = parseNewsDateMs(b.entry?.date) - parseNewsDateMs(a.entry?.date);
-      if (diff !== 0) return diff;
-      const sectionDiff = a.sectionIndex - b.sectionIndex;
-      if (sectionDiff !== 0) return sectionDiff;
-      return a.entryIndex - b.entryIndex;
-    });
+  const visibleEntries = getVisibleSortedNewsEntries(newsContent, { includeInternal: showInternalUpdates });
 
   const latest = visibleEntries[0] ?? null;
   const previous = visibleEntries[1] ?? null;

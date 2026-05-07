@@ -105,21 +105,31 @@ export function formatNewsVersion(rawValue, fallback = "v0.0.0") {
     : `v${parsed.major}.${parsed.minor}.${parsed.patch}`;
 }
 
-export function getLatestVisibleNewsEntry(newsContent, { includeInternal = false } = {}) {
+export function getVisibleSortedNewsEntries(newsContent, { includeInternal = false } = {}) {
   const sections = Array.isArray(newsContent?.sections) ? newsContent.sections : [];
   return sections
     .flatMap((section, sectionIndex) => {
       const entries = Array.isArray(section?.entries) ? section.entries : [];
-      return entries.map((entry, entryIndex) => ({ entry, sectionIndex, entryIndex }));
+      return entries
+        .filter((entry) => includeInternal || normalizeNewsClassification(entry?.classification) !== "internal_update")
+        .map((entry, entryIndex) => ({
+          entry,
+          sectionTitle: String(section?.title ?? "Updates").trim() || "Updates",
+          sectionIndex,
+          entryIndex
+        }));
     })
-    .filter(({ entry }) => includeInternal || normalizeNewsClassification(entry?.classification) !== "internal_update")
     .sort((a, b) => {
       const diff = parseNewsDateMs(b.entry?.date) - parseNewsDateMs(a.entry?.date);
       if (diff !== 0) return diff;
       const sectionDiff = a.sectionIndex - b.sectionIndex;
       if (sectionDiff !== 0) return sectionDiff;
       return a.entryIndex - b.entryIndex;
-    })[0] ?? null;
+    });
+}
+
+export function getLatestVisibleNewsEntry(newsContent, { includeInternal = false } = {}) {
+  return getVisibleSortedNewsEntries(newsContent, { includeInternal })[0] ?? null;
 }
 
 export function getLatestNewsVersionForPlayer(newsContent) {
