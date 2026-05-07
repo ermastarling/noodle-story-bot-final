@@ -51,7 +51,7 @@
           "classification": "player_update",
           "changes": [
             "Improved staff upgrade picker and embed readability for smoother staffing upgrades.",
-            "Improved missing-access guidance so blocked actions are clearer and less confusing.",
+            "Enabled a notification for players once they reach 5000 REP: the **Seating** shop upgrade can unlock more orders on the order board.",
             "6 **NEW** Premium Shop Specializations available for purchase in the store, each purchase includes **10,000c** for your shop."
           ]
         }
