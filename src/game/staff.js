@@ -1,7 +1,70 @@
 import { loadUpgradesContent } from "../content/index.js";
 import { calculateUpgradeEffects } from "./upgrades.js";
+import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "./garden.js";
+import { isFishingUnlocked, FISHING_UNLOCK_LEVEL } from "./fishing.js";
 
 const upgradesContent = loadUpgradesContent();
+
+const STAFF_UNLOCK_RULES = [
+  {
+    featureName: "Garden",
+    requiredLevel: GARDEN_UNLOCK_LEVEL,
+    effectKeys: new Set(["forage_seed_chance", "garden_autoharvest", "garden_harvest_seed_chance", "harvest_cooldown_reduction"]),
+    isUnlocked: isGardenUnlocked
+  },
+  {
+    featureName: "Fishing",
+    requiredLevel: FISHING_UNLOCK_LEVEL,
+    effectKeys: new Set(["fishing_bonus_items"]),
+    isUnlocked: isFishingUnlocked
+  }
+];
+
+function getStaffUnlockRuleForEffect(effectKey) {
+  if (!effectKey) return null;
+  return STAFF_UNLOCK_RULES.find((rule) => rule.effectKeys.has(effectKey)) || null;
+}
+
+export function isStaffEffectUnlocked(player, effectKey) {
+  const rule = getStaffUnlockRuleForEffect(effectKey);
+  if (!rule) return true;
+  return rule.isUnlocked(player);
+}
+
+export function filterUnlockedStaffEffects(player, effectsPerLevel = {}) {
+  const visible = {};
+  for (const [effectKey, value] of Object.entries(effectsPerLevel || {})) {
+    if (!isStaffEffectUnlocked(player, effectKey)) continue;
+    visible[effectKey] = value;
+  }
+  return visible;
+}
+
+export function getStaffUnlockStatus(player, staff) {
+  const effects = staff?.effects_per_level ?? {};
+  const effectKeys = Object.keys(effects);
+  if (!effectKeys.length) {
+    return { unlocked: true, featureName: null, requiredLevel: null, requirementLabel: null };
+  }
+
+  const hasAnyActiveEffect = effectKeys.some((effectKey) => isStaffEffectUnlocked(player, effectKey));
+  if (hasAnyActiveEffect) {
+    return { unlocked: true, featureName: null, requiredLevel: null, requirementLabel: null };
+  }
+
+  for (const effectKey of effectKeys) {
+    const rule = getStaffUnlockRuleForEffect(effectKey);
+    if (!rule || rule.isUnlocked(player)) continue;
+    return {
+      unlocked: false,
+      featureName: rule.featureName,
+      requiredLevel: rule.requiredLevel,
+      requirementLabel: `Unlocks at shop level ${rule.requiredLevel}`
+    };
+  }
+
+  return { unlocked: true, featureName: null, requiredLevel: null, requirementLabel: null };
+}
 
 /**
  * Roll a daily staff pool for a server
@@ -39,6 +102,16 @@ export function levelUpStaff(player, staffId, staffContent) {
   const staff = staffContent.staff_members?.[staffId];
   if (!staff) {
     return { success: false, message: "Staff member not found.", cost: 0, newLevel: 0 };
+  }
+
+  const unlockStatus = getStaffUnlockStatus(player, staff);
+  if (!unlockStatus.unlocked) {
+    return {
+      success: false,
+      message: `${unlockStatus.requirementLabel}.`,
+      cost: 0,
+      newLevel: 0
+    };
   }
   
   // Ensure staff_levels object exists
@@ -153,6 +226,7 @@ export function calculateStaffEffects(player, staffContent) {
     if (!staff || !staff.effects_per_level) continue;
     
     for (const [effectKey, effectPerLevel] of Object.entries(staff.effects_per_level)) {
+      if (!isStaffEffectUnlocked(player, effectKey)) continue;
       if (effects.hasOwnProperty(effectKey)) {
         effects[effectKey] += effectPerLevel * level * staffMultiplier;
       }

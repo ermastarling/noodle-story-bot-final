@@ -9,6 +9,52 @@ source .git-workflow.sh
 
 ## Daily Workflow
 
+## Clean Main Standard (Use Every Time)
+
+Follow this exact sequence for every piece of work to keep `main` clean:
+
+1. **Start from latest main**
+```bash
+cleanstart fix/my-change      # creates branch from updated origin/main
+```
+
+2. **Make one logical change only**
+```bash
+whatsnew
+stage                         # stage only related hunks/files
+review
+```
+
+3. **Commit once per logical unit**
+```bash
+qcommit fix "describe one logical fix"
+```
+
+4. **Keep branch up to date with main**
+```bash
+syncmain                      # rebase your branch on origin/main
+```
+
+5. **Run pre-push sanity checks**
+```bash
+preflight                     # branch + status + staged guard rails
+ready                         # commit graph/divergence from origin/main
+```
+
+6. **Before PR, clean history**
+```bash
+cleanup 3                     # or git squash <n>
+```
+
+7. **PR should be focused**
+- one concern per PR
+- no unrelated files
+- clear summary + test evidence
+
+8. **Merge policy**
+- prefer **Squash and merge** for a single clean commit on `main`
+- if not squashing, keep only a small set of meaningful commits
+
 ### 1. **Make Changes & Review**
 ```bash
 whatsnew              # See all changes
@@ -81,6 +127,22 @@ In the interactive rebase editor:
 - `git history` - Pretty commit history
 - `git cleanup` - Interactive rebase shortcut
 - `git squash <n>` - Squash last n commits (default: 2)
+
+## Helper Commands (from .git-workflow.sh)
+
+- `cleanstart <branch>` - Create/switch to branch from latest `origin/main`
+- `syncmain` - Rebase current branch on latest `origin/main`
+- `preflight` - Quick guard rails before commit/push
+- `ready` - Show divergence + commit graph vs `origin/main`
+
+## Automated Enforcement
+
+PR checklist compliance is automatically enforced by CI:
+- Workflow: `.github/workflows/pr-checklist-enforcement.yml`
+- Trigger: PR opened/edited/synchronized/reopened/ready-for-review
+- Behavior: fails the PR check when required checklist boxes are incomplete
+
+This makes the process a required gate during review, not just a guideline.
 
 ## Commit Message Format
 

@@ -5,7 +5,8 @@ import {
   getMaxStaffCapacity,
   calculateStaffEffects,
   getStaffLevels,
-  calculateStaffCost
+  calculateStaffCost,
+  getStaffUnlockStatus
 } from "../src/game/staff.js";
 import { loadStaffContent } from "../src/content/index.js";
 
@@ -43,6 +44,102 @@ test("Staff: levelUpStaff fails when insufficient coins", () => {
   assert.strictEqual(result.success, false);
   assert.strictEqual(player.staff_levels["prep_chef"], undefined);
   assert.strictEqual(player.coins, 100); // No change
+});
+
+test("Staff: Fisher Crew stays locked until fishing unlock level", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 10;
+  player.coins = 999999;
+
+  const fisherCrew = staffContent.staff_members.fisher_crew;
+  const lockStatus = getStaffUnlockStatus(player, fisherCrew);
+  assert.strictEqual(lockStatus.unlocked, false);
+
+  const lockedResult = levelUpStaff(player, "fisher_crew", staffContent);
+  assert.strictEqual(lockedResult.success, false);
+  assert.match(lockedResult.message, /Unlocks at shop level 65/i);
+  assert.strictEqual(player.staff_levels.fisher_crew, undefined);
+
+  player.shop_level = 65;
+  const unlockedStatus = getStaffUnlockStatus(player, fisherCrew);
+  assert.strictEqual(unlockedStatus.unlocked, true);
+
+  const unlockedResult = levelUpStaff(player, "fisher_crew", staffContent);
+  assert.strictEqual(unlockedResult.success, true);
+  assert.strictEqual(player.staff_levels.fisher_crew, 1);
+});
+
+test("Staff: Garden staff stay locked until garden unlock level", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 5;
+  player.coins = 999999;
+
+  const result = levelUpStaff(player, "gardener", staffContent);
+  assert.strictEqual(result.success, false);
+  assert.match(result.message, /Unlocks at shop level 25/i);
+  assert.strictEqual(player.staff_levels.gardener, undefined);
+
+  player.shop_level = 25;
+  const unlockedResult = levelUpStaff(player, "gardener", staffContent);
+  assert.strictEqual(unlockedResult.success, true);
+  assert.strictEqual(player.staff_levels.gardener, 1);
+});
+
+test("Staff: kitchen-effect staff are not staff-gated", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 44;
+
+  const kitchenOnlyStaff = {
+    staff_id: "kitchen_tester",
+    name: "Kitchen Tester",
+    max_level: 1,
+    effects_per_level: { kitchen_simmer_time_reduction: 0.05 }
+  };
+
+  const status = getStaffUnlockStatus(player, kitchenOnlyStaff);
+  assert.strictEqual(status.unlocked, true);
+});
+
+test("Staff: Forager remains upgradeable before garden but seed effect is locked", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 10;
+  player.coins = 999999;
+
+  const status = getStaffUnlockStatus(player, staffContent.staff_members.forager);
+  assert.strictEqual(status.unlocked, true);
+
+  const result = levelUpStaff(player, "forager", staffContent);
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(player.staff_levels.forager, 1);
+
+  const preGarden = calculateStaffEffects(player, staffContent);
+  assert.strictEqual(preGarden.forage_bonus_items, 1);
+  assert.strictEqual(preGarden.forage_seed_chance, 0);
+
+  player.shop_level = 25;
+  const postGarden = calculateStaffEffects(player, staffContent);
+  assert.ok(postGarden.forage_seed_chance > 0);
+});
+
+test("Staff: Forage Manager remains upgradeable before garden but harvest cooldown effect is locked", () => {
+  const player = makeTestPlayer();
+  player.shop_level = 10;
+  player.coins = 999999;
+
+  const status = getStaffUnlockStatus(player, staffContent.staff_members.manager);
+  assert.strictEqual(status.unlocked, true);
+
+  const result = levelUpStaff(player, "manager", staffContent);
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(player.staff_levels.manager, 1);
+
+  const preGarden = calculateStaffEffects(player, staffContent);
+  assert.ok(preGarden.cooldown_reduction > 0);
+  assert.strictEqual(preGarden.harvest_cooldown_reduction, 0);
+
+  player.shop_level = 25;
+  const postGarden = calculateStaffEffects(player, staffContent);
+  assert.ok(postGarden.harvest_cooldown_reduction > 0);
 });
 
 test("Staff: levelUpStaff fails at max level", () => {

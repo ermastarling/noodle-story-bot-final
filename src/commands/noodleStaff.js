@@ -11,7 +11,10 @@ import {
   getStaffLevels,
   getMaxStaffCapacity,
   getStaffSlotsUsed,
-  calculateStaffCost
+  calculateStaffCost,
+  getStaffUnlockStatus,
+  filterUnlockedStaffEffects,
+  isStaffEffectUnlocked
 } from "../game/staff.js";
 import { calculateUpgradeEffects } from "../game/upgrades.js";
 import { theme } from "../ui/theme.js";
@@ -129,6 +132,7 @@ function formatEffects(effects) {
     else if (key === "forage_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
     else if (key === "garden_autoharvest") lines.push(`Auto-harvest garden plots`);
     else if (key === "garden_harvest_seed_chance") lines.push(`+${(value * 100).toFixed(0)}% harvest seed chance`);
+    else if (key === "harvest_cooldown_reduction") lines.push(`-${(value * 100).toFixed(0)}% harvest cooldown`);
     else if (key === "market_discount") lines.push(`${(value * 100).toFixed(0)}% market discount`);
     else if (key === "sxp_bonus_percent") lines.push(`+${(value * 100).toFixed(0)}% SXP`);
     else if (key === "rare_epic_rep_bonus") lines.push(`+${formatTwoDecimals(value)} rep on rare/epic`);
@@ -230,6 +234,7 @@ export function buildStaffOverviewEmbed(player, server, user) {
     if (key === "forage_seed_chance") return `+${(value * 100).toFixed(2)}% seed find chance`;
     if (key === "garden_autoharvest") return `Auto-harvests garden plots`;
     if (key === "garden_harvest_seed_chance") return `+${(value * 100).toFixed(0)}% seed chance on harvest`;
+    if (key === "harvest_cooldown_reduction") return `-${(value * 100).toFixed(0)}% harvest cooldown`;
     if (key === "market_discount") return `${(value * 100).toFixed(0)}% market discount`;
     if (key === "sxp_bonus_percent") return `+${(value * 100).toFixed(0)}% SXP`;
     if (key === "rare_epic_rep_bonus") return `+${formatTwoDecimals(value)} rep on rare/epic`;
@@ -267,9 +272,14 @@ export function buildStaffOverviewEmbed(player, server, user) {
       const seedPerLevel = Number(effectsPerLevel.forage_seed_chance ?? 0);
       const bonusTotal = bonusPerLevel * level * staffMultiplier;
       const seedTotal = seedPerLevel * level * staffMultiplier;
-      effectSummary = `+${bonusTotal.toFixed(2)} forage items, +${(seedTotal * 100).toFixed(2)}% seed find chance`;
+      const parts = [`+${bonusTotal.toFixed(2)} forage items`];
+      if (isStaffEffectUnlocked(player, "forage_seed_chance")) {
+        parts.push(`+${(seedTotal * 100).toFixed(2)}% seed find chance`);
+      }
+      effectSummary = parts.join(", ");
     } else {
-      const effectPieces = Object.entries(effectsPerLevel)
+      const visibleEffects = filterUnlockedStaffEffects(player, effectsPerLevel);
+      const effectPieces = Object.entries(visibleEffects)
         .map(([effectKey, perLevel]) => {
           const total = perLevel * level * staffMultiplier;
           return formatStaffEffectValue(effectKey, total);
@@ -310,9 +320,12 @@ function buildStaffComponents(userId, player, server) {
     .map(staff => {
       const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
       if (currentLevel >= staff.max_level) return null; // Already maxed
+      const unlockStatus = getStaffUnlockStatus(player, staff);
+      if (!unlockStatus.unlocked) return null;
 
       const cost = calculateStaffCost(staff, currentLevel);
-      const effectStr = formatEffects(staff.effects_per_level);
+      const visibleEffects = filterUnlockedStaffEffects(player, staff.effects_per_level);
+      const effectStr = formatEffects(visibleEffects);
       const description = `Lv${currentLevel}→${currentLevel + 1}: ${effectStr}`.substring(0, 100);
 
       return {

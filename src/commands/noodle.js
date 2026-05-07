@@ -221,10 +221,42 @@ Constants
 
 // Temporary cache for multibuy selections to avoid custom ID length limits
 const multibuyCacheV2 = new Map();
+// Temporary cache for sell selections to avoid custom ID length limits
+const sellSelectionCacheV2 = new Map();
 // Temporary cache for compost selections keyed by message id
 const compostSelectionCache = new Map();
 
-function applyUnlockNoticeEmbeds(payload = {}, player, user) {
+const SELECTION_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function makeSelectionToken() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function purgeExpiredSelectionCache(cache) {
+  const now = Date.now();
+  for (const [key, entry] of cache.entries()) {
+    if ((entry?.expiresAt ?? 0) < now) cache.delete(key);
+  }
+}
+
+function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = {}) {
+  const names = (selectedIds ?? []).map((id) => displayItemName(id)).filter(Boolean);
+  if (!names.length) return "None";
+
+  const visible = names.slice(0, Math.max(1, maxNames));
+  const remainingCount = Math.max(0, names.length - visible.length);
+  const suffix = remainingCount > 0 ? `, …and **${remainingCount}** more` : "";
+
+  const joinedVisible = visible.join(", ");
+  const availableForVisible = Math.max(1, maxChars - suffix.length);
+  const truncatedVisible = joinedVisible.length > availableForVisible
+    ? `${joinedVisible.slice(0, Math.max(1, availableForVisible - 1))}…`
+    : joinedVisible;
+
+  return `${truncatedVisible}${suffix}`;
+}
+
+function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false } = {}) {
   if (!player) return payload;
 
   const garden = getGardenUnlockState(player);
@@ -258,6 +290,43 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user) {
         user
       })
     );
+  }
+
+  const seatingUpgrade = upgradesContent?.upgrades?.u_seating;
+  const seatingLevel = Math.max(0, Number(player?.upgrades?.u_seating || 0));
+  const seatingRepRequirements = Array.isArray(seatingUpgrade?.requirements?.rep)
+    ? seatingUpgrade.requirements.rep
+    : (typeof seatingUpgrade?.requirements?.rep === "number" ? [seatingUpgrade.requirements.rep] : []);
+  const firstSeatingRepThreshold = seatingRepRequirements.length
+    ? Math.max(0, Number(seatingRepRequirements[0]) || 0)
+    : 0;
+  const playerRep = Math.max(0, Number(player?.rep || 0));
+  const seatingNoticeAlreadySeen = Boolean(player?.notifications?.seating_unlock_notice_seen);
+  const shouldShowSeatingNotice = seatingLevel <= 0
+    && firstSeatingRepThreshold > 0
+    && playerRep >= firstSeatingRepThreshold
+    && !seatingNoticeAlreadySeen;
+
+  if (shouldShowSeatingNotice) {
+    notices.push(
+      buildMenuEmbed({
+        title: `${getIcon("orders")} More Orders Available`,
+        description: `${getIcon("rep")} You have enough REP to unlock more seating & **Daily Orders**.\nOpen **/noodle-upgrades** and unlock **Seating** in the **Service** category using your earned REP.`,
+        user
+      })
+    );
+    if (consumeSeatingNotice) {
+      if (!player.notifications) {
+        player.notifications = {
+          pending_pantry_messages: [],
+          dm_reminders_opt_out: false,
+          last_daily_reminder_day: null,
+          last_noodle_channel_id: null,
+          last_noodle_guild_id: null
+        };
+      }
+      player.notifications.seating_unlock_notice_seen = true;
+    }
   }
 
   if (!notices.length) return payload;
@@ -2831,6 +2900,15 @@ function normalizeComponents(rows) {
   return normalized.length ? normalized : [];
 }
 
+function buildInteractionFailureContext(interaction, messageId = null) {
+  return {
+    guildId: interaction?.guildId ?? null,
+    channelId: interaction?.channelId ?? interaction?.channel?.id ?? null,
+    messageId: messageId ?? interaction?.message?.id ?? null,
+    customIdPrefix: getCustomIdPrefix(interaction?.customId ?? null)
+  };
+}
+
 async function componentCommit(interaction, payload) {
 const { ephemeral, targetMessageId, ...rest } = payload ?? {};
 
@@ -2880,7 +2958,11 @@ if (targetMessageId && !ephemeral) {
       return target.edit(editPayload);
     }
   } catch (e) {
-    console.log(`⚠️ Failed to edit target message ${targetMessageId}:`, e?.message);
+    console.error("Failed to edit target message", {
+      ...buildInteractionFailureContext(interaction, targetMessageId),
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? String(e)
+    });
     // Fall through to normal response
   }
 }
@@ -2997,12 +3079,20 @@ if (interaction.deferred || interaction.replied) {
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
-    console.error(`Component editReply failed:`, e?.message);
+    console.error("Component editReply failed", {
+      ...buildInteractionFailureContext(interaction),
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? String(e)
+    });
     // Try followUp as fallback
     try {
       return await interaction.followUp({ ...finalOptions, ephemeral: true });
     } catch (e2) {
-      console.error(`Component followUp fallback also failed:`, e2?.message);
+      console.error("Component followUp fallback also failed", {
+        ...buildInteractionFailureContext(interaction),
+        errorCode: e2?.code ?? null,
+        errorMessage: e2?.message ?? String(e2)
+      });
       return;
     }
   }
@@ -3012,7 +3102,11 @@ if (interaction.deferred || interaction.replied) {
 try {
   return await interaction.update(finalOptions);
 } catch (e) {
-  console.error(`Component update failed:`, e?.message);
+  console.error("Component update failed", {
+    ...buildInteractionFailureContext(interaction),
+    errorCode: e?.code ?? null,
+    errorMessage: e?.message ?? String(e)
+  });
   return;
 }
 }
@@ -3223,22 +3317,45 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
   };
 }
 
-function buildSellQuantityRow(userId, selectedIds, page) {
+function buildSellQuantityRow(userId, selectedIds, page, selectionToken = null) {
   const ids = (selectedIds ?? []).filter(Boolean).slice(0, 5);
   const safePage = Number.isFinite(page) ? Number(page) : 0;
   const joined = ids.join(",");
 
+  const legacySell1Id = `noodle:sell:sell1:${userId}:${safePage}:${joined}`;
+  const legacySell5Id = `noodle:sell:sell5:${userId}:${safePage}:${joined}`;
+  const legacySell10Id = `noodle:sell:sell10:${userId}:${safePage}:${joined}`;
+  const canUseEmbeddedIds = [legacySell1Id, legacySell5Id, legacySell10Id].every((id) => id.length <= 100);
+
+  let sell1Id = legacySell1Id;
+  let sell5Id = legacySell5Id;
+  let sell10Id = legacySell10Id;
+
+  if (!canUseEmbeddedIds) {
+    const token = selectionToken || makeSelectionToken();
+    sellSelectionCacheV2.set(token, {
+      userId,
+      selectedIds: ids,
+      page: safePage,
+      expiresAt: Date.now() + SELECTION_CACHE_TTL_MS
+    });
+
+    sell1Id = `noodle:sell:sell1:${userId}:${token}`;
+    sell5Id = `noodle:sell:sell5:${userId}:${token}`;
+    sell10Id = `noodle:sell:sell10:${userId}:${token}`;
+  }
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:sell:sell1:${userId}:${safePage}:${joined}`)
+      .setCustomId(sell1Id)
       .setLabel("Sell 1 each")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`noodle:sell:sell5:${userId}:${safePage}:${joined}`)
+      .setCustomId(sell5Id)
       .setLabel("Sell 5 each")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`noodle:sell:sell10:${userId}:${safePage}:${joined}`)
+      .setCustomId(sell10Id)
       .setLabel("Sell 10 each")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
@@ -4063,7 +4180,7 @@ async function renderMultiBuyPicker({ interaction, userId, s, p }) {
 }
 
 function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId, { limitToBuy1 = false } = {}) {
-const pickedNames = selectedIds.map((id) => displayItemName(id));
+const selectedNames = formatSelectedItemNames(selectedIds);
 const msgId = sourceMessageId || "none";
 const btnRow = new ActionRowBuilder().addComponents(
 new ButtonBuilder()
@@ -4089,7 +4206,7 @@ if (!limitToBuy1) {
   );
 }
 
-return { pickedNames, btnRow };
+return { selectedNames, btnRow };
 }
 
 /* ------------------------------------------------------------------ */
@@ -4189,7 +4306,9 @@ const withSeasonNotice = (payload = {}) => {
 const commit = async (payload) => {
   const unlockApplied = payload?.__unlockNoticeApplied;
   if (!unlockApplied) {
-    payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user);
+    payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user, {
+      consumeSeatingNotice: false
+    });
   }
   payload = withSeasonNotice(payload);
 // Slash: use editReply since we deferred at the start
@@ -4245,6 +4364,11 @@ if (overrides?.messageId && !payload?.ephemeral) {
       return result;
     }
   } catch (e) {
+    console.error("Modal override target edit failed", {
+      ...buildInteractionFailureContext(interaction, overrides.messageId),
+      errorCode: e?.code ?? null,
+      errorMessage: e?.message ?? String(e)
+    });
     // fall through to componentCommit
   }
 }
@@ -6085,7 +6209,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   const commitState = async (replyObj) => {
 
-    const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user);
+    const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user, {
+      consumeSeatingNotice: true
+    });
     if (replyWithUnlock && typeof replyWithUnlock === "object") {
       Object.defineProperty(replyWithUnlock, "__unlockNoticeApplied", { value: true, enumerable: false });
     }
@@ -10314,7 +10440,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       gate: "multiBuySelectionShowSellButton",
       fallbackValue: true
     });
-    const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId, { limitToBuy1: limitMultiBuyToBuy1 });
+    const { selectedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId, { limitToBuy1: limitMultiBuyToBuy1 });
 
     const sellButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -10325,7 +10451,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     const selectionEmbed = buildMenuEmbed({
       title: `${getIcon("cart")} Multi-buy`,
-      description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to buy:`,
+      description: `**Selected:** ${selectedNames}\nChoose how you want to buy:`,
       user: interaction.member ?? interaction.user
     });
     selectionEmbed.setFooter({
@@ -10461,7 +10587,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
         gate: "multiBuySelectionShowSellButton",
         fallbackValue: true
       });
-      const { pickedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceId, { limitToBuy1: limitMultiBuyToBuy1 });
+      const { selectedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceId, { limitToBuy1: limitMultiBuyToBuy1 });
       const sellButton = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
@@ -10470,7 +10596,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       );
       const selectionEmbed = buildMenuEmbed({
         title: `${getIcon("cart")} Multi-buy`,
-        description: `**Selected:** ${pickedNames.join(", ")}\nQuantity entry has been removed. Use Buy 1/5/10 each instead.`,
+        description: `**Selected:** ${selectedNames}\nQuantity entry has been removed. Use Buy 1/5/10 each instead.`,
         user: interaction.member ?? interaction.user
       });
       selectionEmbed.setFooter({
@@ -10689,6 +10815,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
   }
   /* ---------------- SELL SELECT MENU ---------------- */
   if (interaction.isSelectMenu?.() && interaction.customId.startsWith("noodle:sell:select:")) {
+    purgeExpiredSelectionCache(sellSelectionCacheV2);
     const idParts = interaction.customId.split(":");
     const owner = idParts[3];
     const page = Number(idParts[4] ?? 0);
@@ -10701,14 +10828,22 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       return componentCommit(interaction, { content: "Pick at least one item.", ephemeral: true });
     }
 
-    const pickedNames = picked.map((id) => displayItemName(id));
-    
+    const selectedNames = formatSelectedItemNames(picked);
+
     const sourceMessageId = interaction.message?.id ?? "none";
-    const btnRow = buildSellQuantityRow(interaction.user.id, picked, page);
+    const selectionToken = makeSelectionToken();
+    sellSelectionCacheV2.set(selectionToken, {
+      userId: interaction.user.id,
+      selectedIds: picked.slice(0, 5),
+      page,
+      sourceMessageId: sourceMessageId === "none" ? null : sourceMessageId,
+      expiresAt: Date.now() + SELECTION_CACHE_TTL_MS
+    });
+    const btnRow = buildSellQuantityRow(interaction.user.id, picked, page, selectionToken);
 
     const sellEmbed = buildMenuEmbed({
       title: `${getIcon("coins")} Sell Items`,
-      description: `**Selected:** ${pickedNames.join(", ")}\nChoose how you want to sell:`,
+      description: `**Selected:** ${selectedNames}\nChoose how you want to sell:`,
       user: interaction.member ?? interaction.user
     });
 
@@ -10722,15 +10857,44 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
   /* ---------------- SELL BUTTONS ---------------- */
   if (interaction.isButton?.() && interaction.customId.startsWith("noodle:sell:")) {
+    purgeExpiredSelectionCache(sellSelectionCacheV2);
     const parts2 = interaction.customId.split(":");
-    // noodle:sell:<mode>:<ownerId>:<messageId?>:<id1,id2,...>
+    // noodle:sell:<mode>:<ownerId>:<token>
     const mode = parts2[2];
     const owner = parts2[3];
-    const maybePage = Number(parts2[4]);
-    const hasPage = Number.isFinite(maybePage);
-    const page = hasPage ? maybePage : 0;
-    const idsPart = parts2.slice(hasPage ? 5 : 4).join(":");
-    const selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
+    const tokenOrLegacyPage = parts2[4] ?? null;
+    const isLegacyShape = Number.isFinite(Number(tokenOrLegacyPage)) && parts2.length > 5;
+
+    let page = 0;
+    let selectedIds = [];
+    let selectionToken = null;
+
+    const cacheEntry = tokenOrLegacyPage && !isLegacyShape ? sellSelectionCacheV2.get(tokenOrLegacyPage) : null;
+    if (cacheEntry) {
+      if (cacheEntry.expiresAt < Date.now()) {
+        sellSelectionCacheV2.delete(tokenOrLegacyPage);
+        return componentCommit(interaction, { content: `${getIcon("warning")} Selection expired. Please try again.`, ephemeral: true });
+      }
+      if (cacheEntry.userId && cacheEntry.userId !== interaction.user.id) {
+        return componentCommit(interaction, { content: "That menu isn't for you.", ephemeral: true });
+      }
+
+      page = Number.isFinite(cacheEntry.page) ? Number(cacheEntry.page) : 0;
+      selectedIds = (cacheEntry.selectedIds ?? []).filter(Boolean).slice(0, 5);
+      selectionToken = tokenOrLegacyPage;
+      cacheEntry.expiresAt = Date.now() + SELECTION_CACHE_TTL_MS;
+      sellSelectionCacheV2.set(tokenOrLegacyPage, cacheEntry);
+    } else {
+      if (tokenOrLegacyPage && !isLegacyShape) {
+        return componentCommit(interaction, { content: `${getIcon("warning")} Selection expired. Please reselect items and try again.`, ephemeral: true });
+      }
+      // Backward-compat fallback for older component IDs in already-rendered messages.
+      const maybePage = Number(tokenOrLegacyPage);
+      const hasLegacyPage = Number.isFinite(maybePage);
+      page = hasLegacyPage ? maybePage : 0;
+      const idsPart = parts2.slice(hasLegacyPage ? 5 : 4).join(":");
+      selectedIds = idsPart.split(",").filter(Boolean).slice(0, 5);
+    }
 
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That menu isn't for you.", ephemeral: true });
@@ -10741,12 +10905,12 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     }
 
     if (mode === "qty") {
-      const pickedNames = selectedIds.map((id) => displayItemName(id));
-      const btnRow = buildSellQuantityRow(interaction.user.id, selectedIds, page);
+      const selectedNames = formatSelectedItemNames(selectedIds);
+      const btnRow = buildSellQuantityRow(interaction.user.id, selectedIds, page, selectionToken);
 
       const sellEmbed = buildMenuEmbed({
         title: `${getIcon("coins")} Sell Items`,
-        description: `**Selected:** ${pickedNames.join(", ")}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
+        description: `**Selected:** ${selectedNames}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
         user: interaction.member ?? interaction.user
       });
 
@@ -10843,7 +11007,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
           embeds: [sellEmbed],
           components: pickerPayload.ephemeral
             ? (pickerPayload.components ?? [])
-            : [buildSellQuantityRow(userId, selectedIds, page), ...(pickerPayload.components ?? [noodleMainMenuRow(userId)])],
+            : [buildSellQuantityRow(userId, selectedIds, page, selectionToken), ...(pickerPayload.components ?? [noodleMainMenuRow(userId)])],
           targetMessageId: pickerPayload.ephemeral ? undefined : (interaction.message?.id ?? null),
           ephemeral: pickerPayload.ephemeral
         };

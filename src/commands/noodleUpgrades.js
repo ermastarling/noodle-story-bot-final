@@ -16,7 +16,7 @@ import {
   getUpgradesByCategory,
   calculateUpgradeEffects
 } from "../game/upgrades.js";
-import { calculateStaffCost, levelUpStaff } from "../game/staff.js";
+import { calculateStaffCost, levelUpStaff, getStaffUnlockStatus, filterUnlockedStaffEffects } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 
@@ -131,11 +131,53 @@ function formatEffects(effects) {
     else if (key === "garden_seed_chance") lines.push(`+${(value * 100).toFixed(2)}% seed find chance`);
     else if (key === "kitchen_simmer_capacity") lines.push(`+${formatTwoDecimals(value)} kitchen slots`);
     else if (key === "kitchen_simmer_time_reduction") lines.push(`-${(value * 100).toFixed(2)}% simmer time`);
+    else if (key === "cooldown_reduction") lines.push(`-${(value * 100).toFixed(2)}% cooldowns`);
     else if (key === "fishing_cooldown_reduction") lines.push(`-${(value * 100).toFixed(2)}% fishing cooldown`);
     else if (key === "fishing_rare_weight_bonus") lines.push(`+${(value * 100).toFixed(2)}% rare catch weight`);
     else if (key === "fishing_bonus_items") lines.push(`+${formatTwoDecimals(value)} bonus catch per trip`);
+    else if (key === "harvest_cooldown_reduction") lines.push(`-${(value * 100).toFixed(2)}% harvest cooldown`);
   }
   return lines.join(", ");
+}
+
+function formatStaffPickerEffectValue(effectKey, perLevel) {
+  if (effectKey === "ingredient_save_chance") return `+${(perLevel * 100).toFixed(0)}% ingredient save`;
+  if (effectKey === "double_craft_chance") return `+${(perLevel * 100).toFixed(0)}% double craft`;
+  if (effectKey === "rep_bonus_flat") return `+${perLevel.toFixed(1)} rep per serve`;
+  if (effectKey === "rep_bonus_percent") return `+${(perLevel * 100).toFixed(0)}% rep`;
+  if (effectKey === "bowl_capacity_bonus") return `+${formatTwoDecimals(perLevel)} bowl capacity`;
+  if (effectKey === "cooldown_reduction") return `-${(perLevel * 100).toFixed(2)}% cooldowns`;
+  if (effectKey === "forage_bonus_items") return `+${formatTwoDecimals(perLevel)} forage items`;
+  if (effectKey === "fishing_bonus_items") return `+${formatTwoDecimals(perLevel)} bonus catches per trip`;
+  if (effectKey === "forage_seed_chance") return `+${(perLevel * 100).toFixed(2)}% seed find chance`;
+  if (effectKey === "garden_autoharvest") return "Auto-harvest garden plots";
+  if (effectKey === "garden_harvest_seed_chance") return `+${(perLevel * 100).toFixed(0)}% seed chance on harvest`;
+  if (effectKey === "harvest_cooldown_reduction") return `-${(perLevel * 100).toFixed(2)}% harvest cooldown`;
+  if (effectKey === "market_discount") return `-${(perLevel * 100).toFixed(0)}% market prices`;
+  if (effectKey === "sxp_bonus_percent") return `+${(perLevel * 100).toFixed(0)}% SXP`;
+  if (effectKey === "rare_epic_quality_bonus") return `+${(perLevel * 100).toFixed(0)}% rare/epic quality`;
+  if (effectKey === "rare_epic_fail_reduction") return `-${(perLevel * 100).toFixed(0)}% rare/epic fail`;
+  if (effectKey === "order_quality_bonus") return `+${(perLevel * 100).toFixed(1)}% order quality`;
+  return null;
+}
+
+function buildStaffPickerEffectSummary(player, staff) {
+  const visibleEffects = filterUnlockedStaffEffects(player, staff.effects_per_level ?? {});
+  const priority = {
+    cooldown_reduction: 1,
+    harvest_cooldown_reduction: 2
+  };
+
+  const parts = Object.entries(visibleEffects)
+    .sort(([a], [b]) => (priority[a] ?? 100) - (priority[b] ?? 100) || a.localeCompare(b))
+    .map(([effectKey, perLevel]) => formatStaffPickerEffectValue(effectKey, Number(perLevel) || 0))
+    .filter(Boolean);
+
+  if (!parts.length && staff.staff_id === "prep_chef") {
+    return "auto-buy missing ingredients (+1 order per level)";
+  }
+
+  return parts.join(", ");
 }
 
 function rarityEmoji(rarity) {
@@ -381,6 +423,8 @@ function buildUpgradesManagementEmbed(player, user) {
       const bonus = divisor > 0 ? Math.floor(level / divisor) : 0;
       return bonus > 0 ? `+${bonus} bowls per batch` : `+1 bowl per ${divisor} prep levels`;
     }
+    if (effectKey === "garden_plot_bonus") return `+${formatTwoDecimals(total)} garden plots`;
+    if (effectKey === "garden_seed_chance") return `+${(total * 100).toFixed(2)}% seed find chance`;
     if (effectKey === "kitchen_simmer_capacity") return `+${formatTwoDecimals(total)} kitchen slots`;
     if (effectKey === "kitchen_simmer_time_reduction") return `-${(total * 100).toFixed(2)}% simmer time`;
     if (effectKey === "fishing_cooldown_reduction") return `-${(total * 100).toFixed(2)}% fishing cooldown`;
@@ -472,10 +516,15 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
       })
       .map((staff) => {
         const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
+        const unlockStatus = getStaffUnlockStatus(player, staff);
+        const isLocked = !unlockStatus.unlocked;
         const cost = calculateStaffCost(staff, currentLevel);
-        const status = currentLevel >= staff.max_level ? `${getIcon("status_complete")} MAX` : `${cost}c`;
+        const status = isLocked
+          ? `${getIcon("lock")} ${unlockStatus.requirementLabel}`
+          : (currentLevel >= staff.max_level ? `${getIcon("status_complete")} MAX` : `${cost}c`);
         const emoji = shouldHideRarityEmoji(staff) ? "" : `${rarityEmoji(staff.rarity)} `;
-        const description = staff.description ? `\n  _${staff.description}_` : "";
+        const effectSummary = staff.description || "";
+        const description = effectSummary ? `\n  _${effectSummary}_` : "";
         return `• ${emoji}**${staff.name}** (${currentLevel}/${staff.max_level}) — ${status}${description}`.trim();
       })
       .filter(Boolean);
@@ -563,11 +612,10 @@ function buildUpgradesComponents(userId, player, { categoryId = null, staffRarit
         .map((staff) => {
           const currentLevel = player.staff_levels?.[staff.staff_id] || 0;
           if (currentLevel >= staff.max_level) return null;
+          const unlockStatus = getStaffUnlockStatus(player, staff);
+          if (!unlockStatus.unlocked) return null;
           const cost = calculateStaffCost(staff, currentLevel);
-          let effectStr = formatEffects(staff.effects_per_level);
-          if (!effectStr && staff.staff_id === "prep_chef") {
-            effectStr = "auto-buy missing ingredients (+1 order per level)";
-          }
+          let effectStr = buildStaffPickerEffectSummary(player, staff);
           if (!effectStr) effectStr = staff.description || "No effect listed";
           const description = `Lv${currentLevel}->${currentLevel + 1}: ${effectStr}`.slice(0, 100);
           return {

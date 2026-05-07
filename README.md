@@ -116,7 +116,7 @@ Run the harness to stress-test progression, upgrades, and rewards without sendin
 npm run sim -- --days=30 --players=100 --orders-per-day=8 --seed=1337 --output=sim-output.json
 ```
 
-See `SIMULATION.md` for every supported flag and how to interpret the generated report.
+See `docs/SIMULATION.md` for every supported flag and how to interpret the generated report.
 
 ## Data Notes
 
@@ -145,6 +145,6 @@ The suite exercises discovery, inventory flow, NPC modifiers, order boards, resi
 
 ## Resources
 
-- Detailed simulation options: `SIMULATION.md`
-- Team workflow guidelines: `GIT_WORKFLOW.md`
-- Mobile migration kickoff: `MOBILE_MIGRATION.md`
+- Detailed simulation options: `docs/SIMULATION.md`
+- Team workflow guidelines: `docs/GIT_WORKFLOW.md`
+- Mobile migration kickoff: `docs/MOBILE_MIGRATION.md`
