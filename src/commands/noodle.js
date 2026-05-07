@@ -1574,8 +1574,7 @@ function noodleFeatureInfoRow(userId, {
 
 function noodleSecondaryMenuRow(userId, { questsAvailable = false } = {}) {
 return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("Quests").setEmoji(getButtonEmoji("quests")).setStyle(questsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:quests:${userId}`).setLabel("Quests").setEmoji(getButtonEmoji("quests")).setStyle(questsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
 );
 }
 
@@ -7996,13 +7995,16 @@ ${lines.join("\n")}`;
     }
 
     const blessing = getActiveBlessing(p);
+    const tutorialStep = getCurrentTutorialStep(p);
+    const disableFailures = tutorialStep?.id === "intro_cook";
     const outcome = rollCookBatchOutcome({
       quantity: batchOutput,
       tier: r.tier,
       player: p,
       effects: combinedEffects,
       rng: cookRng,
-      blessing
+      blessing,
+      disableFailures
     });
 
     const doubleCrafted = combinedEffects.double_craft_chance > 0 && rollDoubleCraft(combinedEffects, cookRng);
