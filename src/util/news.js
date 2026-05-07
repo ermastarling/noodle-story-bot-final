@@ -141,7 +141,8 @@ export function hasUnreadNewsUpdate(player, newsContent) {
   const seenVersion = normalizeNewsVersion(player?.notifications?.news_last_seen_version);
   if (!seenVersion) return true;
   const comparison = compareNewsVersions(latestVersion, seenVersion);
-  return comparison === null ? false : comparison > 0;
+  // If versions are non-semver/non-comparable, fall back to direct inequality.
+  return comparison === null ? latestVersion !== seenVersion : comparison > 0;
 }
 
 export function markNewsAsSeen(player, newsContent) {
