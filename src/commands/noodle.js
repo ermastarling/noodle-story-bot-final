@@ -78,6 +78,12 @@ import {
 } from "../constants.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { containsProfanity } from "../util/profanity.js";
+import {
+  hasUnreadNewsUpdate,
+  markNewsAsSeen,
+  normalizeNewsClassification,
+  parseNewsDateMs
+} from "../util/news.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
 import {
@@ -357,7 +363,9 @@ const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
 const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
-const SUPPORT_SERVER_URL = "https://discord.gg/uue7K92pwj";
+const SUPPORT_SERVER_URL = process.env.NOODLE_SUPPORT_SERVER_URL || "https://discord.gg/uue7K92pwj";
+// Look a bit over a year ahead so annual event windows still resolve a future start date.
+const NEXT_EVENT_LOOKAHEAD_MS = 370 * 24 * 60 * 60 * 1000;
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -457,78 +465,6 @@ function getSpecializationAlert(player) {
   const hiddenUnseen = getUnseenHiddenSpecializations(player, specializationsContent);
   if (hiddenUnseen.length) return true;
   return hasNewShopLevelSpecialization(player, specializationsContent);
-}
-
-function normalizeNewsClassification(value) {
-  const raw = String(value ?? "player_update").trim().toLowerCase();
-  if (raw === "internal_update") return "internal_update";
-  return "player_update";
-}
-
-function parseNewsDateMs(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return 0;
-  const parsed = Date.parse(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function normalizeNewsVersion(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  return raw.startsWith("v") ? raw.toLowerCase() : `v${raw.toLowerCase()}`;
-}
-
-function getLatestVisibleNewsEntry({ includeInternal = false } = {}) {
-  const sections = Array.isArray(newsContent?.sections) ? newsContent.sections : [];
-  return sections
-    .flatMap((section, sectionIndex) => {
-      const entries = Array.isArray(section?.entries) ? section.entries : [];
-      return entries.map((entry, entryIndex) => ({ entry, sectionIndex, entryIndex }));
-    })
-    .filter(({ entry }) => includeInternal || normalizeNewsClassification(entry?.classification) !== "internal_update")
-    .sort((a, b) => {
-      const diff = parseNewsDateMs(b.entry?.date) - parseNewsDateMs(a.entry?.date);
-      if (diff !== 0) return diff;
-      const sectionDiff = a.sectionIndex - b.sectionIndex;
-      if (sectionDiff !== 0) return sectionDiff;
-      return a.entryIndex - b.entryIndex;
-    })[0] ?? null;
-}
-
-function getLatestNewsVersionForPlayer() {
-  const latest = getLatestVisibleNewsEntry({ includeInternal: false });
-  if (latest?.entry) {
-    return normalizeNewsVersion(latest.entry.version);
-  }
-
-  const pinned = newsContent?.pinned ?? {};
-  if (normalizeNewsClassification(pinned?.classification) === "internal_update") {
-    return "";
-  }
-  return normalizeNewsVersion(pinned?.version);
-}
-
-function hasUnreadNewsUpdate(player) {
-  const latestVersion = getLatestNewsVersionForPlayer();
-  if (!latestVersion) return false;
-  const seenVersion = normalizeNewsVersion(player?.notifications?.news_last_seen_version);
-  return seenVersion !== latestVersion;
-}
-
-function markNewsAsSeen(player) {
-  if (!player || typeof player !== "object") return false;
-  const latestVersion = getLatestNewsVersionForPlayer();
-  if (!latestVersion) return false;
-
-  if (!player.notifications || typeof player.notifications !== "object") {
-    player.notifications = {};
-  }
-
-  const seenVersion = normalizeNewsVersion(player.notifications.news_last_seen_version);
-  if (seenVersion === latestVersion) return false;
-
-  player.notifications.news_last_seen_version = latestVersion;
-  return true;
 }
 
 function applyOwnerFooter(embed, user) {
@@ -1454,12 +1390,12 @@ function noodleOrdersAcceptOnlyRow(userId, { highlightAccept = true, disableAcce
 }
 
 function noodleMainMenuRowNoProfile(userId, { newsAvailable = false } = {}) {
-return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
-new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("pantry")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:news:${userId}`).setLabel("News").setEmoji(getButtonEmoji("new")).setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
-);
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("pantry")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:nav:news:${userId}`).setLabel("News").setEmoji(getButtonEmoji("new")).setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
+  );
 }
 
 function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false, active = null, allowLockedKitchenInfo = false } = {}) {
@@ -4733,7 +4669,7 @@ if (sub === "profile") {
   const viewingSelf = u.id === userId;
   const questsAvailable = hasDailyRewardAvailable(selfPlayer, nowTs()) || hasClaimableQuests(selfPlayer);
   const specializationsAvailable = getSpecializationAlert(selfPlayer);
-  const newsAvailable = viewingSelf && hasUnreadNewsUpdate(selfPlayer);
+  const newsAvailable = viewingSelf && hasUnreadNewsUpdate(selfPlayer, newsContent);
   const party = getUserActiveParty(db, u.id);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
@@ -4827,7 +4763,7 @@ if (sub === "about") {
 /* ---------------- NEWS ---------------- */
 if (sub === "news") {
   const viewerPlayer = ensurePlayer(serverId, userId);
-  if (db && markNewsAsSeen(viewerPlayer)) {
+  if (db && markNewsAsSeen(viewerPlayer, newsContent)) {
     upsertPlayer(db, serverId, userId, viewerPlayer, null, viewerPlayer.schema_version);
   }
 
@@ -4845,19 +4781,6 @@ if (sub === "news") {
       : `v${Number(major)}.${Number(minor)}.${Number(patch)}`;
   };
 
-  const parseDateMs = (value) => {
-    const raw = String(value ?? "").trim();
-    if (!raw) return 0;
-    const parsed = Date.parse(raw);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
-  const normalizeClassification = (value) => {
-    const raw = String(value ?? "player_update").trim().toLowerCase();
-    if (raw === "internal_update") return "internal_update";
-    return "player_update";
-  };
-
   const classificationLabel = (classification) => {
     if (classification === "internal_update") {
       return `${getIcon("customize")} Internal Update`;
@@ -4867,13 +4790,13 @@ if (sub === "news") {
 
   const showInternalUpdates = false;
   const isVisibleEntry = (entry) => {
-    const cls = normalizeClassification(entry?.classification);
+    const cls = normalizeNewsClassification(entry?.classification);
     return showInternalUpdates || cls !== "internal_update";
   };
 
   const sections = Array.isArray(newsContent?.sections) ? newsContent.sections : [];
   const pinned = newsContent?.pinned ?? {};
-  const pinnedClassification = normalizeClassification(pinned?.classification);
+  const pinnedClassification = normalizeNewsClassification(pinned?.classification);
   const includePinned = showInternalUpdates || pinnedClassification !== "internal_update";
 
   const visibleEntries = sections
@@ -4889,7 +4812,7 @@ if (sub === "news") {
         }));
     })
     .sort((a, b) => {
-      const diff = parseDateMs(b.entry?.date) - parseDateMs(a.entry?.date);
+      const diff = parseNewsDateMs(b.entry?.date) - parseNewsDateMs(a.entry?.date);
       if (diff !== 0) return diff;
       const sectionDiff = a.sectionIndex - b.sectionIndex;
       if (sectionDiff !== 0) return sectionDiff;
@@ -4906,7 +4829,7 @@ if (sub === "news") {
     ? (String(latest.entry?.date ?? "TBD").trim() || "TBD")
     : (includePinned ? (String(pinned?.date ?? "TBD").trim() || "TBD") : "TBD");
   const latestClassLabel = latest
-    ? classificationLabel(normalizeClassification(latest.entry?.classification))
+    ? classificationLabel(normalizeNewsClassification(latest.entry?.classification))
     : classificationLabel(includePinned ? pinnedClassification : "player_update");
   const latestChanges = latest
     ? (Array.isArray(latest.entry?.changes) ? latest.entry.changes : [])
@@ -4937,7 +4860,7 @@ if (sub === "news") {
   if (previous) {
     const previousVersion = formatVersion(previous.entry?.version, "v0.0.0");
     const previousDate = String(previous.entry?.date ?? "TBD").trim() || "TBD";
-    const previousClassLabel = classificationLabel(normalizeClassification(previous.entry?.classification));
+    const previousClassLabel = classificationLabel(normalizeNewsClassification(previous.entry?.classification));
     const previousChanges = Array.isArray(previous.entry?.changes) ? previous.entry.changes : [];
     const previousText = previousChanges.length
       ? previousChanges.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
@@ -4977,7 +4900,7 @@ if (sub === "news") {
   const nextEventCandidates = allEvents
     .map((event) => {
       const currentWindow = getEventWindow(event, nowMs);
-      const nextCycleWindow = getEventWindow(event, nowMs + 370 * 24 * 60 * 60 * 1000);
+      const nextCycleWindow = getEventWindow(event, nowMs + NEXT_EVENT_LOOKAHEAD_MS);
       const starts = [currentWindow?.start, nextCycleWindow?.start]
         .filter((start) => Number.isFinite(start) && start > nowMs)
         .sort((a, b) => a - b);
@@ -5896,8 +5819,7 @@ if (sub === "season") {
       `The world is currently in **${server.season}**.`,
       seasonCard.lore,
       "",
-      "**Today's Flavor**",
-      randomFlavorLine ?? seasonCard.chefNote,
+      ...(randomFlavorLine ? ["**Today's Flavor**", randomFlavorLine, ""] : []),
       seasonCard.chefNote,
       "",
       "**Seasonal Recipes**",
