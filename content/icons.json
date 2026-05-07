@@ -176,6 +176,7 @@
       "scroll": "<:scroll:1470315768473194496>",
       "star": "<:star:1470315553175638038>",
       "idea": "<:idea:1470315763226116229>",
+      "new": "<:new:1501801363166855218>",
       "note": "<:note:1470315426662715548>",
       "inbox": "<:inbox:1470315424439603250>",
       "regulars": "<:regulars:1486270601587851316>",
@@ -221,7 +222,8 @@
       "profile": "<:profile:1470315766652866591>",
       "decor": "<:decor:1470315760990814259>",
       "customize": "<:customize:1470315759124217907>",
-      "tag": "<:tag:1470315777084358760>"
+      "tag": "<:tag:1470315777084358760>",
+      "about_profile": "https://noodlestory.lol/wp-content/uploads/2026/04/enoodles.png"
     },
     "staff_upgrades": {
       "staff_management": "<:staff_management:1470315769735676057>",

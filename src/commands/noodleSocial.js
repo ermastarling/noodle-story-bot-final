@@ -17,7 +17,7 @@ import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
 import { applyQuestProgress } from "../game/quests.js";
-import { loadBadgesContent, loadContentBundle, loadEventsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
+import { loadBadgesContent, loadContentBundle, loadEventsContent, loadNewsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
 import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed } from "./noodle.js";
 import {
   grantBlessing,
@@ -51,6 +51,7 @@ import { grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import { hasNewShopLevelSpecialization } from "../game/specialization.js";
 import { isFishingIngredientLocked } from "../game/fishing.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
+import { hasUnreadNewsUpdate } from "../util/news.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { getOrdersMeta } from "../game/orders.js";
 import { containsProfanity } from "../util/profanity.js";
@@ -87,6 +88,7 @@ const ButtonStyle = {
 const db = openDb();
 const baseContent = loadContentBundle(1);
 const eventsContent = loadEventsContent();
+const newsContent = loadNewsContent();
 const content = withEventRecipes(baseContent, eventsContent);
 const specializationsContent = loadSpecializationsContent();
 const badgesContent = loadBadgesContent();
@@ -990,7 +992,7 @@ function partyCreationRow(userId) {
 /**
  * Social stats view buttons (two rows)
  */
-function statsViewButtons(userId) {
+function statsViewButtons(userId, { newsAvailable = false } = {}) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
@@ -1019,6 +1021,11 @@ function statsViewButtons(userId) {
       .setCustomId(`noodle:nav:pantry:${userId}`)
       .setLabel("Pantry").setEmoji(getButtonEmoji("pantry"))
       .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}`)
+      .setLabel("News")
+      .setEmoji(getButtonEmoji("new"))
+      .setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
@@ -3023,6 +3030,7 @@ async function handleComponent(interaction) {
 
     if (action === "stats") {
       const player = ensurePlayer(serverId, userId);
+      const newsAvailable = hasUnreadNewsUpdate(player, newsContent);
       const tipStats = getUserTipStats(db, serverId, userId);
       const party = getUserActiveParty(db, userId);
       const blessing = getActiveBlessing(player);
@@ -3081,7 +3089,7 @@ async function handleComponent(interaction) {
 
       return componentCommit(interaction, {
         embeds: [embed],
-        components: statsViewButtons(userId)
+        components: statsViewButtons(userId, { newsAvailable })
       });
     }
 

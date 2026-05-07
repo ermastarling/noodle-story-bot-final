@@ -64,3 +64,14 @@ export function loadEventsContent() {
   const p = path.join(__dirname, "..", "..", "content", "events.json");
   return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
+
+let newsContentCache = null;
+
+export function loadNewsContent() {
+  if (newsContentCache) {
+    return newsContentCache;
+  }
+  const p = path.join(__dirname, "..", "..", "content", "news.json");
+  newsContentCache = JSON.parse(fs.readFileSync(p, "utf-8"));
+  return newsContentCache;
+}

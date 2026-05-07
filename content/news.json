@@ -1,0 +1,69 @@
+{
+  "intro": "*This feed is updated so players can quickly see what's changed.*",
+  "standards": {
+    "versioning": {
+      "format": "vMAJOR.MINOR.PATCH[-tag]",
+      "examples": ["v0.1.2", "v1.4.0-hotfix.1"],
+      "notes": [
+        "MAJOR = breaking player-facing structure or progression resets.",
+        "MINOR = new features/content visible to players.",
+        "PATCH = fixes, balancing, and polish with no major feature rollout.",
+        "Optional -tag for pre-release or rollout labels."
+      ]
+    },
+    "classification": {
+      "allowed": ["player_update", "internal_update"],
+      "player_update_criteria": [
+        "Gameplay, progression, economy, or reward behavior changed.",
+        "Menus, UX flows, or social systems players directly use changed.",
+        "New or updated content/events/decor/recipes visible in game."
+      ],
+      "internal_update_criteria": [
+        "Dev tooling, refactor, test harness, infra, or cleanup only.",
+        "No player-visible behavior change in normal gameplay."
+      ]
+    }
+  },
+  "pinned": {
+    "label": "Latest Update",
+    "version": "0.2.0",
+    "date": "2026-05-07",
+    "classification": "player_update",
+    "summary": "Added the new About + News experience, including live About counters, a support-server shortcut, and a cleaner release feed with Latest, Previous, and Upcoming updates."
+  },
+  "sections": [
+    {
+      "title": "May 2026",
+      "entries": [
+        {
+          "version": "0.2.0",
+          "date": "2026-05-07",
+          "classification": "player_update",
+          "changes": [
+            "Added dedicated About & News menus with live counters for current servers & active noodle shops + a one-tap Join Support Server button.",
+            "Refined News layout to show **Latest Update**, **Previous Update**, then **Upcoming notes** & a **Seasonal Event Reminder**.",
+            "Expanded Seasonal lore & flavor in the **Season** menu."
+          ]
+        },
+        {
+          "version": "0.1.0",
+          "date": "2026-05-06",
+          "classification": "player_update",
+          "changes": [
+            "Improved staff upgrade picker and embed readability for smoother staffing upgrades.",
+            "Improved missing-access guidance so blocked actions are clearer and less confusing.",
+            "6 **NEW** Premium Shop Specializations available for purchase in the store, each purchase includes **10,000c** for your shop."
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Upcoming Updates",
+      "items": [
+        "**Support Server Giveaways** are coming with NEW *clueboxes* that contain recipe clues!",
+        "**Monthly Subscriptions** are planned: **24/7 House** & **Take Out Counter** perks, allowing players to unlock either an unlimited order board and/or allow their noodle shop to become idle as they serve from a new location. *Estimated to release by the end of the month.*",
+        "**Noodle A Day** is on the way: a cozy daily noodle image posted in your channel of choice."
+      ]
+    }
+  ]
+}
