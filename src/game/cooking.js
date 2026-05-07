@@ -77,7 +77,7 @@ export function getFailBowlYield() {
   return Math.max(0, Math.min(1, Number(rules.failure?.fail_bowl_yield) || 0.25));
 }
 
-export function rollCookBatchOutcome({ quantity, tier, player, effects, rng, blessing }) {
+export function rollCookBatchOutcome({ quantity, tier, player, effects, rng, blessing, disableFailures = false }) {
   const total = Math.max(0, Number(quantity) || 0);
   if (total <= 0) {
     return { success: 0, failed: 0, salvage: 0, qualityCounts: {} };
@@ -85,8 +85,10 @@ export function rollCookBatchOutcome({ quantity, tier, player, effects, rng, ble
 
   const failChance = getCookFailChance(tier, player, effects);
   let failed = 0;
-  for (let i = 0; i < total; i += 1) {
-    if (rng() < failChance) failed += 1;
+  if (!disableFailures) {
+    for (let i = 0; i < total; i += 1) {
+      if (rng() < failChance) failed += 1;
+    }
   }
 
   const success = Math.max(0, total - failed);

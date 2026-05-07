@@ -15,7 +15,7 @@ function makeSeqRng(values, fallback = 0.99) {
   };
 }
 
-function simulateCookCore({ player, recipe, qtyToCook, effects = {}, rng }) {
+function simulateCookCore({ player, recipe, qtyToCook, effects = {}, rng, disableFailures = false }) {
   const batchOutput = getCookBatchOutput(qtyToCook, player, effects);
   const ingredientsToUse = [];
   const consumedByItem = {};
@@ -48,7 +48,8 @@ function simulateCookCore({ player, recipe, qtyToCook, effects = {}, rng }) {
     player,
     effects,
     rng,
-    blessing: null
+    blessing: null,
+    disableFailures
   });
 
   const qualityCounts = outcome.qualityCounts ?? {};
@@ -171,4 +172,36 @@ test("Cook invariants: quality buckets and salvage totals stay consistent with b
   assert.ok(result.outcome.salvage >= 1);
   assert.equal(result.consumedByItem.noodles_wheat, 8);
   assert.equal(result.consumedByItem.broth_soy, 8);
+});
+
+test("Cook invariants: disableFailures prevents failed bowls", () => {
+  const player = {
+    inv_ingredients: {
+      noodles_wheat: 20,
+      broth_soy: 20
+    },
+    upgrades: { u_prep: 0 }
+  };
+
+  const recipe = {
+    tier: "common",
+    ingredients: [
+      { item_id: "noodles_wheat", qty: 1 },
+      { item_id: "broth_soy", qty: 1 }
+    ]
+  };
+
+  const result = simulateCookCore({
+    player,
+    recipe,
+    qtyToCook: 5,
+    rng: makeSeqRng([0.0, 0.0, 0.0, 0.0, 0.0]),
+    disableFailures: true
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcome.failed, 0);
+  assert.equal(result.outcome.salvage, 0);
+  assert.equal(result.outcome.success, result.batchOutput);
+  assert.equal(result.qualityBucketTotal, result.batchOutput);
 });
