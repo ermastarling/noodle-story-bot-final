@@ -205,3 +205,26 @@ test("Cook invariants: disableFailures prevents failed bowls", () => {
   assert.equal(result.outcome.success, result.batchOutput);
   assert.equal(result.qualityBucketTotal, result.batchOutput);
 });
+
+test("Cook invariants: disableFailures still consumes failure RNG rolls", () => {
+  const player = { upgrades: { u_prep: 0 } };
+  let calls = 0;
+  const rng = () => {
+    calls += 1;
+    return 0.99;
+  };
+
+  const outcome = rollCookBatchOutcome({
+    quantity: 3,
+    tier: "common",
+    player,
+    effects: {},
+    rng,
+    blessing: null,
+    disableFailures: true
+  });
+
+  assert.equal(outcome.failed, 0);
+  assert.equal(outcome.success, 3);
+  assert.equal(calls, 6);
+});

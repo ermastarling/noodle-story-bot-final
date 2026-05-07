@@ -85,10 +85,9 @@ export function rollCookBatchOutcome({ quantity, tier, player, effects, rng, ble
 
   const failChance = getCookFailChance(tier, player, effects);
   let failed = 0;
-  if (!disableFailures) {
-    for (let i = 0; i < total; i += 1) {
-      if (rng() < failChance) failed += 1;
-    }
+  for (let i = 0; i < total; i += 1) {
+    const roll = rng();
+    if (!disableFailures && roll < failChance) failed += 1;
   }
 
   const success = Math.max(0, total - failed);
