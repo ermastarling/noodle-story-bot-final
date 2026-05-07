@@ -357,6 +357,7 @@ const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
 const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
+const SUPPORT_SERVER_URL = "https://discord.gg/uue7K92pwj";
 
 const DECOR_SET_SPECIALIZATION_MAP = {
   festival_noodle_house: "festival_noodle_house",
@@ -456,6 +457,78 @@ function getSpecializationAlert(player) {
   const hiddenUnseen = getUnseenHiddenSpecializations(player, specializationsContent);
   if (hiddenUnseen.length) return true;
   return hasNewShopLevelSpecialization(player, specializationsContent);
+}
+
+function normalizeNewsClassification(value) {
+  const raw = String(value ?? "player_update").trim().toLowerCase();
+  if (raw === "internal_update") return "internal_update";
+  return "player_update";
+}
+
+function parseNewsDateMs(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return 0;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeNewsVersion(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  return raw.startsWith("v") ? raw.toLowerCase() : `v${raw.toLowerCase()}`;
+}
+
+function getLatestVisibleNewsEntry({ includeInternal = false } = {}) {
+  const sections = Array.isArray(newsContent?.sections) ? newsContent.sections : [];
+  return sections
+    .flatMap((section, sectionIndex) => {
+      const entries = Array.isArray(section?.entries) ? section.entries : [];
+      return entries.map((entry, entryIndex) => ({ entry, sectionIndex, entryIndex }));
+    })
+    .filter(({ entry }) => includeInternal || normalizeNewsClassification(entry?.classification) !== "internal_update")
+    .sort((a, b) => {
+      const diff = parseNewsDateMs(b.entry?.date) - parseNewsDateMs(a.entry?.date);
+      if (diff !== 0) return diff;
+      const sectionDiff = a.sectionIndex - b.sectionIndex;
+      if (sectionDiff !== 0) return sectionDiff;
+      return a.entryIndex - b.entryIndex;
+    })[0] ?? null;
+}
+
+function getLatestNewsVersionForPlayer() {
+  const latest = getLatestVisibleNewsEntry({ includeInternal: false });
+  if (latest?.entry) {
+    return normalizeNewsVersion(latest.entry.version);
+  }
+
+  const pinned = newsContent?.pinned ?? {};
+  if (normalizeNewsClassification(pinned?.classification) === "internal_update") {
+    return "";
+  }
+  return normalizeNewsVersion(pinned?.version);
+}
+
+function hasUnreadNewsUpdate(player) {
+  const latestVersion = getLatestNewsVersionForPlayer();
+  if (!latestVersion) return false;
+  const seenVersion = normalizeNewsVersion(player?.notifications?.news_last_seen_version);
+  return seenVersion !== latestVersion;
+}
+
+function markNewsAsSeen(player) {
+  if (!player || typeof player !== "object") return false;
+  const latestVersion = getLatestNewsVersionForPlayer();
+  if (!latestVersion) return false;
+
+  if (!player.notifications || typeof player.notifications !== "object") {
+    player.notifications = {};
+  }
+
+  const seenVersion = normalizeNewsVersion(player.notifications.news_last_seen_version);
+  if (seenVersion === latestVersion) return false;
+
+  player.notifications.news_last_seen_version = latestVersion;
+  return true;
 }
 
 function applyOwnerFooter(embed, user) {
@@ -1380,12 +1453,12 @@ function noodleOrdersAcceptOnlyRow(userId, { highlightAccept = true, disableAcce
   );
 }
 
-function noodleMainMenuRowNoProfile(userId) {
+function noodleMainMenuRowNoProfile(userId, { newsAvailable = false } = {}) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("pantry")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:news:${userId}`).setLabel("News").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Secondary)
+new ButtonBuilder().setCustomId(`noodle:nav:news:${userId}`).setLabel("News").setEmoji(getButtonEmoji("new")).setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
 );
 }
 
@@ -1491,13 +1564,6 @@ new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel
 );
 }
 
-function noodleQuestsSecondaryRow(userId) {
-return new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("Season").setEmoji(getButtonEmoji("season")).setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
-);
-}
-
 function hasClaimableQuests(player) {
 return Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
 }
@@ -1523,9 +1589,7 @@ if (showClaim) {
 }
 
 row.addComponents(
-  new ButtonBuilder().setCustomId(`noodle:action:quests_vote:${userId}`).setLabel("Vote Rewards").setEmoji(getButtonEmoji("quests")).setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder().setCustomId(`noodle:nav:season:${userId}`).setLabel("Season").setEmoji(getButtonEmoji("season")).setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder().setCustomId(`noodle:nav:event:${userId}`).setLabel("Event").setEmoji(getButtonEmoji("event")).setStyle(ButtonStyle.Secondary)
+  new ButtonBuilder().setCustomId(`noodle:action:quests_vote:${userId}`).setLabel("Vote Rewards").setEmoji(getButtonEmoji("quests")).setStyle(ButtonStyle.Secondary)
 );
 
 return row;
@@ -1535,6 +1599,41 @@ function noodleQuestsBackRow(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
+}
+
+function noodleAboutNewsNavRow(userId, { active = "news" } = {}) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}`)
+      .setLabel("News")
+      .setEmoji(getButtonEmoji("new"))
+      .setStyle(active === "news" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:about:${userId}`)
+      .setLabel("About")
+      .setEmoji(getButtonEmoji("sparkle"))
+      .setStyle(active === "about" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:season:${userId}`)
+      .setLabel("Season")
+      .setEmoji(getButtonEmoji("season"))
+      .setStyle(active === "season" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:event:${userId}`)
+      .setLabel("Event")
+      .setEmoji(getButtonEmoji("event"))
+      .setStyle(active === "event" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+}
+
+function noodleAboutNewsBackRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:profile:${userId}`)
+      .setLabel("Back")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+  );
 }
 
 function noodleMainMenuRowNoPantry(userId) {
@@ -4634,6 +4733,7 @@ if (sub === "profile") {
   const viewingSelf = u.id === userId;
   const questsAvailable = hasDailyRewardAvailable(selfPlayer, nowTs()) || hasClaimableQuests(selfPlayer);
   const specializationsAvailable = getSpecializationAlert(selfPlayer);
+  const newsAvailable = viewingSelf && hasUnreadNewsUpdate(selfPlayer);
   const party = getUserActiveParty(db, u.id);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
@@ -4650,7 +4750,7 @@ if (sub === "profile") {
     embed.setFooter({ text: footerText });
   }
   const profileComponents = viewingSelf
-    ? [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
+    ? [noodleMainMenuRowNoProfile(userId, { newsAvailable }), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
     : [];
   const embedsWithFooter = applyGreenButtonFooter([embed], profileComponents);
   
@@ -4662,27 +4762,54 @@ if (sub === "profile") {
 
 /* ---------------- ABOUT ---------------- */
 if (sub === "about") {
+  const liveServerCount = Number(interaction.client?.guilds?.cache?.size ?? 0);
+  let liveShopCount = null;
+  if (db) {
+    try {
+      const row = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
+      const count = Number(row?.count ?? 0);
+      if (Number.isFinite(count)) {
+        liveShopCount = count;
+      }
+    } catch {
+      // Ignore count query issues for About view.
+    }
+  }
+
   const aboutProfileImageUrl = getIconUrl("about_profile");
   const aboutEmbed = buildMenuEmbed({
-    title: `${getIcon("sparkle")} About Noodle Story`,
+    title: `${getIcon("sparkle")} About`,
     description:
-      "**Creator: Erma Starling**\n\n" +
+      "**Creator:** *Erma Starling*\n\n" +
       "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
       "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
-      "And yes, noodles are absolutely the creator's favorite dish.",
+      "And yes, she's obsessed with noodles... it's a problem.",
     user: interaction.member ?? interaction.user,
     color: theme.colors.info
   });
+
+  aboutEmbed.addFields(
+    {
+      name: `${getIcon("group")} Servers`,
+      value: `\`\`${liveServerCount.toLocaleString("en-US")}\`\``,
+      inline: true
+    },
+    {
+      name: `${getIcon("profile")} Noodle Shops`,
+      value: `\`\`${liveShopCount === null ? "Unknown" : liveShopCount.toLocaleString("en-US")}\`\``,
+      inline: true
+    }
+  );
 
   if (aboutProfileImageUrl) {
     aboutEmbed.setThumbnail(aboutProfileImageUrl);
   }
 
-  const aboutRow = new ActionRowBuilder().addComponents(
+  const aboutSupportRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`noodle:nav:news:${userId}`)
-      .setLabel("News")
-      .setStyle(ButtonStyle.Primary),
+      .setLabel("Join Support Server")
+      .setStyle(ButtonStyle.Link)
+      .setURL(SUPPORT_SERVER_URL),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:profile:${userId}`)
       .setLabel("Back")
@@ -4693,12 +4820,17 @@ if (sub === "about") {
   return commit({
     content: " ",
     embeds: [aboutEmbed],
-    components: [aboutRow]
+    components: [noodleAboutNewsNavRow(userId, { active: "about" }), aboutSupportRow]
   });
 }
 
 /* ---------------- NEWS ---------------- */
 if (sub === "news") {
+  const viewerPlayer = ensurePlayer(serverId, userId);
+  if (db && markNewsAsSeen(viewerPlayer)) {
+    upsertPlayer(db, serverId, userId, viewerPlayer, null, viewerPlayer.schema_version);
+  }
+
   const formatVersion = (rawValue, fallback = "v0.0.0") => {
     const raw = String(rawValue ?? "").trim();
     if (!raw) return fallback;
@@ -4739,150 +4871,169 @@ if (sub === "news") {
     return showInternalUpdates || cls !== "internal_update";
   };
 
+  const sections = Array.isArray(newsContent?.sections) ? newsContent.sections : [];
   const pinned = newsContent?.pinned ?? {};
   const pinnedClassification = normalizeClassification(pinned?.classification);
+  const includePinned = showInternalUpdates || pinnedClassification !== "internal_update";
 
-  const latestVisibleEntry = (Array.isArray(newsContent?.sections) ? newsContent.sections : [])
-    .flatMap((section) => {
+  const visibleEntries = sections
+    .flatMap((section, sectionIndex) => {
       const entries = Array.isArray(section?.entries) ? section.entries : [];
       return entries
         .filter((entry) => isVisibleEntry(entry))
-        .map((entry) => ({ section, entry }));
+        .map((entry, entryIndex) => ({
+          entry,
+          sectionTitle: String(section?.title ?? "Updates").trim() || "Updates",
+          sectionIndex,
+          entryIndex
+        }));
     })
     .sort((a, b) => {
       const diff = parseDateMs(b.entry?.date) - parseDateMs(a.entry?.date);
       if (diff !== 0) return diff;
-      return 0;
-    })[0] ?? null;
+      const sectionDiff = a.sectionIndex - b.sectionIndex;
+      if (sectionDiff !== 0) return sectionDiff;
+      return a.entryIndex - b.entryIndex;
+    });
 
-  const usePinnedAsIs = showInternalUpdates || pinnedClassification !== "internal_update";
-  const pinnedLabel = usePinnedAsIs
-    ? (String(pinned?.label ?? "Pinned: Latest Update").trim() || "Pinned: Latest Update")
-    : "Pinned: Latest Player Update";
-  const pinnedVersion = usePinnedAsIs
-    ? formatVersion(pinned?.version, "v0.0.0")
-    : formatVersion(latestVisibleEntry?.entry?.version, "v0.0.0");
-  const pinnedDate = usePinnedAsIs
-    ? (String(pinned?.date ?? "TBD").trim() || "TBD")
-    : (String(latestVisibleEntry?.entry?.date ?? "TBD").trim() || "TBD");
-  const pinnedSummary = usePinnedAsIs
-    ? (String(pinned?.summary ?? "No update summary yet.").trim() || "No update summary yet.")
-    : (() => {
-        const changes = Array.isArray(latestVisibleEntry?.entry?.changes) ? latestVisibleEntry.entry.changes : [];
-        if (changes.length) return String(changes[0] ?? "No player-facing updates yet.").trim() || "No player-facing updates yet.";
-        return latestVisibleEntry ? "Latest player-facing update available in sections below." : "No player-facing updates yet.";
-      })();
-  const pinnedClassificationLabel = usePinnedAsIs
-    ? classificationLabel(pinnedClassification)
-    : classificationLabel(normalizeClassification(latestVisibleEntry?.entry?.classification));
-  const introText = String(newsContent?.intro ?? "This feed is updated with each release so players can quickly see what changed.").trim();
-  const playerRules = Array.isArray(newsContent?.standards?.classification?.player_update_criteria)
-    ? newsContent.standards.classification.player_update_criteria.filter(Boolean)
+  const latest = visibleEntries[0] ?? null;
+  const previous = visibleEntries[1] ?? null;
+
+  const latestVersion = latest
+    ? formatVersion(latest.entry?.version, "v0.0.0")
+    : (includePinned ? formatVersion(pinned?.version, "v0.0.0") : "v0.0.0");
+  const latestDate = latest
+    ? (String(latest.entry?.date ?? "TBD").trim() || "TBD")
+    : (includePinned ? (String(pinned?.date ?? "TBD").trim() || "TBD") : "TBD");
+  const latestClassLabel = latest
+    ? classificationLabel(normalizeClassification(latest.entry?.classification))
+    : classificationLabel(includePinned ? pinnedClassification : "player_update");
+  const latestChanges = latest
+    ? (Array.isArray(latest.entry?.changes) ? latest.entry.changes : [])
     : [];
-  const playerRuleText = playerRules.length ? `\n${getIcon("idea")} Player Update means: ${playerRules.join("; ")}.` : "";
+  const latestSummary = latest
+    ? (latestChanges.length
+      ? latestChanges.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
+      : "• No changes listed.")
+    : (includePinned
+      ? (String(pinned?.summary ?? "No update summary yet.").trim() || "No update summary yet.")
+      : "No player-facing updates yet.");
+  const introText = String(newsContent?.intro ?? "*This feed is updated so players can quickly see what's changed.*").trim();
+  const clampFieldValue = (text, maxLen = 1024) => {
+    const value = String(text ?? "").trim();
+    if (!value) return "-";
+    if (value.length <= maxLen) return value;
+    return `${value.slice(0, Math.max(1, maxLen - 3))}...`;
+  };
 
   const newsEmbed = buildMenuEmbed({
-    title: `${getIcon("note")} News`,
-    description:
-      `${getIcon("note")} **${pinnedLabel}**\n` +
-      `**${pinnedVersion}** · ${pinnedDate} · ${pinnedClassificationLabel}\n` +
-      `${pinnedSummary}\n\n` +
-      `${getIcon("idea")} ${introText}${playerRuleText}`,
+    title: `${getIcon("new")} News`,
+    description: `${getIcon("idea")} ${introText}`,
     user: interaction.member ?? interaction.user,
     color: theme.colors.success
   });
 
-  const sectionFields = (Array.isArray(newsContent?.sections) ? newsContent.sections : [])
-    .map((section, sectionIndex) => {
-      const sectionTitle = String(section?.title ?? "Updates").trim() || "Updates";
-
-      let value = "";
-      const entries = Array.isArray(section?.entries) ? section.entries : [];
-      const items = Array.isArray(section?.items) ? section.items : [];
-      const sortedEntries = entries
-        .filter((entry) => isVisibleEntry(entry))
-        .map((entry, entryIndex) => ({ entry, entryIndex }))
-        .sort((a, b) => {
-          const diff = parseDateMs(b.entry?.date) - parseDateMs(a.entry?.date);
-          if (diff !== 0) return diff;
-          return a.entryIndex - b.entryIndex;
-        })
-        .map(({ entry }) => entry);
-
-      const sectionDateMs = Math.max(
-        parseDateMs(section?.date),
-        ...sortedEntries.map((entry) => parseDateMs(entry?.date))
-      );
-
-      if (sortedEntries.length) {
-        value = sortedEntries
-          .map((entry) => {
-            const version = formatVersion(entry?.version, "v0.0.0");
-            const date = String(entry?.date ?? "TBD").trim() || "TBD";
-            const classification = normalizeClassification(entry?.classification);
-            const classLabel = classificationLabel(classification);
-            const changes = Array.isArray(entry?.changes) ? entry.changes : [];
-            const changeLines = changes.length
-              ? changes.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
-              : "• No changes listed.";
-            return `**${version}** · ${date} · ${classLabel}\n${changeLines}`;
-          })
-          .join("\n\n");
-      } else if (items.length) {
-        value = items
-          .map((item) => `• ${String(item ?? "").trim()}`)
-          .join("\n");
-      } else {
-        const body = String(section?.body ?? "").trim();
-        value = body || "• No updates yet.";
-      }
-
-      if (value.length > 1024) {
-        value = `${value.slice(0, 1021)}...`;
-      }
-
-      if (!value.trim()) {
-        return null;
-      }
-
-      return {
-        name: `${getIcon("calendar")} ${sectionTitle}`,
-        value,
-        inline: false,
-        sectionDateMs,
-        sectionIndex
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const diff = b.sectionDateMs - a.sectionDateMs;
-      if (diff !== 0) return diff;
-      return a.sectionIndex - b.sectionIndex;
-    })
-    .map(({ name, value, inline }) => ({ name, value, inline }))
-    .slice(0, 10);
-
-  if (sectionFields.length) {
-    newsEmbed.addFields(sectionFields);
+  let previousSectionText = "**Previous Update**\nNo previous update yet.";
+  if (previous) {
+    const previousVersion = formatVersion(previous.entry?.version, "v0.0.0");
+    const previousDate = String(previous.entry?.date ?? "TBD").trim() || "TBD";
+    const previousClassLabel = classificationLabel(normalizeClassification(previous.entry?.classification));
+    const previousChanges = Array.isArray(previous.entry?.changes) ? previous.entry.changes : [];
+    const previousText = previousChanges.length
+      ? previousChanges.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
+      : "• No changes listed.";
+    previousSectionText = [
+      "**Previous Update**",
+      `*${previousVersion} · ${previousDate} · ${previousClassLabel}*`,
+      previousText
+    ].join("\n");
   }
 
-  const newsRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:about:${userId}`)
-      .setLabel("About")
-      .setEmoji(getButtonEmoji("sparkle"))
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:profile:${userId}`)
-      .setLabel("Back")
-      .setEmoji(getButtonEmoji("back"))
-      .setStyle(ButtonStyle.Secondary)
-  );
+  let upcomingSectionText = "**Upcoming**\nNo upcoming notes yet.";
+  const upcomingSection = sections.find((section) => {
+    const title = String(section?.title ?? "").trim().toLowerCase();
+    return title === "upcoming" || title === "upcoming updates" || title.startsWith("upcoming");
+  });
+  if (upcomingSection) {
+    const upcomingItems = Array.isArray(upcomingSection?.items) ? upcomingSection.items : [];
+    let upcomingText = "";
+    if (upcomingItems.length) {
+      upcomingText = upcomingItems.map((item) => `• ${String(item ?? "").trim()}`).join("\n");
+    } else {
+      const upcomingBody = String(upcomingSection?.body ?? "").trim();
+      upcomingText = upcomingBody || "• No upcoming notes yet.";
+    }
+    upcomingSectionText = [
+      "**Upcoming**",
+      upcomingText
+    ].join("\n");
+  }
+
+  const nowMs = nowTs();
+  const allEvents = Array.isArray(eventsContent?.events) ? eventsContent.events : [];
+  const activeSeasonalEvent = getActiveEvent(eventsContent, server);
+  const activeWindow = activeSeasonalEvent ? getEventWindow(activeSeasonalEvent, nowMs) : { start: null, end: null };
+
+  const nextEventCandidates = allEvents
+    .map((event) => {
+      const currentWindow = getEventWindow(event, nowMs);
+      const nextCycleWindow = getEventWindow(event, nowMs + 370 * 24 * 60 * 60 * 1000);
+      const starts = [currentWindow?.start, nextCycleWindow?.start]
+        .filter((start) => Number.isFinite(start) && start > nowMs)
+        .sort((a, b) => a - b);
+      return {
+        event,
+        start: starts[0] ?? null
+      };
+    })
+    .filter(({ start }) => Number.isFinite(start))
+    .sort((a, b) => a.start - b.start);
+
+  const nextEvent = nextEventCandidates[0] ?? null;
+  const activeEndText = Number.isFinite(activeWindow?.end)
+    ? `<t:${Math.floor(activeWindow.end / 1000)}:R>`
+    : "TBD";
+  const nextStartText = Number.isFinite(nextEvent?.start)
+    ? `<t:${Math.floor(nextEvent.start / 1000)}:R>`
+    : "TBD";
+  const activeEventLabel = activeSeasonalEvent?.name ?? "Current seasonal event";
+  const nextEventLabel = nextEvent?.event?.name ?? "Next seasonal event";
+
+  const seasonalNotice = [
+    `**${activeEventLabel}** ends: ${activeEndText}, **${nextEventLabel}** begins: ${nextStartText}`,
+    "*Try to discover one or all of this season's event recipes before the season ends so you can earn the event badge!*"
+  ].join("\n");
+  const dotColumnDivider = "· · · · · · ·";
+
+  newsEmbed.addFields({
+    name: `${getIcon("new")} Updates`,
+    value: clampFieldValue([
+      dotColumnDivider,
+      "**Latest Update**",
+      `*${latestVersion} · ${latestDate} · ${latestClassLabel}*`,
+      latestSummary,
+      "",
+      previousSectionText
+    ].join("\n")),
+    inline: true
+  });
+
+  newsEmbed.addFields({
+    name: `\n${getIcon("calendar")} Upcoming & Seasonal`,
+    value: clampFieldValue([
+      dotColumnDivider,
+      upcomingSectionText,
+      "",
+      `**${getIcon("event")} Seasonal Event Reminder**`,
+      seasonalNotice
+    ].join("\n")),
+    inline: true
+  });
 
   return commit({
     content: " ",
     embeds: [newsEmbed],
-    components: [newsRow]
+    components: [noodleAboutNewsNavRow(userId, { active: "news" }), noodleAboutNewsBackRow(userId)]
   });
 }
 
@@ -5684,49 +5835,76 @@ if (sub === "season") {
   const seasonalLine = seasonalRecipes.length
     ? seasonalRecipes
         .map((recipe) => {
-          const unlocked = availableRecipes.includes(recipe.recipe_id)
-            ? "You have discovered this recipe!"
-            : "You have not discovered this yet!";
-          return `• **${recipe.name}** — ${unlocked}`;
+          const discovered = availableRecipes.includes(recipe.recipe_id);
+          const discoveredIcon = discovered ? `${getIcon("status_complete")} ` : "";
+          return `• ${discoveredIcon}**${recipe.name}**`;
         })
         .join("\n")
     : "_No seasonal recipe found for this season._";
 
-  const seasonFlavor = {
-    spring: "Your shop smells of fresh herbs and rain-kissed broth.",
-    summer: "Your shop hums with bright, citrusy steam and lively crowds.",
-    autumn: "Your shop glows with warm spices and crackling lantern light.",
-    winter: "Your shop is a cozy haven of rich broth and drifting snow."
-  }[server.season] ?? null;
+  const seasonFlavorContent = {
+    spring: {
+      lore: "When spring arrives, old market paths reopen and regulars trade stories over bowls perfumed with herbs and blossom rain.",
+      chefNote: "Keep your shop bright and welcoming; spring regulars love light broths and fresh toppings.",
+      flavorLines: [
+        "A soft drizzle taps the awning while scallions and steam perfume the lane.",
+        "Petals drift by the doorway and every bowl tastes like a fresh start.",
+        "Morning rain cools the street, but your broth keeps every seat warm."
+      ]
+    },
+    summer: {
+      lore: "Summer brings festival crowds and long evenings, when neon signs glow late and fast service earns loyal regulars.",
+      chefNote: "Summer traffic is lively; keep a steady rhythm and ride the rush.",
+      flavorLines: [
+        "Lantern strings sway above the street and citrus steam hangs in warm air.",
+        "The dinner line curls around the block as your counter keeps pace.",
+        "Fans hum, bowls fly, and the whole lane buzzes with summer energy."
+      ]
+    },
+    autumn: {
+      lore: "In autumn, harvest caravans fill the market and your shop becomes a lantern-lit refuge for travelers and neighbors alike.",
+      chefNote: "Autumn regulars linger longer; rich flavors and cozy pacing go a long way.",
+      flavorLines: [
+        "Spice and woodsmoke drift through the alley as lanterns flicker to life.",
+        "Crisp evening air meets deep, savory broth at your shop door.",
+        "Golden leaves gather by the steps while warm bowls steady the night."
+      ]
+    },
+    winter: {
+      lore: "Winter settles quietly over the district, and noodle shops become hearths where strangers thaw into familiar faces.",
+      chefNote: "Lean into comfort: steady service and rich broth make winter regulars feel at home.",
+      flavorLines: [
+        "Snow hushes the street while your kitchen glows with patient heat.",
+        "Scarves drip at the entrance and grateful regulars cradle hot bowls.",
+        "Frost clings to the windows, but inside your broth keeps spirits bright."
+      ]
+    }
+  };
+  const seasonCard = seasonFlavorContent[server.season] ?? {
+    lore: "Each season reshapes the rhythm of your noodle shop.",
+    chefNote: "Trust your pace, keep your broth ready, and serve with heart.",
+    flavorLines: ["The market shifts with the season, and your shop sets the tone."]
+  };
+  const flavorLines = Array.isArray(seasonCard.flavorLines) ? seasonCard.flavorLines : [];
+  const randomFlavorLine = flavorLines.length
+    ? flavorLines[Math.floor(Math.random() * flavorLines.length)]
+    : null;
 
   const seasonEmbed = buildMenuEmbed({
     title: `${getIcon("season")} Season`,
     description: [
       `The world is currently in **${server.season}**.`,
-      seasonFlavor,
+      seasonCard.lore,
       "",
-      "**Seasonal Recipe**",
+      "**Today's Flavor**",
+      randomFlavorLine ?? seasonCard.chefNote,
+      seasonCard.chefNote,
+      "",
+      "**Seasonal Recipes**",
       seasonalLine
     ].join("\n"),
     user: interaction.member ?? interaction.user
   });
-
-  const dailyAvailable = hasDailyRewardAvailable(p, nowTs());
-  const seasonRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
-      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
-      .setDisabled(!dailyAvailable),
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:event:${userId}`)
-      .setLabel("Event").setEmoji(getButtonEmoji("event"))
-      .setStyle(ButtonStyle.Secondary)
-  );
 
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
@@ -5735,7 +5913,7 @@ if (sub === "season") {
   return commit({
     content: " ",
     embeds: [seasonEmbed],
-    components: [seasonRow, backRow]
+    components: [noodleAboutNewsNavRow(userId, { active: "season" }), backRow]
   });
 }
 
@@ -5761,23 +5939,6 @@ if (sub === "status") {
 if (sub === "event") {
   const player = ensurePlayer(serverId, userId);
   const knownRecipeIds = new Set(getAvailableRecipes(player));
-  const dailyAvailable = hasDailyRewardAvailable(player, nowTs());
-  const eventRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:action:quests_daily:${userId}`)
-      .setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward"))
-      .setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
-      .setDisabled(!dailyAvailable),
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:quests:${userId}`)
-      .setLabel("Quests").setEmoji(getButtonEmoji("quests"))
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:season:${userId}`)
-      .setLabel("Season").setEmoji(getButtonEmoji("season"))
-      .setStyle(ButtonStyle.Secondary)
-  );
-
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
   );
@@ -5857,7 +6018,7 @@ if (sub === "event") {
   return commit({
     content: " ",
     embeds: [eventEmbed],
-    components: [eventRow, backRow]
+    components: [noodleAboutNewsNavRow(userId, { active: "event" }), backRow]
   });
 }
 

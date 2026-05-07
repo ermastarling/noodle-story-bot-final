@@ -17,7 +17,7 @@ import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
 import { applyQuestProgress } from "../game/quests.js";
-import { loadBadgesContent, loadContentBundle, loadEventsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
+import { loadBadgesContent, loadContentBundle, loadEventsContent, loadNewsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
 import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed } from "./noodle.js";
 import {
   grantBlessing,
@@ -87,6 +87,7 @@ const ButtonStyle = {
 const db = openDb();
 const baseContent = loadContentBundle(1);
 const eventsContent = loadEventsContent();
+const newsContent = loadNewsContent();
 const content = withEventRecipes(baseContent, eventsContent);
 const specializationsContent = loadSpecializationsContent();
 const badgesContent = loadBadgesContent();
@@ -990,7 +991,60 @@ function partyCreationRow(userId) {
 /**
  * Social stats view buttons (two rows)
  */
-function statsViewButtons(userId) {
+function normalizeNewsClassification(value) {
+  const raw = String(value ?? "player_update").trim().toLowerCase();
+  if (raw === "internal_update") return "internal_update";
+  return "player_update";
+}
+
+function parseNewsDateMs(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return 0;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeNewsVersion(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  return raw.startsWith("v") ? raw.toLowerCase() : `v${raw.toLowerCase()}`;
+}
+
+function getLatestNewsVersionForPlayer() {
+  const sections = Array.isArray(newsContent?.sections) ? newsContent.sections : [];
+  const latestVisibleEntry = sections
+    .flatMap((section, sectionIndex) => {
+      const entries = Array.isArray(section?.entries) ? section.entries : [];
+      return entries.map((entry, entryIndex) => ({ entry, sectionIndex, entryIndex }));
+    })
+    .filter(({ entry }) => normalizeNewsClassification(entry?.classification) !== "internal_update")
+    .sort((a, b) => {
+      const diff = parseNewsDateMs(b.entry?.date) - parseNewsDateMs(a.entry?.date);
+      if (diff !== 0) return diff;
+      const sectionDiff = a.sectionIndex - b.sectionIndex;
+      if (sectionDiff !== 0) return sectionDiff;
+      return a.entryIndex - b.entryIndex;
+    })[0] ?? null;
+
+  if (latestVisibleEntry?.entry) {
+    return normalizeNewsVersion(latestVisibleEntry.entry.version);
+  }
+
+  const pinned = newsContent?.pinned ?? {};
+  if (normalizeNewsClassification(pinned?.classification) === "internal_update") {
+    return "";
+  }
+  return normalizeNewsVersion(pinned?.version);
+}
+
+function hasUnreadNewsUpdate(player) {
+  const latestVersion = getLatestNewsVersionForPlayer();
+  if (!latestVersion) return false;
+  const seenVersion = normalizeNewsVersion(player?.notifications?.news_last_seen_version);
+  return seenVersion !== latestVersion;
+}
+
+function statsViewButtons(userId, { newsAvailable = false } = {}) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
@@ -1023,7 +1077,7 @@ function statsViewButtons(userId) {
       .setCustomId(`noodle:nav:news:${userId}`)
       .setLabel("News")
       .setEmoji(getButtonEmoji("note"))
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
@@ -3028,6 +3082,7 @@ async function handleComponent(interaction) {
 
     if (action === "stats") {
       const player = ensurePlayer(serverId, userId);
+      const newsAvailable = hasUnreadNewsUpdate(player);
       const tipStats = getUserTipStats(db, serverId, userId);
       const party = getUserActiveParty(db, userId);
       const blessing = getActiveBlessing(player);
@@ -3086,7 +3141,7 @@ async function handleComponent(interaction) {
 
       return componentCommit(interaction, {
         embeds: [embed],
-        components: statsViewButtons(userId)
+        components: statsViewButtons(userId, { newsAvailable })
       });
     }
 
