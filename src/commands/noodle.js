@@ -4954,8 +4954,9 @@ if (sub === "news") {
   });
 
   newsEmbed.addFields({
-    name: `\n${getIcon("calendar")} Upcoming & Seasonal`,
+    name: `${getIcon("calendar")} Upcoming & Seasonal`,
     value: clampFieldValue([
+      "\u200b",
       dotColumnDivider,
       upcomingSectionText,
       "",

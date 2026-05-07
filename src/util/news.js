@@ -14,7 +14,8 @@ export function parseNewsDateMs(value) {
 export function normalizeNewsVersion(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
-  return raw.startsWith("v") ? raw.toLowerCase() : `v${raw.toLowerCase()}`;
+  const normalizedBody = raw.replace(/^v/i, "").toLowerCase();
+  return `v${normalizedBody}`;
 }
 
 function parseSemver(value) {
@@ -61,6 +62,7 @@ function comparePrerelease(a, b) {
   return 0;
 }
 
+// Returns 1 when left > right, -1 when left < right, 0 when equal, and null when non-comparable.
 export function compareNewsVersions(leftValue, rightValue) {
   const left = normalizeNewsVersion(leftValue);
   const right = normalizeNewsVersion(rightValue);
