@@ -8697,6 +8697,7 @@ ${lines.join("\n")}`;
     let seasonalServedCount = 0;
     let seasonalServedCoins = 0;
     let duplicateDiscoveryCoins = 0;
+    let discoveryRewardGrantedThisServe = false;
     let leveledUp = false;
     let recipeUnlocked = false;
     const unlockedRecipeNames = [];
@@ -8820,7 +8821,7 @@ ${lines.join("\n")}`;
       }
       
       const allowDiscovery = bowlQuality !== "salvage";
-      if (allowDiscovery) {
+      if (allowDiscovery && !discoveryRewardGrantedThisServe) {
         // Apply NPC discovery buffs for next serve
         applyNpcDiscoveryBuff(p, order.npc_archetype);
 
@@ -8844,6 +8845,10 @@ ${lines.join("\n")}`;
           activeSeason: s.season,
           activeEventId: s.active_event_id ?? null
         });
+
+        if ((discoveries?.length || 0) > 0) {
+          discoveryRewardGrantedThisServe = true;
+        }
         
         for (const discovery of discoveries ?? []) {
           const result = applyDiscovery(p, discovery, content, discoveryRng, { badgesContent });
@@ -9758,6 +9763,9 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     : null;
 
   garden.compost_bags = (garden.compost_bags || 0) + bagsMade;
+  if (bagsMade > 0) {
+    applyQuestProgress(p, questsContent, userId, { type: "garden_compost", amount: bagsMade }, nowTs());
+  }
   cached.ts = Date.now();
   compostSelectionCache.set(messageId, cached);
 
