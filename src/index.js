@@ -25,7 +25,7 @@ import { theme } from "./ui/theme.js";
   }
 
   // Now import the rest
-  const { commandMap } = await import("./commands/index.js");
+  const { commandMap, commands } = await import("./commands/index.js");
   const { startDailyResetScheduler } = await import("./jobs/dailyReset.js");
   const { startDailyRewardReminderScheduler } = await import("./jobs/dailyRewardReminders.js");
   const { startEventSyncScheduler } = await import("./jobs/eventSync.js");
@@ -63,7 +63,10 @@ import { theme } from "./ui/theme.js";
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
   const { ensureSpecializationState, getSpecializationById } = await import("./game/specialization.js");
   const { getAvailableRecipes } = await import("./game/resilience.js");
-  const { registerTopggVote } = await import("./game/voteRewards.js");
+  const {
+    registerVoteFromSource,
+    VOTE_SOURCES
+  } = await import("./game/voteRewards.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
@@ -261,8 +264,138 @@ import { theme } from "./ui/theme.js";
   const officialGuildId = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
   const devAlertChannelId = process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "";
   const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
-  const topggStatsToken = process.env.NOODLE_TOPGG_TOKEN || process.env.TOPGG_TOKEN || process.env.TOPGG_API_TOKEN || "";
-  const topggBotId = process.env.TOPGG_BOT_ID || "1460058511802105976";
+  const sharedBotId = process.env.NOODLE_BOT_ID || process.env.TOPGG_BOT_ID || "1460058511802105976";
+  const BOT_ID_FALLBACK = "1460058511802105976";
+  const getVoteSourceToken = (...envNames) => {
+    for (const name of envNames) {
+      const value = process.env[name];
+      if (value && String(value).trim()) return String(value).trim();
+    }
+    return "";
+  };
+  const voteWebhookConfigs = [
+    {
+      source: VOTE_SOURCES.TOPGG,
+      label: "Top.gg",
+      path: process.env.NOODLE_TOPGG_WEBHOOK_PATH || "/topgg/webhook",
+      auth: getVoteSourceToken("NOODLE_TOPGG_WEBHOOK_AUTH", "TOPGG_WEBHOOK_AUTH")
+    },
+    {
+      source: VOTE_SOURCES.DISCORDBOTLIST,
+      label: "Discord Bot List",
+      path: process.env.NOODLE_DISCORDBOTLIST_WEBHOOK_PATH || "/discordbotlist/webhook",
+      auth: getVoteSourceToken("NOODLE_DISCORDBOTLIST_WEBHOOK_AUTH")
+    },
+    {
+      source: VOTE_SOURCES.VOIDBOTS,
+      label: "Void Bots",
+      path: process.env.NOODLE_VOIDBOTS_WEBHOOK_PATH || "/voidbots/webhook",
+      auth: getVoteSourceToken("NOODLE_VOIDBOTS_WEBHOOK_AUTH")
+    },
+    {
+      source: VOTE_SOURCES.DISCORDS,
+      label: "Discords.com",
+      path: process.env.NOODLE_DISCORDS_WEBHOOK_PATH || "/discords/webhook",
+      auth: getVoteSourceToken("NOODLE_DISCORDS_WEBHOOK_AUTH")
+    },
+    {
+      source: VOTE_SOURCES.BOTLIST_ME,
+      label: "BotList.me",
+      path: process.env.NOODLE_BOTLISTME_WEBHOOK_PATH || "/botlistme/webhook",
+      auth: getVoteSourceToken("NOODLE_BOTLISTME_WEBHOOK_AUTH")
+    },
+    {
+      source: VOTE_SOURCES.STELLARBOTLIST,
+      label: "Stellar Bot List",
+      path: process.env.NOODLE_STELLARBOTLIST_WEBHOOK_PATH || "/stellarbotlist/webhook",
+      auth: getVoteSourceToken("NOODLE_STELLARBOTLIST_WEBHOOK_AUTH")
+    },
+    {
+      source: VOTE_SOURCES.DISCORDLIST_GG,
+      label: "DiscordList.gg",
+      path: process.env.NOODLE_DISCORDLISTGG_WEBHOOK_PATH || "/discordlistgg/webhook",
+      auth: getVoteSourceToken("NOODLE_DISCORDLISTGG_WEBHOOK_AUTH")
+    },
+    {
+      source: VOTE_SOURCES.RADAR_CPDV,
+      label: "Radar.CPDV",
+      path: process.env.NOODLE_RADARCPDV_WEBHOOK_PATH || "/radarcpdv/webhook",
+      auth: getVoteSourceToken("NOODLE_RADARCPDV_WEBHOOK_AUTH")
+    }
+  ];
+  const stableStatsEndpointDefaults = {
+    [VOTE_SOURCES.TOPGG]: "https://top.gg/api/bots/{botId}/stats",
+    [VOTE_SOURCES.DISCORDBOTLIST]: "https://discordbotlist.com/api/v1/bots/{botId}/stats",
+    [VOTE_SOURCES.DISCORDBOTSGG]: "https://discord.bots.gg/api/v1/bots/{botId}/stats"
+  };
+  const stableCommandListEndpointDefaults = {
+    [VOTE_SOURCES.DISCORDBOTLIST]: "https://discordbotlist.com/api/v1/bots/{botId}/commands",
+    [VOTE_SOURCES.RADAR_CPDV]: "https://api.radarcord.net/bot/{botId}/commands"
+  };
+  const botListStatsConfigs = [
+    {
+      source: VOTE_SOURCES.TOPGG,
+      label: "Top.gg",
+      endpoint: process.env.NOODLE_TOPGG_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.TOPGG],
+      token: getVoteSourceToken("NOODLE_TOPGG_TOKEN", "TOPGG_TOKEN", "TOPGG_API_TOKEN"),
+      bodyFormat: "server_count"
+    },
+    {
+      source: VOTE_SOURCES.DISCORDBOTLIST,
+      label: "Discord Bot List",
+      endpoint: process.env.NOODLE_DISCORDBOTLIST_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.DISCORDBOTLIST],
+      token: getVoteSourceToken("NOODLE_DISCORDBOTLIST_TOKEN"),
+      bodyFormat: "discordbotlist_stats"
+    },
+    {
+      source: VOTE_SOURCES.VOIDBOTS,
+      label: "Void Bots",
+      endpoint: process.env.NOODLE_VOIDBOTS_STATS_URL || "",
+      token: getVoteSourceToken("NOODLE_VOIDBOTS_TOKEN")
+    },
+    {
+      source: VOTE_SOURCES.DISCORDS,
+      label: "Discords.com",
+      endpoint: process.env.NOODLE_DISCORDS_STATS_URL || "",
+      token: getVoteSourceToken("NOODLE_DISCORDS_TOKEN")
+    },
+    {
+      source: VOTE_SOURCES.BOTLIST_ME,
+      label: "BotList.me",
+      endpoint: process.env.NOODLE_BOTLISTME_STATS_URL || "",
+      token: getVoteSourceToken("NOODLE_BOTLISTME_TOKEN")
+    },
+    {
+      source: VOTE_SOURCES.DISCORDBOTSGG,
+      label: "Discord.Bots.gg",
+      endpoint: process.env.NOODLE_DISCORDBOTSGG_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.DISCORDBOTSGG],
+      token: getVoteSourceToken("NOODLE_DISCORDBOTSGG_TOKEN")
+    },
+    {
+      source: VOTE_SOURCES.STELLARBOTLIST,
+      label: "Stellar Bot List",
+      endpoint: process.env.NOODLE_STELLARBOTLIST_STATS_URL || "",
+      token: getVoteSourceToken("NOODLE_STELLARBOTLIST_TOKEN")
+    },
+    {
+      source: VOTE_SOURCES.DISCORDLIST_GG,
+      label: "DiscordList.gg",
+      endpoint: process.env.NOODLE_DISCORDLISTGG_STATS_URL || "",
+      token: getVoteSourceToken("NOODLE_DISCORDLISTGG_TOKEN")
+    },
+    {
+      source: VOTE_SOURCES.RADAR_CPDV,
+      label: "Radar.CPDV",
+      endpoint: process.env.NOODLE_RADARCPDV_STATS_URL || "",
+      token: getVoteSourceToken("NOODLE_RADARCPDV_TOKEN")
+    },
+    {
+      source: VOTE_SOURCES.DISCORDEXTREME_LIST,
+      label: "Discord Extreme List",
+      endpoint: process.env.NOODLE_DISCORDEXTREMELIST_STATS_URL || "",
+      token: getVoteSourceToken("NOODLE_DISCORDEXTREMELIST_TOKEN")
+    }
+  ];
   const DEFAULT_SHARD_GUILD_THRESHOLD = 2500;
   const shardThresholdRaw = Number(process.env.NOODLE_SHARD_GUILD_THRESHOLD || DEFAULT_SHARD_GUILD_THRESHOLD);
   const shardAlertRatioRaw = Number(process.env.NOODLE_SHARD_ALERT_RATIO || 0.8);
@@ -273,9 +406,18 @@ import { theme } from "./ui/theme.js";
     ? shardAlertRatioRaw
     : 0.8;
   const shardAlertThreshold = Math.max(1, Math.floor(shardGuildThreshold * shardAlertRatio));
-  let topggStatsDisabledLogged = false;
+  const botListStatsSyncIntervalRaw = Number(process.env.NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS || 15 * 60 * 1000);
+  const botListStatsSyncIntervalMs = Number.isFinite(botListStatsSyncIntervalRaw) && botListStatsSyncIntervalRaw >= 60_000
+    ? Math.floor(botListStatsSyncIntervalRaw)
+    : 15 * 60 * 1000;
+  const topggRequireSignature = String(process.env.NOODLE_TOPGG_REQUIRE_SIGNATURE || "0") === "1";
+  const voteDuplicateWindowMode = String(process.env.NOODLE_VOTE_DUPLICATE_WINDOW_MODE || "sliding").trim().toLowerCase() === "fixed"
+    ? "fixed"
+    : "sliding";
+  const disabledStatsSyncLogged = new Set();
   let shardNearThresholdAlertSent = false;
   let shardRecommendedAlertSent = false;
+  let botListStatsHeartbeatHandle = null;
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -573,6 +715,128 @@ import { theme } from "./ui/theme.js";
     }
   }
 
+  function toBase64Url(buffer) {
+    return Buffer.from(buffer)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
+  }
+
+  function decodeBase64Url(input) {
+    const value = String(input || "").trim();
+    if (!value) return null;
+    const normalized = value
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padding = normalized.length % 4;
+    const padded = padding ? normalized + "=".repeat(4 - padding) : normalized;
+    try {
+      return Buffer.from(padded, "base64");
+    } catch {
+      return null;
+    }
+  }
+
+  function parseJsonBuffer(buffer) {
+    if (!buffer) return null;
+    try {
+      return JSON.parse(buffer.toString("utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  function verifyTopggWebhookSignature({ secret, signatureHeader, rawBody }) {
+    if (!secret || !signatureHeader || !rawBody) return false;
+    try {
+      const parts = String(signatureHeader)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const timestamp = parts.find((part) => part.startsWith("t="))?.slice(2);
+      const signature = parts.find((part) => part.startsWith("v1="))?.slice(3);
+      if (!timestamp || !signature) return false;
+
+      const expected = crypto
+        .createHmac("sha256", secret)
+        .update(`${timestamp}.`)
+        .update(rawBody)
+        .digest("hex");
+
+      return timingSafeEqual(expected, signature);
+    } catch (error) {
+      console.error("Top.gg: Signature verify failed:", error?.message ?? error);
+      return false;
+    }
+  }
+
+  function stripBearerPrefix(value) {
+    const input = String(value || "").trim();
+    if (!input) return "";
+    return input.toLowerCase().startsWith("bearer ") ? input.slice(7).trim() : input;
+  }
+
+  function extractDiscordListJwtFromPayload(payload) {
+    const candidates = [
+      payload?.token,
+      payload?.jwt,
+      payload?.auth,
+      payload?.authorization,
+      payload?.data?.token,
+      payload?.data?.jwt,
+      payload?.data?.auth,
+      payload?.data?.authorization,
+      payload?.vote?.token,
+      payload?.vote?.jwt,
+      payload?.vote?.auth,
+      payload?.vote?.authorization,
+      payload?.event?.token,
+      payload?.event?.jwt,
+      payload?.event?.auth,
+      payload?.event?.authorization
+    ];
+    const token = candidates.find((candidate) => String(candidate || "").trim());
+    return stripBearerPrefix(token);
+  }
+
+  function verifyDiscordListWebhookJwt({ secret, payload }) {
+    const token = extractDiscordListJwtFromPayload(payload);
+    const signingSecret = stripBearerPrefix(secret);
+    if (!signingSecret || !token) return { ok: false, claims: null };
+
+    try {
+      const [headerSegment, payloadSegment, signatureSegment] = token.split(".");
+      if (!headerSegment || !payloadSegment || !signatureSegment) {
+        return { ok: false, claims: null };
+      }
+
+      const header = parseJsonBuffer(decodeBase64Url(headerSegment));
+      if (!header || String(header.alg || "").toUpperCase() !== "HS256") {
+        return { ok: false, claims: null };
+      }
+
+      const signedPayload = `${headerSegment}.${payloadSegment}`;
+      const expectedSignature = toBase64Url(
+        crypto.createHmac("sha256", signingSecret).update(signedPayload).digest()
+      );
+
+      if (!timingSafeEqual(expectedSignature, signatureSegment)) {
+        return { ok: false, claims: null };
+      }
+
+      const claims = parseJsonBuffer(decodeBase64Url(payloadSegment));
+      if (!claims || typeof claims !== "object") {
+        return { ok: false, claims: null };
+      }
+
+      return { ok: true, claims };
+    } catch (error) {
+      console.error("DiscordList.gg: JWT verify failed:", error?.message ?? error);
+      return { ok: false, claims: null };
+    }
+  }
+
   function extractEntitlementPayload(payload) {
     const data = payload?.data ?? payload?.d ?? payload?.entitlement ?? payload?.event?.data ?? payload?.event ?? payload;
     const rawEventType = String(
@@ -632,45 +896,324 @@ import { theme } from "./ui/theme.js";
     }
   }
 
-  async function updateTopggServerCount(serverCount, { reason = "event" } = {}) {
-    if (!topggStatsToken) {
-      if (!topggStatsDisabledLogged) {
-        topggStatsDisabledLogged = true;
-        console.log("INFO: Top.gg server count sync disabled (NOODLE_TOPGG_TOKEN/TOPGG_TOKEN not set).");
+  function getVoteWebhookConfigByPath(urlPath) {
+    return voteWebhookConfigs.find((cfg) => cfg.path === urlPath) || null;
+  }
+
+  function extractVoteWebhookToken(req, requestUrl) {
+    const authHeader = String(req.headers["authorization"] || "").trim();
+    if (authHeader) {
+      if (authHeader.toLowerCase().startsWith("bearer ")) {
+        return authHeader.slice(7).trim();
+      }
+      return authHeader;
+    }
+    const xAuth = String(req.headers["x-auth-token"] || req.headers["x-api-key"] || req.headers["x-webhook-auth"] || "").trim();
+    if (xAuth) return xAuth;
+    const queryToken = String(requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("token") || "").trim();
+    return queryToken;
+  }
+
+  function isVoteTestPayload(payload) {
+    const type = String(payload?.type || payload?.event || payload?.action || "").toLowerCase();
+    if (type === "test") return true;
+    if (type === "webhook.test") return true;
+    if (type.endsWith(".test")) return true;
+    if (payload?.test === true || payload?.is_test === true) return true;
+    return false;
+  }
+
+  function extractVoteUserId(payload) {
+    const candidates = [
+      payload?.user,
+      payload?.user_id,
+      payload?.userId,
+      payload?.userid,
+      payload?.id,
+      payload?.data?.user,
+      payload?.data?.user?.platform_id,
+      payload?.data?.user?.platformId,
+      payload?.data?.user?.id,
+      payload?.data?.user_id,
+      payload?.data?.userId,
+      payload?.data?.platform_id,
+      payload?.data?.platformId,
+      payload?.vote?.user_id,
+      payload?.vote?.userId,
+      payload?.vote?.user?.id,
+      payload?.vote?.user?.platform_id,
+      payload?.vote?.user?.platformId,
+      payload?.event?.user_id,
+      payload?.event?.userId,
+      payload?.event?.user?.id,
+      payload?.event?.user?.platform_id,
+      payload?.event?.user?.platformId
+    ];
+    const match = candidates.find((candidate) => {
+      const valueType = typeof candidate;
+      if (valueType !== "string" && valueType !== "number") return false;
+      return String(candidate).trim().length > 0;
+    });
+    return match == null ? "" : String(match).trim();
+  }
+
+  function hasAnyConfiguredBotListStatsSync() {
+    return botListStatsConfigs.some((config) => {
+      const endpoint = String(config?.endpoint || "").trim();
+      const tokenValue = String(config?.token || "").trim();
+      return Boolean(endpoint && tokenValue);
+    });
+  }
+
+  function renderStatsEndpoint(endpoint, botId) {
+    return String(endpoint || "")
+      .replaceAll("{botId}", encodeURIComponent(botId))
+      .replaceAll("{{BOT_ID}}", encodeURIComponent(botId));
+  }
+
+  function getCurrentBotListCounts() {
+    const guilds = [...client.guilds.cache.values()];
+    const serverCount = guilds.length;
+    const userCount = guilds.reduce((sum, guild) => sum + Math.max(0, Number(guild?.memberCount || 0)), 0);
+    return { serverCount, userCount };
+  }
+
+  function buildStatsBody(config, serverCount, userCount) {
+    if (config?.bodyFormat === "server_count") {
+      return { server_count: Number(serverCount) || 0 };
+    }
+    if (config?.bodyFormat === "discordbotlist_stats") {
+      const body = {
+        guilds: Number(serverCount) || 0
+      };
+      if (Number.isFinite(userCount) && userCount >= 0) {
+        body.users = Math.floor(userCount);
+      }
+
+      const voiceConnectionsRaw = Number(process.env.NOODLE_DISCORDBOTLIST_VOICE_CONNECTIONS || NaN);
+      if (Number.isFinite(voiceConnectionsRaw) && voiceConnectionsRaw >= 0) {
+        body.voice_connections = Math.floor(voiceConnectionsRaw);
+      }
+      return body;
+    }
+    return {
+      server_count: Number(serverCount) || 0,
+      guilds: Number(serverCount) || 0,
+      guild_count: Number(serverCount) || 0
+    };
+  }
+
+  async function updateSingleBotListServerCount(config, serverCount, userCount, { reason = "event" } = {}) {
+    const endpoint = String(config?.endpoint || "").trim();
+    const tokenValue = String(config?.token || "").trim();
+
+    if (!endpoint || !tokenValue) {
+      if (!disabledStatsSyncLogged.has(config.source)) {
+        disabledStatsSyncLogged.add(config.source);
+        console.log(`INFO: ${config.label} server count sync disabled (missing URL or token).`);
       }
       return false;
     }
 
-    const resolvedBotId = String(client.user?.id || topggBotId || "").trim();
+    const resolvedBotId = String(client.user?.id || sharedBotId || BOT_ID_FALLBACK || "").trim();
     if (!resolvedBotId) {
-      console.error("❌ Skipping Top.gg server count sync: missing bot id.");
+      console.error(`❌ Skipping ${config.label} server count sync: missing bot id.`);
       return false;
     }
 
+    const targetUrl = renderStatsEndpoint(endpoint, resolvedBotId);
+
     try {
-      const response = await fetch(`https://top.gg/api/bots/${encodeURIComponent(resolvedBotId)}/stats`, {
+      const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
-          Authorization: topggStatsToken,
+          Authorization: tokenValue,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ server_count: Number(serverCount) || 0 })
+        body: JSON.stringify(buildStatsBody(config, serverCount, userCount))
       });
 
       if (!response.ok) {
         const responseBody = await response.text().catch(() => "");
         console.error(
-          `❌ Top.gg server count sync failed (${reason}): ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
+          `❌ ${config.label} server count sync failed (${reason}): ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
         );
         return false;
       }
 
-      console.log(`✅ Top.gg server count updated (${reason}): ${Number(serverCount) || 0}`);
+      console.log(`✅ ${config.label} stats updated (${reason}): guilds=${Number(serverCount) || 0}${Number.isFinite(userCount) ? ` users=${Math.floor(userCount)}` : ""}`);
       return true;
     } catch (error) {
-      console.error(`❌ Top.gg server count sync threw (${reason}):`, error?.stack ?? error);
+      console.error(`❌ ${config.label} server count sync threw (${reason}):`, error?.stack ?? error);
       return false;
     }
+  }
+
+  async function updateAllBotListServerCounts(serverCountOrCounts, { reason = "event" } = {}) {
+    const counts = typeof serverCountOrCounts === "number"
+      ? { serverCount: Number(serverCountOrCounts) || 0, userCount: NaN }
+      : serverCountOrCounts;
+    const serverCount = Number(counts?.serverCount) || 0;
+    const userCount = Number(counts?.userCount);
+
+    let anyUpdated = false;
+    for (const config of botListStatsConfigs) {
+      const updated = await updateSingleBotListServerCount(config, serverCount, userCount, { reason });
+      anyUpdated = anyUpdated || updated;
+    }
+    return anyUpdated;
+  }
+
+  function toProviderCommand(command) {
+    const normalized = {
+      name: String(command?.name || "").trim(),
+      description: String(command?.description || "").trim()
+    };
+    if (Array.isArray(command?.options) && command.options.length > 0) {
+      normalized.options = command.options;
+    }
+    return normalized;
+  }
+
+  function buildProviderCommandsPayload({ includeDevEnvVar, wrapInCommandsObject = false }) {
+    const includeDevCommands = String(process.env[includeDevEnvVar] || "0") === "1";
+    const payload = (commands || [])
+      .map((command) => command?.data?.toJSON?.())
+      .filter(Boolean)
+      .filter((cmd) => includeDevCommands || String(cmd?.name || "").trim() !== "noodle-dev");
+    const normalizedPayload = payload
+      .map(toProviderCommand)
+      .filter((cmd) => cmd.name && cmd.description);
+    return wrapInCommandsObject ? { commands: normalizedPayload } : normalizedPayload;
+  }
+
+  function buildDiscordBotListCommandsPayload() {
+    const wrapInCommandsObject = String(process.env.NOODLE_DISCORDBOTLIST_COMMANDS_WRAP || "0") === "1";
+    return buildProviderCommandsPayload({
+      includeDevEnvVar: "NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS",
+      wrapInCommandsObject
+    });
+  }
+
+  function buildRadarCpdvCommandsPayload() {
+    const wrapInCommandsObject = String(process.env.NOODLE_RADARCPDV_COMMANDS_WRAP || "0") === "1";
+    return buildProviderCommandsPayload({
+      includeDevEnvVar: "NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS",
+      wrapInCommandsObject
+    });
+  }
+
+  async function syncDiscordBotListCommands({ reason = "ready" } = {}) {
+    const enabled = String(process.env.NOODLE_DISCORDBOTLIST_SYNC_COMMANDS || "1") !== "0";
+    if (!enabled) return false;
+
+    const tokenValue = getVoteSourceToken("NOODLE_DISCORDBOTLIST_TOKEN");
+    if (!tokenValue) {
+      console.log("INFO: Discord Bot List command sync skipped (missing token).");
+      return false;
+    }
+
+    const endpointTemplate = process.env.NOODLE_DISCORDBOTLIST_COMMANDS_URL
+      || stableCommandListEndpointDefaults[VOTE_SOURCES.DISCORDBOTLIST];
+    const resolvedBotId = String(client.user?.id || sharedBotId || BOT_ID_FALLBACK || "").trim();
+    if (!resolvedBotId) {
+      console.log("INFO: Discord Bot List command sync skipped (missing bot id).");
+      return false;
+    }
+
+    const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
+    const commandsPayload = buildDiscordBotListCommandsPayload();
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          Authorization: tokenValue,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(commandsPayload)
+      });
+
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => "");
+        console.error(
+          `❌ Discord Bot List command sync failed (${reason}): ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
+        );
+        return false;
+      }
+
+      console.log(`✅ Discord Bot List command list synced (${reason}): ${commandsPayload.length} command(s)`);
+      return true;
+    } catch (error) {
+      console.error("❌ Discord Bot List command sync threw:", error?.stack ?? error);
+      return false;
+    }
+  }
+
+  async function syncRadarCpdvCommands({ reason = "ready" } = {}) {
+    const enabled = String(process.env.NOODLE_RADARCPDV_SYNC_COMMANDS || "1") !== "0";
+    if (!enabled) return false;
+
+    const tokenValue = getVoteSourceToken("NOODLE_RADARCPDV_TOKEN");
+    if (!tokenValue) {
+      console.log("INFO: Radar.CPDV command sync skipped (missing token).");
+      return false;
+    }
+
+    const endpointTemplate = process.env.NOODLE_RADARCPDV_COMMANDS_URL
+      || stableCommandListEndpointDefaults[VOTE_SOURCES.RADAR_CPDV];
+    const resolvedBotId = String(client.user?.id || sharedBotId || BOT_ID_FALLBACK || "").trim();
+    if (!resolvedBotId) {
+      console.log("INFO: Radar.CPDV command sync skipped (missing bot id).");
+      return false;
+    }
+
+    const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
+    const commandsPayload = buildRadarCpdvCommandsPayload();
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          Authorization: tokenValue,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(commandsPayload)
+      });
+
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => "");
+        console.error(
+          `❌ Radar.CPDV command sync failed (${reason}): ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
+        );
+        return false;
+      }
+
+      console.log(`✅ Radar.CPDV command list synced (${reason}): ${commandsPayload.length} command(s)`);
+      return true;
+    } catch (error) {
+      console.error("❌ Radar.CPDV command sync threw:", error?.stack ?? error);
+      return false;
+    }
+  }
+
+  function startBotListStatsHeartbeat() {
+    if (botListStatsHeartbeatHandle) return;
+    if (!hasAnyConfiguredBotListStatsSync()) {
+      console.log("INFO: Bot-list stats heartbeat disabled (no providers configured with both URL and token).");
+      return;
+    }
+
+    botListStatsHeartbeatHandle = setInterval(async () => {
+      const counts = getCurrentBotListCounts();
+      await updateAllBotListServerCounts(counts, { reason: "heartbeat" });
+    }, botListStatsSyncIntervalMs);
+
+    if (typeof botListStatsHeartbeatHandle.unref === "function") {
+      botListStatsHeartbeatHandle.unref();
+    }
+
+    console.log(`INFO: Bot-list stats heartbeat enabled every ${Math.round(botListStatsSyncIntervalMs / 1000)}s.`);
   }
 
   async function fetchRecommendedShardCount() {
@@ -752,8 +1295,8 @@ import { theme } from "./ui/theme.js";
     const webhookPath = process.env.NOODLE_WEBHOOK_PATH || "/discord/entitlements";
     const stripeWebhookPath = process.env.NOODLE_STRIPE_WEBHOOK_PATH || "/store/stripe";
     const stripePrecheckPath = process.env.NOODLE_STRIPE_PRECHECK_PATH || "/store/stripe-precheck";
-    const topggWebhookPath = process.env.NOODLE_TOPGG_WEBHOOK_PATH || "/topgg/webhook";
-    const topggWebhookAuth = process.env.NOODLE_TOPGG_WEBHOOK_AUTH || process.env.TOPGG_WEBHOOK_AUTH || "";
+    const voteWebhookPaths = new Set(voteWebhookConfigs.map((cfg) => cfg.path));
+    const enabledVoteConfigs = voteWebhookConfigs.filter((cfg) => cfg.auth);
     const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
     const stripeSecret = process.env.NOODLE_STRIPE_WEBHOOK_SECRET || "";
     const stripePrecheckSecret = process.env.NOODLE_STRIPE_PRECHECK_SECRET || "";
@@ -765,8 +1308,8 @@ import { theme } from "./ui/theme.js";
     if (!publicKeyHex) {
       console.log("INFO: DISCORD_PUBLIC_KEY not set; Discord entitlement signature checks are disabled.");
     }
-    if (!topggWebhookAuth) {
-      console.log("INFO: Top.gg vote webhook auth token not set; Top.gg webhook route disabled.");
+    if (!enabledVoteConfigs.length) {
+      console.log("INFO: Vote webhook auth token not set; vote webhook routes disabled.");
     }
 
     const server = http.createServer(async (req, res) => {
@@ -820,7 +1363,8 @@ import { theme } from "./ui/theme.js";
         return;
       }
 
-      if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== stripeWebhookPath && urlPath !== topggWebhookPath)) {
+      const isVoteWebhookPath = voteWebhookPaths.has(urlPath);
+      if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== stripeWebhookPath && !isVoteWebhookPath)) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
         return;
@@ -984,26 +1528,61 @@ import { theme } from "./ui/theme.js";
         return;
       }
 
-      if (urlPath === topggWebhookPath) {
-        if (!topggWebhookAuth) {
+      if (isVoteWebhookPath) {
+        const voteConfig = getVoteWebhookConfigByPath(urlPath);
+        if (!voteConfig || !voteConfig.auth) {
           res.writeHead(503, { "content-type": "text/plain" });
-          res.end("topgg webhook not configured");
+          res.end("vote webhook not configured");
           return;
         }
 
-        const authHeader = String(req.headers["authorization"] || "").trim();
-        const providedToken = authHeader.toLowerCase().startsWith("bearer ")
-          ? authHeader.slice(7).trim()
-          : authHeader;
-        if (!timingSafeEqual(providedToken, topggWebhookAuth)) {
+        const providedToken = extractVoteWebhookToken(req, requestUrl);
+        const topggSignature = String(req.headers["x-topgg-signature"] || "").trim();
+
+        let authValid = false;
+        let effectiveVotePayload = payload;
+
+        if (voteConfig.source === VOTE_SOURCES.TOPGG && topggSignature) {
+          const signatureValid = verifyTopggWebhookSignature({
+            secret: voteConfig.auth,
+            signatureHeader: topggSignature,
+            rawBody
+          });
+          authValid = signatureValid;
+          if (!signatureValid && !topggRequireSignature) {
+            authValid = timingSafeEqual(providedToken, voteConfig.auth);
+          }
+          if (!signatureValid && authValid && !topggRequireSignature) {
+            console.warn("Top.gg: Invalid x-topgg-signature; accepted via webhook token fallback.");
+          }
+          if (!signatureValid && topggRequireSignature) {
+            console.warn("Top.gg: Rejected webhook due to invalid signature with NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
+          }
+        } else if (voteConfig.source === VOTE_SOURCES.TOPGG) {
+          authValid = !topggRequireSignature && timingSafeEqual(providedToken, voteConfig.auth);
+          if (topggRequireSignature) {
+            console.warn("Top.gg: Rejected webhook without x-topgg-signature because NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
+          }
+        } else if (voteConfig.source === VOTE_SOURCES.DISCORDLIST_GG) {
+          const jwtResult = verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload });
+          if (jwtResult.ok) {
+            authValid = true;
+            effectiveVotePayload = jwtResult.claims;
+          } else {
+            authValid = timingSafeEqual(providedToken, stripBearerPrefix(voteConfig.auth));
+          }
+        } else {
+          authValid = timingSafeEqual(providedToken, voteConfig.auth);
+        }
+
+        if (!authValid) {
           res.writeHead(401, { "content-type": "text/plain" });
           res.end("invalid authorization");
           return;
         }
 
-        const voteType = String(payload?.type || "").trim().toLowerCase();
-        if (voteType === "test") {
-          console.log("Top.gg: Test webhook acknowledged");
+        if (isVoteTestPayload(effectiveVotePayload)) {
+          console.log(`${voteConfig.label}: Test webhook acknowledged`);
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: true, test: true }));
           return;
@@ -1015,12 +1594,7 @@ import { theme } from "./ui/theme.js";
           return;
         }
 
-        const votedUserId = String(
-          payload?.user
-          ?? payload?.user_id
-          ?? payload?.id
-          ?? ""
-        ).trim();
+        const votedUserId = extractVoteUserId(effectiveVotePayload);
 
         if (!votedUserId) {
           res.writeHead(202, { "content-type": "text/plain" });
@@ -1038,15 +1612,33 @@ import { theme } from "./ui/theme.js";
         let player = getPlayer(db, serverId, votedUserId);
         if (!player) player = newPlayerProfile(votedUserId);
 
-        const voteResult = registerTopggVote(player, Date.now());
-        if (!voteResult.duplicate) {
+        const voteResult = registerVoteFromSource(player, voteConfig.source, Date.now(), {
+          duplicateWindowMode: voteDuplicateWindowMode
+        });
+        if (!voteResult.duplicate || voteResult.shouldPersistDuplicate) {
           upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
         }
 
-        console.log("Top.gg: Vote registered", JSON.stringify({ userId: votedUserId, serverId, pendingClaims: voteResult.pendingClaims, duplicate: voteResult.duplicate }));
+        console.log(
+          `${voteConfig.label}: Vote registered`,
+          JSON.stringify({
+            userId: votedUserId,
+            source: voteResult.source,
+            serverId,
+            pendingClaims: voteResult.pendingClaims,
+            duplicate: voteResult.duplicate
+          })
+        );
 
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true, pending_claims: voteResult.pendingClaims, duplicate: voteResult.duplicate }));
+        res.end(
+          JSON.stringify({
+            ok: true,
+            source: voteResult.source,
+            pending_claims: voteResult.pendingClaims,
+            duplicate: voteResult.duplicate
+          })
+        );
         return;
       }
 
@@ -1176,7 +1768,10 @@ import { theme } from "./ui/theme.js";
     server.listen(port, () => {
       console.log(`OK: Discord store webhook listening on ${port}${webhookPath}`);
       console.log(`OK: Stripe webhook listening on ${port}${stripeWebhookPath}`);
-      console.log(`OK: Top.gg webhook listening on ${port}${topggWebhookPath}`);
+      for (const cfg of voteWebhookConfigs) {
+        const enabledText = cfg.auth ? "enabled" : "disabled";
+        console.log(`OK: ${cfg.label} vote webhook ${enabledText} on ${port}${cfg.path}`);
+      }
     });
   }
 
@@ -1212,6 +1807,16 @@ import { theme } from "./ui/theme.js";
       console.error("❌ Failed to write boot marker:", e?.stack ?? e);
     }
 
+    if (hasAnyConfiguredBotListStatsSync()) {
+      const startupCounts = getCurrentBotListCounts();
+      await updateAllBotListServerCounts(startupCounts, { reason: "ready" });
+    } else {
+      console.log("INFO: Skipping bot-list stats sync on ready (no providers configured with both URL and token).");
+    }
+    await syncDiscordBotListCommands({ reason: "ready" });
+    await syncRadarCpdvCommands({ reason: "ready" });
+    startBotListStatsHeartbeat();
+
     startDailyResetScheduler(getKnownServerIds);
     startDailyRewardReminderScheduler(client, getKnownServerIds);
     startEventSyncScheduler(getKnownServerIds);
@@ -1228,8 +1833,8 @@ import { theme } from "./ui/theme.js";
 
   client.on("guildCreate", async (guild) => {
     try {
-      const currentServerCount = Number(guild?.client?.guilds?.cache?.size ?? client.guilds.cache.size ?? 0);
-      await updateTopggServerCount(currentServerCount, { reason: "guildCreate" });
+      const currentCounts = getCurrentBotListCounts();
+      await updateAllBotListServerCounts(currentCounts, { reason: "guildCreate" });
       await refreshShardHealth({ reason: "guildCreate" });
 
       if (guild?.id === officialGuildId) return;
@@ -1239,7 +1844,7 @@ import { theme } from "./ui/theme.js";
         description:
           `New Server: ${String(guild?.name || "Unknown Server")}\n` +
           `Members: ${memberCount.toLocaleString()}`,
-        footerText: `Current Server Count: ${currentServerCount.toLocaleString()}`,
+        footerText: `Current Server Count: ${currentCounts.serverCount.toLocaleString()}`,
         color: theme.colors.success,
         requireMention: true
       });
@@ -1250,15 +1855,15 @@ import { theme } from "./ui/theme.js";
 
   client.on("guildDelete", async (guild) => {
     try {
-      const currentServerCount = Number(guild?.client?.guilds?.cache?.size ?? client.guilds.cache.size ?? 0);
-      await updateTopggServerCount(currentServerCount, { reason: "guildDelete" });
+      const currentCounts = getCurrentBotListCounts();
+      await updateAllBotListServerCounts(currentCounts, { reason: "guildDelete" });
       await refreshShardHealth({ reason: "guildDelete" });
 
       if (guild?.id === officialGuildId) return;
       await sendDevAlert({
         title: "Server Left Alert!",
         description: `Left Server: ${String(guild?.name || "Unknown Server")}`,
-        footerText: `Current Server Count: ${currentServerCount.toLocaleString()}`,
+        footerText: `Current Server Count: ${currentCounts.serverCount.toLocaleString()}`,
         color: theme.colors.warning,
         requireMention: true
       });

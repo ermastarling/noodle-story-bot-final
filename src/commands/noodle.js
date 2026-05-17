@@ -103,7 +103,7 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../g
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
-import { TOPGG_BOT_URL, getVoteRewardStatus, claimTopggVoteReward } from "../game/voteRewards.js";
+import { getVoteRewardStatus, claimTopggVoteReward, getVotePlatformStatusLines, getVotePlatformPages } from "../game/voteRewards.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge, grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import {
   applyCollectionProgressOnServe,
@@ -780,7 +780,7 @@ function buildHelpPage({ page, userId, user }) {
             "• `/noodle quests` — View quests.",
             "• `/noodle quests_daily` — Claim your daily reward.",
             "• `/noodle quests_claim` — Claim your quest rewards.",
-            "• `/noodle quests_vote` — View and claim Top.gg vote rewards.",
+            "• `/noodle quests_vote` — View and claim bot-list vote rewards.",
             "• `/noodle season` — View the current season.",
             "• `/noodle event` — View the current event."
           ].join("\n"),
@@ -6452,24 +6452,47 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
+    const voteLinks = getVotePlatformStatusLines().join("\n");
+    const voteLinkPages = getVotePlatformPages()
+      .filter((page) => page.supportsVoteRewards && page.voteUrl)
+      .slice(0, 8);
 
-    const voteEmbed = buildMenuEmbed({
-      title: `${getIcon("leaderboard")} Top.gg Vote Rewards`,
-      description: [
-        `Vote for the bot, then claim your reward here! You can vote every 12 hours.`,
-        "",
-        `Per claim reward: ${rewardLine}`,
-        `Ready to claim: **${status.pendingClaims}**`,
-        `Last vote: **${lastVoteLine}**`
-      ].join("\n"),
-      user: interaction.member ?? interaction.user
-    });
+    const makeVoteLinkButton = (page) => new ButtonBuilder()
+      .setLabel(page.label)
+      .setStyle(ButtonStyle.Link)
+      .setURL(page.voteUrl);
 
-    const voteRow = new ActionRowBuilder().addComponents(
+    const voteSiteRows = [];
+    const firstRowPages = voteLinkPages.slice(0, 5);
+    if (firstRowPages.length) {
+      voteSiteRows.push(new ActionRowBuilder().addComponents(...firstRowPages.map(makeVoteLinkButton)));
+    }
+
+    const secondRowPages = voteLinkPages.slice(5, 8);
+    const secondRow = new ActionRowBuilder();
+    for (const page of secondRowPages) {
+      secondRow.addComponents(makeVoteLinkButton(page));
+    }
+    secondRow.addComponents(
       new ButtonBuilder()
-        .setLabel("Vote on Top.gg")
-        .setStyle(ButtonStyle.Link)
-        .setURL(TOPGG_BOT_URL),
+        .setCustomId(`noodle:nav:quests:${userId}`)
+        .setLabel("Quests")
+        .setEmoji(getButtonEmoji("quests"))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:action:quests_vote:${userId}`)
+        .setLabel("Vote Rewards")
+        .setEmoji(getButtonEmoji("vote"))
+        .setStyle(ButtonStyle.Secondary)
+    );
+    voteSiteRows.push(secondRow);
+
+    const actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:profile:${userId}`)
+        .setLabel("Back")
+        .setEmoji(getButtonEmoji("back"))
+        .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`noodle:action:quests_vote_claim:${userId}`)
         .setLabel("Claim All Vote Rewards")
@@ -6478,13 +6501,28 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         .setDisabled(status.pendingClaims <= 0)
     );
 
+    const voteEmbed = buildMenuEmbed({
+      title: `${getIcon("vote")} Bot List Vote Rewards`,
+      description: [
+        `Vote for the bot on these sites, then claim your rewards here!`,
+        "",
+        "**Vote links:**",
+        voteLinks,
+        "",
+        `Per vote reward: ${rewardLine}`,
+        `Ready to claim: **${status.pendingClaims}**`,
+        `Last vote: **${lastVoteLine}**`,
+        "_After voting, press **Vote Rewards** button to refresh._"
+      ].join("\n"),
+      user: interaction.member ?? interaction.user
+    });
+
     return commitState({
       content: " ",
       embeds: [voteEmbed],
       components: [
-        voteRow,
-        noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
-        noodleQuestsBackRow(userId)
+        ...voteSiteRows,
+        actionRow
       ]
     });
   }
@@ -6498,7 +6536,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const result = claimTopggVoteReward(latestPlayer, now);
     if (!result.ok) {
       const embed = buildMenuEmbed({
-        title: `${getIcon("leaderboard")} Top.gg Vote Rewards`,
+        title: `${getIcon("vote")} Bot List Vote Rewards`,
         description: result.message,
         user: interaction.member ?? interaction.user
       });
@@ -6520,7 +6558,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const claimedLabel = result.claimsClaimed === 1 ? "1 vote reward" : `${result.claimsClaimed} vote rewards`;
     const embed = buildMenuEmbed({
-      title: `${getIcon("leaderboard")} Vote Rewards Claimed`,
+      title: `${getIcon("vote")} Vote Rewards Claimed`,
       description: `Claimed: **${claimedLabel}**\nRewards: ${rewardLines.join(" · ")}\nPending claims: **${result.pendingClaims}**${levelLine}`,
       user: interaction.member ?? interaction.user
     });
@@ -11092,7 +11130,7 @@ const noodleCommandData = new SlashCommandBuilder()
   .addSubcommand((sc) => sc.setName("quests").setDescription("View active quests."))
   .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
   .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
-  .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim Top.gg vote rewards."))
+  .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim bot-list vote rewards."))
   .addSubcommand((sc) =>
     sc
       .setName("buy")
