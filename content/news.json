@@ -26,15 +26,25 @@
   },
   "pinned": {
     "label": "Latest Update",
-    "version": "0.2.0",
-    "date": "2026-05-07",
+    "version": "0.3.0",
+    "date": "2026-05-17",
     "classification": "player_update",
-    "summary": "Added the new About + News experience, including live About counters, a support-server shortcut, and a cleaner release feed with Latest, Previous, and Upcoming updates."
+    "summary": "Expanded Bot List Vote Rewards with a cleaner vote menu, direct vote-site buttons, and clearer claim flow so players can stack high rewards faster."
   },
   "sections": [
     {
       "title": "May 2026",
       "entries": [
+        {
+          "version": "0.3.0",
+          "date": "2026-05-17",
+          "classification": "player_update",
+          "changes": [
+            "Revamped **Bot List Vote Rewards** with cleaner vote links and direct button shortcuts to each active vote site.",
+            "Updated vote rewards layout to make claiming easier, including a clearer **Claim All Vote Rewards** flow.",
+            "Friendly reminder: each valid vote can grant **1,000c + 300 SXP + 50 REP**. If you vote regularly, rewards stack up quickly!"
+          ]
+        },
         {
           "version": "0.2.0",
           "date": "2026-05-07",
