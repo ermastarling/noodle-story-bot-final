@@ -186,7 +186,7 @@ NOODLE_DISCORDS_STATS_URL=https://discords.com/bots/api/bot/{botId}/setservers
 NOODLE_STELLARBOTLIST_WEBHOOK_PATH=/stellarbotlist/webhook
 NOODLE_STELLARBOTLIST_WEBHOOK_AUTH=replace_with_stellarbotlist_webhook_auth
 NOODLE_STELLARBOTLIST_TOKEN=replace_with_stellarbotlist_api_token
-NOODLE_STELLARBOTLIST_STATS_URL=NO SERVER COUNT
+# No server-count stats URL is configured for this provider.
 
 # Discord.Bots.gg (server count only; no vote rewards)
 NOODLE_DISCORDBOTSGG_TOKEN=replace_with_discordbotsgg_api_token
