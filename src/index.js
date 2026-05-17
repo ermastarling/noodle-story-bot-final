@@ -410,6 +410,9 @@ import { theme } from "./ui/theme.js";
   const botListStatsSyncIntervalMs = Number.isFinite(botListStatsSyncIntervalRaw) && botListStatsSyncIntervalRaw >= 60_000
     ? Math.floor(botListStatsSyncIntervalRaw)
     : 15 * 60 * 1000;
+  const voteDuplicateWindowMode = String(process.env.NOODLE_VOTE_DUPLICATE_WINDOW_MODE || "sliding").trim().toLowerCase() === "fixed"
+    ? "fixed"
+    : "sliding";
   const disabledStatsSyncLogged = new Set();
   let shardNearThresholdAlertSent = false;
   let shardRecommendedAlertSent = false;
@@ -1050,20 +1053,20 @@ import { theme } from "./ui/theme.js";
     return anyUpdated;
   }
 
-  function buildDiscordBotListCommandsPayload() {
-    const includeDevCommands = String(process.env.NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS || "0") === "1";
+  function buildProviderCommandsPayload({ includeDevEnvVar }) {
+    const includeDevCommands = String(process.env[includeDevEnvVar] || "0") === "1";
     return (commands || [])
       .map((command) => command?.data?.toJSON?.())
       .filter(Boolean)
       .filter((cmd) => includeDevCommands || String(cmd?.name || "").trim() !== "noodle-dev");
   }
 
+  function buildDiscordBotListCommandsPayload() {
+    return buildProviderCommandsPayload({ includeDevEnvVar: "NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS" });
+  }
+
   function buildRadarCpdvCommandsPayload() {
-    const includeDevCommands = String(process.env.NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS || "0") === "1";
-    return (commands || [])
-      .map((command) => command?.data?.toJSON?.())
-      .filter(Boolean)
-      .filter((cmd) => includeDevCommands || String(cmd?.name || "").trim() !== "noodle-dev");
+    return buildProviderCommandsPayload({ includeDevEnvVar: "NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS" });
   }
 
   async function syncDiscordBotListCommands({ reason = "ready" } = {}) {
@@ -1502,11 +1505,15 @@ import { theme } from "./ui/theme.js";
         let effectiveVotePayload = payload;
 
         if (voteConfig.source === VOTE_SOURCES.TOPGG && topggSignature) {
-          authValid = verifyTopggWebhookSignature({
+          const signatureValid = verifyTopggWebhookSignature({
             secret: voteConfig.auth,
             signatureHeader: topggSignature,
             rawBody
           });
+          authValid = signatureValid || timingSafeEqual(providedToken, voteConfig.auth);
+          if (!signatureValid && authValid) {
+            console.warn("Top.gg: Invalid x-topgg-signature; accepted via webhook token fallback.");
+          }
         } else if (voteConfig.source === VOTE_SOURCES.DISCORDLIST_GG) {
           const jwtResult = verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload });
           if (jwtResult.ok) {
@@ -1556,7 +1563,9 @@ import { theme } from "./ui/theme.js";
         let player = getPlayer(db, serverId, votedUserId);
         if (!player) player = newPlayerProfile(votedUserId);
 
-        const voteResult = registerVoteFromSource(player, voteConfig.source, Date.now());
+        const voteResult = registerVoteFromSource(player, voteConfig.source, Date.now(), {
+          duplicateWindowMode: voteDuplicateWindowMode
+        });
         upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
 
         console.log(

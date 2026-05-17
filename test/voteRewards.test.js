@@ -114,3 +114,26 @@ test("Vote rewards: duplicate webhook timestamp must persist across requests", (
   assert.equal(staleRetry.pendingClaims, 2);
 });
 
+test("Vote rewards: fixed duplicate window mode does not slide forward", () => {
+  const now = 1_000_000;
+  const player = mockPlayer();
+
+  const firstVote = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now, {
+    duplicateWindowMode: "fixed"
+  });
+  assert.equal(firstVote.duplicate, false);
+  assert.equal(firstVote.pendingClaims, 1);
+
+  const duplicateVote = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now + 60_000, {
+    duplicateWindowMode: "fixed"
+  });
+  assert.equal(duplicateVote.duplicate, true);
+  assert.equal(duplicateVote.pendingClaims, 1);
+
+  const retryAfterWindow = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now + (5 * 60_000) + 30_000, {
+    duplicateWindowMode: "fixed"
+  });
+  assert.equal(retryAfterWindow.duplicate, false);
+  assert.equal(retryAfterWindow.pendingClaims, 2);
+});
+

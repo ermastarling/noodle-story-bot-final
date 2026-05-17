@@ -141,15 +141,23 @@ function ensureVoteSourceState(player, source = VOTE_SOURCES.TOPGG) {
   return { state, sourceState: state.sources[sourceKey], sourceKey };
 }
 
-export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now = nowTs()) {
+function normalizeDuplicateWindowMode(mode) {
+  const normalized = String(mode || "sliding").trim().toLowerCase();
+  return normalized === "fixed" ? "fixed" : "sliding";
+}
+
+export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now = nowTs(), options = {}) {
   const { state, sourceState, sourceKey } = ensureVoteSourceState(player, source);
+  const duplicateWindowMode = normalizeDuplicateWindowMode(options?.duplicateWindowMode);
   const lastWebhookAt = Number(sourceState.last_webhook_at || 0);
   const duplicateWindowMs = 5 * 60 * 1000;
 
   // Bot list webhooks can retry; suppress obvious duplicates per source.
   if (lastWebhookAt > 0 && now - lastWebhookAt < duplicateWindowMs) {
-    sourceState.last_webhook_at = now;
-    state.last_webhook_at = now;
+    if (duplicateWindowMode === "sliding") {
+      sourceState.last_webhook_at = now;
+      state.last_webhook_at = now;
+    }
     return {
       ok: true,
       source: sourceKey,
