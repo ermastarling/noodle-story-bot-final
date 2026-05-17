@@ -93,19 +93,128 @@ Store/webhook-related env vars:
 
 - `NOODLE_WEBHOOK_PORT` — enables the webhook HTTP server when set
 - `NOODLE_WEBHOOK_PATH` — Discord entitlement webhook path (default `/discord/entitlements`)
-- `NOODLE_TOPGG_TOKEN` (fallbacks: `TOPGG_TOKEN`, `TOPGG_API_TOKEN`) — Top.gg API token used to POST bot stats on guild join/leave
-- `TOPGG_BOT_ID` — optional explicit bot id for Top.gg stats endpoint (defaults to live client id, then `1460058511802105976`)
+- `NOODLE_TOPGG_WEBHOOK_PATH` + `NOODLE_TOPGG_WEBHOOK_AUTH` (fallback: `TOPGG_WEBHOOK_AUTH`) — Top.gg vote webhook path/auth
+- `NOODLE_DISCORDBOTLIST_WEBHOOK_PATH` + `NOODLE_DISCORDBOTLIST_WEBHOOK_AUTH` — Discord Bot List vote webhook
+- `NOODLE_VOIDBOTS_WEBHOOK_PATH` + `NOODLE_VOIDBOTS_WEBHOOK_AUTH` — Void Bots vote webhook
+- `NOODLE_DISCORDS_WEBHOOK_PATH` + `NOODLE_DISCORDS_WEBHOOK_AUTH` — Discords.com vote webhook
+- `NOODLE_BOTLISTME_WEBHOOK_PATH` + `NOODLE_BOTLISTME_WEBHOOK_AUTH` — BotList.me vote webhook
+- `NOODLE_STELLARBOTLIST_WEBHOOK_PATH` + `NOODLE_STELLARBOTLIST_WEBHOOK_AUTH` — Stellar Bot List vote webhook
+- `NOODLE_DISCORDLISTGG_WEBHOOK_PATH` + `NOODLE_DISCORDLISTGG_WEBHOOK_AUTH` — DiscordList.gg vote webhook
+- `NOODLE_RADARCPDV_WEBHOOK_PATH` + `NOODLE_RADARCPDV_WEBHOOK_AUTH` — Radar.CPDV vote webhook
+- `NOODLE_TOPGG_TOKEN` (fallbacks: `TOPGG_TOKEN`, `TOPGG_API_TOKEN`) + `NOODLE_TOPGG_STATS_URL` — Top.gg server count sync target (`NOODLE_TOPGG_STATS_URL` optional; default built in)
+- `NOODLE_DISCORDBOTLIST_TOKEN` + `NOODLE_DISCORDBOTLIST_STATS_URL` — Discord Bot List stats sync target (`NOODLE_DISCORDBOTLIST_STATS_URL` optional; default built in). Sends `guilds`, `users`, and optional `voice_connections`.
+- `NOODLE_DISCORDBOTLIST_VOICE_CONNECTIONS` — optional static voice connection count value for Discord Bot List stats payloads
+- `NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS` — optional periodic stats heartbeat interval (default `900000` ms / 15 min)
+- `NOODLE_DISCORDBOTLIST_SYNC_COMMANDS` — set `0` to disable Discord Bot List command-list sync (default enabled)
+- `NOODLE_DISCORDBOTLIST_COMMANDS_URL` — optional command-list endpoint override (default `https://discordbotlist.com/api/v1/bots/{botId}/commands`)
+- `NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS` — set `1` to include `noodle-dev` in Discord Bot List command list (default excluded)
+- `NOODLE_VOIDBOTS_TOKEN` + `NOODLE_VOIDBOTS_STATS_URL` — Void Bots server count sync target
+- `NOODLE_DISCORDS_TOKEN` + `NOODLE_DISCORDS_STATS_URL` — Discords.com server count sync target
+- `NOODLE_BOTLISTME_TOKEN` + `NOODLE_BOTLISTME_STATS_URL` — BotList.me server count sync target
+- `NOODLE_DISCORDBOTSGG_TOKEN` + `NOODLE_DISCORDBOTSGG_STATS_URL` — Discord.Bots.gg server count sync target (no vote rewards; `NOODLE_DISCORDBOTSGG_STATS_URL` optional; default built in)
+- `NOODLE_STELLARBOTLIST_TOKEN` + `NOODLE_STELLARBOTLIST_STATS_URL` — Stellar Bot List server count sync target
+- `NOODLE_DISCORDLISTGG_TOKEN` + `NOODLE_DISCORDLISTGG_STATS_URL` — DiscordList.gg server count sync target
+- `NOODLE_RADARCPDV_TOKEN` + `NOODLE_RADARCPDV_STATS_URL` — Radar.CPDV server count sync target
+- `NOODLE_RADARCPDV_SYNC_COMMANDS` — set `0` to disable Radar.CPDV command-list sync (default enabled)
+- `NOODLE_RADARCPDV_COMMANDS_URL` — optional Radar.CPDV command-list endpoint override (default `https://api.radarcord.net/bot/{botId}/commands`)
+- `NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS` — set `1` to include `noodle-dev` in Radar.CPDV command list (default excluded)
+- `NOODLE_DISCORDEXTREMELIST_TOKEN` + `NOODLE_DISCORDEXTREMELIST_STATS_URL` — Discord Extreme List server count sync target
+- `NOODLE_BOT_ID` — optional shared bot id for endpoints that include `{botId}` in their URL template (defaults to live client id, then legacy `TOPGG_BOT_ID`, then `1460058511802105976`)
+- `TOPGG_BOT_ID` — legacy fallback for `NOODLE_BOT_ID` compatibility
 - `DISCORD_PUBLIC_KEY` — required to verify Discord entitlement signatures
 - `NOODLE_STRIPE_WEBHOOK_PATH` — Stripe webhook path (default `/store/stripe`)
 - `NOODLE_STRIPE_WEBHOOK_SECRET` — Stripe signing secret for webhook validation
 - `NOODLE_STRIPE_PRECHECK_PATH` and `NOODLE_STRIPE_PRECHECK_SECRET` — optional store precheck endpoint
+
+PebbleHost `.env` copy/paste template for all vote webhooks + bot-list stats:
+
+```dotenv
+# Shared webhook server
+NOODLE_WEBHOOK_PORT=3000
+# Optional: periodic bot-list stats heartbeat interval (default 15 min)
+# NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS=900000
+
+# Top.gg (vote webhook + stats)
+NOODLE_TOPGG_WEBHOOK_PATH=/topgg/webhook
+NOODLE_TOPGG_WEBHOOK_AUTH=replace_with_topgg_webhook_auth
+NOODLE_TOPGG_TOKEN=replace_with_topgg_api_token
+# Optional override (default is built in)
+# NOODLE_TOPGG_STATS_URL=https://top.gg/api/bots/{botId}/stats
+
+# Discord Bot List
+NOODLE_DISCORDBOTLIST_WEBHOOK_PATH=/discordbotlist/webhook
+NOODLE_DISCORDBOTLIST_WEBHOOK_AUTH=replace_with_discordbotlist_webhook_auth
+NOODLE_DISCORDBOTLIST_TOKEN=replace_with_discordbotlist_api_token
+# Optional override (default is built in)
+# NOODLE_DISCORDBOTLIST_STATS_URL=https://discordbotlist.com/api/v1/bots/{botId}/stats
+# Optional: include voice connections in stats payload
+# NOODLE_DISCORDBOTLIST_VOICE_CONNECTIONS=0
+# Optional: command-list sync controls
+# NOODLE_DISCORDBOTLIST_SYNC_COMMANDS=1
+# NOODLE_DISCORDBOTLIST_COMMANDS_URL=https://discordbotlist.com/api/v1/bots/{botId}/commands
+# NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS=0
+
+# Radar.CPDV
+NOODLE_RADARCPDV_WEBHOOK_PATH=/radarcpdv/webhook
+NOODLE_RADARCPDV_WEBHOOK_AUTH=replace_with_radarcpdv_webhook_auth
+NOODLE_RADARCPDV_TOKEN=replace_with_radarcpdv_api_token
+NOODLE_RADARCPDV_STATS_URL=https://api.radarcord.net/bot/{botId}/stats
+# Optional: command-list sync controls
+# NOODLE_RADARCPDV_SYNC_COMMANDS=1
+# NOODLE_RADARCPDV_COMMANDS_URL=https://api.radarcord.net/bot/{botId}/commands
+# NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS=0
+
+# DiscordList.gg
+NOODLE_DISCORDLISTGG_WEBHOOK_PATH=/discordlistgg/webhook
+NOODLE_DISCORDLISTGG_WEBHOOK_AUTH=replace_with_discordlistgg_webhook_auth
+NOODLE_DISCORDLISTGG_TOKEN=replace_with_discordlistgg_api_token
+NOODLE_DISCORDLISTGG_STATS_URL=https://api.discordlist.gg/v0/bots/{botId}/stats
+
+# Void Bots (not live yet)
+NOODLE_VOIDBOTS_WEBHOOK_PATH=/voidbots/webhook
+NOODLE_VOIDBOTS_WEBHOOK_AUTH=replace_with_voidbots_webhook_auth
+NOODLE_VOIDBOTS_TOKEN=replace_with_voidbots_api_token
+NOODLE_VOIDBOTS_STATS_URL=https://api.voidbots.net/bot/stats/{botId}
+
+# Discords.com
+NOODLE_DISCORDS_WEBHOOK_PATH=/discords/webhook
+NOODLE_DISCORDS_WEBHOOK_AUTH=replace_with_discords_webhook_auth
+NOODLE_DISCORDS_TOKEN=replace_with_discords_api_token
+NOODLE_DISCORDS_STATS_URL=https://discords.com/bots/api/bot/{botId}/setservers
+
+# Stellar Bot List
+NOODLE_STELLARBOTLIST_WEBHOOK_PATH=/stellarbotlist/webhook
+NOODLE_STELLARBOTLIST_WEBHOOK_AUTH=replace_with_stellarbotlist_webhook_auth
+NOODLE_STELLARBOTLIST_TOKEN=replace_with_stellarbotlist_api_token
+NOODLE_STELLARBOTLIST_STATS_URL=NO SERVER COUNT
+
+# Discord.Bots.gg (server count only; no vote rewards)
+NOODLE_DISCORDBOTSGG_TOKEN=replace_with_discordbotsgg_api_token
+# Optional override (default is built in)
+# NOODLE_DISCORDBOTSGG_STATS_URL=https://discord.bots.gg/api/v1/bots/{botId}/stats
+
+# Discord Extreme List (server count only; no vote webhook support)
+NOODLE_DISCORDEXTREMELIST_TOKEN=replace_with_discordextremelist_api_token
+NOODLE_DISCORDEXTREMELIST_STATS_URL=replace_with_discordextremelist_stats_endpoint
+
+# BotList.me (pending page)
+NOODLE_BOTLISTME_WEBHOOK_PATH=/botlistme/webhook
+NOODLE_BOTLISTME_WEBHOOK_AUTH=replace_with_botlistme_webhook_auth
+NOODLE_BOTLISTME_TOKEN=replace_with_botlistme_api_token
+NOODLE_BOTLISTME_STATS_URL=https://api.botlist.me/api/v1/bots/{botId}/stats
+
+# Shared bot id template replacement for URLs that use {botId}
+NOODLE_BOT_ID=1460058511802105976
+# Legacy fallback (optional)
+# TOPGG_BOT_ID=1460058511802105976
+```
 
 Alert behavior:
 
 - Guild join alerts, Discord entitlement purchase alerts, and Stripe purchase alerts all use a single formatting path.
 - Alerts require `NOODLE_DEV_ALERT_USER_ID` when mention is required.
 - Guild join/leave alerts include current server count in the embed footer.
-- Guild join/leave events also POST updated `server_count` to Top.gg when a Top.gg API token is configured.
+- Guild join/leave events also POST updated stats (guild and user counts when supported) to each configured bot list endpoint.
 - Purchase alerts include specialization purchase count in the embed footer (all-time from durable purchase history).
 
 ## Simulation Harness

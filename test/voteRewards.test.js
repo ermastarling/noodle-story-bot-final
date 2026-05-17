@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { claimTopggVoteReward, getVoteRewardStatus } from "../src/game/voteRewards.js";
+import {
+  claimTopggVoteReward,
+  getVoteRewardStatus,
+  registerVoteFromSource,
+  VOTE_SOURCES
+} from "../src/game/voteRewards.js";
 
 function mockPlayer() {
   return {
@@ -52,3 +57,24 @@ test("Vote rewards: claim fails when no pending rewards", () => {
   assert.equal(result.ok, false);
   assert.match(result.message, /No vote rewards are ready yet/i);
 });
+
+test("Vote rewards: duplicate suppression is isolated per source", () => {
+  const player = mockPlayer();
+  const now = 1_000_000;
+
+  const topggFirst = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now);
+  assert.equal(topggFirst.ok, true);
+  assert.equal(topggFirst.duplicate, false);
+  assert.equal(topggFirst.pendingClaims, 1);
+
+  const topggDuplicate = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now + 60_000);
+  assert.equal(topggDuplicate.ok, true);
+  assert.equal(topggDuplicate.duplicate, true);
+  assert.equal(topggDuplicate.pendingClaims, 1);
+
+  const secondSource = registerVoteFromSource(player, VOTE_SOURCES.DISCORDBOTLIST, now + 90_000);
+  assert.equal(secondSource.ok, true);
+  assert.equal(secondSource.duplicate, false);
+  assert.equal(secondSource.pendingClaims, 2);
+});
+
