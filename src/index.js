@@ -925,10 +925,12 @@ import { theme } from "./ui/theme.js";
 
   function extractVoteUserId(payload) {
     const candidates = [
+      payload?.user,
       payload?.user_id,
       payload?.userId,
       payload?.userid,
       payload?.id,
+      payload?.data?.user,
       payload?.data?.user?.platform_id,
       payload?.data?.user?.platformId,
       payload?.data?.user?.id,
