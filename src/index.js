@@ -410,6 +410,7 @@ import { theme } from "./ui/theme.js";
   const botListStatsSyncIntervalMs = Number.isFinite(botListStatsSyncIntervalRaw) && botListStatsSyncIntervalRaw >= 60_000
     ? Math.floor(botListStatsSyncIntervalRaw)
     : 15 * 60 * 1000;
+  const topggRequireSignature = String(process.env.NOODLE_TOPGG_REQUIRE_SIGNATURE || "0") === "1";
   const voteDuplicateWindowMode = String(process.env.NOODLE_VOTE_DUPLICATE_WINDOW_MODE || "sliding").trim().toLowerCase() === "fixed"
     ? "fixed"
     : "sliding";
@@ -924,7 +925,6 @@ import { theme } from "./ui/theme.js";
 
   function extractVoteUserId(payload) {
     const candidates = [
-      payload?.user,
       payload?.user_id,
       payload?.userId,
       payload?.userid,
@@ -932,26 +932,35 @@ import { theme } from "./ui/theme.js";
       payload?.data?.user?.platform_id,
       payload?.data?.user?.platformId,
       payload?.data?.user?.id,
-      payload?.data?.user,
       payload?.data?.user_id,
       payload?.data?.userId,
       payload?.data?.platform_id,
       payload?.data?.platformId,
-      payload?.vote?.user,
       payload?.vote?.user_id,
       payload?.vote?.userId,
       payload?.vote?.user?.id,
       payload?.vote?.user?.platform_id,
       payload?.vote?.user?.platformId,
-      payload?.event?.user,
       payload?.event?.user_id,
       payload?.event?.userId,
       payload?.event?.user?.id,
       payload?.event?.user?.platform_id,
       payload?.event?.user?.platformId
     ];
-    const match = candidates.find((candidate) => String(candidate || "").trim());
-    return String(match || "").trim();
+    const match = candidates.find((candidate) => {
+      const valueType = typeof candidate;
+      if (valueType !== "string" && valueType !== "number") return false;
+      return String(candidate).trim().length > 0;
+    });
+    return match == null ? "" : String(match).trim();
+  }
+
+  function hasAnyConfiguredBotListStatsSync() {
+    return botListStatsConfigs.some((config) => {
+      const endpoint = String(config?.endpoint || "").trim();
+      const tokenValue = String(config?.token || "").trim();
+      return Boolean(endpoint && tokenValue);
+    });
   }
 
   function renderStatsEndpoint(endpoint, botId) {
@@ -1188,6 +1197,10 @@ import { theme } from "./ui/theme.js";
 
   function startBotListStatsHeartbeat() {
     if (botListStatsHeartbeatHandle) return;
+    if (!hasAnyConfiguredBotListStatsSync()) {
+      console.log("INFO: Bot-list stats heartbeat disabled (no providers configured with both URL and token).");
+      return;
+    }
 
     botListStatsHeartbeatHandle = setInterval(async () => {
       const counts = getCurrentBotListCounts();
@@ -1533,9 +1546,20 @@ import { theme } from "./ui/theme.js";
             signatureHeader: topggSignature,
             rawBody
           });
-          authValid = signatureValid || timingSafeEqual(providedToken, voteConfig.auth);
-          if (!signatureValid && authValid) {
+          authValid = signatureValid;
+          if (!signatureValid && !topggRequireSignature) {
+            authValid = timingSafeEqual(providedToken, voteConfig.auth);
+          }
+          if (!signatureValid && authValid && !topggRequireSignature) {
             console.warn("Top.gg: Invalid x-topgg-signature; accepted via webhook token fallback.");
+          }
+          if (!signatureValid && topggRequireSignature) {
+            console.warn("Top.gg: Rejected webhook due to invalid signature with NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
+          }
+        } else if (voteConfig.source === VOTE_SOURCES.TOPGG) {
+          authValid = !topggRequireSignature && timingSafeEqual(providedToken, voteConfig.auth);
+          if (topggRequireSignature) {
+            console.warn("Top.gg: Rejected webhook without x-topgg-signature because NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
           }
         } else if (voteConfig.source === VOTE_SOURCES.DISCORDLIST_GG) {
           const jwtResult = verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload });
@@ -1781,8 +1805,12 @@ import { theme } from "./ui/theme.js";
       console.error("❌ Failed to write boot marker:", e?.stack ?? e);
     }
 
-    const startupCounts = getCurrentBotListCounts();
-    await updateAllBotListServerCounts(startupCounts, { reason: "ready" });
+    if (hasAnyConfiguredBotListStatsSync()) {
+      const startupCounts = getCurrentBotListCounts();
+      await updateAllBotListServerCounts(startupCounts, { reason: "ready" });
+    } else {
+      console.log("INFO: Skipping bot-list stats sync on ready (no providers configured with both URL and token).");
+    }
     await syncDiscordBotListCommands({ reason: "ready" });
     await syncRadarCpdvCommands({ reason: "ready" });
     startBotListStatsHeartbeat();

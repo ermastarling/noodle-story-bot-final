@@ -94,6 +94,7 @@ Store/webhook-related env vars:
 - `NOODLE_WEBHOOK_PORT` — enables the webhook HTTP server when set
 - `NOODLE_WEBHOOK_PATH` — Discord entitlement webhook path (default `/discord/entitlements`)
 - `NOODLE_TOPGG_WEBHOOK_PATH` + `NOODLE_TOPGG_WEBHOOK_AUTH` (fallback: `TOPGG_WEBHOOK_AUTH`) — Top.gg vote webhook path/auth
+- `NOODLE_TOPGG_REQUIRE_SIGNATURE` — set `1` to require valid `x-topgg-signature` and disable token fallback for Top.gg webhooks
 - `NOODLE_DISCORDBOTLIST_WEBHOOK_PATH` + `NOODLE_DISCORDBOTLIST_WEBHOOK_AUTH` — Discord Bot List vote webhook
 - `NOODLE_VOIDBOTS_WEBHOOK_PATH` + `NOODLE_VOIDBOTS_WEBHOOK_AUTH` — Void Bots vote webhook
 - `NOODLE_DISCORDS_WEBHOOK_PATH` + `NOODLE_DISCORDS_WEBHOOK_AUTH` — Discords.com vote webhook
@@ -142,6 +143,8 @@ NOODLE_WEBHOOK_PORT=3000
 # Top.gg 
 NOODLE_TOPGG_WEBHOOK_PATH=/topgg/webhook
 NOODLE_TOPGG_WEBHOOK_AUTH=replace_with_topgg_webhook_auth
+# Optional: enforce signature-only auth (disable token fallback)
+# NOODLE_TOPGG_REQUIRE_SIGNATURE=0
 NOODLE_TOPGG_TOKEN=replace_with_topgg_api_token
 # Optional override (default is built in)
 # NOODLE_TOPGG_STATS_URL=https://top.gg/api/bots/{botId}/stats
