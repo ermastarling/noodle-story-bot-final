@@ -151,18 +151,25 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
   const duplicateWindowMode = normalizeDuplicateWindowMode(options?.duplicateWindowMode);
   const lastWebhookAt = Number(sourceState.last_webhook_at || 0);
   const duplicateWindowMs = 5 * 60 * 1000;
+  const duplicateRefreshMs = 30 * 1000;
 
   // Bot list webhooks can retry; suppress obvious duplicates per source.
   if (lastWebhookAt > 0 && now - lastWebhookAt < duplicateWindowMs) {
+    let shouldPersistDuplicate = false;
     if (duplicateWindowMode === "sliding") {
-      sourceState.last_webhook_at = now;
-      state.last_webhook_at = now;
+      // Throttle duplicate timestamp refreshes to avoid excessive write volume.
+      if (now - lastWebhookAt >= duplicateRefreshMs) {
+        sourceState.last_webhook_at = now;
+        state.last_webhook_at = now;
+        shouldPersistDuplicate = true;
+      }
     }
     return {
       ok: true,
       source: sourceKey,
       duplicate: true,
       lifetimeLimited: false,
+      shouldPersistDuplicate,
       pendingClaims: state.pending_claims
     };
   }
@@ -180,6 +187,7 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
     source: sourceKey,
     duplicate: false,
     lifetimeLimited: false,
+    shouldPersistDuplicate: true,
     pendingClaims: state.pending_claims
   };
 }

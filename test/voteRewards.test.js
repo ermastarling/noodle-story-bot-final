@@ -137,3 +137,32 @@ test("Vote rewards: fixed duplicate window mode does not slide forward", () => {
   assert.equal(retryAfterWindow.pendingClaims, 2);
 });
 
+test("Vote rewards: rapid duplicate retries do not require persistence on every hit", () => {
+  const now = 1_000_000;
+  const player = mockPlayer();
+
+  const firstVote = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now);
+  assert.equal(firstVote.shouldPersistDuplicate, true);
+
+  const rapidDuplicate = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now + 10_000);
+  assert.equal(rapidDuplicate.duplicate, true);
+  assert.equal(rapidDuplicate.shouldPersistDuplicate, false);
+
+  const laterDuplicate = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now + 40_000);
+  assert.equal(laterDuplicate.duplicate, true);
+  assert.equal(laterDuplicate.shouldPersistDuplicate, true);
+});
+
+test("Vote rewards: fixed mode duplicate does not request persistence", () => {
+  const now = 1_000_000;
+  const player = mockPlayer();
+
+  registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now, { duplicateWindowMode: "fixed" });
+  const duplicateVote = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now + 60_000, {
+    duplicateWindowMode: "fixed"
+  });
+
+  assert.equal(duplicateVote.duplicate, true);
+  assert.equal(duplicateVote.shouldPersistDuplicate, false);
+});
+

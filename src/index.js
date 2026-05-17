@@ -1053,20 +1053,43 @@ import { theme } from "./ui/theme.js";
     return anyUpdated;
   }
 
-  function buildProviderCommandsPayload({ includeDevEnvVar }) {
+  function toProviderCommand(command) {
+    const normalized = {
+      name: String(command?.name || "").trim(),
+      description: String(command?.description || "").trim()
+    };
+    if (Array.isArray(command?.options) && command.options.length > 0) {
+      normalized.options = command.options;
+    }
+    return normalized;
+  }
+
+  function buildProviderCommandsPayload({ includeDevEnvVar, wrapInCommandsObject = false }) {
     const includeDevCommands = String(process.env[includeDevEnvVar] || "0") === "1";
-    return (commands || [])
+    const payload = (commands || [])
       .map((command) => command?.data?.toJSON?.())
       .filter(Boolean)
       .filter((cmd) => includeDevCommands || String(cmd?.name || "").trim() !== "noodle-dev");
+    const normalizedPayload = payload
+      .map(toProviderCommand)
+      .filter((cmd) => cmd.name && cmd.description);
+    return wrapInCommandsObject ? { commands: normalizedPayload } : normalizedPayload;
   }
 
   function buildDiscordBotListCommandsPayload() {
-    return buildProviderCommandsPayload({ includeDevEnvVar: "NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS" });
+    const wrapInCommandsObject = String(process.env.NOODLE_DISCORDBOTLIST_COMMANDS_WRAP || "0") === "1";
+    return buildProviderCommandsPayload({
+      includeDevEnvVar: "NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS",
+      wrapInCommandsObject
+    });
   }
 
   function buildRadarCpdvCommandsPayload() {
-    return buildProviderCommandsPayload({ includeDevEnvVar: "NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS" });
+    const wrapInCommandsObject = String(process.env.NOODLE_RADARCPDV_COMMANDS_WRAP || "0") === "1";
+    return buildProviderCommandsPayload({
+      includeDevEnvVar: "NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS",
+      wrapInCommandsObject
+    });
   }
 
   async function syncDiscordBotListCommands({ reason = "ready" } = {}) {
@@ -1566,7 +1589,9 @@ import { theme } from "./ui/theme.js";
         const voteResult = registerVoteFromSource(player, voteConfig.source, Date.now(), {
           duplicateWindowMode: voteDuplicateWindowMode
         });
-        upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
+        if (!voteResult.duplicate || voteResult.shouldPersistDuplicate) {
+          upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
+        }
 
         console.log(
           `${voteConfig.label}: Vote registered`,

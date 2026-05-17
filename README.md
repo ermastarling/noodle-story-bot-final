@@ -109,6 +109,7 @@ Store/webhook-related env vars:
 - `NOODLE_DISCORDBOTLIST_SYNC_COMMANDS` — set `0` to disable Discord Bot List command-list sync (default enabled)
 - `NOODLE_DISCORDBOTLIST_COMMANDS_URL` — optional command-list endpoint override (default `https://discordbotlist.com/api/v1/bots/{botId}/commands`)
 - `NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS` — set `1` to include `noodle-dev` in Discord Bot List command list (default excluded)
+- `NOODLE_DISCORDBOTLIST_COMMANDS_WRAP` — set `1` to send command sync payload as `{ commands: [...] }` instead of a bare array
 - `NOODLE_VOIDBOTS_TOKEN` + `NOODLE_VOIDBOTS_STATS_URL` — Void Bots server count sync target
 - `NOODLE_DISCORDS_TOKEN` + `NOODLE_DISCORDS_STATS_URL` — Discords.com server count sync target
 - `NOODLE_BOTLISTME_TOKEN` + `NOODLE_BOTLISTME_STATS_URL` — BotList.me server count sync target
@@ -119,6 +120,7 @@ Store/webhook-related env vars:
 - `NOODLE_RADARCPDV_SYNC_COMMANDS` — set `0` to disable Radar.CPDV command-list sync (default enabled)
 - `NOODLE_RADARCPDV_COMMANDS_URL` — optional Radar.CPDV command-list endpoint override (default `https://api.radarcord.net/bot/{botId}/commands`)
 - `NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS` — set `1` to include `noodle-dev` in Radar.CPDV command list (default excluded)
+- `NOODLE_RADARCPDV_COMMANDS_WRAP` — set `1` to send command sync payload as `{ commands: [...] }` instead of a bare array
 - `NOODLE_DISCORDEXTREMELIST_TOKEN` + `NOODLE_DISCORDEXTREMELIST_STATS_URL` — Discord Extreme List server count sync target
 - `NOODLE_BOT_ID` — optional shared bot id for endpoints that include `{botId}` in their URL template (defaults to live client id, then legacy `TOPGG_BOT_ID`, then `1460058511802105976`)
 - `TOPGG_BOT_ID` — legacy fallback for `NOODLE_BOT_ID` compatibility
@@ -156,6 +158,7 @@ NOODLE_DISCORDBOTLIST_TOKEN=replace_with_discordbotlist_api_token
 # NOODLE_DISCORDBOTLIST_SYNC_COMMANDS=1
 # NOODLE_DISCORDBOTLIST_COMMANDS_URL=https://discordbotlist.com/api/v1/bots/{botId}/commands
 # NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS=0
+# NOODLE_DISCORDBOTLIST_COMMANDS_WRAP=0
 
 # Radarcord
 NOODLE_RADARCPDV_WEBHOOK_PATH=/radarcpdv/webhook
@@ -166,6 +169,7 @@ NOODLE_RADARCPDV_STATS_URL=https://api.radarcord.net/bot/{botId}/stats
 # NOODLE_RADARCPDV_SYNC_COMMANDS=1
 # NOODLE_RADARCPDV_COMMANDS_URL=https://api.radarcord.net/bot/{botId}/commands
 # NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS=0
+# NOODLE_RADARCPDV_COMMANDS_WRAP=0
 
 # DiscordList.gg
 NOODLE_DISCORDLISTGG_WEBHOOK_PATH=/discordlistgg/webhook
