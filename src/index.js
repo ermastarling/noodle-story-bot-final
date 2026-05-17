@@ -982,7 +982,18 @@ import { theme } from "./ui/theme.js";
   function getCurrentBotListCounts() {
     const guilds = [...client.guilds.cache.values()];
     const serverCount = guilds.length;
-    const userCount = guilds.reduce((sum, guild) => sum + Math.max(0, Number(guild?.memberCount || 0)), 0);
+    let userCount = guilds.reduce((sum, guild) => sum + Math.max(0, Number(guild?.memberCount || 0)), 0);
+
+    // Match About embed user metric: global unique players from the DB.
+    if (db) {
+      try {
+        const row = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
+        userCount = Math.max(0, Number(row?.count || 0));
+      } catch (error) {
+        console.error("❌ Failed to query global unique user count:", error?.stack ?? error);
+      }
+    }
+
     return { serverCount, userCount };
   }
 
