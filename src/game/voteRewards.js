@@ -9,6 +9,7 @@ export const VOTE_SOURCES = {
   VOIDBOTS: "voidbots",
   DISCORDS: "discords",
   BOTLIST_ME: "botlistme",
+  DISCORDBOTSGG: "discordbotsgg",
   STELLARBOTLIST: "stellarbotlist",
   DISCORDLIST_GG: "discordlistgg",
   RADAR_CPDV: "radarcpdv",
@@ -36,7 +37,7 @@ export const VOTE_PLATFORM_PAGES = [
     voteUrl: "https://voidbots.net/bot/1460058511802105976/vote",
     supportsVoteRewards: true,
     supportsServerCount: true,
-    notes: "Not live yet"
+    notes: "*Pending bot approval*"
   },
   {
     source: VOTE_SOURCES.DISCORDS,
@@ -51,10 +52,10 @@ export const VOTE_PLATFORM_PAGES = [
     voteUrl: null,
     supportsVoteRewards: true,
     supportsServerCount: true,
-    notes: "Bot page pending"
+    notes: "*Bot page pending*"
   },
   {
-    source: "discordbotsgg",
+    source: VOTE_SOURCES.DISCORDBOTSGG,
     label: "Discord Bots",
     voteUrl: "https://discord.bots.gg/bots/1460058511802105976",
     supportsVoteRewards: false,
@@ -77,7 +78,7 @@ export const VOTE_PLATFORM_PAGES = [
   },
   {
     source: VOTE_SOURCES.RADAR_CPDV,
-    label: "Radar (CPDV)",
+    label: "Radarcord",
     voteUrl: "https://radar.cpdv.net/bot/1460058511802105976/vote",
     supportsVoteRewards: true,
     supportsServerCount: true
@@ -184,13 +185,12 @@ export function getVotePlatformPages() {
 }
 
 export function getVotePlatformStatusLines() {
-  return getVotePlatformPages().map((page) => {
+  return getVotePlatformPages()
+    .filter((page) => page.supportsVoteRewards)
+    .map((page) => {
     const notesSuffix = page.notes ? ` (${page.notes})` : "";
     if (page.voteUrl && page.supportsVoteRewards) {
-      return `- [${page.label}](${page.voteUrl})${notesSuffix}`;
-    }
-    if (page.voteUrl && !page.supportsVoteRewards) {
-      return `- [${page.label}](${page.voteUrl}) (${page.notes || "Server count only"})`;
+      return `- **[${page.label}](${page.voteUrl})**${notesSuffix}`;
     }
     return `- ${page.label} (${page.notes || "Pending"})`;
   });

@@ -326,7 +326,7 @@ import { theme } from "./ui/theme.js";
   const stableStatsEndpointDefaults = {
     [VOTE_SOURCES.TOPGG]: "https://top.gg/api/bots/{botId}/stats",
     [VOTE_SOURCES.DISCORDBOTLIST]: "https://discordbotlist.com/api/v1/bots/{botId}/stats",
-    discordbotsgg: "https://discord.bots.gg/api/v1/bots/{botId}/stats"
+    [VOTE_SOURCES.DISCORDBOTSGG]: "https://discord.bots.gg/api/v1/bots/{botId}/stats"
   };
   const stableCommandListEndpointDefaults = {
     [VOTE_SOURCES.DISCORDBOTLIST]: "https://discordbotlist.com/api/v1/bots/{botId}/commands",
@@ -366,9 +366,9 @@ import { theme } from "./ui/theme.js";
       token: getVoteSourceToken("NOODLE_BOTLISTME_TOKEN")
     },
     {
-      source: "discordbotsgg",
+      source: VOTE_SOURCES.DISCORDBOTSGG,
       label: "Discord.Bots.gg",
-      endpoint: process.env.NOODLE_DISCORDBOTSGG_STATS_URL || stableStatsEndpointDefaults.discordbotsgg,
+      endpoint: process.env.NOODLE_DISCORDBOTSGG_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.DISCORDBOTSGG],
       token: getVoteSourceToken("NOODLE_DISCORDBOTSGG_TOKEN")
     },
     {

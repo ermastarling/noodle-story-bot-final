@@ -134,7 +134,7 @@ NOODLE_WEBHOOK_PORT=3000
 # Optional: periodic bot-list stats heartbeat interval (default 15 min)
 # NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS=900000
 
-# Top.gg (vote webhook + stats)
+# Top.gg 
 NOODLE_TOPGG_WEBHOOK_PATH=/topgg/webhook
 NOODLE_TOPGG_WEBHOOK_AUTH=replace_with_topgg_webhook_auth
 NOODLE_TOPGG_TOKEN=replace_with_topgg_api_token
@@ -154,7 +154,7 @@ NOODLE_DISCORDBOTLIST_TOKEN=replace_with_discordbotlist_api_token
 # NOODLE_DISCORDBOTLIST_COMMANDS_URL=https://discordbotlist.com/api/v1/bots/{botId}/commands
 # NOODLE_DISCORDBOTLIST_INCLUDE_DEV_COMMANDS=0
 
-# Radar.CPDV
+# Radarcord
 NOODLE_RADARCPDV_WEBHOOK_PATH=/radarcpdv/webhook
 NOODLE_RADARCPDV_WEBHOOK_AUTH=replace_with_radarcpdv_webhook_auth
 NOODLE_RADARCPDV_TOKEN=replace_with_radarcpdv_api_token
@@ -170,7 +170,7 @@ NOODLE_DISCORDLISTGG_WEBHOOK_AUTH=replace_with_discordlistgg_webhook_auth
 NOODLE_DISCORDLISTGG_TOKEN=replace_with_discordlistgg_api_token
 NOODLE_DISCORDLISTGG_STATS_URL=https://api.discordlist.gg/v0/bots/{botId}/stats
 
-# Void Bots (not live yet)
+# Void Bots
 NOODLE_VOIDBOTS_WEBHOOK_PATH=/voidbots/webhook
 NOODLE_VOIDBOTS_WEBHOOK_AUTH=replace_with_voidbots_webhook_auth
 NOODLE_VOIDBOTS_TOKEN=replace_with_voidbots_api_token
@@ -197,7 +197,7 @@ NOODLE_DISCORDBOTSGG_TOKEN=replace_with_discordbotsgg_api_token
 NOODLE_DISCORDEXTREMELIST_TOKEN=replace_with_discordextremelist_api_token
 NOODLE_DISCORDEXTREMELIST_STATS_URL=replace_with_discordextremelist_stats_endpoint
 
-# BotList.me (pending page)
+# BotList.me
 NOODLE_BOTLISTME_WEBHOOK_PATH=/botlistme/webhook
 NOODLE_BOTLISTME_WEBHOOK_AUTH=replace_with_botlistme_webhook_auth
 NOODLE_BOTLISTME_TOKEN=replace_with_botlistme_api_token
