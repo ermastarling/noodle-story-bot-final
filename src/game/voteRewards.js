@@ -21,6 +21,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.TOPGG,
     label: "Top.gg",
     voteUrl: TOPGG_BOT_URL,
+    isVoteLive: true,
     supportsVoteRewards: true,
     supportsServerCount: true
   },
@@ -28,6 +29,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.DISCORDBOTLIST,
     label: "Discord Bot List",
     voteUrl: "https://discordbotlist.com/bots/noodle-story/upvote",
+    isVoteLive: true,
     supportsVoteRewards: true,
     supportsServerCount: true
   },
@@ -35,6 +37,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.VOIDBOTS,
     label: "Void Bots",
     voteUrl: "https://voidbots.net/bot/1460058511802105976/vote",
+    isVoteLive: false,
     supportsVoteRewards: true,
     supportsServerCount: true,
     notes: "*Pending bot approval*"
@@ -43,6 +46,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.DISCORDS,
     label: "Discords.com",
     voteUrl: "https://discords.com/bots/bot/1460058511802105976/vote",
+    isVoteLive: true,
     supportsVoteRewards: true,
     supportsServerCount: true
   },
@@ -50,6 +54,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.BOTLIST_ME,
     label: "BotList.me",
     voteUrl: null,
+    isVoteLive: false,
     supportsVoteRewards: true,
     supportsServerCount: true,
     notes: "*Bot page pending*"
@@ -66,13 +71,16 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.STELLARBOTLIST,
     label: "Stellar Bot List",
     voteUrl: "https://stellarbotlist.com/bot/1460058511802105976/vote",
+    isVoteLive: false,
     supportsVoteRewards: true,
-    supportsServerCount: true
+    supportsServerCount: true,
+    notes: "*Pending bot approval*"
   },
   {
     source: VOTE_SOURCES.DISCORDLIST_GG,
     label: "DiscordList",
     voteUrl: "https://discordlist.gg/bot/1460058511802105976/vote",
+    isVoteLive: true,
     supportsVoteRewards: true,
     supportsServerCount: true
   },
@@ -80,6 +88,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.RADAR_CPDV,
     label: "Radarcord",
     voteUrl: "https://radar.cpdv.net/bot/1460058511802105976/vote",
+    isVoteLive: false,
     supportsVoteRewards: true,
     supportsServerCount: true
   },
@@ -200,16 +209,35 @@ export function getVotePlatformPages() {
   return VOTE_PLATFORM_PAGES.map((page) => ({ ...page }));
 }
 
-export function getVotePlatformStatusLines() {
-  return getVotePlatformPages()
-    .filter((page) => page.supportsVoteRewards)
-    .map((page) => {
-    const notesSuffix = page.notes ? ` (${page.notes})` : "";
-    if (page.voteUrl && page.supportsVoteRewards) {
-      return `- **[${page.label}](${page.voteUrl})**${notesSuffix}`;
+function getSourceLastVoteAt(player, source) {
+  const state = ensureVoteState(player || {});
+  const sourceKey = String(source || "").trim().toLowerCase();
+  const sourceState = state.sources?.[sourceKey];
+  const sourceLastVoteAt = Number(sourceState?.last_vote_at || 0);
+  if (Number.isFinite(sourceLastVoteAt) && sourceLastVoteAt > 0) {
+    return sourceLastVoteAt;
+  }
+
+  if (sourceKey === VOTE_SOURCES.TOPGG) {
+    const legacyLastVoteAt = Number(state.last_vote_at || 0);
+    if (Number.isFinite(legacyLastVoteAt) && legacyLastVoteAt > 0) {
+      return legacyLastVoteAt;
     }
-    return `- ${page.label} (${page.notes || "Pending"})`;
-  });
+  }
+
+  return null;
+}
+
+export function getVotePlatformStatusLines(player) {
+  return getVotePlatformPages()
+    .filter((page) => page.supportsVoteRewards && page.voteUrl && page.isVoteLive !== false)
+    .map((page) => {
+      const sourceLastVoteAt = getSourceLastVoteAt(player, page.source);
+      const lastVoteText = sourceLastVoteAt
+        ? `<t:${Math.floor(sourceLastVoteAt / 1000)}:R>`
+        : "Not detected yet";
+      return `- **[${page.label}](${page.voteUrl})** — last vote: ${lastVoteText}`;
+    });
 }
 
 export function getVoteRewardStatus(player) {

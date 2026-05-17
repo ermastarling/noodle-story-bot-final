@@ -114,7 +114,7 @@ Store/webhook-related env vars:
 - `NOODLE_VOIDBOTS_TOKEN` + `NOODLE_VOIDBOTS_STATS_URL` — Void Bots server count sync target
 - `NOODLE_DISCORDS_TOKEN` + `NOODLE_DISCORDS_STATS_URL` — Discords.com server count sync target
 - `NOODLE_BOTLISTME_TOKEN` + `NOODLE_BOTLISTME_STATS_URL` — BotList.me server count sync target
-- `NOODLE_DISCORDBOTSGG_TOKEN` + `NOODLE_DISCORDBOTSGG_STATS_URL` — Discord.Bots.gg server count sync target (no vote rewards; `NOODLE_DISCORDBOTSGG_STATS_URL` optional; default built in)
+- `NOODLE_DISCORDBOTSGG_TOKEN` + `NOODLE_DISCORDBOTSGG_STATS_URL` — Discord.Bots.gg server count sync target using `guildCount` payload format (no vote rewards; `NOODLE_DISCORDBOTSGG_STATS_URL` optional; default built in)
 - `NOODLE_STELLARBOTLIST_TOKEN` + `NOODLE_STELLARBOTLIST_STATS_URL` — Stellar Bot List server count sync target
 - `NOODLE_DISCORDLISTGG_TOKEN` + `NOODLE_DISCORDLISTGG_STATS_URL` — DiscordList.gg server count sync target
 - `NOODLE_RADARCPDV_TOKEN` + `NOODLE_RADARCPDV_STATS_URL` — Radar.CPDV server count sync target

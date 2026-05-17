@@ -6452,9 +6452,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
-    const voteLinks = getVotePlatformStatusLines().join("\n");
+    const voteLinks = getVotePlatformStatusLines(latestPlayer).join("\n");
     const voteLinkPages = getVotePlatformPages()
-      .filter((page) => page.supportsVoteRewards && page.voteUrl)
+      .filter((page) => page.supportsVoteRewards && page.voteUrl && page.isVoteLive !== false)
       .slice(0, 8);
 
     const makeVoteLinkButton = (page) => new ButtonBuilder()

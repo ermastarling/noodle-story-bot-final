@@ -369,7 +369,8 @@ import { theme } from "./ui/theme.js";
       source: VOTE_SOURCES.DISCORDBOTSGG,
       label: "Discord.Bots.gg",
       endpoint: process.env.NOODLE_DISCORDBOTSGG_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.DISCORDBOTSGG],
-      token: getVoteSourceToken("NOODLE_DISCORDBOTSGG_TOKEN")
+      token: getVoteSourceToken("NOODLE_DISCORDBOTSGG_TOKEN"),
+      bodyFormat: "discordbotsgg_stats"
     },
     {
       source: VOTE_SOURCES.STELLARBOTLIST,
@@ -926,16 +927,23 @@ import { theme } from "./ui/theme.js";
   function extractVoteUserId(payload) {
     const candidates = [
       payload?.user,
+      payload?.user?.id,
+      payload?.user?.platform_id,
+      payload?.user?.platformId,
       payload?.user_id,
       payload?.userId,
       payload?.userid,
       payload?.id,
+      payload?.sub,
       payload?.data?.user,
       payload?.data?.user?.platform_id,
       payload?.data?.user?.platformId,
       payload?.data?.user?.id,
       payload?.data?.user_id,
       payload?.data?.userId,
+      payload?.data?.id,
+      payload?.vote?.id,
+      payload?.event?.id,
       payload?.data?.platform_id,
       payload?.data?.platformId,
       payload?.vote?.user_id,
@@ -981,6 +989,9 @@ import { theme } from "./ui/theme.js";
   function buildStatsBody(config, serverCount, userCount) {
     if (config?.bodyFormat === "server_count") {
       return { server_count: Number(serverCount) || 0 };
+    }
+    if (config?.bodyFormat === "discordbotsgg_stats") {
+      return { guildCount: Number(serverCount) || 0 };
     }
     if (config?.bodyFormat === "discordbotlist_stats") {
       const body = {
