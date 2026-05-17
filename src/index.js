@@ -1557,10 +1557,7 @@ import { theme } from "./ui/theme.js";
         if (!player) player = newPlayerProfile(votedUserId);
 
         const voteResult = registerVoteFromSource(player, voteConfig.source, Date.now());
-
-        if (!voteResult.duplicate) {
-          upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
-        }
+        upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
 
         console.log(
           `${voteConfig.label}: Vote registered`,

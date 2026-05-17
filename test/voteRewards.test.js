@@ -78,3 +78,39 @@ test("Vote rewards: duplicate suppression is isolated per source", () => {
   assert.equal(secondSource.pendingClaims, 2);
 });
 
+test("Vote rewards: duplicate webhook timestamp must persist across requests", () => {
+  const now = 1_000_000;
+
+  // First webhook request creates one pending claim.
+  const firstRequestPlayer = mockPlayer();
+  const firstVote = registerVoteFromSource(firstRequestPlayer, VOTE_SOURCES.TOPGG, now);
+  assert.equal(firstVote.duplicate, false);
+  assert.equal(firstVote.pendingClaims, 1);
+
+  // Simulate loading persisted player state in a later webhook request.
+  const secondRequestPlayer = JSON.parse(JSON.stringify(firstRequestPlayer));
+  const duplicateVote = registerVoteFromSource(secondRequestPlayer, VOTE_SOURCES.TOPGG, now + 60_000);
+  assert.equal(duplicateVote.duplicate, true);
+  assert.equal(duplicateVote.pendingClaims, 1);
+
+  // If duplicate timestamp mutations are persisted, later retries still suppress correctly.
+  const persistedAfterDuplicate = JSON.parse(JSON.stringify(secondRequestPlayer));
+  const retryAfterOriginalWindow = registerVoteFromSource(
+    persistedAfterDuplicate,
+    VOTE_SOURCES.TOPGG,
+    now + (5 * 60_000) + 30_000
+  );
+  assert.equal(retryAfterOriginalWindow.duplicate, true);
+  assert.equal(retryAfterOriginalWindow.pendingClaims, 1);
+
+  // Demonstrates the stale-state failure this regression protects against.
+  const staleReloadWithoutDuplicatePersist = JSON.parse(JSON.stringify(firstRequestPlayer));
+  const staleRetry = registerVoteFromSource(
+    staleReloadWithoutDuplicatePersist,
+    VOTE_SOURCES.TOPGG,
+    now + (5 * 60_000) + 30_000
+  );
+  assert.equal(staleRetry.duplicate, false);
+  assert.equal(staleRetry.pendingClaims, 2);
+});
+
