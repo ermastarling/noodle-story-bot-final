@@ -394,7 +394,8 @@ import { theme } from "./ui/theme.js";
       source: VOTE_SOURCES.DISCORDEXTREME_LIST,
       label: "Discord Extreme List",
       endpoint: process.env.NOODLE_DISCORDEXTREMELIST_STATS_URL || "",
-      token: getVoteSourceToken("NOODLE_DISCORDEXTREMELIST_TOKEN")
+      token: getVoteSourceToken("NOODLE_DISCORDEXTREMELIST_TOKEN"),
+      bodyFormat: "discordextremelist_stats"
     }
   ];
   const DEFAULT_SHARD_GUILD_THRESHOLD = 2500;
@@ -1003,6 +1004,13 @@ import { theme } from "./ui/theme.js";
     }
     if (config?.bodyFormat === "discordbotsgg_stats") {
       return { guildCount: Number(serverCount) || 0 };
+    }
+    if (config?.bodyFormat === "discordextremelist_stats") {
+      const count = Number(serverCount) || 0;
+      return {
+        serverCount: count,
+        guildCount: count
+      };
     }
     if (config?.bodyFormat === "discordbotlist_stats") {
       const body = {

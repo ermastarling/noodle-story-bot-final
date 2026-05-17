@@ -122,7 +122,7 @@ Store/webhook-related env vars:
 - `NOODLE_RADARCPDV_COMMANDS_URL` — optional Radar.CPDV command-list endpoint override (default `https://api.radarcord.net/bot/{botId}/commands`)
 - `NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS` — set `1` to include `noodle-dev` in Radar.CPDV command list (default excluded)
 - `NOODLE_RADARCPDV_COMMANDS_WRAP` — set `1` to send command sync payload as `{ commands: [...] }` instead of a bare array
-- `NOODLE_DISCORDEXTREMELIST_TOKEN` + `NOODLE_DISCORDEXTREMELIST_STATS_URL` — Discord Extreme List server count sync target
+- `NOODLE_DISCORDEXTREMELIST_TOKEN` + `NOODLE_DISCORDEXTREMELIST_STATS_URL` — Discord Extreme List server count sync target using `serverCount`/`guildCount` payload format
 - `NOODLE_BOT_ID` — optional shared bot id for endpoints that include `{botId}` in their URL template (defaults to live client id, then legacy `TOPGG_BOT_ID`, then `1460058511802105976`)
 - `TOPGG_BOT_ID` — legacy fallback for `NOODLE_BOT_ID` compatibility
 - `DISCORD_PUBLIC_KEY` — required to verify Discord entitlement signatures
