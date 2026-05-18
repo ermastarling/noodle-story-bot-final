@@ -106,6 +106,7 @@ Store/webhook-related env vars:
 - `NOODLE_DISCORDBOTLIST_TOKEN` + `NOODLE_DISCORDBOTLIST_STATS_URL` — Discord Bot List stats sync target (`NOODLE_DISCORDBOTLIST_STATS_URL` optional; default built in). Sends `guilds`, `users`, and optional `voice_connections`.
 - `NOODLE_DISCORDBOTLIST_VOICE_CONNECTIONS` — optional static voice connection count value for Discord Bot List stats payloads
 - `NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS` — optional periodic stats heartbeat interval (default `900000` ms / 15 min)
+- `NOODLE_BOTLIST_STATS_MIN_INTERVAL_MS` — optional minimum gap between stats POSTs per provider across ready/guild events/heartbeat (default `180000` ms / 3 min)
 - `NOODLE_VOTE_DUPLICATE_WINDOW_MODE` — optional duplicate suppression mode for vote retries: `sliding` (default) extends the 5-minute window on repeated retries; `fixed` keeps a fixed window from first seen webhook
 - `NOODLE_DISCORDBOTLIST_SYNC_COMMANDS` — set `0` to disable Discord Bot List command-list sync (default enabled)
 - `NOODLE_DISCORDBOTLIST_COMMANDS_URL` — optional command-list endpoint override (default `https://discordbotlist.com/api/v1/bots/{botId}/commands`)

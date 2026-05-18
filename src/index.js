@@ -412,11 +412,17 @@ import { theme } from "./ui/theme.js";
   const botListStatsSyncIntervalMs = Number.isFinite(botListStatsSyncIntervalRaw) && botListStatsSyncIntervalRaw >= 60_000
     ? Math.floor(botListStatsSyncIntervalRaw)
     : 15 * 60 * 1000;
+  const botListStatsMinIntervalRaw = Number(process.env.NOODLE_BOTLIST_STATS_MIN_INTERVAL_MS || 3 * 60 * 1000);
+  const botListStatsMinIntervalMs = Number.isFinite(botListStatsMinIntervalRaw) && botListStatsMinIntervalRaw >= 30_000
+    ? Math.floor(botListStatsMinIntervalRaw)
+    : 3 * 60 * 1000;
   const topggRequireSignature = String(process.env.NOODLE_TOPGG_REQUIRE_SIGNATURE || "0") === "1";
   const voteDuplicateWindowMode = String(process.env.NOODLE_VOTE_DUPLICATE_WINDOW_MODE || "sliding").trim().toLowerCase() === "fixed"
     ? "fixed"
     : "sliding";
   const disabledStatsSyncLogged = new Set();
+  const lastBotListStatsPushBySource = new Map();
+  const nextStatsSyncAllowedAtBySource = new Map();
   let shardNearThresholdAlertSent = false;
   let shardRecommendedAlertSent = false;
   let botListStatsHeartbeatHandle = null;
@@ -779,6 +785,18 @@ import { theme } from "./ui/theme.js";
     return input.toLowerCase().startsWith("bearer ") ? input.slice(7).trim() : input;
   }
 
+  function normalizeAuthToken(value) {
+    const input = String(value || "").trim();
+    if (!input) return "";
+    const lower = input.toLowerCase();
+    for (const scheme of ["bearer ", "token ", "webhook ", "jwt "]) {
+      if (lower.startsWith(scheme)) {
+        return input.slice(scheme.length).trim();
+      }
+    }
+    return input;
+  }
+
   function extractDiscordListJwtFromPayload(payload) {
     const candidates = [
       payload?.token,
@@ -802,9 +820,9 @@ import { theme } from "./ui/theme.js";
     return stripBearerPrefix(token);
   }
 
-  function verifyDiscordListWebhookJwt({ secret, payload }) {
-    const token = extractDiscordListJwtFromPayload(payload);
-    const signingSecret = stripBearerPrefix(secret);
+  function verifyDiscordListWebhookJwt({ secret, payload, tokenCandidate }) {
+    const token = normalizeAuthToken(tokenCandidate) || extractDiscordListJwtFromPayload(payload);
+    const signingSecret = normalizeAuthToken(secret);
     if (!signingSecret || !token) return { ok: false, claims: null };
 
     try {
@@ -905,15 +923,12 @@ import { theme } from "./ui/theme.js";
   function extractVoteWebhookToken(req, requestUrl) {
     const authHeader = String(req.headers["authorization"] || "").trim();
     if (authHeader) {
-      if (authHeader.toLowerCase().startsWith("bearer ")) {
-        return authHeader.slice(7).trim();
-      }
-      return authHeader;
+      return normalizeAuthToken(authHeader);
     }
     const xAuth = String(req.headers["x-auth-token"] || req.headers["x-api-key"] || req.headers["x-webhook-auth"] || "").trim();
-    if (xAuth) return xAuth;
+    if (xAuth) return normalizeAuthToken(xAuth);
     const queryToken = String(requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("token") || "").trim();
-    return queryToken;
+    return normalizeAuthToken(queryToken);
   }
 
   function isVoteTestPayload(payload) {
@@ -932,6 +947,7 @@ import { theme } from "./ui/theme.js";
       payload?.user?.platform_id,
       payload?.user?.platformId,
       payload?.user_id,
+      payload?.userID,
       payload?.userId,
       payload?.userid,
       payload?.id,
@@ -941,6 +957,7 @@ import { theme } from "./ui/theme.js";
       payload?.data?.user?.platformId,
       payload?.data?.user?.id,
       payload?.data?.user_id,
+      payload?.data?.userID,
       payload?.data?.userId,
       payload?.data?.id,
       payload?.vote?.id,
@@ -948,11 +965,13 @@ import { theme } from "./ui/theme.js";
       payload?.data?.platform_id,
       payload?.data?.platformId,
       payload?.vote?.user_id,
+      payload?.vote?.userID,
       payload?.vote?.userId,
       payload?.vote?.user?.id,
       payload?.vote?.user?.platform_id,
       payload?.vote?.user?.platformId,
       payload?.event?.user_id,
+      payload?.event?.userID,
       payload?.event?.userId,
       payload?.event?.user?.id,
       payload?.event?.user?.platform_id,
@@ -1052,6 +1071,23 @@ import { theme } from "./ui/theme.js";
     }
 
     const targetUrl = renderStatsEndpoint(endpoint, resolvedBotId);
+    const sourceKey = String(config?.source || "").trim();
+    const nowMs = Date.now();
+    const minIntervalMs = Number.isFinite(config?.minSyncIntervalMs)
+      ? Math.max(30_000, Math.floor(config.minSyncIntervalMs))
+      : botListStatsMinIntervalMs;
+    const nextAllowedAt = Number(nextStatsSyncAllowedAtBySource.get(sourceKey) || 0);
+    if (nextAllowedAt > nowMs) {
+      return false;
+    }
+
+    const previous = lastBotListStatsPushBySource.get(sourceKey) || null;
+    if (previous && previous.serverCount === Number(serverCount) && previous.userCount === Number(userCount)) {
+      return false;
+    }
+    if (previous && nowMs - Number(previous.sentAt || 0) < minIntervalMs) {
+      return false;
+    }
 
     try {
       const response = await fetch(targetUrl, {
@@ -1064,12 +1100,26 @@ import { theme } from "./ui/theme.js";
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          const retryAfterSeconds = Number(response.headers.get("retry-after") || 0);
+          const cooldownMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? Math.ceil(retryAfterSeconds * 1000)
+            : minIntervalMs;
+          nextStatsSyncAllowedAtBySource.set(sourceKey, nowMs + cooldownMs);
+        }
         const responseBody = await response.text().catch(() => "");
         console.error(
           `❌ ${config.label} server count sync failed (${reason}): ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
         );
         return false;
       }
+
+      lastBotListStatsPushBySource.set(sourceKey, {
+        sentAt: nowMs,
+        serverCount: Number(serverCount),
+        userCount: Number(userCount)
+      });
+      nextStatsSyncAllowedAtBySource.delete(sourceKey);
 
       console.log(`✅ ${config.label} stats updated (${reason}): guilds=${Number(serverCount) || 0}${Number.isFinite(userCount) ? ` users=${Math.floor(userCount)}` : ""}`);
       return true;
@@ -1594,15 +1644,15 @@ import { theme } from "./ui/theme.js";
             console.warn("Top.gg: Rejected webhook without x-topgg-signature because NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
           }
         } else if (voteConfig.source === VOTE_SOURCES.DISCORDLIST_GG) {
-          const jwtResult = verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload });
+          const jwtResult = verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload, tokenCandidate: providedToken });
           if (jwtResult.ok) {
             authValid = true;
             effectiveVotePayload = jwtResult.claims;
           } else {
-            authValid = timingSafeEqual(providedToken, stripBearerPrefix(voteConfig.auth));
+            authValid = timingSafeEqual(providedToken, normalizeAuthToken(voteConfig.auth));
           }
         } else {
-          authValid = timingSafeEqual(providedToken, voteConfig.auth);
+          authValid = timingSafeEqual(providedToken, normalizeAuthToken(voteConfig.auth));
         }
 
         if (!authValid) {
