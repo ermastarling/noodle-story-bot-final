@@ -916,18 +916,64 @@ import { theme } from "./ui/theme.js";
     }
   }
 
-  function getVoteWebhookConfigByPath(urlPath) {
-    return voteWebhookConfigs.find((cfg) => cfg.path === urlPath) || null;
+  function normalizeWebhookPath(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "/";
+    const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+    const collapsed = withLeadingSlash.replace(/\/+/g, "/");
+    if (collapsed.length > 1 && collapsed.endsWith("/")) {
+      return collapsed.slice(0, -1);
+    }
+    return collapsed;
   }
 
-  function extractVoteWebhookToken(req, requestUrl) {
-    const authHeader = String(req.headers["authorization"] || "").trim();
+  function getVoteWebhookConfigByPath(urlPath) {
+    const normalizedPath = normalizeWebhookPath(urlPath);
+    return voteWebhookConfigs.find((cfg) => normalizeWebhookPath(cfg.path) === normalizedPath) || null;
+  }
+
+  function extractVoteWebhookToken(req, requestUrl, payload = null) {
+    const authHeader = String(req.headers["authorization"] || req.headers["x-authorization"] || "").trim();
     if (authHeader) {
       return normalizeAuthToken(authHeader);
     }
-    const xAuth = String(req.headers["x-auth-token"] || req.headers["x-api-key"] || req.headers["x-webhook-auth"] || "").trim();
+    const xAuth = String(
+      req.headers["x-auth-token"]
+      || req.headers["x-api-key"]
+      || req.headers["x-webhook-auth"]
+      || req.headers["x-access-token"]
+      || req.headers["x-token"]
+      || ""
+    ).trim();
     if (xAuth) return normalizeAuthToken(xAuth);
-    const queryToken = String(requestUrl.searchParams.get("auth") || requestUrl.searchParams.get("token") || "").trim();
+    const queryToken = String(
+      requestUrl.searchParams.get("auth")
+      || requestUrl.searchParams.get("token")
+      || requestUrl.searchParams.get("key")
+      || ""
+    ).trim();
+    if (queryToken) return normalizeAuthToken(queryToken);
+
+    const payloadTokenCandidates = [
+      payload?.token,
+      payload?.auth,
+      payload?.authorization,
+      payload?.api_key,
+      payload?.apiKey,
+      payload?.secret,
+      payload?.data?.token,
+      payload?.data?.auth,
+      payload?.data?.authorization,
+      payload?.vote?.token,
+      payload?.vote?.auth,
+      payload?.vote?.authorization,
+      payload?.event?.token,
+      payload?.event?.auth,
+      payload?.event?.authorization
+    ];
+    const payloadToken = payloadTokenCandidates.find((candidate) => String(candidate || "").trim());
+    if (payloadToken) return normalizeAuthToken(payloadToken);
+
     return normalizeAuthToken(queryToken);
   }
 
@@ -1375,7 +1421,7 @@ import { theme } from "./ui/theme.js";
     const webhookPath = process.env.NOODLE_WEBHOOK_PATH || "/discord/entitlements";
     const stripeWebhookPath = process.env.NOODLE_STRIPE_WEBHOOK_PATH || "/store/stripe";
     const stripePrecheckPath = process.env.NOODLE_STRIPE_PRECHECK_PATH || "/store/stripe-precheck";
-    const voteWebhookPaths = new Set(voteWebhookConfigs.map((cfg) => cfg.path));
+    const voteWebhookPaths = new Set(voteWebhookConfigs.map((cfg) => normalizeWebhookPath(cfg.path)));
     const enabledVoteConfigs = voteWebhookConfigs.filter((cfg) => cfg.auth);
     const publicKeyHex = process.env.DISCORD_PUBLIC_KEY || "";
     const stripeSecret = process.env.NOODLE_STRIPE_WEBHOOK_SECRET || "";
@@ -1443,7 +1489,8 @@ import { theme } from "./ui/theme.js";
         return;
       }
 
-      const isVoteWebhookPath = voteWebhookPaths.has(urlPath);
+      const normalizedUrlPath = normalizeWebhookPath(urlPath);
+      const isVoteWebhookPath = voteWebhookPaths.has(normalizedUrlPath);
       if (req.method !== "POST" || (urlPath !== webhookPath && urlPath !== stripeWebhookPath && !isVoteWebhookPath)) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("not found");
@@ -1616,7 +1663,7 @@ import { theme } from "./ui/theme.js";
           return;
         }
 
-        const providedToken = extractVoteWebhookToken(req, requestUrl);
+        const providedToken = extractVoteWebhookToken(req, requestUrl, payload);
         const topggSignature = String(req.headers["x-topgg-signature"] || "").trim();
 
         let authValid = false;
