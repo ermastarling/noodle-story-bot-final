@@ -268,6 +268,8 @@ import { theme } from "./ui/theme.js";
     .filter(Boolean);
   const officialAutoReactEnabled = String(process.env.NOODLE_OFFICIAL_AUTOREACT_ENABLED || "1") !== "0";
   const officialAutoReactBotsOnly = String(process.env.NOODLE_OFFICIAL_AUTOREACT_BOTS_ONLY || "1") !== "0";
+  const officialAutoReactKeywordMatchEnabled = String(process.env.NOODLE_OFFICIAL_AUTOREACT_MATCH_KEYWORDS || "0") === "1";
+  const officialMessageContentIntentEnabled = String(process.env.NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT || "0") === "1";
   const officialWelcomeAutoReactEmojis = parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_REACT_EMOJI || "👋");
   const officialLevelAutoReactEmojis = parseCsvValues(process.env.NOODLE_OFFICIAL_LEVEL_REACT_EMOJI || "🎉");
   const officialStatsChannelsEnabled = String(process.env.NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED || "1") !== "0";
@@ -458,7 +460,12 @@ import { theme } from "./ui/theme.js";
     Intents.FLAGS.GUILD_MESSAGES,
     Intents.FLAGS.DIRECT_MESSAGES
   ];
-  if (Intents.FLAGS.MESSAGE_CONTENT) {
+  if (
+    officialAutoReactEnabled
+    && officialAutoReactKeywordMatchEnabled
+    && officialMessageContentIntentEnabled
+    && Intents.FLAGS.MESSAGE_CONTENT
+  ) {
     clientIntents.push(Intents.FLAGS.MESSAGE_CONTENT);
   }
 
@@ -1229,6 +1236,14 @@ import { theme } from "./ui/theme.js";
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, prefix, count, topic }) {
     let channel = null;
     const existingId = String(channelId || "").trim();
+    const lockPermissionNames = [
+      "SEND_MESSAGES",
+      "ADD_REACTIONS",
+      "CREATE_PUBLIC_THREADS",
+      "CREATE_PRIVATE_THREADS",
+      "SEND_MESSAGES_IN_THREADS"
+    ].filter((perm) => Boolean(Discord.Permissions?.FLAGS?.[perm]));
+    const lockPermissionOptions = Object.fromEntries(lockPermissionNames.map((perm) => [perm, false]));
 
     if (existingId) {
       channel = officialGuild.channels.cache.get(existingId)
@@ -1243,23 +1258,21 @@ import { theme } from "./ui/theme.js";
     }
 
     if (!channel) {
-      const denied = [
-        "SEND_MESSAGES",
-        "ADD_REACTIONS",
-        "CREATE_PUBLIC_THREADS",
-        "CREATE_PRIVATE_THREADS",
-        "SEND_MESSAGES_IN_THREADS"
-      ].filter((perm) => Boolean(Discord.Permissions?.FLAGS?.[perm]));
-
       channel = await officialGuild.channels.create(buildStatChannelName(prefix, count), {
         type: "GUILD_TEXT",
         topic: `${marker} | ${topic}`.slice(0, 1024),
         permissionOverwrites: [
           {
             id: officialGuild.roles.everyone.id,
-            deny: denied
+            deny: lockPermissionNames
           }
         ]
+      });
+    }
+
+    if (channel?.permissionOverwrites?.edit && Object.keys(lockPermissionOptions).length > 0) {
+      await channel.permissionOverwrites.edit(officialGuild.roles.everyone, lockPermissionOptions).catch((error) => {
+        console.error(`❌ Failed to apply official stats lock permissions (${marker}):`, error?.message ?? error);
       });
     }
 
@@ -2101,6 +2114,10 @@ import { theme } from "./ui/theme.js";
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
+    if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled && !officialMessageContentIntentEnabled) {
+      console.warn("⚠️ Official auto-react keyword matching is enabled but NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT is not set to 1. Keyword matching may not work in production; channel-id matching will still work.");
+    }
+
     await c.user.setPresence({
       status: "online",
       activities: [{
@@ -2220,12 +2237,12 @@ import { theme } from "./ui/theme.js";
       if (officialAutoReactBotsOnly && !message.author?.bot) return;
 
       const channelId = String(message.channelId || "");
-      const searchBlob = getMessageSearchBlob(message);
+      const searchBlob = officialAutoReactKeywordMatchEnabled ? getMessageSearchBlob(message) : "";
 
       const isWelcomeMatch = officialWelcomeAutoReactChannels.has(channelId)
-        || officialWelcomeKeywords.some((keyword) => searchBlob.includes(keyword));
+        || (officialAutoReactKeywordMatchEnabled && officialWelcomeKeywords.some((keyword) => searchBlob.includes(keyword)));
       const isLevelMatch = officialLevelAutoReactChannels.has(channelId)
-        || officialLevelKeywords.some((keyword) => searchBlob.includes(keyword));
+        || (officialAutoReactKeywordMatchEnabled && officialLevelKeywords.some((keyword) => searchBlob.includes(keyword)));
 
       if (!isWelcomeMatch && !isLevelMatch) return;
 
