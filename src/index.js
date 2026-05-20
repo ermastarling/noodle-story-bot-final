@@ -1274,6 +1274,7 @@ import { theme } from "./ui/theme.js";
     const existingId = String(channelId || "").trim();
     const normalizedLabel = normalizeCounterLabel(label);
     const markerUserLimit = getCounterMarkerUserLimit(marker);
+    const hasMarkerConstraint = markerUserLimit > 0;
     const lockPermissionNames = [
       "CONNECT",
       "SPEAK",
@@ -1291,9 +1292,10 @@ import { theme } from "./ui/theme.js";
         channel = null;
       } else if (channel) {
         const matchesCategory = !officialStatsCategoryId || String(channel?.parentId || "") === officialStatsCategoryId;
-        const matchesMarker = markerUserLimit <= 0 || Number(channel?.userLimit || 0) === markerUserLimit;
+        const matchesMarker = !hasMarkerConstraint || Number(channel?.userLimit || 0) === markerUserLimit;
         const matchesLabel = extractCounterLabelFromName(channel?.name) === normalizedLabel;
-        if (!matchesCategory || (!matchesMarker && !matchesLabel)) {
+        const matchesIdentity = hasMarkerConstraint ? matchesMarker : matchesLabel;
+        if (!matchesCategory || !matchesIdentity) {
           console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: marker/category invariants do not match.`);
           channel = null;
         }
@@ -1304,10 +1306,9 @@ import { theme } from "./ui/theme.js";
       channel = officialGuild.channels.cache.find((candidate) =>
         isSupportedStatsCounterChannel(candidate)
         && (!officialStatsCategoryId || String(candidate?.parentId || "") === officialStatsCategoryId)
-        && (markerUserLimit <= 0
-          || Number(candidate?.userLimit || 0) === markerUserLimit
-          || extractCounterLabelFromName(candidate?.name) === normalizedLabel)
-        && extractCounterLabelFromName(candidate?.name) === normalizedLabel
+        && (hasMarkerConstraint
+          ? Number(candidate?.userLimit || 0) === markerUserLimit
+          : extractCounterLabelFromName(candidate?.name) === normalizedLabel)
       ) || null;
     }
 
