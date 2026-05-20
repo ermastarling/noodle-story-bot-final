@@ -262,6 +262,24 @@ import { theme } from "./ui/theme.js";
 
   const token = process.env.DISCORD_TOKEN;
   const officialGuildId = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
+  const parseCsvValues = (value) => String(value || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const officialAutoReactEnabled = String(process.env.NOODLE_OFFICIAL_AUTOREACT_ENABLED || "1") !== "0";
+  const officialAutoReactBotsOnly = String(process.env.NOODLE_OFFICIAL_AUTOREACT_BOTS_ONLY || "1") !== "0";
+  const officialAutoReactKeywordMatchEnabled = String(process.env.NOODLE_OFFICIAL_AUTOREACT_MATCH_KEYWORDS || "0") === "1";
+  const officialMessageContentIntentEnabled = String(process.env.NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT || "0") === "1";
+  const officialWelcomeAutoReactEmojis = parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_REACT_EMOJI || "👋");
+  const officialLevelAutoReactEmojis = parseCsvValues(process.env.NOODLE_OFFICIAL_LEVEL_REACT_EMOJI || "🎉");
+  const officialStatsChannelsEnabled = String(process.env.NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED || "1") !== "0";
+  let officialServerCountChannelId = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_CHANNEL_ID || "").trim();
+  let officialShopCountChannelId = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_CHANNEL_ID || "").trim();
+  const officialStatsChannelRefreshIntervalRaw = Number(process.env.NOODLE_OFFICIAL_STATS_CHANNEL_REFRESH_INTERVAL_MS || 10 * 60 * 1000);
+  const officialStatsChannelRefreshIntervalMs = Number.isFinite(officialStatsChannelRefreshIntervalRaw)
+    ? Math.max(60_000, Math.floor(officialStatsChannelRefreshIntervalRaw))
+    : 10 * 60 * 1000;
+  let officialStatsChannelRefreshHandle = null;
   const devAlertChannelId = process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "";
   const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
   const sharedBotId = process.env.NOODLE_BOT_ID || process.env.TOPGG_BOT_ID || "1460058511802105976";
@@ -423,6 +441,12 @@ import { theme } from "./ui/theme.js";
   const disabledStatsSyncLogged = new Set();
   const lastBotListStatsPushBySource = new Map();
   const nextStatsSyncAllowedAtBySource = new Map();
+  const officialWelcomeAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_CHANNEL_IDS));
+  const officialLevelAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_LEVEL_CHANNEL_IDS));
+  const officialWelcomeKeywords = parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_KEYWORDS || "welcome,joined the server")
+    .map((value) => value.toLowerCase());
+  const officialLevelKeywords = parseCsvValues(process.env.NOODLE_OFFICIAL_LEVEL_KEYWORDS || "level up,leveled up,reached level,is now level")
+    .map((value) => value.toLowerCase());
   let shardNearThresholdAlertSent = false;
   let shardRecommendedAlertSent = false;
   let botListStatsHeartbeatHandle = null;
@@ -431,13 +455,27 @@ import { theme } from "./ui/theme.js";
     process.exit(1);
   }
 
-  const client = new Client({
-    intents: [
-      Intents.FLAGS.GUILDS,
-      Intents.FLAGS.GUILD_MESSAGES,
-      Intents.FLAGS.DIRECT_MESSAGES
-    ]
-  });
+  const clientIntents = [
+    Intents.FLAGS.GUILDS,
+    Intents.FLAGS.GUILD_MESSAGES,
+    Intents.FLAGS.DIRECT_MESSAGES
+  ];
+  const messageContentIntentBit = Intents.FLAGS.MESSAGE_CONTENT ?? (1 << 15);
+  const messageContentIntentRequested = Boolean(
+    officialAutoReactEnabled
+    && officialAutoReactKeywordMatchEnabled
+    && officialMessageContentIntentEnabled
+  );
+  const messageContentIntentApplied = Boolean(
+    messageContentIntentRequested
+    && Number.isInteger(messageContentIntentBit)
+    && messageContentIntentBit > 0
+  );
+  if (messageContentIntentApplied) {
+    clientIntents.push(messageContentIntentBit);
+  }
+
+  const client = new Client({ intents: clientIntents });
 
   client.noodleShardHealth = {
     guildCount: 0,
@@ -1190,6 +1228,214 @@ import { theme } from "./ui/theme.js";
     return anyUpdated;
   }
 
+  function buildStatChannelName(prefix, count) {
+    const safePrefix = String(prefix || "stats")
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 70) || "stats";
+    const safeCount = Math.max(0, Number(count) || 0).toLocaleString("en-US").replace(/,/g, "-");
+    return `${safePrefix}-${safeCount}`.slice(0, 100);
+  }
+
+  async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, prefix, count, topic }) {
+    const isSupportedStatsTextChannel = (candidate) => (
+      candidate?.type === "GUILD_TEXT"
+      && typeof candidate?.setName === "function"
+      && typeof candidate?.setTopic === "function"
+      && typeof candidate?.permissionOverwrites?.edit === "function"
+    );
+
+    let channel = null;
+    const existingId = String(channelId || "").trim();
+    const lockPermissionNames = [
+      "SEND_MESSAGES",
+      "SEND_TTS_MESSAGES",
+      "ATTACH_FILES",
+      "EMBED_LINKS",
+      "ADD_REACTIONS",
+      "USE_APPLICATION_COMMANDS",
+      "CREATE_PUBLIC_THREADS",
+      "CREATE_PRIVATE_THREADS",
+      "SEND_MESSAGES_IN_THREADS"
+    ].filter((perm) => Boolean(Discord.Permissions?.FLAGS?.[perm]));
+    const lockPermissionOptions = Object.fromEntries(lockPermissionNames.map((perm) => [perm, false]));
+
+    if (existingId) {
+      channel = officialGuild.channels.cache.get(existingId)
+        || await officialGuild.channels.fetch(existingId).catch(() => null);
+      if (channel && !isSupportedStatsTextChannel(channel)) {
+        console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a guild text channel.`);
+        channel = null;
+      }
+    }
+
+    if (!channel) {
+      channel = officialGuild.channels.cache.find((candidate) =>
+        isSupportedStatsTextChannel(candidate)
+        && String(candidate?.topic || "").includes(marker)
+      ) || null;
+    }
+
+    if (!channel) {
+      channel = await officialGuild.channels.create(buildStatChannelName(prefix, count), {
+        type: "GUILD_TEXT",
+        topic: `${marker} | ${topic}`.slice(0, 1024),
+        permissionOverwrites: [
+          {
+            id: officialGuild.roles.everyone.id,
+            deny: lockPermissionNames
+          }
+        ]
+      });
+    }
+
+    if (!isSupportedStatsTextChannel(channel)) {
+      console.error(`❌ Failed to resolve a valid guild text channel for ${marker}.`);
+      return null;
+    }
+
+    if (Object.keys(lockPermissionOptions).length > 0) {
+      const everyoneRoleId = officialGuild.roles.everyone.id;
+      const overwrite = channel.permissionOverwrites?.cache?.get(everyoneRoleId) || null;
+      const alreadyLocked = lockPermissionNames.every((perm) => {
+        const permFlag = Discord.Permissions?.FLAGS?.[perm];
+        return permFlag ? overwrite?.deny?.has?.(permFlag) : true;
+      });
+
+      if (!alreadyLocked) {
+        await channel.permissionOverwrites.edit(everyoneRoleId, lockPermissionOptions).catch((error) => {
+          console.error(`❌ Failed to apply official stats lock permissions (${marker}):`, error?.message ?? error);
+        });
+      }
+    }
+
+    const nextName = buildStatChannelName(prefix, count);
+    const nextTopic = `${marker} | ${topic}`.slice(0, 1024);
+    if (channel.name !== nextName) {
+      await channel.setName(nextName).catch((error) => {
+        console.error(`❌ Failed to rename official stats channel (${marker}):`, error?.message ?? error);
+      });
+    }
+    if (channel.topic !== nextTopic) {
+      await channel.setTopic(nextTopic).catch((error) => {
+        console.error(`❌ Failed to update official stats topic (${marker}):`, error?.message ?? error);
+      });
+    }
+
+    return channel;
+  }
+
+  async function updateOfficialStatsChannels(precomputedCounts = null, { reason = "event" } = {}) {
+    if (!officialStatsChannelsEnabled || !officialGuildId) return false;
+
+    try {
+      const officialGuild = client.guilds.cache.get(officialGuildId)
+        || await client.guilds.fetch(officialGuildId).catch(() => null);
+      if (!officialGuild) return false;
+
+      const counts = precomputedCounts && typeof precomputedCounts === "object"
+        ? precomputedCounts
+        : getCurrentBotListCounts();
+      const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
+      const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
+
+      const serverChannel = await ensureOfficialReadonlyStatsChannel(
+        officialGuild,
+        officialServerCountChannelId,
+        {
+          marker: "noodle:stats:servers",
+          prefix: "servers",
+          count: serverCount,
+          topic: "Global server count"
+        }
+      );
+      const shopsChannel = await ensureOfficialReadonlyStatsChannel(
+        officialGuild,
+        officialShopCountChannelId,
+        {
+          marker: "noodle:stats:shops",
+          prefix: "noodle-shops",
+          count: shopsCount,
+          topic: "Global noodle shops count (same metric as unique players)"
+        }
+      );
+
+      if (serverChannel?.id) officialServerCountChannelId = serverChannel.id;
+      if (shopsChannel?.id) officialShopCountChannelId = shopsChannel.id;
+
+      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}`);
+      return true;
+    } catch (error) {
+      console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
+      return false;
+    }
+  }
+
+  function getMessageSearchBlob(message) {
+    const embedParts = (message?.embeds || []).flatMap((embed) => {
+      const fieldParts = (embed?.fields || []).flatMap((field) => [field?.name, field?.value]);
+      return [embed?.title, embed?.description, ...fieldParts];
+    });
+    return [message?.content || "", ...embedParts]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
+
+  function parseReactionEmoji(emoji) {
+    const value = String(emoji || "").trim();
+    if (!value) return null;
+
+    const bracketCustom = value.match(/^<a?:([a-zA-Z0-9_]+):(\d{15,25})>$/);
+    if (bracketCustom) {
+      const name = bracketCustom[1];
+      const id = bracketCustom[2];
+      return { raw: value, id, isCustom: true, reactValue: `${name}:${id}` };
+    }
+
+    const plainCustom = value.match(/^[a-zA-Z0-9_]+:(\d{15,25})$/);
+    if (plainCustom) {
+      return { raw: value, id: plainCustom[1], isCustom: true, reactValue: value };
+    }
+
+    const idOnlyCustom = value.match(/^(\d{15,25})$/);
+    if (idOnlyCustom) {
+      return { raw: value, id: idOnlyCustom[1], isCustom: true, reactValue: value };
+    }
+
+    return { raw: value, id: null, isCustom: false, reactValue: value };
+  }
+
+  function emojiMatchesReaction(parsed, reactionEmoji) {
+    if (!parsed || !reactionEmoji) return false;
+    if (parsed.isCustom && parsed.id) {
+      return String(reactionEmoji.id || "") === parsed.id;
+    }
+
+    const rendered = typeof reactionEmoji.toString === "function" ? reactionEmoji.toString() : "";
+    return reactionEmoji.name === parsed.raw || rendered === parsed.raw;
+  }
+
+  async function tryAutoReact(message, emoji) {
+    const parsed = parseReactionEmoji(emoji);
+    if (!parsed) return false;
+
+    const alreadyReacted = message.reactions?.cache?.some((reaction) => {
+      return reaction?.me && emojiMatchesReaction(parsed, reaction?.emoji);
+    });
+    if (alreadyReacted) return false;
+
+    try {
+      await message.react(parsed.reactValue);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to auto-react with ${parsed.raw}:`, error?.message ?? error);
+      return false;
+    }
+  }
+
   function toProviderCommand(command) {
     const normalized = {
       name: String(command?.name || "").trim(),
@@ -1906,6 +2152,26 @@ import { theme } from "./ui/theme.js";
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
+    if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled) {
+      if (!officialMessageContentIntentEnabled) {
+        console.warn("⚠️ Official auto-react keyword matching is enabled but NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT is not set to 1. Keyword matching may not work in production; channel-id matching will still work.");
+      } else if (!messageContentIntentApplied) {
+        console.warn("⚠️ Official auto-react keyword matching is enabled and intent is requested, but MESSAGE_CONTENT is unavailable in this discord.js/runtime environment. Keyword matching may not work; channel-id matching will still work.");
+      }
+    }
+
+    try {
+      await c.user.setPresence({
+        status: "online",
+        activities: [{
+          name: "/noodle help | /noodle start",
+          type: "PLAYING"
+        }]
+      });
+    } catch (error) {
+      console.error("⚠️ Failed to set bot presence:", error?.message ?? error);
+    }
+
     const customEmojis = getCustomEmojiEntries();
     const { ids: accessibleEmojiIds, applicationEmojiCount } = await resolveAccessibleEmojiIds(client, token);
     await refreshShardHealth({ reason: "ready" });
@@ -1934,15 +2200,23 @@ import { theme } from "./ui/theme.js";
       console.error("❌ Failed to write boot marker:", e?.stack ?? e);
     }
 
+    const startupCounts = getCurrentBotListCounts();
     if (hasAnyConfiguredBotListStatsSync()) {
-      const startupCounts = getCurrentBotListCounts();
       await updateAllBotListServerCounts(startupCounts, { reason: "ready" });
     } else {
       console.log("INFO: Skipping bot-list stats sync on ready (no providers configured with both URL and token).");
     }
+    await updateOfficialStatsChannels(startupCounts, { reason: "ready" });
     await syncDiscordBotListCommands({ reason: "ready" });
     await syncRadarCpdvCommands({ reason: "ready" });
     startBotListStatsHeartbeat();
+
+    if (officialStatsChannelsEnabled && officialGuildId && !officialStatsChannelRefreshHandle) {
+      officialStatsChannelRefreshHandle = setInterval(() => {
+        updateOfficialStatsChannels(null, { reason: "interval" });
+      }, officialStatsChannelRefreshIntervalMs);
+      officialStatsChannelRefreshHandle.unref?.();
+    }
 
     startDailyResetScheduler(getKnownServerIds);
     startDailyRewardReminderScheduler(client, getKnownServerIds);
@@ -1962,6 +2236,7 @@ import { theme } from "./ui/theme.js";
     try {
       const currentCounts = getCurrentBotListCounts();
       await updateAllBotListServerCounts(currentCounts, { reason: "guildCreate" });
+      await updateOfficialStatsChannels(currentCounts, { reason: "guildCreate" });
       await refreshShardHealth({ reason: "guildCreate" });
 
       if (guild?.id === officialGuildId) return;
@@ -1984,6 +2259,7 @@ import { theme } from "./ui/theme.js";
     try {
       const currentCounts = getCurrentBotListCounts();
       await updateAllBotListServerCounts(currentCounts, { reason: "guildDelete" });
+      await updateOfficialStatsChannels(currentCounts, { reason: "guildDelete" });
       await refreshShardHealth({ reason: "guildDelete" });
 
       if (guild?.id === officialGuildId) return;
@@ -1996,6 +2272,38 @@ import { theme } from "./ui/theme.js";
       });
     } catch (error) {
       console.error("❌ Failed to send guild leave alert:", error?.stack ?? error);
+    }
+  });
+
+  client.on("messageCreate", async (message) => {
+    try {
+      if (!officialAutoReactEnabled || !officialGuildId) return;
+      if (!message?.guildId || message.guildId !== officialGuildId) return;
+      if (message.author?.id === client.user?.id) return;
+      if (officialAutoReactBotsOnly && !message.author?.bot) return;
+
+      const channelId = String(message.channelId || "");
+      const searchBlob = officialAutoReactKeywordMatchEnabled ? getMessageSearchBlob(message) : "";
+
+      const isWelcomeMatch = officialWelcomeAutoReactChannels.has(channelId)
+        || (officialAutoReactKeywordMatchEnabled && officialWelcomeKeywords.some((keyword) => searchBlob.includes(keyword)));
+      const isLevelMatch = officialLevelAutoReactChannels.has(channelId)
+        || (officialAutoReactKeywordMatchEnabled && officialLevelKeywords.some((keyword) => searchBlob.includes(keyword)));
+
+      if (!isWelcomeMatch && !isLevelMatch) return;
+
+      if (isWelcomeMatch) {
+        for (const emoji of officialWelcomeAutoReactEmojis) {
+          await tryAutoReact(message, emoji);
+        }
+      }
+      if (isLevelMatch) {
+        for (const emoji of officialLevelAutoReactEmojis) {
+          await tryAutoReact(message, emoji);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Official auto-react handler failed:", error?.stack ?? error);
     }
   });
 
