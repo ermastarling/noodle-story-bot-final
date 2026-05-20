@@ -275,6 +275,9 @@ import { theme } from "./ui/theme.js";
   const officialStatsChannelsEnabled = String(process.env.NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED || "1") !== "0";
   let officialServerCountChannelId = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_CHANNEL_ID || "").trim();
   let officialShopCountChannelId = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_CHANNEL_ID || "").trim();
+  const officialServerCountLabel = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_LABEL || "Total Servers").trim() || "Total Servers";
+  const officialShopCountLabel = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_LABEL || "Total Shops").trim() || "Total Shops";
+  const officialStatsCategoryId = String(process.env.NOODLE_OFFICIAL_STATS_CATEGORY_ID || "").trim();
   const officialStatsChannelRefreshIntervalRaw = Number(process.env.NOODLE_OFFICIAL_STATS_CHANNEL_REFRESH_INTERVAL_MS || 10 * 60 * 1000);
   const officialStatsChannelRefreshIntervalMs = Number.isFinite(officialStatsChannelRefreshIntervalRaw)
     ? Math.max(60_000, Math.floor(officialStatsChannelRefreshIntervalRaw))
@@ -1228,60 +1231,53 @@ import { theme } from "./ui/theme.js";
     return anyUpdated;
   }
 
-  function buildStatChannelName(prefix, count) {
-    const safePrefix = String(prefix || "stats")
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 70) || "stats";
-    const safeCount = Math.max(0, Number(count) || 0).toLocaleString("en-US").replace(/,/g, "-");
-    return `${safePrefix}-${safeCount}`.slice(0, 100);
+  function buildStatChannelName(label, count) {
+    const safeLabel = String(label || "Stats")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "Stats";
+    const safeCount = Math.max(0, Number(count) || 0).toLocaleString("en-US");
+    return `${safeLabel}: ${safeCount}`.slice(0, 100);
   }
 
-  async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, prefix, count, topic }) {
-    const isSupportedStatsTextChannel = (candidate) => (
-      candidate?.type === "GUILD_TEXT"
+  async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
+    const isSupportedStatsCounterChannel = (candidate) => (
+      candidate?.type === "GUILD_VOICE"
       && typeof candidate?.setName === "function"
-      && typeof candidate?.setTopic === "function"
       && typeof candidate?.permissionOverwrites?.edit === "function"
     );
 
     let channel = null;
     const existingId = String(channelId || "").trim();
     const lockPermissionNames = [
-      "SEND_MESSAGES",
-      "SEND_TTS_MESSAGES",
-      "ATTACH_FILES",
-      "EMBED_LINKS",
-      "ADD_REACTIONS",
-      "USE_APPLICATION_COMMANDS",
-      "CREATE_PUBLIC_THREADS",
-      "CREATE_PRIVATE_THREADS",
-      "SEND_MESSAGES_IN_THREADS"
+      "CONNECT",
+      "SPEAK",
+      "STREAM",
+      "USE_VAD",
+      "REQUEST_TO_SPEAK"
     ].filter((perm) => Boolean(Discord.Permissions?.FLAGS?.[perm]));
     const lockPermissionOptions = Object.fromEntries(lockPermissionNames.map((perm) => [perm, false]));
 
     if (existingId) {
       channel = officialGuild.channels.cache.get(existingId)
         || await officialGuild.channels.fetch(existingId).catch(() => null);
-      if (channel && !isSupportedStatsTextChannel(channel)) {
-        console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a guild text channel.`);
+      if (channel && !isSupportedStatsCounterChannel(channel)) {
+        console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a voice counter channel.`);
         channel = null;
       }
     }
 
     if (!channel) {
       channel = officialGuild.channels.cache.find((candidate) =>
-        isSupportedStatsTextChannel(candidate)
-        && String(candidate?.topic || "").includes(marker)
+        isSupportedStatsCounterChannel(candidate)
+        && String(candidate?.name || "").startsWith(`${label}:`)
       ) || null;
     }
 
     if (!channel) {
-      channel = await officialGuild.channels.create(buildStatChannelName(prefix, count), {
-        type: "GUILD_TEXT",
-        topic: `${marker} | ${topic}`.slice(0, 1024),
+      channel = await officialGuild.channels.create(buildStatChannelName(label, count), {
+        type: "GUILD_VOICE",
+        ...(officialStatsCategoryId ? { parent: officialStatsCategoryId } : {}),
         permissionOverwrites: [
           {
             id: officialGuild.roles.everyone.id,
@@ -1291,8 +1287,8 @@ import { theme } from "./ui/theme.js";
       });
     }
 
-    if (!isSupportedStatsTextChannel(channel)) {
-      console.error(`❌ Failed to resolve a valid guild text channel for ${marker}.`);
+    if (!isSupportedStatsCounterChannel(channel)) {
+      console.error(`❌ Failed to resolve a valid voice counter channel for ${marker}.`);
       return null;
     }
 
@@ -1311,16 +1307,10 @@ import { theme } from "./ui/theme.js";
       }
     }
 
-    const nextName = buildStatChannelName(prefix, count);
-    const nextTopic = `${marker} | ${topic}`.slice(0, 1024);
+    const nextName = buildStatChannelName(label, count);
     if (channel.name !== nextName) {
       await channel.setName(nextName).catch((error) => {
         console.error(`❌ Failed to rename official stats channel (${marker}):`, error?.message ?? error);
-      });
-    }
-    if (channel.topic !== nextTopic) {
-      await channel.setTopic(nextTopic).catch((error) => {
-        console.error(`❌ Failed to update official stats topic (${marker}):`, error?.message ?? error);
       });
     }
 
@@ -1346,9 +1336,8 @@ import { theme } from "./ui/theme.js";
         officialServerCountChannelId,
         {
           marker: "noodle:stats:servers",
-          prefix: "servers",
+          label: officialServerCountLabel,
           count: serverCount,
-          topic: "Global server count"
         }
       );
       const shopsChannel = await ensureOfficialReadonlyStatsChannel(
@@ -1356,9 +1345,8 @@ import { theme } from "./ui/theme.js";
         officialShopCountChannelId,
         {
           marker: "noodle:stats:shops",
-          prefix: "noodle-shops",
+          label: officialShopCountLabel,
           count: shopsCount,
-          topic: "Global noodle shops count (same metric as unique players)"
         }
       );
 
