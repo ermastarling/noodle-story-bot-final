@@ -230,6 +230,124 @@ function summarizeSlowEvents(events) {
   return rows;
 }
 
+function summarizeNavPhases(events) {
+  const byKey = new Map();
+
+  for (const e of events) {
+    const subroute = e.subroute || "unknown";
+    const resolvedSubroute = e.resolvedSubroute || "unknown";
+    const customIdPrefix = e.customIdPrefix || "unknown";
+    const key = `${subroute}|${resolvedSubroute}|${customIdPrefix}`;
+
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        subroute,
+        resolvedSubroute,
+        customIdPrefix,
+        count: 0,
+        resolveMs: [],
+        runMs: [],
+        totalMs: [],
+        errorCount: 0
+      });
+    }
+
+    const row = byKey.get(key);
+    row.count += 1;
+    if (Number.isFinite(e.resolveMs)) row.resolveMs.push(e.resolveMs);
+    if (Number.isFinite(e.runMs)) row.runMs.push(e.runMs);
+    if (Number.isFinite(e.totalMs)) row.totalMs.push(e.totalMs);
+    if (e.error) row.errorCount += 1;
+  }
+
+  const rows = [];
+  for (const row of byKey.values()) {
+    rows.push({
+      subroute: row.subroute,
+      resolvedSubroute: row.resolvedSubroute,
+      customIdPrefix: row.customIdPrefix,
+      count: row.count,
+      resolveP50: r3(percentile(row.resolveMs, 50)),
+      resolveP95: r3(percentile(row.resolveMs, 95)),
+      runP50: r3(percentile(row.runMs, 50)),
+      runP95: r3(percentile(row.runMs, 95)),
+      runP99: r3(percentile(row.runMs, 99)),
+      totalP95: r3(percentile(row.totalMs, 95)),
+      maxTotal: r3(row.totalMs.length ? Math.max(...row.totalMs) : null),
+      errorCount: row.errorCount
+    });
+  }
+
+  rows.sort((a, b) => {
+    const aRun = a.runP95 ?? -Infinity;
+    const bRun = b.runP95 ?? -Infinity;
+    if (bRun !== aRun) return bRun - aRun;
+    return b.count - a.count;
+  });
+
+  return rows;
+}
+
+function summarizeNavSubroutePhases(events) {
+  const byKey = new Map();
+
+  for (const e of events) {
+    const subroute = e.subroute || "unknown";
+    const mode = e.mode || "unknown";
+    const customIdPrefix = e.customIdPrefix || "unknown";
+    const key = `${subroute}|${mode}|${customIdPrefix}`;
+
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        subroute,
+        mode,
+        customIdPrefix,
+        count: 0,
+        catchupMs: [],
+        inventoryScanMs: [],
+        paginationMs: [],
+        persistMs: [],
+        renderMs: [],
+        totalMs: []
+      });
+    }
+
+    const row = byKey.get(key);
+    row.count += 1;
+    if (Number.isFinite(e.catchupMs)) row.catchupMs.push(e.catchupMs);
+    if (Number.isFinite(e.inventoryScanMs)) row.inventoryScanMs.push(e.inventoryScanMs);
+    if (Number.isFinite(e.paginationMs)) row.paginationMs.push(e.paginationMs);
+    if (Number.isFinite(e.persistMs)) row.persistMs.push(e.persistMs);
+    if (Number.isFinite(e.renderMs)) row.renderMs.push(e.renderMs);
+    if (Number.isFinite(e.totalMs)) row.totalMs.push(e.totalMs);
+  }
+
+  const rows = [];
+  for (const row of byKey.values()) {
+    rows.push({
+      subroute: row.subroute,
+      mode: row.mode,
+      customIdPrefix: row.customIdPrefix,
+      count: row.count,
+      catchupP95: r3(percentile(row.catchupMs, 95)),
+      scanP95: r3(percentile(row.inventoryScanMs, 95)),
+      paginationP95: r3(percentile(row.paginationMs, 95)),
+      persistP95: r3(percentile(row.persistMs, 95)),
+      renderP95: r3(percentile(row.renderMs, 95)),
+      totalP95: r3(percentile(row.totalMs, 95))
+    });
+  }
+
+  rows.sort((a, b) => {
+    const aTotal = a.totalP95 ?? -Infinity;
+    const bTotal = b.totalP95 ?? -Infinity;
+    if (bTotal !== aTotal) return bTotal - aTotal;
+    return b.count - a.count;
+  });
+
+  return rows;
+}
+
 function mdValue(v, unit = "") {
   return v == null ? "N/A" : `${v}${unit}`;
 }
@@ -300,6 +418,26 @@ function toMarkdown(report, routeLimit, slowLimit) {
     out.push(`| ${row.route} | ${row.subroute} | ${row.customIdPrefix} | ${row.count} | ${mdValue(row.p50)} | ${mdValue(row.p95)} | ${mdValue(row.max)} |`);
   }
 
+  out.push("");
+  out.push("## Nav Dispatch Bottlenecks (component_nav_phase)");
+  out.push("");
+  out.push(`- Nav phase events: ${report.navPhaseCount}`);
+  out.push("| Subroute | Resolved Subroute | customId prefix | Events | resolve p95 ms | run p95 ms | run p99 ms | total p95 ms | max total ms | errors |");
+  out.push("|---|---|---|---:|---:|---:|---:|---:|---:|---:|");
+  for (const row of report.navBottlenecks.slice(0, routeLimit)) {
+    out.push(`| ${row.subroute} | ${row.resolvedSubroute} | ${row.customIdPrefix} | ${row.count} | ${mdValue(row.resolveP95)} | ${mdValue(row.runP95)} | ${mdValue(row.runP99)} | ${mdValue(row.totalP95)} | ${mdValue(row.maxTotal)} | ${row.errorCount} |`);
+  }
+
+  out.push("");
+  out.push("## Nav Subroute Phase Breakdown (component_nav_subroute_phase)");
+  out.push("");
+  out.push(`- Nav subroute phase events: ${report.navSubroutePhaseCount}`);
+  out.push("| Subroute | Mode | customId prefix | Events | catchup p95 | scan p95 | pagination p95 | persist p95 | render p95 | total p95 |");
+  out.push("|---|---|---|---:|---:|---:|---:|---:|---:|---:|");
+  for (const row of report.navSubrouteBottlenecks.slice(0, routeLimit)) {
+    out.push(`| ${row.subroute} | ${row.mode} | ${row.customIdPrefix} | ${row.count} | ${mdValue(row.catchupP95)} | ${mdValue(row.scanP95)} | ${mdValue(row.paginationP95)} | ${mdValue(row.persistP95)} | ${mdValue(row.renderP95)} | ${mdValue(row.totalP95)} |`);
+  }
+
   return out.join("\n") + "\n";
 }
 
@@ -318,6 +456,8 @@ async function main() {
 
   const events = [];
   const slowEvents = [];
+  const navPhaseEvents = [];
+  const navSubroutePhaseEvents = [];
   let minTs = null;
   let maxTs = null;
 
@@ -346,6 +486,41 @@ async function main() {
         lockAcquireCount: Number(p.lockAcquireCount),
         lockReleaseCount: Number(p.lockReleaseCount),
         lockBusyCount: Number(p.lockBusyCount)
+      });
+      continue;
+    }
+
+    if (obj?.event === "component_nav_phase") {
+      const p = obj.payload || {};
+      navPhaseEvents.push({
+        ts,
+        route: p.route || "unknown",
+        subroute: p.subroute || null,
+        resolvedSubroute: p.resolvedSubroute || null,
+        customIdPrefix: p.customIdPrefix || null,
+        resolveMs: Number(p.resolveMs),
+        runMs: Number(p.runMs),
+        totalMs: Number(p.totalMs),
+        error: p.error
+      });
+      continue;
+    }
+
+    if (obj?.event === "component_nav_subroute_phase") {
+      const p = obj.payload || {};
+      navSubroutePhaseEvents.push({
+        ts,
+        route: p.route || "unknown",
+        subroute: p.subroute || null,
+        navSource: p.navSource || null,
+        customIdPrefix: p.customIdPrefix || null,
+        mode: p.mode || null,
+        catchupMs: Number(p.catchupMs),
+        inventoryScanMs: Number(p.inventoryScanMs),
+        paginationMs: Number(p.paginationMs),
+        persistMs: Number(p.persistMs),
+        renderMs: Number(p.renderMs),
+        totalMs: Number(p.totalMs)
       });
       continue;
     }
@@ -384,17 +559,23 @@ async function main() {
 
   let filtered = events;
   let slowFiltered = slowEvents;
+  let navPhaseFiltered = navPhaseEvents;
+  let navSubroutePhaseFiltered = navSubroutePhaseEvents;
   if (Number.isFinite(args.windowHours) && args.windowHours > 0) {
     const latest = maxTs;
     const start = latest - (args.windowHours * 60 * 60 * 1000);
     filtered = events.filter((e) => e.ts >= start && e.ts <= latest);
     slowFiltered = slowEvents.filter((e) => e.ts >= start && e.ts <= latest);
+    navPhaseFiltered = navPhaseEvents.filter((e) => e.ts >= start && e.ts <= latest);
+    navSubroutePhaseFiltered = navSubroutePhaseEvents.filter((e) => e.ts >= start && e.ts <= latest);
   }
 
   const summary = summarizeEvents(filtered);
   const byRoute = summarizeByRoute(filtered);
   const bySubroute = summarizeBySubroute(filtered);
   const slowPatterns = summarizeSlowEvents(slowFiltered);
+  const navBottlenecks = summarizeNavPhases(navPhaseFiltered);
+  const navSubrouteBottlenecks = summarizeNavSubroutePhases(navSubroutePhaseFiltered);
   const earliest = Math.min(...filtered.map((e) => e.ts));
   const latest = Math.max(...filtered.map((e) => e.ts));
 
@@ -408,7 +589,11 @@ async function main() {
     byRoute,
     bySubroute,
     slowEventCount: slowFiltered.length,
-    slowPatterns
+    slowPatterns,
+    navPhaseCount: navPhaseFiltered.length,
+    navBottlenecks,
+    navSubroutePhaseCount: navSubroutePhaseFiltered.length,
+    navSubrouteBottlenecks
   };
 
   if (args.json) {

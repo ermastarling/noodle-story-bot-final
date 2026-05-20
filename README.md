@@ -89,6 +89,14 @@ Optional developer alert env vars:
 - `NOODLE_DEV_ALERT_CHANNEL_ID` — channel ID in the official guild for alerts
 - `NOODLE_DEV_ALERT_USER_ID` — user ID that is required for alert mention/ping behavior
 
+Telemetry env vars:
+
+- `NOODLE_TELEMETRY_LOG_DISABLED` — set `1` to disable file telemetry entirely
+- `NOODLE_TELEMETRY_LOG_PATH` — optional custom path for telemetry JSONL output
+- `NOODLE_TELEMETRY_MODE` — `all` (default), `slow` (only `interaction_slow_event` + `rate_limited`), or `off`
+- `NOODLE_TELEMETRY_SAMPLE_RATE` — `0..1` sampling rate for high-volume events (`interaction_latency`, `component_nav_phase`, `component_nav_subroute_phase`)
+- `NOODLE_TELEMETRY_MAX_BUFFER_BYTES` — max write buffer guard (default `262144`); events are dropped under sustained backpressure to protect process memory
+
 Official stats counter env vars:
 
 - `NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED` — set `0` to disable official stats counter updates
