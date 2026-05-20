@@ -1339,18 +1339,7 @@ import { theme } from "./ui/theme.js";
         ? precomputedCounts
         : getCurrentBotListCounts();
       const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
-      let shopsCount = null;
-      if (db) {
-        try {
-          const row = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
-          shopsCount = Math.max(0, Number(row?.count || 0));
-        } catch (error) {
-          console.error("❌ Failed to query DB shop count for official stats channels:", error?.stack ?? error);
-        }
-      }
-      if (!Number.isFinite(shopsCount) || shopsCount == null) {
-        shopsCount = 0;
-      }
+      const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
 
       const serverChannel = await ensureOfficialReadonlyStatsChannel(
         officialGuild,
@@ -1369,7 +1358,7 @@ import { theme } from "./ui/theme.js";
           marker: "noodle:stats:shops",
           prefix: "noodle-shops",
           count: shopsCount,
-          topic: "Global noodle shops count from DB players table"
+          topic: "Global noodle shops count (same metric as unique players)"
         }
       );
 
