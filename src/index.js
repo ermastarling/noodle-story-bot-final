@@ -1291,14 +1291,7 @@ import { theme } from "./ui/theme.js";
         console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a voice counter channel.`);
         channel = null;
       } else if (channel) {
-        const matchesCategory = !officialStatsCategoryId || String(channel?.parentId || "") === officialStatsCategoryId;
-        const matchesMarker = !hasMarkerConstraint || Number(channel?.userLimit || 0) === markerUserLimit;
-        const matchesLabel = extractCounterLabelFromName(channel?.name) === normalizedLabel;
-        const matchesIdentity = hasMarkerConstraint ? matchesMarker : matchesLabel;
-        if (!matchesCategory || !matchesIdentity) {
-          console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: marker/category invariants do not match.`);
-          channel = null;
-        }
+        console.log(`ℹ️ Using configured stats channel ${existingId} for ${marker}; applying expected counter settings.`);
       }
     }
 
@@ -1312,7 +1305,7 @@ import { theme } from "./ui/theme.js";
         isSupportedStatsCounterChannel(candidate)
         && (!officialStatsCategoryId || String(candidate?.parentId || "") === officialStatsCategoryId)
         && (hasMarkerConstraint
-          ? Number(candidate?.userLimit || 0) === markerUserLimit
+          ? Number(candidate?.userLimit || 0) === markerUserLimit && extractCounterLabelFromName(candidate?.name) === normalizedLabel
           : extractCounterLabelFromName(candidate?.name) === normalizedLabel)
       ) || null;
     }
@@ -1334,6 +1327,12 @@ import { theme } from "./ui/theme.js";
     if (!isSupportedStatsCounterChannel(channel)) {
       console.error(`❌ Failed to resolve a valid voice counter channel for ${marker}.`);
       return null;
+    }
+
+    if (officialStatsCategoryId && String(channel.parentId || "") !== officialStatsCategoryId && typeof channel.setParent === "function") {
+      await channel.setParent(officialStatsCategoryId).catch((error) => {
+        console.error(`❌ Failed to move stats channel to configured category (${marker}):`, error?.message ?? error);
+      });
     }
 
     if (Object.keys(lockPermissionOptions).length > 0) {
@@ -1413,7 +1412,13 @@ import { theme } from "./ui/theme.js";
       if (shopsChannel?.id) officialShopCountChannelId = shopsChannel.id;
       if (memberChannel?.id) officialMemberCountChannelId = memberChannel.id;
 
-      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}`);
+      const resolvedChannels = [serverChannel, shopsChannel, memberChannel].filter(Boolean);
+      if (resolvedChannels.length === 0) {
+        console.warn(`⚠️ Official stats channels skipped (${reason}): configure NOODLE_OFFICIAL_STATS_CATEGORY_ID or explicit channel IDs.`);
+        return false;
+      }
+
+      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannels.length}/3`);
       return true;
     } catch (error) {
       console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
