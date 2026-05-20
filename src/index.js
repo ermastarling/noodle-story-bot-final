@@ -1272,9 +1272,7 @@ import { theme } from "./ui/theme.js";
 
     let channel = null;
     const existingId = String(channelId || "").trim();
-    const normalizedLabel = normalizeCounterLabel(label);
     const markerUserLimit = getCounterMarkerUserLimit(marker);
-    const hasMarkerConstraint = markerUserLimit > 0;
     const lockPermissionNames = [
       "CONNECT",
       "SPEAK",
@@ -1295,37 +1293,13 @@ import { theme } from "./ui/theme.js";
       }
     }
 
-    if (!channel && !existingId && !officialStatsCategoryId) {
-      console.warn(`⚠️ Skipping stats channel auto-discovery for ${marker}: set NOODLE_OFFICIAL_STATS_CATEGORY_ID or explicit channel IDs.`);
+    if (!channel && !existingId) {
+      console.error(`❌ Skipping stats channel update for ${marker}: explicit channel ID is required.`);
       return null;
     }
 
-    if (!channel) {
-      channel = officialGuild.channels.cache.find((candidate) =>
-        isSupportedStatsCounterChannel(candidate)
-        && (!officialStatsCategoryId || String(candidate?.parentId || "") === officialStatsCategoryId)
-        && (hasMarkerConstraint
-          ? Number(candidate?.userLimit || 0) === markerUserLimit && extractCounterLabelFromName(candidate?.name) === normalizedLabel
-          : extractCounterLabelFromName(candidate?.name) === normalizedLabel)
-      ) || null;
-    }
-
-    if (!channel) {
-      channel = await officialGuild.channels.create(buildStatChannelName(label, count), {
-        type: "GUILD_VOICE",
-        ...(officialStatsCategoryId ? { parent: officialStatsCategoryId } : {}),
-        ...(markerUserLimit > 0 ? { userLimit: markerUserLimit } : {}),
-        permissionOverwrites: [
-          {
-            id: officialGuild.roles.everyone.id,
-            deny: lockPermissionNames
-          }
-        ]
-      });
-    }
-
     if (!isSupportedStatsCounterChannel(channel)) {
-      console.error(`❌ Failed to resolve a valid voice counter channel for ${marker}.`);
+      console.error(`❌ Failed to resolve configured voice counter channel for ${marker}.`);
       return null;
     }
 
@@ -1414,7 +1388,7 @@ import { theme } from "./ui/theme.js";
 
       const resolvedChannels = [serverChannel, shopsChannel, memberChannel].filter(Boolean);
       if (resolvedChannels.length === 0) {
-        console.warn(`⚠️ Official stats channels skipped (${reason}): configure NOODLE_OFFICIAL_STATS_CATEGORY_ID or explicit channel IDs.`);
+        console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
         return false;
       }
 

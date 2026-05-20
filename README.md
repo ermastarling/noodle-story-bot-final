@@ -89,6 +89,13 @@ Optional developer alert env vars:
 - `NOODLE_DEV_ALERT_CHANNEL_ID` — channel ID in the official guild for alerts
 - `NOODLE_DEV_ALERT_USER_ID` — user ID that is required for alert mention/ping behavior
 
+Official stats counter env vars:
+
+- `NOODLE_OFFICIAL_SERVER_COUNT_CHANNEL_ID`, `NOODLE_OFFICIAL_SHOP_COUNT_CHANNEL_ID`, `NOODLE_OFFICIAL_MEMBER_COUNT_CHANNEL_ID` — required explicit voice channel IDs for the three official counters
+- `NOODLE_OFFICIAL_SERVER_COUNT_LABEL`, `NOODLE_OFFICIAL_SHOP_COUNT_LABEL`, `NOODLE_OFFICIAL_MEMBER_COUNT_LABEL` — optional display labels used when renaming those channels
+- `NOODLE_OFFICIAL_STATS_CATEGORY_ID` — optional category ID; configured channels are moved here when set
+- PebbleHost note: set these values in your PebbleHost server files environment configuration so they load at runtime
+
 Store/webhook-related env vars:
 
 - `NOODLE_WEBHOOK_PORT` — enables the webhook HTTP server when set
