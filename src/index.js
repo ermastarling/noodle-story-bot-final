@@ -460,14 +460,19 @@ import { theme } from "./ui/theme.js";
     Intents.FLAGS.GUILD_MESSAGES,
     Intents.FLAGS.DIRECT_MESSAGES
   ];
-  const messageContentIntentApplied = Boolean(
+  const messageContentIntentBit = Intents.FLAGS.MESSAGE_CONTENT ?? (1 << 15);
+  const messageContentIntentRequested = Boolean(
     officialAutoReactEnabled
     && officialAutoReactKeywordMatchEnabled
     && officialMessageContentIntentEnabled
-    && Intents.FLAGS.MESSAGE_CONTENT
+  );
+  const messageContentIntentApplied = Boolean(
+    messageContentIntentRequested
+    && Number.isInteger(messageContentIntentBit)
+    && messageContentIntentBit > 0
   );
   if (messageContentIntentApplied) {
-    clientIntents.push(Intents.FLAGS.MESSAGE_CONTENT);
+    clientIntents.push(messageContentIntentBit);
   }
 
   const client = new Client({ intents: clientIntents });
@@ -1334,8 +1339,18 @@ import { theme } from "./ui/theme.js";
         ? precomputedCounts
         : getCurrentBotListCounts();
       const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
-      const userCount = Math.max(0, Number(counts?.userCount) || 0);
-      const shopsCount = Math.max(0, Number(userCount) || 0);
+      let shopsCount = null;
+      if (db) {
+        try {
+          const row = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM players").get();
+          shopsCount = Math.max(0, Number(row?.count || 0));
+        } catch (error) {
+          console.error("❌ Failed to query DB shop count for official stats channels:", error?.stack ?? error);
+        }
+      }
+      if (!Number.isFinite(shopsCount) || shopsCount == null) {
+        shopsCount = 0;
+      }
 
       const serverChannel = await ensureOfficialReadonlyStatsChannel(
         officialGuild,
@@ -2151,18 +2166,22 @@ import { theme } from "./ui/theme.js";
     if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled) {
       if (!officialMessageContentIntentEnabled) {
         console.warn("⚠️ Official auto-react keyword matching is enabled but NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT is not set to 1. Keyword matching may not work in production; channel-id matching will still work.");
-      } else if (!Intents.FLAGS.MESSAGE_CONTENT || !messageContentIntentApplied) {
+      } else if (!messageContentIntentApplied) {
         console.warn("⚠️ Official auto-react keyword matching is enabled and intent is requested, but MESSAGE_CONTENT is unavailable in this discord.js/runtime environment. Keyword matching may not work; channel-id matching will still work.");
       }
     }
 
-    await c.user.setPresence({
-      status: "online",
-      activities: [{
-        name: "/noodle help | /noodle start",
-        type: "PLAYING"
-      }]
-    });
+    try {
+      await c.user.setPresence({
+        status: "online",
+        activities: [{
+          name: "/noodle help | /noodle start",
+          type: "PLAYING"
+        }]
+      });
+    } catch (error) {
+      console.error("⚠️ Failed to set bot presence:", error?.message ?? error);
+    }
 
     const customEmojis = getCustomEmojiEntries();
     const { ids: accessibleEmojiIds, applicationEmojiCount } = await resolveAccessibleEmojiIds(client, token);
