@@ -1291,9 +1291,18 @@ import { theme } from "./ui/theme.js";
     }
 
     if (Object.keys(lockPermissionOptions).length > 0) {
-      await channel.permissionOverwrites.edit(officialGuild.roles.everyone, lockPermissionOptions).catch((error) => {
-        console.error(`❌ Failed to apply official stats lock permissions (${marker}):`, error?.message ?? error);
+      const everyoneRoleId = officialGuild.roles.everyone.id;
+      const overwrite = channel.permissionOverwrites?.cache?.get(everyoneRoleId) || null;
+      const alreadyLocked = lockPermissionNames.every((perm) => {
+        const permFlag = Discord.Permissions?.FLAGS?.[perm];
+        return permFlag ? overwrite?.deny?.has?.(permFlag) : true;
       });
+
+      if (!alreadyLocked) {
+        await channel.permissionOverwrites.edit(everyoneRoleId, lockPermissionOptions).catch((error) => {
+          console.error(`❌ Failed to apply official stats lock permissions (${marker}):`, error?.message ?? error);
+        });
+      }
     }
 
     const nextName = buildStatChannelName(prefix, count);
@@ -1312,7 +1321,7 @@ import { theme } from "./ui/theme.js";
     return channel;
   }
 
-  async function updateOfficialStatsChannels({ reason = "event" } = {}) {
+  async function updateOfficialStatsChannels(precomputedCounts = null, { reason = "event" } = {}) {
     if (!officialStatsChannelsEnabled || !officialGuildId) return false;
 
     try {
@@ -1320,7 +1329,11 @@ import { theme } from "./ui/theme.js";
         || await client.guilds.fetch(officialGuildId).catch(() => null);
       if (!officialGuild) return false;
 
-      const { serverCount, userCount } = getCurrentBotListCounts();
+      const counts = precomputedCounts && typeof precomputedCounts === "object"
+        ? precomputedCounts
+        : getCurrentBotListCounts();
+      const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
+      const userCount = Math.max(0, Number(counts?.userCount) || 0);
       const shopsCount = Math.max(0, Number(userCount) || 0);
 
       const serverChannel = await ensureOfficialReadonlyStatsChannel(
@@ -1347,7 +1360,7 @@ import { theme } from "./ui/theme.js";
       if (serverChannel?.id) officialServerCountChannelId = serverChannel.id;
       if (shopsChannel?.id) officialShopCountChannelId = shopsChannel.id;
 
-      console.log(`✅ Official stats channels updated (${reason}): servers=${Number(serverCount) || 0}, shops=${shopsCount}`);
+      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}`);
       return true;
     } catch (error) {
       console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
@@ -2174,13 +2187,13 @@ import { theme } from "./ui/theme.js";
       console.error("❌ Failed to write boot marker:", e?.stack ?? e);
     }
 
+    const startupCounts = getCurrentBotListCounts();
     if (hasAnyConfiguredBotListStatsSync()) {
-      const startupCounts = getCurrentBotListCounts();
       await updateAllBotListServerCounts(startupCounts, { reason: "ready" });
     } else {
       console.log("INFO: Skipping bot-list stats sync on ready (no providers configured with both URL and token).");
     }
-    await updateOfficialStatsChannels({ reason: "ready" });
+    await updateOfficialStatsChannels(startupCounts, { reason: "ready" });
     await syncDiscordBotListCommands({ reason: "ready" });
     await syncRadarCpdvCommands({ reason: "ready" });
     startBotListStatsHeartbeat();
@@ -2210,7 +2223,7 @@ import { theme } from "./ui/theme.js";
     try {
       const currentCounts = getCurrentBotListCounts();
       await updateAllBotListServerCounts(currentCounts, { reason: "guildCreate" });
-      await updateOfficialStatsChannels({ reason: "guildCreate" });
+      await updateOfficialStatsChannels(currentCounts, { reason: "guildCreate" });
       await refreshShardHealth({ reason: "guildCreate" });
 
       if (guild?.id === officialGuildId) return;
@@ -2233,7 +2246,7 @@ import { theme } from "./ui/theme.js";
     try {
       const currentCounts = getCurrentBotListCounts();
       await updateAllBotListServerCounts(currentCounts, { reason: "guildDelete" });
-      await updateOfficialStatsChannels({ reason: "guildDelete" });
+      await updateOfficialStatsChannels(currentCounts, { reason: "guildDelete" });
       await refreshShardHealth({ reason: "guildDelete" });
 
       if (guild?.id === officialGuildId) return;
