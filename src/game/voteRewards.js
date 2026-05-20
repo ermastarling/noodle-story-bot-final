@@ -37,10 +37,9 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.VOIDBOTS,
     label: "Void Bots",
     voteUrl: "https://voidbots.net/bot/1460058511802105976/vote",
-    isVoteLive: false,
+    isVoteLive: true,
     supportsVoteRewards: true,
-    supportsServerCount: true,
-    notes: "*Pending bot approval*"
+    supportsServerCount: true
   },
   {
     source: VOTE_SOURCES.DISCORDS,

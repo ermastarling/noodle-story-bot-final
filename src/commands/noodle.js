@@ -722,7 +722,7 @@ function buildHelpPage({ page, userId, user }) {
         "**Hello chef! Begin the tutorial with `/noodle start`, you can play exclusively with buttons.**",
         "\n**When you've completed the tutorial, you will only need to use `/noodle orders` any time you want to access all play commands.**",
         "",
-        `Error messages are sent only to you.\n${getIcon("help")} If you need further help, screenshot your error & head over to the ⁠support server! [Join here](https://discord.gg/uue7K92pwj)\n\nTip: Copy/paste the '/noodle start' or '/noodle orders' text into a message on this channel and send!`
+        `Error messages are sent only to you.\n${getIcon("help")} If you need further help, screenshot your error & head over to the ⁠support server! [Join here](https://discord.gg/uue7K92pwj)\n\nTip: Copy/paste the \`\`/noodle start\`\` or \`\`/noodle orders\`\` slash command into a message on this channel and send!`
       ].join("\n"),
       supportUrl: "https://discord.gg/uue7K92pwj"
     },

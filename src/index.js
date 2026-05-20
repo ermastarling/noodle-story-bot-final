@@ -275,6 +275,11 @@ import { theme } from "./ui/theme.js";
   const officialStatsChannelsEnabled = String(process.env.NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED || "1") !== "0";
   let officialServerCountChannelId = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_CHANNEL_ID || "").trim();
   let officialShopCountChannelId = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_CHANNEL_ID || "").trim();
+  let officialMemberCountChannelId = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_CHANNEL_ID || "").trim();
+  const officialServerCountLabel = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_LABEL || "Total Servers").trim() || "Total Servers";
+  const officialShopCountLabel = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_LABEL || "Total Users").trim() || "Total Users";
+  const officialMemberCountLabel = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_LABEL || "Server Members").trim() || "Server Members";
+  const officialStatsCategoryId = String(process.env.NOODLE_OFFICIAL_STATS_CATEGORY_ID || "").trim();
   const officialStatsChannelRefreshIntervalRaw = Number(process.env.NOODLE_OFFICIAL_STATS_CHANNEL_REFRESH_INTERVAL_MS || 10 * 60 * 1000);
   const officialStatsChannelRefreshIntervalMs = Number.isFinite(officialStatsChannelRefreshIntervalRaw)
     ? Math.max(60_000, Math.floor(officialStatsChannelRefreshIntervalRaw))
@@ -439,6 +444,10 @@ import { theme } from "./ui/theme.js";
     ? "fixed"
     : "sliding";
   const disabledStatsSyncLogged = new Set();
+  const missingStatsChannelIdLoggedMarkers = new Set();
+  const configuredStatsChannelLoggedMarkers = new Set();
+  const invalidStatsChannelTypeLoggedMarkers = new Set();
+  const unresolvedStatsChannelLoggedMarkers = new Set();
   const lastBotListStatsPushBySource = new Map();
   const nextStatsSyncAllowedAtBySource = new Map();
   const officialWelcomeAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_CHANNEL_IDS));
@@ -1228,72 +1237,86 @@ import { theme } from "./ui/theme.js";
     return anyUpdated;
   }
 
-  function buildStatChannelName(prefix, count) {
-    const safePrefix = String(prefix || "stats")
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 70) || "stats";
-    const safeCount = Math.max(0, Number(count) || 0).toLocaleString("en-US").replace(/,/g, "-");
-    return `${safePrefix}-${safeCount}`.slice(0, 100);
+  function buildStatChannelName(label, count) {
+    const safeLabel = normalizeCounterLabel(label);
+    const safeCount = Math.max(0, Number(count) || 0).toLocaleString("en-US");
+    return `${safeLabel}: ${safeCount}`.slice(0, 100);
   }
 
-  async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, prefix, count, topic }) {
-    const isSupportedStatsTextChannel = (candidate) => (
-      candidate?.type === "GUILD_TEXT"
+  function normalizeCounterLabel(label) {
+    return String(label || "Stats")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "Stats";
+  }
+
+  async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
+    const isSupportedStatsCounterChannel = (candidate) => (
+      candidate?.type === "GUILD_VOICE"
       && typeof candidate?.setName === "function"
-      && typeof candidate?.setTopic === "function"
       && typeof candidate?.permissionOverwrites?.edit === "function"
     );
 
     let channel = null;
     const existingId = String(channelId || "").trim();
     const lockPermissionNames = [
+      "CONNECT",
+      "SPEAK",
+      "STREAM",
+      "USE_VAD",
+      "REQUEST_TO_SPEAK",
       "SEND_MESSAGES",
-      "SEND_TTS_MESSAGES",
-      "ATTACH_FILES",
-      "EMBED_LINKS",
       "ADD_REACTIONS",
-      "USE_APPLICATION_COMMANDS",
       "CREATE_PUBLIC_THREADS",
       "CREATE_PRIVATE_THREADS",
       "SEND_MESSAGES_IN_THREADS"
     ].filter((perm) => Boolean(Discord.Permissions?.FLAGS?.[perm]));
-    const lockPermissionOptions = Object.fromEntries(lockPermissionNames.map((perm) => [perm, false]));
+    const viewPermissionName = Discord.Permissions?.FLAGS?.VIEW_CHANNEL ? "VIEW_CHANNEL" : null;
+    const lockPermissionOptions = {
+      ...Object.fromEntries(lockPermissionNames.map((perm) => [perm, false])),
+      ...(viewPermissionName ? { [viewPermissionName]: true } : {})
+    };
 
     if (existingId) {
       channel = officialGuild.channels.cache.get(existingId)
         || await officialGuild.channels.fetch(existingId).catch(() => null);
-      if (channel && !isSupportedStatsTextChannel(channel)) {
-        console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a guild text channel.`);
-        channel = null;
+      if (channel && !isSupportedStatsCounterChannel(channel)) {
+        if (!invalidStatsChannelTypeLoggedMarkers.has(marker)) {
+          invalidStatsChannelTypeLoggedMarkers.add(marker);
+          console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a voice counter channel.`);
+        }
+        return null;
+      } else if (channel) {
+        if (!configuredStatsChannelLoggedMarkers.has(marker)) {
+          configuredStatsChannelLoggedMarkers.add(marker);
+          console.log(`ℹ️ Using configured stats channel ${existingId} for ${marker}; applying expected counter settings.`);
+        }
       }
     }
 
-    if (!channel) {
-      channel = officialGuild.channels.cache.find((candidate) =>
-        isSupportedStatsTextChannel(candidate)
-        && String(candidate?.topic || "").includes(marker)
-      ) || null;
-    }
-
-    if (!channel) {
-      channel = await officialGuild.channels.create(buildStatChannelName(prefix, count), {
-        type: "GUILD_TEXT",
-        topic: `${marker} | ${topic}`.slice(0, 1024),
-        permissionOverwrites: [
-          {
-            id: officialGuild.roles.everyone.id,
-            deny: lockPermissionNames
-          }
-        ]
-      });
-    }
-
-    if (!isSupportedStatsTextChannel(channel)) {
-      console.error(`❌ Failed to resolve a valid guild text channel for ${marker}.`);
+    if (!channel && !existingId) {
+      if (!missingStatsChannelIdLoggedMarkers.has(marker)) {
+        missingStatsChannelIdLoggedMarkers.add(marker);
+        console.warn(`⚠️ Skipping stats channel update for ${marker}: explicit channel ID is required.`);
+      }
       return null;
+    }
+
+    if (!isSupportedStatsCounterChannel(channel)) {
+      if (!unresolvedStatsChannelLoggedMarkers.has(marker)) {
+        unresolvedStatsChannelLoggedMarkers.add(marker);
+        console.error(`❌ Failed to resolve configured voice counter channel for ${marker}.`);
+      }
+      return null;
+    }
+
+    unresolvedStatsChannelLoggedMarkers.delete(marker);
+    invalidStatsChannelTypeLoggedMarkers.delete(marker);
+
+    if (officialStatsCategoryId && String(channel.parentId || "") !== officialStatsCategoryId && typeof channel.setParent === "function") {
+      await channel.setParent(officialStatsCategoryId).catch((error) => {
+        console.error(`❌ Failed to move stats channel to configured category (${marker}):`, error?.message ?? error);
+      });
     }
 
     if (Object.keys(lockPermissionOptions).length > 0) {
@@ -1302,7 +1325,7 @@ import { theme } from "./ui/theme.js";
       const alreadyLocked = lockPermissionNames.every((perm) => {
         const permFlag = Discord.Permissions?.FLAGS?.[perm];
         return permFlag ? overwrite?.deny?.has?.(permFlag) : true;
-      });
+      }) && (!viewPermissionName || overwrite?.allow?.has?.(Discord.Permissions.FLAGS[viewPermissionName]));
 
       if (!alreadyLocked) {
         await channel.permissionOverwrites.edit(everyoneRoleId, lockPermissionOptions).catch((error) => {
@@ -1311,19 +1334,12 @@ import { theme } from "./ui/theme.js";
       }
     }
 
-    const nextName = buildStatChannelName(prefix, count);
-    const nextTopic = `${marker} | ${topic}`.slice(0, 1024);
+    const nextName = buildStatChannelName(label, count);
     if (channel.name !== nextName) {
       await channel.setName(nextName).catch((error) => {
         console.error(`❌ Failed to rename official stats channel (${marker}):`, error?.message ?? error);
       });
     }
-    if (channel.topic !== nextTopic) {
-      await channel.setTopic(nextTopic).catch((error) => {
-        console.error(`❌ Failed to update official stats topic (${marker}):`, error?.message ?? error);
-      });
-    }
-
     return channel;
   }
 
@@ -1340,15 +1356,15 @@ import { theme } from "./ui/theme.js";
         : getCurrentBotListCounts();
       const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
       const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
+      const officialMemberCount = Math.max(0, Number(officialGuild?.memberCount || 0));
 
       const serverChannel = await ensureOfficialReadonlyStatsChannel(
         officialGuild,
         officialServerCountChannelId,
         {
           marker: "noodle:stats:servers",
-          prefix: "servers",
-          count: serverCount,
-          topic: "Global server count"
+          label: officialServerCountLabel,
+          count: serverCount
         }
       );
       const shopsChannel = await ensureOfficialReadonlyStatsChannel(
@@ -1356,16 +1372,31 @@ import { theme } from "./ui/theme.js";
         officialShopCountChannelId,
         {
           marker: "noodle:stats:shops",
-          prefix: "noodle-shops",
-          count: shopsCount,
-          topic: "Global noodle shops count (same metric as unique players)"
+          label: officialShopCountLabel,
+          count: shopsCount
+        }
+      );
+      const memberChannel = await ensureOfficialReadonlyStatsChannel(
+        officialGuild,
+        officialMemberCountChannelId,
+        {
+          marker: "noodle:stats:official-members",
+          label: officialMemberCountLabel,
+          count: officialMemberCount
         }
       );
 
       if (serverChannel?.id) officialServerCountChannelId = serverChannel.id;
       if (shopsChannel?.id) officialShopCountChannelId = shopsChannel.id;
+      if (memberChannel?.id) officialMemberCountChannelId = memberChannel.id;
 
-      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}`);
+      const resolvedChannels = [serverChannel, shopsChannel, memberChannel].filter(Boolean);
+      if (resolvedChannels.length === 0) {
+        console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
+        return false;
+      }
+
+      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannels.length}/3`);
       return true;
     } catch (error) {
       console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
