@@ -1302,6 +1302,11 @@ import { theme } from "./ui/theme.js";
       }
     }
 
+    if (!channel && !existingId && !officialStatsCategoryId) {
+      console.warn(`⚠️ Skipping stats channel auto-discovery for ${marker}: set NOODLE_OFFICIAL_STATS_CATEGORY_ID or explicit channel IDs.`);
+      return null;
+    }
+
     if (!channel) {
       channel = officialGuild.channels.cache.find((candidate) =>
         isSupportedStatsCounterChannel(candidate)
