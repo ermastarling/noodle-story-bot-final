@@ -444,6 +444,7 @@ import { theme } from "./ui/theme.js";
     ? "fixed"
     : "sliding";
   const disabledStatsSyncLogged = new Set();
+  const missingStatsChannelIdLoggedMarkers = new Set();
   const lastBotListStatsPushBySource = new Map();
   const nextStatsSyncAllowedAtBySource = new Map();
   const officialWelcomeAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_CHANNEL_IDS));
@@ -1246,23 +1247,6 @@ import { theme } from "./ui/theme.js";
       .slice(0, 80) || "Stats";
   }
 
-  function getCounterMarkerUserLimit(marker) {
-    const markerMap = {
-      "noodle:stats:servers": 97,
-      "noodle:stats:shops": 98,
-      "noodle:stats:official-members": 99
-    };
-    return Number(markerMap[String(marker || "")]) || 0;
-  }
-
-  function extractCounterLabelFromName(name) {
-    const raw = String(name || "").trim();
-    if (!raw) return null;
-    const match = raw.match(/^(.*):\s[\d,]+$/);
-    if (!match?.[1]) return null;
-    return normalizeCounterLabel(match[1]);
-  }
-
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
     const isSupportedStatsCounterChannel = (candidate) => (
       candidate?.type === "GUILD_VOICE"
@@ -1272,7 +1256,6 @@ import { theme } from "./ui/theme.js";
 
     let channel = null;
     const existingId = String(channelId || "").trim();
-    const markerUserLimit = getCounterMarkerUserLimit(marker);
     const lockPermissionNames = [
       "CONNECT",
       "SPEAK",
@@ -1299,7 +1282,10 @@ import { theme } from "./ui/theme.js";
     }
 
     if (!channel && !existingId) {
-      console.error(`❌ Skipping stats channel update for ${marker}: explicit channel ID is required.`);
+      if (!missingStatsChannelIdLoggedMarkers.has(marker)) {
+        missingStatsChannelIdLoggedMarkers.add(marker);
+        console.warn(`⚠️ Skipping stats channel update for ${marker}: explicit channel ID is required.`);
+      }
       return null;
     }
 
@@ -1335,12 +1321,6 @@ import { theme } from "./ui/theme.js";
         console.error(`❌ Failed to rename official stats channel (${marker}):`, error?.message ?? error);
       });
     }
-    if (markerUserLimit > 0 && Number(channel.userLimit || 0) !== markerUserLimit && typeof channel.setUserLimit === "function") {
-      await channel.setUserLimit(markerUserLimit).catch((error) => {
-        console.error(`❌ Failed to set stable marker userLimit (${marker}):`, error?.message ?? error);
-      });
-    }
-
     return channel;
   }
 
