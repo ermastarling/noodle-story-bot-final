@@ -448,6 +448,7 @@ import { theme } from "./ui/theme.js";
   const configuredStatsChannelLoggedMarkers = new Set();
   const invalidStatsChannelTypeLoggedMarkers = new Set();
   const unresolvedStatsChannelLoggedMarkers = new Set();
+  const invalidStatsCategoryLogged = new Set();
   const lastBotListStatsPushBySource = new Map();
   const nextStatsSyncAllowedAtBySource = new Map();
   const officialWelcomeAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_CHANNEL_IDS));
@@ -1313,10 +1314,24 @@ import { theme } from "./ui/theme.js";
     unresolvedStatsChannelLoggedMarkers.delete(marker);
     invalidStatsChannelTypeLoggedMarkers.delete(marker);
 
-    if (officialStatsCategoryId && String(channel.parentId || "") !== officialStatsCategoryId && typeof channel.setParent === "function") {
-      await channel.setParent(officialStatsCategoryId).catch((error) => {
-        console.error(`❌ Failed to move stats channel to configured category (${marker}):`, error?.message ?? error);
-      });
+    if (officialStatsCategoryId && typeof channel.setParent === "function") {
+      const configuredCategory = officialGuild.channels.cache.get(officialStatsCategoryId)
+        || await officialGuild.channels.fetch(officialStatsCategoryId).catch(() => null);
+
+      if (!configuredCategory || configuredCategory.type !== "GUILD_CATEGORY") {
+        if (!invalidStatsCategoryLogged.has(officialStatsCategoryId)) {
+          invalidStatsCategoryLogged.add(officialStatsCategoryId);
+          console.warn("⚠️ NOODLE_OFFICIAL_STATS_CATEGORY_ID is not a valid category in the official guild; skipping category moves.");
+        }
+      } else {
+        invalidStatsCategoryLogged.delete(officialStatsCategoryId);
+        const currentParentId = String(channel.parentId || channel.parent?.id || "");
+        if (currentParentId !== configuredCategory.id) {
+          await channel.setParent(configuredCategory.id, { lockPermissions: false }).catch((error) => {
+            console.error(`❌ Failed to move stats channel to configured category (${marker}):`, error?.message ?? error);
+          });
+        }
+      }
     }
 
     if (Object.keys(lockPermissionOptions).length > 0) {
