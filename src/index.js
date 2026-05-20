@@ -1278,7 +1278,12 @@ import { theme } from "./ui/theme.js";
       "SPEAK",
       "STREAM",
       "USE_VAD",
-      "REQUEST_TO_SPEAK"
+      "REQUEST_TO_SPEAK",
+      "SEND_MESSAGES",
+      "ADD_REACTIONS",
+      "CREATE_PUBLIC_THREADS",
+      "CREATE_PRIVATE_THREADS",
+      "SEND_MESSAGES_IN_THREADS"
     ].filter((perm) => Boolean(Discord.Permissions?.FLAGS?.[perm]));
     const lockPermissionOptions = Object.fromEntries(lockPermissionNames.map((perm) => [perm, false]));
 
