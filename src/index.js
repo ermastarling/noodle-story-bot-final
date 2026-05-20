@@ -1271,7 +1271,11 @@ import { theme } from "./ui/theme.js";
       "CREATE_PRIVATE_THREADS",
       "SEND_MESSAGES_IN_THREADS"
     ].filter((perm) => Boolean(Discord.Permissions?.FLAGS?.[perm]));
-    const lockPermissionOptions = Object.fromEntries(lockPermissionNames.map((perm) => [perm, false]));
+    const viewPermissionName = Discord.Permissions?.FLAGS?.VIEW_CHANNEL ? "VIEW_CHANNEL" : null;
+    const lockPermissionOptions = {
+      ...Object.fromEntries(lockPermissionNames.map((perm) => [perm, false])),
+      ...(viewPermissionName ? { [viewPermissionName]: true } : {})
+    };
 
     if (existingId) {
       channel = officialGuild.channels.cache.get(existingId)
@@ -1321,7 +1325,7 @@ import { theme } from "./ui/theme.js";
       const alreadyLocked = lockPermissionNames.every((perm) => {
         const permFlag = Discord.Permissions?.FLAGS?.[perm];
         return permFlag ? overwrite?.deny?.has?.(permFlag) : true;
-      });
+      }) && (!viewPermissionName || overwrite?.allow?.has?.(Discord.Permissions.FLAGS[viewPermissionName]));
 
       if (!alreadyLocked) {
         await channel.permissionOverwrites.edit(everyoneRoleId, lockPermissionOptions).catch((error) => {
