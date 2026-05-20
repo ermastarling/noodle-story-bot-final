@@ -91,6 +91,8 @@ Optional developer alert env vars:
 
 Official stats counter env vars:
 
+- `NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED` — set `0` to disable official stats counter updates
+- `NOODLE_OFFICIAL_STATS_CHANNEL_REFRESH_INTERVAL_MS` — optional refresh interval in ms for scheduled counter updates (minimum enforced to 60,000)
 - `NOODLE_OFFICIAL_SERVER_COUNT_CHANNEL_ID`, `NOODLE_OFFICIAL_SHOP_COUNT_CHANNEL_ID`, `NOODLE_OFFICIAL_MEMBER_COUNT_CHANNEL_ID` — explicit voice channel IDs for the official counters; set each one for the specific counter you want to enable
 - `NOODLE_OFFICIAL_SERVER_COUNT_LABEL`, `NOODLE_OFFICIAL_SHOP_COUNT_LABEL`, `NOODLE_OFFICIAL_MEMBER_COUNT_LABEL` — optional display labels used when renaming the corresponding configured channels
 - `NOODLE_OFFICIAL_STATS_CATEGORY_ID` — optional category ID; configured channels are moved here when set

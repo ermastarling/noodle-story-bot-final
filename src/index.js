@@ -445,6 +445,9 @@ import { theme } from "./ui/theme.js";
     : "sliding";
   const disabledStatsSyncLogged = new Set();
   const missingStatsChannelIdLoggedMarkers = new Set();
+  const configuredStatsChannelLoggedMarkers = new Set();
+  const invalidStatsChannelTypeLoggedMarkers = new Set();
+  const unresolvedStatsChannelLoggedMarkers = new Set();
   const lastBotListStatsPushBySource = new Map();
   const nextStatsSyncAllowedAtBySource = new Map();
   const officialWelcomeAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_CHANNEL_IDS));
@@ -1274,10 +1277,16 @@ import { theme } from "./ui/theme.js";
       channel = officialGuild.channels.cache.get(existingId)
         || await officialGuild.channels.fetch(existingId).catch(() => null);
       if (channel && !isSupportedStatsCounterChannel(channel)) {
-        console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a voice counter channel.`);
-        channel = null;
+        if (!invalidStatsChannelTypeLoggedMarkers.has(marker)) {
+          invalidStatsChannelTypeLoggedMarkers.add(marker);
+          console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a voice counter channel.`);
+        }
+        return null;
       } else if (channel) {
-        console.log(`ℹ️ Using configured stats channel ${existingId} for ${marker}; applying expected counter settings.`);
+        if (!configuredStatsChannelLoggedMarkers.has(marker)) {
+          configuredStatsChannelLoggedMarkers.add(marker);
+          console.log(`ℹ️ Using configured stats channel ${existingId} for ${marker}; applying expected counter settings.`);
+        }
       }
     }
 
@@ -1290,9 +1299,15 @@ import { theme } from "./ui/theme.js";
     }
 
     if (!isSupportedStatsCounterChannel(channel)) {
-      console.error(`❌ Failed to resolve configured voice counter channel for ${marker}.`);
+      if (!unresolvedStatsChannelLoggedMarkers.has(marker)) {
+        unresolvedStatsChannelLoggedMarkers.add(marker);
+        console.error(`❌ Failed to resolve configured voice counter channel for ${marker}.`);
+      }
       return null;
     }
+
+    unresolvedStatsChannelLoggedMarkers.delete(marker);
+    invalidStatsChannelTypeLoggedMarkers.delete(marker);
 
     if (officialStatsCategoryId && String(channel.parentId || "") !== officialStatsCategoryId && typeof channel.setParent === "function") {
       await channel.setParent(officialStatsCategoryId).catch((error) => {
