@@ -460,12 +460,13 @@ import { theme } from "./ui/theme.js";
     Intents.FLAGS.GUILD_MESSAGES,
     Intents.FLAGS.DIRECT_MESSAGES
   ];
-  if (
+  const messageContentIntentApplied = Boolean(
     officialAutoReactEnabled
     && officialAutoReactKeywordMatchEnabled
     && officialMessageContentIntentEnabled
     && Intents.FLAGS.MESSAGE_CONTENT
-  ) {
+  );
+  if (messageContentIntentApplied) {
     clientIntents.push(Intents.FLAGS.MESSAGE_CONTENT);
   }
 
@@ -2147,8 +2148,12 @@ import { theme } from "./ui/theme.js";
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
 
-    if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled && !officialMessageContentIntentEnabled) {
-      console.warn("⚠️ Official auto-react keyword matching is enabled but NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT is not set to 1. Keyword matching may not work in production; channel-id matching will still work.");
+    if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled) {
+      if (!officialMessageContentIntentEnabled) {
+        console.warn("⚠️ Official auto-react keyword matching is enabled but NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT is not set to 1. Keyword matching may not work in production; channel-id matching will still work.");
+      } else if (!Intents.FLAGS.MESSAGE_CONTENT || !messageContentIntentApplied) {
+        console.warn("⚠️ Official auto-react keyword matching is enabled and intent is requested, but MESSAGE_CONTENT is unavailable in this discord.js/runtime environment. Keyword matching may not work; channel-id matching will still work.");
+      }
     }
 
     await c.user.setPresence({
@@ -2200,7 +2205,7 @@ import { theme } from "./ui/theme.js";
 
     if (officialStatsChannelsEnabled && officialGuildId && !officialStatsChannelRefreshHandle) {
       officialStatsChannelRefreshHandle = setInterval(() => {
-        updateOfficialStatsChannels({ reason: "interval" });
+        updateOfficialStatsChannels(null, { reason: "interval" });
       }, officialStatsChannelRefreshIntervalMs);
       officialStatsChannelRefreshHandle.unref?.();
     }
