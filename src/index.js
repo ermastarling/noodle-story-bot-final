@@ -1234,12 +1234,25 @@ import { theme } from "./ui/theme.js";
   }
 
   function buildStatChannelName(label, count) {
-    const safeLabel = String(label || "Stats")
+    const safeLabel = normalizeCounterLabel(label);
+    const safeCount = Math.max(0, Number(count) || 0).toLocaleString("en-US");
+    return `${safeLabel}: ${safeCount}`.slice(0, 100);
+  }
+
+  function normalizeCounterLabel(label) {
+    return String(label || "Stats")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 80) || "Stats";
-    const safeCount = Math.max(0, Number(count) || 0).toLocaleString("en-US");
-    return `${safeLabel}: ${safeCount}`.slice(0, 100);
+  }
+
+  function getCounterMarkerUserLimit(marker) {
+    const markerMap = {
+      "noodle:stats:servers": 97,
+      "noodle:stats:shops": 98,
+      "noodle:stats:official-members": 99
+    };
+    return Number(markerMap[String(marker || "")]) || 0;
   }
 
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
@@ -1251,6 +1264,8 @@ import { theme } from "./ui/theme.js";
 
     let channel = null;
     const existingId = String(channelId || "").trim();
+    const normalizedLabel = normalizeCounterLabel(label);
+    const markerUserLimit = getCounterMarkerUserLimit(marker);
     const lockPermissionNames = [
       "CONNECT",
       "SPEAK",
@@ -1272,7 +1287,9 @@ import { theme } from "./ui/theme.js";
     if (!channel) {
       channel = officialGuild.channels.cache.find((candidate) =>
         isSupportedStatsCounterChannel(candidate)
-        && String(candidate?.name || "").startsWith(`${label}:`)
+        && (!officialStatsCategoryId || String(candidate?.parentId || "") === officialStatsCategoryId)
+        && (markerUserLimit <= 0 || Number(candidate?.userLimit || 0) === markerUserLimit)
+        && normalizeCounterLabel(String(candidate?.name || "").split(":")[0]) === normalizedLabel
       ) || null;
     }
 
@@ -1280,6 +1297,7 @@ import { theme } from "./ui/theme.js";
       channel = await officialGuild.channels.create(buildStatChannelName(label, count), {
         type: "GUILD_VOICE",
         ...(officialStatsCategoryId ? { parent: officialStatsCategoryId } : {}),
+        ...(markerUserLimit > 0 ? { userLimit: markerUserLimit } : {}),
         permissionOverwrites: [
           {
             id: officialGuild.roles.everyone.id,
@@ -1313,6 +1331,11 @@ import { theme } from "./ui/theme.js";
     if (channel.name !== nextName) {
       await channel.setName(nextName).catch((error) => {
         console.error(`❌ Failed to rename official stats channel (${marker}):`, error?.message ?? error);
+      });
+    }
+    if (markerUserLimit > 0 && Number(channel.userLimit || 0) !== markerUserLimit && typeof channel.setUserLimit === "function") {
+      await channel.setUserLimit(markerUserLimit).catch((error) => {
+        console.error(`❌ Failed to set stable marker userLimit (${marker}):`, error?.message ?? error);
       });
     }
 
