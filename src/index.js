@@ -1234,11 +1234,22 @@ import { theme } from "./ui/theme.js";
   }
 
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, prefix, count, topic }) {
+    const isSupportedStatsTextChannel = (candidate) => (
+      candidate?.type === "GUILD_TEXT"
+      && typeof candidate?.setName === "function"
+      && typeof candidate?.setTopic === "function"
+      && typeof candidate?.permissionOverwrites?.edit === "function"
+    );
+
     let channel = null;
     const existingId = String(channelId || "").trim();
     const lockPermissionNames = [
       "SEND_MESSAGES",
+      "SEND_TTS_MESSAGES",
+      "ATTACH_FILES",
+      "EMBED_LINKS",
       "ADD_REACTIONS",
+      "USE_APPLICATION_COMMANDS",
       "CREATE_PUBLIC_THREADS",
       "CREATE_PRIVATE_THREADS",
       "SEND_MESSAGES_IN_THREADS"
@@ -1248,11 +1259,15 @@ import { theme } from "./ui/theme.js";
     if (existingId) {
       channel = officialGuild.channels.cache.get(existingId)
         || await officialGuild.channels.fetch(existingId).catch(() => null);
+      if (channel && !isSupportedStatsTextChannel(channel)) {
+        console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a guild text channel.`);
+        channel = null;
+      }
     }
 
     if (!channel) {
       channel = officialGuild.channels.cache.find((candidate) =>
-        candidate?.type === "GUILD_TEXT"
+        isSupportedStatsTextChannel(candidate)
         && String(candidate?.topic || "").includes(marker)
       ) || null;
     }
@@ -1270,7 +1285,12 @@ import { theme } from "./ui/theme.js";
       });
     }
 
-    if (channel?.permissionOverwrites?.edit && Object.keys(lockPermissionOptions).length > 0) {
+    if (!isSupportedStatsTextChannel(channel)) {
+      console.error(`❌ Failed to resolve a valid guild text channel for ${marker}.`);
+      return null;
+    }
+
+    if (Object.keys(lockPermissionOptions).length > 0) {
       await channel.permissionOverwrites.edit(officialGuild.roles.everyone, lockPermissionOptions).catch((error) => {
         console.error(`❌ Failed to apply official stats lock permissions (${marker}):`, error?.message ?? error);
       });
@@ -1310,7 +1330,7 @@ import { theme } from "./ui/theme.js";
           marker: "noodle:stats:servers",
           prefix: "servers",
           count: serverCount,
-          topic: `Global server count (updated: ${new Date().toISOString()})`
+          topic: "Global server count"
         }
       );
       const shopsChannel = await ensureOfficialReadonlyStatsChannel(
@@ -1320,7 +1340,7 @@ import { theme } from "./ui/theme.js";
           marker: "noodle:stats:shops",
           prefix: "noodle-shops",
           count: shopsCount,
-          topic: `Global noodle shops count from DB players table (updated: ${new Date().toISOString()})`
+          topic: "Global noodle shops count from DB players table"
         }
       );
 
@@ -2165,7 +2185,7 @@ import { theme } from "./ui/theme.js";
     await syncRadarCpdvCommands({ reason: "ready" });
     startBotListStatsHeartbeat();
 
-    if (officialStatsChannelsEnabled && !officialStatsChannelRefreshHandle) {
+    if (officialStatsChannelsEnabled && officialGuildId && !officialStatsChannelRefreshHandle) {
       officialStatsChannelRefreshHandle = setInterval(() => {
         updateOfficialStatsChannels({ reason: "interval" });
       }, officialStatsChannelRefreshIntervalMs);
