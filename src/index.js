@@ -1255,6 +1255,14 @@ import { theme } from "./ui/theme.js";
     return Number(markerMap[String(marker || "")]) || 0;
   }
 
+  function extractCounterLabelFromName(name) {
+    const raw = String(name || "").trim();
+    if (!raw) return null;
+    const match = raw.match(/^(.*):\s[\d,]+$/);
+    if (!match?.[1]) return null;
+    return normalizeCounterLabel(match[1]);
+  }
+
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
     const isSupportedStatsCounterChannel = (candidate) => (
       candidate?.type === "GUILD_VOICE"
@@ -1281,6 +1289,14 @@ import { theme } from "./ui/theme.js";
       if (channel && !isSupportedStatsCounterChannel(channel)) {
         console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: not a voice counter channel.`);
         channel = null;
+      } else if (channel) {
+        const matchesCategory = !officialStatsCategoryId || String(channel?.parentId || "") === officialStatsCategoryId;
+        const matchesMarker = markerUserLimit <= 0 || Number(channel?.userLimit || 0) === markerUserLimit;
+        const matchesLabel = extractCounterLabelFromName(channel?.name) === normalizedLabel;
+        if (!matchesCategory || (!matchesMarker && !matchesLabel)) {
+          console.warn(`⚠️ Ignoring configured stats channel ${existingId} for ${marker}: marker/category invariants do not match.`);
+          channel = null;
+        }
       }
     }
 
@@ -1288,8 +1304,10 @@ import { theme } from "./ui/theme.js";
       channel = officialGuild.channels.cache.find((candidate) =>
         isSupportedStatsCounterChannel(candidate)
         && (!officialStatsCategoryId || String(candidate?.parentId || "") === officialStatsCategoryId)
-        && (markerUserLimit <= 0 || Number(candidate?.userLimit || 0) === markerUserLimit)
-        && normalizeCounterLabel(String(candidate?.name || "").split(":")[0]) === normalizedLabel
+        && (markerUserLimit <= 0
+          || Number(candidate?.userLimit || 0) === markerUserLimit
+          || extractCounterLabelFromName(candidate?.name) === normalizedLabel)
+        && extractCounterLabelFromName(candidate?.name) === normalizedLabel
       ) || null;
     }
 
