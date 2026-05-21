@@ -1593,13 +1593,27 @@ import { theme } from "./ui/theme.js";
         if (memberResult?.channel?.id) officialMemberCountChannelId = memberResult.channel.id;
 
         if (resolvedChannelCount === 0) {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs,
+            fullySynchronized: false
+          };
           console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
           return false;
         }
 
         if (synchronizedResolvedChannelCount === 0) {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs,
+            fullySynchronized: false
+          };
           console.error(
-            `❌ Official stats channel sync had no successful channel updates (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannelCount}/3`
+            `❌ Official stats channel sync had no fully successful channel synchronizations (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannelCount}/3`
           );
           return false;
         }
@@ -1616,6 +1630,14 @@ import { theme } from "./ui/theme.js";
             fullySynchronized: true
           };
           nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
+        } else {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs,
+            fullySynchronized: false
+          };
         }
 
         console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannelCount}/3, synchronized=${synchronizedResolvedChannelCount}/${resolvedChannelCount}`);
