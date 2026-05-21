@@ -163,6 +163,7 @@ import { theme } from "./ui/theme.js";
   let lastUserErrorCleanup = 0;
   let webhookFileLoggingEnabled = false;
   let webhookLogNeedsDrain = false;
+  let webhookWriteFailureNotified = false;
 
   const errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
   let webhookLogStream = null;
@@ -236,8 +237,16 @@ import { theme } from "./ui/theme.js";
         // Keep webhook errors visible when file writes are temporarily dropped under backpressure.
         writeWebhookConsole(level, args);
       }
-    } catch {
-      // Ignore webhook log write failures.
+    } catch (error) {
+      webhookFileLoggingEnabled = false;
+      webhookLogStream = null;
+      webhookLogNeedsDrain = false;
+      if (!webhookWriteFailureNotified) {
+        webhookWriteFailureNotified = true;
+        console.error("Webhook log file disabled after write failure:", error?.message ?? error);
+      }
+      writeWebhookConsole(level, args);
+      return;
     }
 
     if (WEBHOOK_LOG_TO_CONSOLE && level === "error") {

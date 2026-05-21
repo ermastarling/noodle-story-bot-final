@@ -7,7 +7,11 @@ const telemetryMode = String(process.env.NOODLE_TELEMETRY_MODE || "all").trim().
 const TELEMETRY_MAX_BUFFER_BYTES_CAP = 4 * 1024 * 1024;
 
 function parseNumberEnv(name, fallback) {
-  const raw = Number(process.env[name]);
+  const rawValue = process.env[name];
+  if (rawValue == null) return fallback;
+  const normalized = String(rawValue).trim();
+  if (!normalized) return fallback;
+  const raw = Number(normalized);
   return Number.isFinite(raw) ? raw : fallback;
 }
 
