@@ -98,12 +98,22 @@ if (!changed.length) {
 
 // 1) Env var docs check (recurring PR feedback in #91/#93/#94).
 const envVarPattern = /process\.env\.([A-Z][A-Z0-9_]+)/g;
+const envVarBracketPattern = /process\.env\[("|')([A-Z][A-Z0-9_]+)\1\]/g;
+const helperEnvVarPattern = /\b(?:parseNumberEnv|parseStringEnv|parseBooleanEnv|readEnv|getEnv|[A-Za-z0-9_]*Env)\(\s*("|')([A-Z][A-Z0-9_]+)\1/g;
 const codeEnvVars = new Set();
 for (const file of changedJs) {
   const added = addedByFile.get(file) || [];
   const joined = added.join("\n");
   for (const match of joined.matchAll(envVarPattern)) {
     const name = match[1];
+    if (name.startsWith("NOODLE_")) codeEnvVars.add(name);
+  }
+  for (const match of joined.matchAll(envVarBracketPattern)) {
+    const name = match[2];
+    if (name.startsWith("NOODLE_")) codeEnvVars.add(name);
+  }
+  for (const match of joined.matchAll(helperEnvVarPattern)) {
+    const name = match[2];
     if (name.startsWith("NOODLE_")) codeEnvVars.add(name);
   }
 }
