@@ -228,8 +228,8 @@ import { theme } from "./ui/theme.js";
     }
 
     try {
-      const line = args.map(formatLogPart).join(" ");
       if (!webhookLogNeedsDrain) {
+        const line = args.map(formatLogPart).join(" ");
         const accepted = webhookLogStream.write(`[${new Date().toISOString()}] [${level.toUpperCase()}] ${line}\n`);
         if (!accepted) webhookLogNeedsDrain = true;
       } else if (level === "error") {

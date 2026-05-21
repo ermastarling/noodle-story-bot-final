@@ -3,7 +3,7 @@ import path from "path";
 
 const telemetryLogPath = process.env.NOODLE_TELEMETRY_LOG_PATH || path.join(process.cwd(), "telemetry.log");
 const telemetryDisabled = process.env.NOODLE_TELEMETRY_LOG_DISABLED === "1";
-const telemetryMode = String(process.env.NOODLE_TELEMETRY_MODE || "all").toLowerCase();
+const telemetryMode = String(process.env.NOODLE_TELEMETRY_MODE || "all").trim().toLowerCase();
 const TELEMETRY_MAX_BUFFER_BYTES_CAP = 4 * 1024 * 1024;
 
 function parseNumberEnv(name, fallback) {
