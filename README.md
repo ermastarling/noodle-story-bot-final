@@ -110,6 +110,8 @@ Store/webhook-related env vars:
 
 - `NOODLE_WEBHOOK_PORT` — enables the webhook HTTP server when set
 - `NOODLE_WEBHOOK_PATH` — Discord entitlement webhook path (default `/discord/entitlements`)
+- `NOODLE_WEBHOOK_LOG_FILE` — optional webhook log file path (default `webhooks.log` in the current working directory)
+- `NOODLE_WEBHOOK_LOG_TO_CONSOLE` — set `1` to mirror webhook `error` logs to console in addition to file output
 - `NOODLE_TOPGG_WEBHOOK_PATH` + `NOODLE_TOPGG_WEBHOOK_AUTH` (fallback: `TOPGG_WEBHOOK_AUTH`) — Top.gg vote webhook path/auth
 - `NOODLE_TOPGG_REQUIRE_SIGNATURE` — set `1` to require valid `x-topgg-signature` and disable token fallback for Top.gg webhooks
 - `NOODLE_DISCORDBOTLIST_WEBHOOK_PATH` + `NOODLE_DISCORDBOTLIST_WEBHOOK_AUTH` — Discord Bot List vote webhook

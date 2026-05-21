@@ -20,6 +20,7 @@ let telemetryInitFailed = false;
 let droppedByBuffer = 0;
 let droppedBySampling = 0;
 let droppedByMode = 0;
+let backpressureSignals = 0;
 let lastDropLogAt = 0;
 
 function shouldEmitByMode(event) {
@@ -38,10 +39,10 @@ function maybeLogDropSummary() {
   const now = Date.now();
   if (now - lastDropLogAt < 60000) return;
   const totalDrops = droppedByBuffer + droppedBySampling + droppedByMode;
-  if (totalDrops <= 0) return;
+  if (totalDrops <= 0 && backpressureSignals <= 0) return;
   lastDropLogAt = now;
   console.warn(
-    `Telemetry drops: total=${totalDrops} buffer=${droppedByBuffer} sampling=${droppedBySampling} mode=${droppedByMode}`
+    `Telemetry drops: total=${totalDrops} buffer=${droppedByBuffer} sampling=${droppedBySampling} mode=${droppedByMode} backpressureSignals=${backpressureSignals}`
   );
 }
 
@@ -119,7 +120,7 @@ export function emitTelemetry(event, payload = {}) {
   });
   const accepted = stream.write(`${line}\n`);
   if (!accepted) {
-    droppedByBuffer += 1;
+    backpressureSignals += 1;
     maybeLogDropSummary();
   }
 }

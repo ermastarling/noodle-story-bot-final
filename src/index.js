@@ -162,6 +162,7 @@ import { theme } from "./ui/theme.js";
   const USER_ERROR_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
   let lastUserErrorCleanup = 0;
   let webhookFileLoggingEnabled = false;
+  let webhookLogNeedsDrain = false;
 
   const errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
   let webhookLogStream = null;
@@ -169,14 +170,19 @@ import { theme } from "./ui/theme.js";
     fs.mkdirSync(path.dirname(WEBHOOK_LOG_PATH), { recursive: true });
     webhookLogStream = fs.createWriteStream(WEBHOOK_LOG_PATH, { flags: "a" });
     webhookFileLoggingEnabled = true;
+    webhookLogStream.on("drain", () => {
+      webhookLogNeedsDrain = false;
+    });
     webhookLogStream.on("error", (error) => {
       webhookFileLoggingEnabled = false;
       webhookLogStream = null;
+      webhookLogNeedsDrain = false;
       console.error("Webhook log stream error:", error?.message ?? error);
     });
   } catch (error) {
     webhookFileLoggingEnabled = false;
     webhookLogStream = null;
+    webhookLogNeedsDrain = false;
     console.error("Failed to initialize webhook log file:", error?.message ?? error);
   }
   const origError = console.error;
@@ -204,8 +210,9 @@ import { theme } from "./ui/theme.js";
   function writeWebhookLog(level, args) {
     try {
       const line = args.map(formatLogPart).join(" ");
-      if (webhookFileLoggingEnabled && webhookLogStream) {
-        webhookLogStream.write(`[${new Date().toISOString()}] [${level.toUpperCase()}] ${line}\n`);
+      if (webhookFileLoggingEnabled && webhookLogStream && !webhookLogNeedsDrain) {
+        const accepted = webhookLogStream.write(`[${new Date().toISOString()}] [${level.toUpperCase()}] ${line}\n`);
+        if (!accepted) webhookLogNeedsDrain = true;
       }
     } catch {
       // Ignore webhook log write failures.
