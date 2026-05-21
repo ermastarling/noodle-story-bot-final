@@ -23,7 +23,7 @@ const telemetryMaxBufferBytes = Math.min(
   TELEMETRY_MAX_BUFFER_BYTES_CAP,
   Math.max(8192, telemetryMaxBufferBytesInt)
 );
-if (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytesInt || telemetryMaxBufferBytesInt !== telemetryMaxBufferBytes) {
+if (!telemetryDisabled && (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytesInt || telemetryMaxBufferBytesInt !== telemetryMaxBufferBytes)) {
   console.warn(
     `NOODLE_TELEMETRY_MAX_BUFFER_BYTES normalized to ${telemetryMaxBufferBytes} (requested ${telemetryMaxBufferBytesRaw}; integer ${telemetryMaxBufferBytesInt}; bounds 8192-${TELEMETRY_MAX_BUFFER_BYTES_CAP})`
   );

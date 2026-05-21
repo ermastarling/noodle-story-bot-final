@@ -191,24 +191,26 @@ import { theme } from "./ui/theme.js";
     errorLogNeedsDrain = false;
   }
   let webhookLogStream = null;
-  try {
-    fs.mkdirSync(path.dirname(WEBHOOK_LOG_PATH), { recursive: true });
-    webhookLogStream = fs.createWriteStream(WEBHOOK_LOG_PATH, { flags: "a" });
-    webhookFileLoggingEnabled = true;
-    webhookLogStream.on("drain", () => {
-      webhookLogNeedsDrain = false;
-    });
-    webhookLogStream.on("error", (error) => {
+  if (process.env.NOODLE_WEBHOOK_PORT) {
+    try {
+      fs.mkdirSync(path.dirname(WEBHOOK_LOG_PATH), { recursive: true });
+      webhookLogStream = fs.createWriteStream(WEBHOOK_LOG_PATH, { flags: "a" });
+      webhookFileLoggingEnabled = true;
+      webhookLogStream.on("drain", () => {
+        webhookLogNeedsDrain = false;
+      });
+      webhookLogStream.on("error", (error) => {
+        webhookFileLoggingEnabled = false;
+        webhookLogStream = null;
+        webhookLogNeedsDrain = false;
+        console.error("Webhook log stream error:", error?.message ?? error);
+      });
+    } catch (error) {
       webhookFileLoggingEnabled = false;
       webhookLogStream = null;
       webhookLogNeedsDrain = false;
-      console.error("Webhook log stream error:", error?.message ?? error);
-    });
-  } catch (error) {
-    webhookFileLoggingEnabled = false;
-    webhookLogStream = null;
-    webhookLogNeedsDrain = false;
-    console.error("Failed to initialize webhook log file:", error?.message ?? error);
+      console.error("Failed to initialize webhook log file:", error?.message ?? error);
+    }
   }
   console.error = (...args) => {
     origError(...args);
