@@ -1518,6 +1518,9 @@ import { theme } from "./ui/theme.js";
       if (isIntervalReason && nextOfficialStatsSyncAllowedAt > nowMs) {
         return false;
       }
+      if (isIntervalReason) {
+        nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
+      }
 
       try {
         const officialGuild = client.guilds.cache.get(officialGuildId)
