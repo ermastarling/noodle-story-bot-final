@@ -212,13 +212,23 @@ import { theme } from "./ui/theme.js";
       console.error("Failed to initialize webhook log file:", error?.message ?? error);
     }
   }
+
+  const formatErrorLogPart = (arg) => {
+    if (typeof arg === "string") return arg;
+    try {
+      return JSON.stringify(arg);
+    } catch {
+      return String(arg);
+    }
+  };
+
   console.error = (...args) => {
     origError(...args);
     if (!errorLogEnabled || !errorLog) return;
     if (errorLogNeedsDrain) return;
     try {
       const line = args
-        .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+        .map((arg) => formatErrorLogPart(arg))
         .join(" ");
       const accepted = errorLog.write(`[${new Date().toISOString()}] ${line}\n`);
       if (!accepted) errorLogNeedsDrain = true;

@@ -133,7 +133,7 @@ for (const file of changedJs) {
   const added = addedByFile.get(file) || [];
   const addedJoined = added.join("\n");
 
-  const streamDecls = [...addedJoined.matchAll(/(?:const|let)\s+(\w+)\s*=\s*fs\.createWriteStream\(/g)];
+  const streamDecls = [...addedJoined.matchAll(/(?:const|let)?\s*(\w+)\s*=\s*fs\.createWriteStream\(/g)];
   for (const m of streamDecls) {
     const varName = m[1];
     const hasErrorListener = new RegExp(`${varName}\\.on\\(("|')error\\1`).test(content);
