@@ -515,7 +515,6 @@ async function main() {
         ts,
         route: p.route || "unknown",
         subroute: p.subroute || null,
-        navSource: p.navSource || null,
         customIdPrefix: p.customIdPrefix || null,
         mode: p.mode || null,
         catchupMs: Number(p.catchupMs),

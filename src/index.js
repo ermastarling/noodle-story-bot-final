@@ -232,6 +232,9 @@ import { theme } from "./ui/theme.js";
       if (!webhookLogNeedsDrain) {
         const accepted = webhookLogStream.write(`[${new Date().toISOString()}] [${level.toUpperCase()}] ${line}\n`);
         if (!accepted) webhookLogNeedsDrain = true;
+      } else if (level === "error") {
+        // Keep webhook errors visible when file writes are temporarily dropped under backpressure.
+        writeWebhookConsole(level, args);
       }
     } catch {
       // Ignore webhook log write failures.

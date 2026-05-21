@@ -4,6 +4,7 @@ import path from "path";
 const telemetryLogPath = process.env.NOODLE_TELEMETRY_LOG_PATH || path.join(process.cwd(), "telemetry.log");
 const telemetryDisabled = process.env.NOODLE_TELEMETRY_LOG_DISABLED === "1";
 const telemetryMode = String(process.env.NOODLE_TELEMETRY_MODE || "all").toLowerCase();
+const TELEMETRY_MAX_BUFFER_BYTES_CAP = 4 * 1024 * 1024;
 
 function parseNumberEnv(name, fallback) {
   const raw = Number(process.env[name]);
@@ -12,7 +13,16 @@ function parseNumberEnv(name, fallback) {
 
 const telemetrySampleRateRaw = parseNumberEnv("NOODLE_TELEMETRY_SAMPLE_RATE", 1);
 const telemetrySampleRate = Math.max(0, Math.min(1, telemetrySampleRateRaw));
-const telemetryMaxBufferBytes = Math.max(8192, parseNumberEnv("NOODLE_TELEMETRY_MAX_BUFFER_BYTES", 262144));
+const telemetryMaxBufferBytesRaw = parseNumberEnv("NOODLE_TELEMETRY_MAX_BUFFER_BYTES", 262144);
+const telemetryMaxBufferBytes = Math.min(
+  TELEMETRY_MAX_BUFFER_BYTES_CAP,
+  Math.max(8192, telemetryMaxBufferBytesRaw)
+);
+if (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytes) {
+  console.warn(
+    `NOODLE_TELEMETRY_MAX_BUFFER_BYTES clamped to ${telemetryMaxBufferBytes} (requested ${telemetryMaxBufferBytesRaw})`
+  );
+}
 const noisyEvents = new Set(["interaction_latency", "component_nav_phase", "component_nav_subroute_phase"]);
 
 let telemetryStream = null;
@@ -95,6 +105,7 @@ function getTelemetryStream() {
 }
 
 export function emitTelemetry(event, payload = {}) {
+  if (telemetryDisabled) return;
   if (telemetryMode === "off" || telemetryMode === "none") return;
 
   if (!shouldEmitByMode(event)) {
