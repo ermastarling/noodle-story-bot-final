@@ -5,7 +5,7 @@ import readline from "readline";
 
 function parseArgs(argv) {
   const args = {
-    file: "telemetry.log",
+    file: path.join("noodle-logs", "telemetry.log"),
     routeLimit: 20,
     slowLimit: 10,
     json: false,
@@ -53,7 +53,7 @@ function printHelp() {
       "Usage: node scripts/analyze-telemetry-report.js [options]",
       "",
       "Options:",
-      "  -f, --file <path>          Path to telemetry JSONL file (default: telemetry.log)",
+      "  -f, --file <path>          Path to telemetry JSONL file (default: noodle-logs/telemetry.log)",
       "  --window-hours <n>         Analyze only the last N hours based on event ts",
       "  --route-limit <n>          Max routes in markdown table (default: 20)",
       "  --slow-limit <n>           Max slow-pattern rows in markdown table (default: 10)",

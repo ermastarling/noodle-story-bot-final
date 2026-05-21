@@ -4,6 +4,7 @@ This folder contains project documentation.
 
 ## Current Docs
 
+- ENVIRONMENT.md
 - GIT_WORKFLOW.md
 - MOBILE_MIGRATION.md
 - SIMULATION.md

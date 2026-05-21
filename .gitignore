@@ -13,7 +13,10 @@ data/
 
 # Logs
 *.log
-logs/
+logs/*
+!logs/.gitkeep
+noodle-logs/*
+!noodle-logs/.gitkeep
 
 # OS
 .DS_Store

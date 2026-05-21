@@ -152,12 +152,22 @@ import { theme } from "./ui/theme.js";
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   const CWD = process.cwd();
+  const LOG_DIR = path.join(CWD, "noodle-logs");
 
-  const LOG_PATH = path.join(CWD, "command-errors.log");
-  const WEBHOOK_LOG_PATH = path.resolve(CWD, process.env.NOODLE_WEBHOOK_LOG_FILE || "webhooks.log");
+  const resolveLogPath = (configuredPath, fallbackFileName) => {
+    if (!configuredPath || !String(configuredPath).trim()) {
+      return path.join(LOG_DIR, fallbackFileName);
+    }
+    const normalized = String(configuredPath).trim();
+    if (path.isAbsolute(normalized)) return normalized;
+    return path.join(LOG_DIR, normalized);
+  };
+
+  const LOG_PATH = path.join(LOG_DIR, "command-errors.log");
+  const WEBHOOK_LOG_PATH = resolveLogPath(process.env.NOODLE_WEBHOOK_LOG_FILE, "webhooks.log");
   const WEBHOOK_LOG_TO_CONSOLE = process.env.NOODLE_WEBHOOK_LOG_TO_CONSOLE === "1";
-  const BOOT_PATH = path.join(CWD, "boot-ok.log");
-  const USER_ERROR_DIR = path.join(CWD, "user-error-logs");
+  const BOOT_PATH = path.join(LOG_DIR, "boot-ok.log");
+  const USER_ERROR_DIR = path.join(LOG_DIR, "user-error-logs");
   const USER_ERROR_RETENTION_DAYS = 14;
   const USER_ERROR_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
   let lastUserErrorCleanup = 0;
@@ -169,6 +179,8 @@ import { theme } from "./ui/theme.js";
   let webhookLogNeedsDrain = false;
   let webhookWriteFailureNotified = false;
   const origError = console.error;
+
+  fs.mkdirSync(LOG_DIR, { recursive: true });
 
   try {
     errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });

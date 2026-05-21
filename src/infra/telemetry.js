@@ -1,7 +1,14 @@
 import fs from "fs";
 import path from "path";
 
-const telemetryLogPath = process.env.NOODLE_TELEMETRY_LOG_PATH || path.join(process.cwd(), "telemetry.log");
+const logDir = path.join(process.cwd(), "noodle-logs");
+const telemetryLogPath = (() => {
+  const configuredPath = process.env.NOODLE_TELEMETRY_LOG_PATH;
+  if (!configuredPath || !String(configuredPath).trim()) return path.join(logDir, "telemetry.log");
+  const normalized = String(configuredPath).trim();
+  if (path.isAbsolute(normalized)) return normalized;
+  return path.join(logDir, normalized);
+})();
 const telemetryDisabled = process.env.NOODLE_TELEMETRY_LOG_DISABLED === "1";
 const telemetryMode = String(process.env.NOODLE_TELEMETRY_MODE || "all").trim().toLowerCase();
 const TELEMETRY_MAX_BUFFER_BYTES_CAP = 4 * 1024 * 1024;
