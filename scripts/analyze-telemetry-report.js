@@ -84,6 +84,15 @@ function finite(arr) {
   return arr.filter((v) => Number.isFinite(v));
 }
 
+function maxOf(values) {
+  let max = null;
+  for (const v of values) {
+    if (!Number.isFinite(v)) continue;
+    if (max == null || v > max) max = v;
+  }
+  return max;
+}
+
 function summarizeEvents(events) {
   const totalMs = finite(events.map((e) => e.totalMs));
   const deferMs = finite(events.map((e) => e.deferMs));
@@ -219,7 +228,7 @@ function summarizeSlowEvents(events) {
       count: row.count,
       p50: r3(percentile(row.totalMs, 50)),
       p95: r3(percentile(row.totalMs, 95)),
-      max: r3(row.totalMs.length ? Math.max(...row.totalMs) : null)
+      max: r3(maxOf(row.totalMs))
     });
   }
 
@@ -273,7 +282,7 @@ function summarizeNavPhases(events) {
       runP95: r3(percentile(row.runMs, 95)),
       runP99: r3(percentile(row.runMs, 99)),
       totalP95: r3(percentile(row.totalMs, 95)),
-      maxTotal: r3(row.totalMs.length ? Math.max(...row.totalMs) : null),
+      maxTotal: r3(maxOf(row.totalMs)),
       errorCount: row.errorCount
     });
   }

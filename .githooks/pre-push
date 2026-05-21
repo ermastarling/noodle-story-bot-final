@@ -22,6 +22,18 @@ if [[ "$branch" == "main" || "$branch" == "develop" ]]; then
 	exit 0
 fi
 
+if ! command -v gh >/dev/null 2>&1; then
+	echo "Warning: gh CLI not found; skipping PR checklist enforcement in pre-push hook."
+	echo "Install gh and authenticate to enforce local PR checklist validation automatically."
+	exit 0
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+	echo "Warning: gh CLI is not authenticated; skipping PR checklist enforcement in pre-push hook."
+	echo "Run 'gh auth login' to enable local PR checklist validation."
+	exit 0
+fi
+
 if gh pr view --json number >/dev/null 2>&1; then
 	node scripts/validate-pr-checklist.js --current-pr
 	exit 0

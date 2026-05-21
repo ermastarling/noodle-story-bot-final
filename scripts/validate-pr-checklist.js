@@ -62,11 +62,18 @@ function validate(body) {
 }
 
 function readCurrentPrBody() {
-  const out = execSync("gh pr view --json body --jq .body", {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  return out;
+  try {
+    const out = execSync("gh pr view --json body --jq .body", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    return out;
+  } catch {
+    throw new Error(
+      "Unable to read current PR body. Ensure gh is installed and authenticated, and that this branch has an open PR. "
+      + "Alternatively run with --body-file <path>."
+    );
+  }
 }
 
 function parseArgs(argv) {
@@ -89,12 +96,17 @@ function main() {
   const args = parseArgs(process.argv);
   let body = "";
 
-  if (args.bodyFile) {
-    body = fs.readFileSync(args.bodyFile, "utf8");
-  } else if (args.currentPr) {
-    body = readCurrentPrBody();
-  } else {
-    process.stderr.write("Usage: node scripts/validate-pr-checklist.js --current-pr OR --body-file <path>\n");
+  try {
+    if (args.bodyFile) {
+      body = fs.readFileSync(args.bodyFile, "utf8");
+    } else if (args.currentPr) {
+      body = readCurrentPrBody();
+    } else {
+      process.stderr.write("Usage: node scripts/validate-pr-checklist.js --current-pr OR --body-file <path>\n");
+      process.exit(2);
+    }
+  } catch (error) {
+    process.stderr.write(`${error?.message || error}\n`);
     process.exit(2);
   }
 

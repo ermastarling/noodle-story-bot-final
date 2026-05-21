@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 
 const cwd = process.cwd();
 const args = new Set(process.argv.slice(2));
@@ -43,7 +43,24 @@ function getChangedFiles() {
 }
 
 function getAddedLines(relPath) {
-  const diff = safeExec(`git diff --cached --unified=0 -- ${relPath}`) || safeExec(`git diff --unified=0 -- ${relPath}`);
+  let diff = "";
+  try {
+    diff = execFileSync("git", ["diff", "--cached", "--unified=0", "--", relPath], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+  } catch {
+    try {
+      diff = execFileSync("git", ["diff", "--unified=0", "--", relPath], {
+        cwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+    } catch {
+      diff = "";
+    }
+  }
   if (!diff) return [];
   const lines = [];
   for (const line of diff.split("\n")) {
