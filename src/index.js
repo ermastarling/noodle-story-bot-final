@@ -154,7 +154,7 @@ import { theme } from "./ui/theme.js";
   const CWD = process.cwd();
 
   const LOG_PATH = path.join(CWD, "command-errors.log");
-  const WEBHOOK_LOG_PATH = path.join(CWD, process.env.NOODLE_WEBHOOK_LOG_FILE || "webhooks.log");
+  const WEBHOOK_LOG_PATH = path.resolve(CWD, process.env.NOODLE_WEBHOOK_LOG_FILE || "webhooks.log");
   const WEBHOOK_LOG_TO_CONSOLE = process.env.NOODLE_WEBHOOK_LOG_TO_CONSOLE === "1";
   const BOOT_PATH = path.join(CWD, "boot-ok.log");
   const USER_ERROR_DIR = path.join(CWD, "user-error-logs");

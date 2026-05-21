@@ -18,9 +18,10 @@ function parseNumberEnv(name, fallback) {
 const telemetrySampleRateRaw = parseNumberEnv("NOODLE_TELEMETRY_SAMPLE_RATE", 1);
 const telemetrySampleRate = Math.max(0, Math.min(1, telemetrySampleRateRaw));
 const telemetryMaxBufferBytesRaw = parseNumberEnv("NOODLE_TELEMETRY_MAX_BUFFER_BYTES", 262144);
+const telemetryMaxBufferBytesInt = Math.trunc(telemetryMaxBufferBytesRaw);
 const telemetryMaxBufferBytes = Math.min(
   TELEMETRY_MAX_BUFFER_BYTES_CAP,
-  Math.max(8192, telemetryMaxBufferBytesRaw)
+  Math.max(8192, telemetryMaxBufferBytesInt)
 );
 if (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytes) {
   console.warn(
