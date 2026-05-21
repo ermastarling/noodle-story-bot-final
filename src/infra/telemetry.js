@@ -23,11 +23,9 @@ const telemetryMaxBufferBytes = Math.min(
   TELEMETRY_MAX_BUFFER_BYTES_CAP,
   Math.max(8192, telemetryMaxBufferBytesInt)
 );
-if (!telemetryDisabled && (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytesInt || telemetryMaxBufferBytesInt !== telemetryMaxBufferBytes)) {
-  console.warn(
-    `NOODLE_TELEMETRY_MAX_BUFFER_BYTES normalized to ${telemetryMaxBufferBytes} (requested ${telemetryMaxBufferBytesRaw}; integer ${telemetryMaxBufferBytesInt}; bounds 8192-${TELEMETRY_MAX_BUFFER_BYTES_CAP})`
-  );
-}
+const telemetryMaxBufferWasNormalized =
+  !telemetryDisabled
+  && (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytesInt || telemetryMaxBufferBytesInt !== telemetryMaxBufferBytes);
 const noisyEvents = new Set(["interaction_latency", "component_nav_phase", "component_nav_subroute_phase"]);
 
 let telemetryStream = null;
@@ -38,6 +36,7 @@ let droppedByMode = 0;
 let backpressureSignals = 0;
 let lastDropLogAt = 0;
 let telemetryBackpressureActive = false;
+let telemetryNormalizationNoticePending = telemetryMaxBufferWasNormalized;
 
 function shouldEmitByMode(event) {
   if (telemetryMode !== "slow") return true;
@@ -50,15 +49,34 @@ function shouldSampleEvent(event) {
   return Math.random() < telemetrySampleRate;
 }
 
+function writeTelemetryMeta(event, payload = {}) {
+  const stream = getTelemetryStream();
+  if (!stream) return;
+  try {
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      event,
+      payload
+    });
+    stream.write(`${line}\n`);
+  } catch {
+    // Ignore telemetry metadata write failures.
+  }
+}
+
 function maybeLogDropSummary() {
   const now = Date.now();
   if (now - lastDropLogAt < 60000) return;
   const totalDrops = droppedByBuffer + droppedBySampling + droppedByMode;
   if (totalDrops <= 0 && backpressureSignals <= 0) return;
   lastDropLogAt = now;
-  console.warn(
-    `Telemetry drops: total=${totalDrops} buffer=${droppedByBuffer} sampling=${droppedBySampling} mode=${droppedByMode} backpressureSignals=${backpressureSignals}`
-  );
+  writeTelemetryMeta("telemetry_drop_summary", {
+    totalDrops,
+    droppedByBuffer,
+    droppedBySampling,
+    droppedByMode,
+    backpressureSignals
+  });
 }
 
 function roundTelemetryNumber(value) {
@@ -101,6 +119,13 @@ function getTelemetryStream() {
     telemetryStream.on("drain", () => {
       telemetryBackpressureActive = false;
     });
+    if (telemetryNormalizationNoticePending) {
+      telemetryNormalizationNoticePending = false;
+      writeTelemetryMeta("telemetry_config_notice", {
+        name: "NOODLE_TELEMETRY_MAX_BUFFER_BYTES",
+        message: `normalized to ${telemetryMaxBufferBytes} (requested ${telemetryMaxBufferBytesRaw}; integer ${telemetryMaxBufferBytesInt}; bounds 8192-${TELEMETRY_MAX_BUFFER_BYTES_CAP})`
+      });
+    }
     return telemetryStream;
   } catch (error) {
     telemetryInitFailed = true;
