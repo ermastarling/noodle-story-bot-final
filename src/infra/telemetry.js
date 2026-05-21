@@ -23,9 +23,9 @@ const telemetryMaxBufferBytes = Math.min(
   TELEMETRY_MAX_BUFFER_BYTES_CAP,
   Math.max(8192, telemetryMaxBufferBytesInt)
 );
-if (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytes) {
+if (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytesInt || telemetryMaxBufferBytesInt !== telemetryMaxBufferBytes) {
   console.warn(
-    `NOODLE_TELEMETRY_MAX_BUFFER_BYTES clamped to ${telemetryMaxBufferBytes} (requested ${telemetryMaxBufferBytesRaw})`
+    `NOODLE_TELEMETRY_MAX_BUFFER_BYTES normalized to ${telemetryMaxBufferBytes} (requested ${telemetryMaxBufferBytesRaw}; integer ${telemetryMaxBufferBytesInt}; bounds 8192-${TELEMETRY_MAX_BUFFER_BYTES_CAP})`
   );
 }
 const noisyEvents = new Set(["interaction_latency", "component_nav_phase", "component_nav_subroute_phase"]);

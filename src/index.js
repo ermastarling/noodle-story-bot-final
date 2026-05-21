@@ -161,11 +161,35 @@ import { theme } from "./ui/theme.js";
   const USER_ERROR_RETENTION_DAYS = 14;
   const USER_ERROR_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
   let lastUserErrorCleanup = 0;
+  let errorLog = null;
+  let errorLogEnabled = false;
+  let errorLogNeedsDrain = false;
+  let errorLogFailureNotified = false;
   let webhookFileLoggingEnabled = false;
   let webhookLogNeedsDrain = false;
   let webhookWriteFailureNotified = false;
+  const origError = console.error;
 
-  const errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
+  try {
+    errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
+    errorLogEnabled = true;
+    errorLog.on("drain", () => {
+      errorLogNeedsDrain = false;
+    });
+    errorLog.on("error", (error) => {
+      errorLogEnabled = false;
+      errorLog = null;
+      errorLogNeedsDrain = false;
+      if (!errorLogFailureNotified) {
+        errorLogFailureNotified = true;
+        origError("Command error log stream disabled:", error?.message ?? error);
+      }
+    });
+  } catch (error) {
+    errorLogEnabled = false;
+    errorLog = null;
+    errorLogNeedsDrain = false;
+  }
   let webhookLogStream = null;
   try {
     fs.mkdirSync(path.dirname(WEBHOOK_LOG_PATH), { recursive: true });
@@ -186,16 +210,24 @@ import { theme } from "./ui/theme.js";
     webhookLogNeedsDrain = false;
     console.error("Failed to initialize webhook log file:", error?.message ?? error);
   }
-  const origError = console.error;
   console.error = (...args) => {
     origError(...args);
+    if (!errorLogEnabled || !errorLog) return;
+    if (errorLogNeedsDrain) return;
     try {
       const line = args
         .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
         .join(" ");
-      errorLog.write(`[${new Date().toISOString()}] ${line}\n`);
-    } catch {
-      // Ignore log write failures.
+      const accepted = errorLog.write(`[${new Date().toISOString()}] ${line}\n`);
+      if (!accepted) errorLogNeedsDrain = true;
+    } catch (error) {
+      errorLogEnabled = false;
+      errorLog = null;
+      errorLogNeedsDrain = false;
+      if (!errorLogFailureNotified) {
+        errorLogFailureNotified = true;
+        origError("Command error log stream disabled:", error?.message ?? error);
+      }
     }
   };
 
