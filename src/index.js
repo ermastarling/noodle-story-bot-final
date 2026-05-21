@@ -424,6 +424,10 @@ import { theme } from "./ui/theme.js";
   const officialStatsChannelRefreshIntervalMs = Number.isFinite(officialStatsChannelRefreshIntervalRaw)
     ? Math.max(60_000, Math.floor(officialStatsChannelRefreshIntervalRaw))
     : 10 * 60 * 1000;
+  const officialStatsMinIntervalRaw = Number(process.env.NOODLE_OFFICIAL_STATS_MIN_INTERVAL_MS || officialStatsChannelRefreshIntervalMs);
+  const officialStatsMinIntervalMs = Number.isFinite(officialStatsMinIntervalRaw) && officialStatsMinIntervalRaw >= 30_000
+    ? Math.floor(officialStatsMinIntervalRaw)
+    : officialStatsChannelRefreshIntervalMs;
   let officialStatsChannelRefreshHandle = null;
   const devAlertChannelId = process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "";
   const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
@@ -591,6 +595,7 @@ import { theme } from "./ui/theme.js";
   const invalidStatsCategoryLogged = new Set();
   const lastBotListStatsPushBySource = new Map();
   const nextStatsSyncAllowedAtBySource = new Map();
+  let lastOfficialStatsPush = null;
   const officialWelcomeAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_CHANNEL_IDS));
   const officialLevelAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_LEVEL_CHANNEL_IDS));
   const officialWelcomeKeywords = parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_KEYWORDS || "welcome,joined the server")
@@ -600,6 +605,9 @@ import { theme } from "./ui/theme.js";
   let shardNearThresholdAlertSent = false;
   let shardRecommendedAlertSent = false;
   let botListStatsHeartbeatHandle = null;
+  let nextOfficialStatsSyncAllowedAt = 0;
+  let officialStatsUpdateQueue = Promise.resolve(false);
+  let officialStatsUpdateInFlight = false;
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -1399,6 +1407,7 @@ import { theme } from "./ui/theme.js";
     );
 
     let channel = null;
+    let hadSyncError = false;
     const existingId = String(channelId || "").trim();
     const lockPermissionNames = [
       "CONNECT",
@@ -1468,6 +1477,7 @@ import { theme } from "./ui/theme.js";
         const currentParentId = String(channel.parentId || channel.parent?.id || "");
         if (currentParentId !== configuredCategory.id) {
           await channel.setParent(configuredCategory.id, { lockPermissions: false }).catch((error) => {
+            hadSyncError = true;
             console.error(`❌ Failed to move stats channel to configured category (${marker}):`, error?.message ?? error);
           });
         }
@@ -1484,6 +1494,7 @@ import { theme } from "./ui/theme.js";
 
       if (!alreadyLocked) {
         await channel.permissionOverwrites.edit(everyoneRoleId, lockPermissionOptions).catch((error) => {
+          hadSyncError = true;
           console.error(`❌ Failed to apply official stats lock permissions (${marker}):`, error?.message ?? error);
         });
       }
@@ -1492,71 +1503,163 @@ import { theme } from "./ui/theme.js";
     const nextName = buildStatChannelName(label, count);
     if (channel.name !== nextName) {
       await channel.setName(nextName).catch((error) => {
+        hadSyncError = true;
         console.error(`❌ Failed to rename official stats channel (${marker}):`, error?.message ?? error);
       });
     }
-    return channel;
+    return { channel, synchronized: !hadSyncError };
   }
 
   async function updateOfficialStatsChannels(precomputedCounts = null, { reason = "event" } = {}) {
     if (!officialStatsChannelsEnabled || !officialGuildId) return false;
+    const isIntervalReason = reason === "interval";
 
-    try {
-      const officialGuild = client.guilds.cache.get(officialGuildId)
-        || await client.guilds.fetch(officialGuildId).catch(() => null);
-      if (!officialGuild) return false;
-
-      const counts = precomputedCounts && typeof precomputedCounts === "object"
-        ? precomputedCounts
-        : getCurrentBotListCounts();
-      const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
-      const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
-      const officialMemberCount = Math.max(0, Number(officialGuild?.memberCount || 0));
-
-      const serverChannel = await ensureOfficialReadonlyStatsChannel(
-        officialGuild,
-        officialServerCountChannelId,
-        {
-          marker: "noodle:stats:servers",
-          label: officialServerCountLabel,
-          count: serverCount
-        }
-      );
-      const shopsChannel = await ensureOfficialReadonlyStatsChannel(
-        officialGuild,
-        officialShopCountChannelId,
-        {
-          marker: "noodle:stats:shops",
-          label: officialShopCountLabel,
-          count: shopsCount
-        }
-      );
-      const memberChannel = await ensureOfficialReadonlyStatsChannel(
-        officialGuild,
-        officialMemberCountChannelId,
-        {
-          marker: "noodle:stats:official-members",
-          label: officialMemberCountLabel,
-          count: officialMemberCount
-        }
-      );
-
-      if (serverChannel?.id) officialServerCountChannelId = serverChannel.id;
-      if (shopsChannel?.id) officialShopCountChannelId = shopsChannel.id;
-      if (memberChannel?.id) officialMemberCountChannelId = memberChannel.id;
-
-      const resolvedChannels = [serverChannel, shopsChannel, memberChannel].filter(Boolean);
-      if (resolvedChannels.length === 0) {
-        console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
-        return false;
-      }
-
-      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannels.length}/3`);
-      return true;
-    } catch (error) {
-      console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
+    if (isIntervalReason && officialStatsUpdateInFlight) {
       return false;
     }
+
+    const runUpdate = async () => {
+      const nowMs = Date.now();
+      if (isIntervalReason && nextOfficialStatsSyncAllowedAt > nowMs) {
+        return false;
+      }
+      if (isIntervalReason) {
+        nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
+      }
+
+      try {
+        const officialGuild = client.guilds.cache.get(officialGuildId)
+          || await client.guilds.fetch(officialGuildId).catch(() => null);
+        if (!officialGuild) return false;
+
+        const counts = precomputedCounts && typeof precomputedCounts === "object"
+          ? precomputedCounts
+          : getCurrentBotListCounts();
+        const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
+        const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
+        const officialMemberCount = Math.max(0, Number(officialGuild?.memberCount || 0));
+
+        if (
+          isIntervalReason
+          && lastOfficialStatsPush
+          && lastOfficialStatsPush.fullySynchronized === true
+          && lastOfficialStatsPush.serverCount === serverCount
+          && lastOfficialStatsPush.shopsCount === shopsCount
+          && lastOfficialStatsPush.officialMemberCount === officialMemberCount
+        ) {
+          return false;
+        }
+
+        const serverResult = await ensureOfficialReadonlyStatsChannel(
+          officialGuild,
+          officialServerCountChannelId,
+          {
+            marker: "noodle:stats:servers",
+            label: officialServerCountLabel,
+            count: serverCount
+          }
+        );
+        const shopsResult = await ensureOfficialReadonlyStatsChannel(
+          officialGuild,
+          officialShopCountChannelId,
+          {
+            marker: "noodle:stats:shops",
+            label: officialShopCountLabel,
+            count: shopsCount
+          }
+        );
+        const memberResult = await ensureOfficialReadonlyStatsChannel(
+          officialGuild,
+          officialMemberCountChannelId,
+          {
+            marker: "noodle:stats:official-members",
+            label: officialMemberCountLabel,
+            count: officialMemberCount
+          }
+        );
+
+        const channelResults = [serverResult, shopsResult, memberResult];
+        const resolvedChannels = channelResults
+          .map((result) => result?.channel || null)
+          .filter(Boolean);
+        const resolvedChannelCount = resolvedChannels.length;
+        const synchronizedResolvedChannelCount = channelResults.filter(
+          (result) => Boolean(result?.channel) && result?.synchronized === true
+        ).length;
+        const expectedChannelCount = 3;
+
+        if (serverResult?.channel?.id) officialServerCountChannelId = serverResult.channel.id;
+        if (shopsResult?.channel?.id) officialShopCountChannelId = shopsResult.channel.id;
+        if (memberResult?.channel?.id) officialMemberCountChannelId = memberResult.channel.id;
+
+        if (resolvedChannelCount === 0) {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs,
+            fullySynchronized: false
+          };
+          console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
+          return false;
+        }
+
+        if (synchronizedResolvedChannelCount === 0) {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs,
+            fullySynchronized: false
+          };
+          console.error(
+            `❌ Official stats channel sync had no fully successful channel synchronizations (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannelCount}/3`
+          );
+          return false;
+        }
+
+        if (
+          resolvedChannelCount === expectedChannelCount
+          && synchronizedResolvedChannelCount === expectedChannelCount
+        ) {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs,
+            fullySynchronized: true
+          };
+          nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
+        } else {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs,
+            fullySynchronized: false
+          };
+        }
+
+        console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannelCount}/3, synchronized=${synchronizedResolvedChannelCount}/${resolvedChannelCount}`);
+        return true;
+      } catch (error) {
+        console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
+        return false;
+      }
+    };
+
+    const queuedRun = officialStatsUpdateQueue
+      .catch(() => false)
+      .then(async () => {
+        officialStatsUpdateInFlight = true;
+        try {
+          return await runUpdate();
+        } finally {
+          officialStatsUpdateInFlight = false;
+        }
+      });
+    officialStatsUpdateQueue = queuedRun.then(() => false, () => false);
+    return queuedRun;
   }
 
   function getMessageSearchBlob(message) {
