@@ -607,6 +607,7 @@ import { theme } from "./ui/theme.js";
   let botListStatsHeartbeatHandle = null;
   let nextOfficialStatsSyncAllowedAt = 0;
   let officialStatsUpdateQueue = Promise.resolve(false);
+  let officialStatsUpdateInFlight = false;
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -1511,10 +1512,14 @@ import { theme } from "./ui/theme.js";
 
   async function updateOfficialStatsChannels(precomputedCounts = null, { reason = "event" } = {}) {
     if (!officialStatsChannelsEnabled || !officialGuildId) return false;
+    const isIntervalReason = reason === "interval";
+
+    if (isIntervalReason && officialStatsUpdateInFlight) {
+      return false;
+    }
 
     const runUpdate = async () => {
       const nowMs = Date.now();
-      const isIntervalReason = reason === "interval";
       if (isIntervalReason && nextOfficialStatsSyncAllowedAt > nowMs) {
         return false;
       }
@@ -1537,6 +1542,7 @@ import { theme } from "./ui/theme.js";
         if (
           isIntervalReason
           && lastOfficialStatsPush
+          && lastOfficialStatsPush.fullySynchronized === true
           && lastOfficialStatsPush.serverCount === serverCount
           && lastOfficialStatsPush.shopsCount === shopsCount
           && lastOfficialStatsPush.officialMemberCount === officialMemberCount
@@ -1580,6 +1586,7 @@ import { theme } from "./ui/theme.js";
         const synchronizedResolvedChannelCount = channelResults.filter(
           (result) => Boolean(result?.channel) && result?.synchronized === true
         ).length;
+        const expectedChannelCount = 3;
 
         if (serverResult?.channel?.id) officialServerCountChannelId = serverResult.channel.id;
         if (shopsResult?.channel?.id) officialShopCountChannelId = shopsResult.channel.id;
@@ -1597,12 +1604,16 @@ import { theme } from "./ui/theme.js";
           return false;
         }
 
-        if (synchronizedResolvedChannelCount === resolvedChannelCount) {
+        if (
+          resolvedChannelCount === expectedChannelCount
+          && synchronizedResolvedChannelCount === expectedChannelCount
+        ) {
           lastOfficialStatsPush = {
             serverCount,
             shopsCount,
             officialMemberCount,
-            sentAt: nowMs
+            sentAt: nowMs,
+            fullySynchronized: true
           };
           nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
         }
@@ -1617,7 +1628,14 @@ import { theme } from "./ui/theme.js";
 
     const queuedRun = officialStatsUpdateQueue
       .catch(() => false)
-      .then(runUpdate);
+      .then(async () => {
+        officialStatsUpdateInFlight = true;
+        try {
+          return await runUpdate();
+        } finally {
+          officialStatsUpdateInFlight = false;
+        }
+      });
     officialStatsUpdateQueue = queuedRun.then(() => false, () => false);
     return queuedRun;
   }
