@@ -1573,8 +1573,9 @@ import { theme } from "./ui/theme.js";
         const resolvedChannels = channelResults
           .map((result) => result?.channel || null)
           .filter(Boolean);
-        const allChannelsResolved = channelResults.every((result) => Boolean(result?.channel));
-        const allChannelsSynchronized = channelResults.every((result) => Boolean(result?.channel) && result?.synchronized === true);
+        const synchronizedResolvedChannelCount = channelResults.filter(
+          (result) => Boolean(result?.channel) && result?.synchronized === true
+        ).length;
 
         if (serverResult?.channel?.id) officialServerCountChannelId = serverResult.channel.id;
         if (shopsResult?.channel?.id) officialShopCountChannelId = shopsResult.channel.id;
@@ -1585,7 +1586,7 @@ import { theme } from "./ui/theme.js";
           return false;
         }
 
-        if (allChannelsResolved && allChannelsSynchronized) {
+        if (synchronizedResolvedChannelCount > 0) {
           lastOfficialStatsPush = {
             serverCount,
             shopsCount,
