@@ -45,7 +45,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.DISCORDS,
     label: "Discords.com",
     voteUrl: "https://discords.com/bots/bot/1460058511802105976/vote",
-    isVoteLive: true,
+    isVoteLive: false,
     supportsVoteRewards: true,
     supportsServerCount: true
   },
@@ -79,7 +79,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.DISCORDLIST_GG,
     label: "DiscordList",
     voteUrl: "https://discordlist.gg/bot/1460058511802105976/vote",
-    isVoteLive: true,
+    isVoteLive: false,
     supportsVoteRewards: true,
     supportsServerCount: true
   },

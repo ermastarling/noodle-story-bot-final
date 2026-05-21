@@ -70,6 +70,25 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 - `npm run sim` — exercise the simulation harness (see below)
 - `npm run mobile:baseline` — run tests and create a baseline migration tag (`mobile-base-v1` by default)
 - `npm run mobile:bootstrap` — clone and bootstrap a dedicated mobile repository with `gh`
+- `npm run review:guard` — run local pre-review safety checks (env-doc drift, new stream-safety patterns, script memory-risk patterns)
+- `npm run review:all` — run lint + tests + pre-review guard
+- `npm run check:pr-checklist` — validate the active PR body against required checklist rules
+
+## Git Hooks
+
+Enable repo hooks once per clone/codespace:
+
+```bash
+npm run setup:hooks
+```
+
+The pre-push hook automatically runs:
+
+- `scripts/check-actions-pinned.sh`
+- `npm run review:all`
+- PR checklist validation (for branches with an existing PR)
+
+For a brand-new branch publish (no PR yet), the first push is allowed and the hook prints a reminder to create the PR with the required checklist completed before subsequent pushes.
 
 ## Command Registration Notes
 
@@ -89,6 +108,14 @@ Optional developer alert env vars:
 - `NOODLE_DEV_ALERT_CHANNEL_ID` — channel ID in the official guild for alerts
 - `NOODLE_DEV_ALERT_USER_ID` — user ID that is required for alert mention/ping behavior
 
+Telemetry env vars:
+
+- `NOODLE_TELEMETRY_LOG_DISABLED` — set `1` to disable file telemetry entirely
+- `NOODLE_TELEMETRY_LOG_PATH` — optional custom path for telemetry JSONL output
+- `NOODLE_TELEMETRY_MODE` — `all` (default), `slow` (only `interaction_slow_event` + `rate_limited`), or `off` (alias: `none`)
+- `NOODLE_TELEMETRY_SAMPLE_RATE` — `0..1` sampling rate for high-volume events (`interaction_latency`, `component_nav_phase`, `component_nav_subroute_phase`)
+- `NOODLE_TELEMETRY_MAX_BUFFER_BYTES` — max write buffer guard (default `262144`); events are dropped under sustained backpressure to protect process memory
+
 Official stats counter env vars:
 
 - `NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED` — set `0` to disable official stats counter updates
@@ -102,6 +129,8 @@ Store/webhook-related env vars:
 
 - `NOODLE_WEBHOOK_PORT` — enables the webhook HTTP server when set
 - `NOODLE_WEBHOOK_PATH` — Discord entitlement webhook path (default `/discord/entitlements`)
+- `NOODLE_WEBHOOK_LOG_FILE` — optional webhook log file path (default `webhooks.log` in the current working directory)
+- `NOODLE_WEBHOOK_LOG_TO_CONSOLE` — set `1` to mirror webhook `error` logs to console in addition to file output
 - `NOODLE_TOPGG_WEBHOOK_PATH` + `NOODLE_TOPGG_WEBHOOK_AUTH` (fallback: `TOPGG_WEBHOOK_AUTH`) — Top.gg vote webhook path/auth
 - `NOODLE_TOPGG_REQUIRE_SIGNATURE` — set `1` to require valid `x-topgg-signature` and disable token fallback for Top.gg webhooks
 - `NOODLE_DISCORDBOTLIST_WEBHOOK_PATH` + `NOODLE_DISCORDBOTLIST_WEBHOOK_AUTH` — Discord Bot List vote webhook

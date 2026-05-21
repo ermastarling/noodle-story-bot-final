@@ -3,9 +3,63 @@ import path from "path";
 
 const telemetryLogPath = process.env.NOODLE_TELEMETRY_LOG_PATH || path.join(process.cwd(), "telemetry.log");
 const telemetryDisabled = process.env.NOODLE_TELEMETRY_LOG_DISABLED === "1";
+const telemetryMode = String(process.env.NOODLE_TELEMETRY_MODE || "all").trim().toLowerCase();
+const TELEMETRY_MAX_BUFFER_BYTES_CAP = 4 * 1024 * 1024;
+
+function parseNumberEnv(name, fallback) {
+  const rawValue = process.env[name];
+  if (rawValue == null) return fallback;
+  const normalized = String(rawValue).trim();
+  if (!normalized) return fallback;
+  const raw = Number(normalized);
+  return Number.isFinite(raw) ? raw : fallback;
+}
+
+const telemetrySampleRateRaw = parseNumberEnv("NOODLE_TELEMETRY_SAMPLE_RATE", 1);
+const telemetrySampleRate = Math.max(0, Math.min(1, telemetrySampleRateRaw));
+const telemetryMaxBufferBytesRaw = parseNumberEnv("NOODLE_TELEMETRY_MAX_BUFFER_BYTES", 262144);
+const telemetryMaxBufferBytesInt = Math.trunc(telemetryMaxBufferBytesRaw);
+const telemetryMaxBufferBytes = Math.min(
+  TELEMETRY_MAX_BUFFER_BYTES_CAP,
+  Math.max(8192, telemetryMaxBufferBytesInt)
+);
+if (!telemetryDisabled && (telemetryMaxBufferBytesRaw !== telemetryMaxBufferBytesInt || telemetryMaxBufferBytesInt !== telemetryMaxBufferBytes)) {
+  console.warn(
+    `NOODLE_TELEMETRY_MAX_BUFFER_BYTES normalized to ${telemetryMaxBufferBytes} (requested ${telemetryMaxBufferBytesRaw}; integer ${telemetryMaxBufferBytesInt}; bounds 8192-${TELEMETRY_MAX_BUFFER_BYTES_CAP})`
+  );
+}
+const noisyEvents = new Set(["interaction_latency", "component_nav_phase", "component_nav_subroute_phase"]);
 
 let telemetryStream = null;
 let telemetryInitFailed = false;
+let droppedByBuffer = 0;
+let droppedBySampling = 0;
+let droppedByMode = 0;
+let backpressureSignals = 0;
+let lastDropLogAt = 0;
+let telemetryBackpressureActive = false;
+
+function shouldEmitByMode(event) {
+  if (telemetryMode !== "slow") return true;
+  return event === "interaction_slow_event" || event === "rate_limited";
+}
+
+function shouldSampleEvent(event) {
+  if (telemetrySampleRate >= 1) return true;
+  if (!noisyEvents.has(event)) return true;
+  return Math.random() < telemetrySampleRate;
+}
+
+function maybeLogDropSummary() {
+  const now = Date.now();
+  if (now - lastDropLogAt < 60000) return;
+  const totalDrops = droppedByBuffer + droppedBySampling + droppedByMode;
+  if (totalDrops <= 0 && backpressureSignals <= 0) return;
+  lastDropLogAt = now;
+  console.warn(
+    `Telemetry drops: total=${totalDrops} buffer=${droppedByBuffer} sampling=${droppedBySampling} mode=${droppedByMode} backpressureSignals=${backpressureSignals}`
+  );
+}
 
 function roundTelemetryNumber(value) {
   if (!Number.isFinite(value)) return value;
@@ -34,11 +88,18 @@ function getTelemetryStream() {
   try {
     const dir = path.dirname(telemetryLogPath);
     fs.mkdirSync(dir, { recursive: true });
-    telemetryStream = fs.createWriteStream(telemetryLogPath, { flags: "a" });
+    telemetryStream = fs.createWriteStream(telemetryLogPath, {
+      flags: "a",
+      highWaterMark: telemetryMaxBufferBytes
+    });
     telemetryStream.on("error", (error) => {
       telemetryInitFailed = true;
       telemetryStream = null;
+      telemetryBackpressureActive = false;
       console.error("Telemetry stream error:", error?.message ?? error);
+    });
+    telemetryStream.on("drain", () => {
+      telemetryBackpressureActive = false;
     });
     return telemetryStream;
   } catch (error) {
@@ -49,6 +110,21 @@ function getTelemetryStream() {
 }
 
 export function emitTelemetry(event, payload = {}) {
+  if (telemetryDisabled) return;
+  if (telemetryMode === "off" || telemetryMode === "none") return;
+
+  if (!shouldEmitByMode(event)) {
+    droppedByMode += 1;
+    maybeLogDropSummary();
+    return;
+  }
+
+  if (!shouldSampleEvent(event)) {
+    droppedBySampling += 1;
+    maybeLogDropSummary();
+    return;
+  }
+
   const stream = getTelemetryStream();
   if (!stream) return;
 
@@ -58,5 +134,18 @@ export function emitTelemetry(event, payload = {}) {
     event,
     payload: safePayload
   });
-  stream.write(`${line}\n`);
+  const lineBytes = Buffer.byteLength(line) + 1;
+
+  if (telemetryBackpressureActive || stream.writableNeedDrain || (stream.writableLength + lineBytes) > telemetryMaxBufferBytes) {
+    droppedByBuffer += 1;
+    maybeLogDropSummary();
+    return;
+  }
+
+  const accepted = stream.write(`${line}\n`);
+  if (!accepted) {
+    telemetryBackpressureActive = true;
+    backpressureSignals += 1;
+    maybeLogDropSummary();
+  }
 }

@@ -154,25 +154,153 @@ import { theme } from "./ui/theme.js";
   const CWD = process.cwd();
 
   const LOG_PATH = path.join(CWD, "command-errors.log");
+  const WEBHOOK_LOG_PATH = path.resolve(CWD, process.env.NOODLE_WEBHOOK_LOG_FILE || "webhooks.log");
+  const WEBHOOK_LOG_TO_CONSOLE = process.env.NOODLE_WEBHOOK_LOG_TO_CONSOLE === "1";
   const BOOT_PATH = path.join(CWD, "boot-ok.log");
   const USER_ERROR_DIR = path.join(CWD, "user-error-logs");
   const USER_ERROR_RETENTION_DAYS = 14;
   const USER_ERROR_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
   let lastUserErrorCleanup = 0;
-
-  const errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
+  let errorLog = null;
+  let errorLogEnabled = false;
+  let errorLogNeedsDrain = false;
+  let errorLogFailureNotified = false;
+  let webhookFileLoggingEnabled = false;
+  let webhookLogNeedsDrain = false;
+  let webhookWriteFailureNotified = false;
   const origError = console.error;
-  console.error = (...args) => {
-    origError(...args);
+
+  try {
+    errorLog = fs.createWriteStream(LOG_PATH, { flags: "a" });
+    errorLogEnabled = true;
+    errorLog.on("drain", () => {
+      errorLogNeedsDrain = false;
+    });
+    errorLog.on("error", (error) => {
+      errorLogEnabled = false;
+      errorLog = null;
+      errorLogNeedsDrain = false;
+      if (!errorLogFailureNotified) {
+        errorLogFailureNotified = true;
+        origError("Command error log stream disabled:", error?.message ?? error);
+      }
+    });
+  } catch (error) {
+    errorLogEnabled = false;
+    errorLog = null;
+    errorLogNeedsDrain = false;
+  }
+  let webhookLogStream = null;
+  if (process.env.NOODLE_WEBHOOK_PORT) {
     try {
-      const line = args
-        .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
-        .join(" ");
-      errorLog.write(`[${new Date().toISOString()}] ${line}\n`);
+      fs.mkdirSync(path.dirname(WEBHOOK_LOG_PATH), { recursive: true });
+      webhookLogStream = fs.createWriteStream(WEBHOOK_LOG_PATH, { flags: "a" });
+      webhookFileLoggingEnabled = true;
+      webhookLogStream.on("drain", () => {
+        webhookLogNeedsDrain = false;
+      });
+      webhookLogStream.on("error", (error) => {
+        webhookFileLoggingEnabled = false;
+        webhookLogStream = null;
+        webhookLogNeedsDrain = false;
+        console.error("Webhook log stream error:", error?.message ?? error);
+      });
+    } catch (error) {
+      webhookFileLoggingEnabled = false;
+      webhookLogStream = null;
+      webhookLogNeedsDrain = false;
+      console.error("Failed to initialize webhook log file:", error?.message ?? error);
+    }
+  }
+
+  const formatErrorLogPart = (arg) => {
+    if (typeof arg === "string") return arg;
+    try {
+      return JSON.stringify(arg);
     } catch {
-      // Ignore log write failures.
+      return String(arg);
     }
   };
+
+  console.error = (...args) => {
+    origError(...args);
+    if (!errorLogEnabled || !errorLog) return;
+    if (errorLogNeedsDrain) return;
+    try {
+      const line = args
+        .map((arg) => formatErrorLogPart(arg))
+        .join(" ");
+      const accepted = errorLog.write(`[${new Date().toISOString()}] ${line}\n`);
+      if (!accepted) errorLogNeedsDrain = true;
+    } catch (error) {
+      errorLogEnabled = false;
+      errorLog = null;
+      errorLogNeedsDrain = false;
+      if (!errorLogFailureNotified) {
+        errorLogFailureNotified = true;
+        origError("Command error log stream disabled:", error?.message ?? error);
+      }
+    }
+  };
+
+  const formatLogPart = (arg) => {
+    if (typeof arg === "string") return arg;
+    try {
+      return JSON.stringify(arg);
+    } catch {
+      return String(arg);
+    }
+  };
+
+  const writeWebhookConsole = (level, args) => {
+    if (level === "error") {
+      console.error(...args);
+      return;
+    }
+    if (level === "warn") {
+      console.warn(...args);
+      return;
+    }
+    console.log(...args);
+  };
+
+  function writeWebhookLog(level, args) {
+    const canWriteFile = webhookFileLoggingEnabled && webhookLogStream;
+    if (!canWriteFile) {
+      // If file logging is unavailable, keep webhook diagnostics visible in console.
+      writeWebhookConsole(level, args);
+      return;
+    }
+
+    try {
+      if (!webhookLogNeedsDrain) {
+        const line = args.map(formatLogPart).join(" ");
+        const accepted = webhookLogStream.write(`[${new Date().toISOString()}] [${level.toUpperCase()}] ${line}\n`);
+        if (!accepted) webhookLogNeedsDrain = true;
+      } else if (level === "error") {
+        // Keep webhook errors visible when file writes are temporarily dropped under backpressure.
+        writeWebhookConsole(level, args);
+      }
+    } catch (error) {
+      webhookFileLoggingEnabled = false;
+      webhookLogStream = null;
+      webhookLogNeedsDrain = false;
+      if (!webhookWriteFailureNotified) {
+        webhookWriteFailureNotified = true;
+        console.error("Webhook log file disabled after write failure:", error?.message ?? error);
+      }
+      writeWebhookConsole(level, args);
+      return;
+    }
+
+    if (WEBHOOK_LOG_TO_CONSOLE && level === "error") {
+      writeWebhookConsole(level, args);
+    }
+  }
+
+  const webhookInfo = (...args) => writeWebhookLog("info", args);
+  const webhookWarn = (...args) => writeWebhookLog("warn", args);
+  const webhookError = (...args) => writeWebhookLog("error", args);
 
   console.log("✅ BOOTING FILE:", __filename);
   console.log("✅ CWD:", CWD);
@@ -750,7 +878,7 @@ import { theme } from "./ui/theme.js";
       const message = Buffer.concat([Buffer.from(String(timestamp)), rawBody]);
       return crypto.verify(null, message, publicKey, signatureBytes);
     } catch (error) {
-      console.error("⚠️ Discord webhook signature verify failed:", error?.message ?? error);
+      webhookError("⚠️ Discord webhook signature verify failed:", error?.message ?? error);
       return false;
     }
   }
@@ -766,7 +894,7 @@ import { theme } from "./ui/theme.js";
       const digest = crypto.createHmac("sha256", secret).update(payload).digest("hex");
       return signatures.some((sig) => timingSafeEqual(digest, sig));
     } catch (error) {
-      console.error("Stripe: Signature verify failed:", error?.message ?? error);
+      webhookError("Stripe: Signature verify failed:", error?.message ?? error);
       return false;
     }
   }
@@ -822,7 +950,7 @@ import { theme } from "./ui/theme.js";
 
       return timingSafeEqual(expected, signature);
     } catch (error) {
-      console.error("Top.gg: Signature verify failed:", error?.message ?? error);
+      webhookError("Top.gg: Signature verify failed:", error?.message ?? error);
       return false;
     }
   }
@@ -900,7 +1028,7 @@ import { theme } from "./ui/theme.js";
 
       return { ok: true, claims };
     } catch (error) {
-      console.error("DiscordList.gg: JWT verify failed:", error?.message ?? error);
+      webhookError("DiscordList.gg: JWT verify failed:", error?.message ?? error);
       return { ok: false, claims: null };
     }
   }
@@ -1720,14 +1848,14 @@ import { theme } from "./ui/theme.js";
     const stripePrecheckSecret = process.env.NOODLE_STRIPE_PRECHECK_SECRET || "";
 
     if (!port) {
-      console.log("INFO: Discord store webhook disabled (NOODLE_WEBHOOK_PORT not set).");
+      webhookInfo("INFO: Discord store webhook disabled (NOODLE_WEBHOOK_PORT not set).");
       return;
     }
     if (!publicKeyHex) {
-      console.log("INFO: DISCORD_PUBLIC_KEY not set; Discord entitlement signature checks are disabled.");
+      webhookInfo("INFO: DISCORD_PUBLIC_KEY not set; Discord entitlement signature checks are disabled.");
     }
     if (!enabledVoteConfigs.length) {
-      console.log("INFO: Vote webhook auth token not set; vote webhook routes disabled.");
+      webhookInfo("INFO: Vote webhook auth token not set; vote webhook routes disabled.");
     }
 
     const server = http.createServer(async (req, res) => {
@@ -1793,7 +1921,7 @@ import { theme } from "./ui/theme.js";
       try {
         rawBody = await getWebhookRawBody(req);
       } catch (error) {
-        console.log("Webhook: Failed to read body", error?.message ?? error);
+        webhookError("Webhook: Failed to read body", error?.message ?? error);
         res.writeHead(400, { "content-type": "text/plain" });
         res.end("bad request");
         return;
@@ -1803,7 +1931,7 @@ import { theme } from "./ui/theme.js";
       try {
         decodedBody = await decodeWebhookBody(rawBody, req.headers["content-encoding"]);
       } catch (error) {
-        console.log("Webhook: Failed to decode body", error?.message ?? error);
+        webhookError("Webhook: Failed to decode body", error?.message ?? error);
         res.writeHead(400, { "content-type": "text/plain" });
         res.end("bad request");
         return;
@@ -1811,7 +1939,7 @@ import { theme } from "./ui/theme.js";
 
       const parsedPayload = parseWebhookPayload(decodedBody, req.headers["content-type"]);
       if (!parsedPayload.ok) {
-        console.log("Webhook: Failed to parse payload", parsedPayload.error?.message ?? parsedPayload.error);
+        webhookError("Webhook: Failed to parse payload", parsedPayload.error?.message ?? parsedPayload.error);
         res.writeHead(400, { "content-type": "text/plain" });
         res.end("invalid json");
         return;
@@ -1832,7 +1960,7 @@ import { theme } from "./ui/theme.js";
           rawBody
         });
         if (!signatureOk) {
-          console.log("Stripe: Invalid signature", {
+          webhookWarn("Stripe: Invalid signature", {
             signature: signatureHeader ? String(signatureHeader).slice(0, 12) : null
           });
           res.writeHead(401, { "content-type": "text/plain" });
@@ -1859,7 +1987,7 @@ import { theme } from "./ui/theme.js";
         const discordId = metadata?.discord_id || session?.client_reference_id || null;
         const specId = metadata?.spec_id || null;
 
-        console.log(
+        webhookInfo(
           "Stripe: Checkout completed",
           JSON.stringify({ sessionId, discordId, specId })
         );
@@ -1882,7 +2010,7 @@ import { theme } from "./ui/theme.js";
 
         const serverId = getLatestServerIdForUser(db, discordId);
         if (!serverId) {
-          console.log("Stripe: Missing server for user", discordId);
+          webhookWarn("Stripe: Missing server for user", discordId);
           res.writeHead(202, { "content-type": "text/plain" });
           res.end("missing server");
           return;
@@ -1898,7 +2026,7 @@ import { theme } from "./ui/theme.js";
           decorSetsContent,
           coins: 10000
         });
-        console.log(
+        webhookInfo(
           "Stripe: Grant result",
           JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, discordId })
         );
@@ -1972,15 +2100,15 @@ import { theme } from "./ui/theme.js";
             authValid = timingSafeEqual(providedToken, voteConfig.auth);
           }
           if (!signatureValid && authValid && !topggRequireSignature) {
-            console.warn("Top.gg: Invalid x-topgg-signature; accepted via webhook token fallback.");
+            webhookWarn("Top.gg: Invalid x-topgg-signature; accepted via webhook token fallback.");
           }
           if (!signatureValid && topggRequireSignature) {
-            console.warn("Top.gg: Rejected webhook due to invalid signature with NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
+            webhookWarn("Top.gg: Rejected webhook due to invalid signature with NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
           }
         } else if (voteConfig.source === VOTE_SOURCES.TOPGG) {
           authValid = !topggRequireSignature && timingSafeEqual(providedToken, voteConfig.auth);
           if (topggRequireSignature) {
-            console.warn("Top.gg: Rejected webhook without x-topgg-signature because NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
+            webhookWarn("Top.gg: Rejected webhook without x-topgg-signature because NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
           }
         } else if (voteConfig.source === VOTE_SOURCES.DISCORDLIST_GG) {
           const jwtResult = verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload, tokenCandidate: providedToken });
@@ -2001,7 +2129,7 @@ import { theme } from "./ui/theme.js";
         }
 
         if (isVoteTestPayload(effectiveVotePayload)) {
-          console.log(`${voteConfig.label}: Test webhook acknowledged`);
+          webhookInfo(`${voteConfig.label}: Test webhook acknowledged`);
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: true, test: true }));
           return;
@@ -2038,7 +2166,7 @@ import { theme } from "./ui/theme.js";
           upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
         }
 
-        console.log(
+        webhookInfo(
           `${voteConfig.label}: Vote registered`,
           JSON.stringify({
             userId: votedUserId,
@@ -2077,9 +2205,9 @@ import { theme } from "./ui/theme.js";
       if (!signatureOk) {
         if (!signature || !timestamp) {
           const headerKeys = Object.keys(req.headers || {}).sort();
-          console.log("Discord: Missing signature headers", JSON.stringify({ headers: headerKeys }));
+          webhookWarn("Discord: Missing signature headers", JSON.stringify({ headers: headerKeys }));
         }
-        console.log("Discord: Invalid signature", {
+        webhookWarn("Discord: Invalid signature", {
           signature: signature ? String(signature).slice(0, 8) : null
         });
         res.writeHead(401, { "content-type": "text/plain" });
@@ -2121,7 +2249,7 @@ import { theme } from "./ui/theme.js";
 
       const serverId = guildId || getLatestServerIdForUser(db, userId);
       if (!serverId) {
-        console.log("Discord: Missing server for user", userId);
+        webhookWarn("Discord: Missing server for user", userId);
         res.writeHead(202, { "content-type": "text/plain" });
         res.end("missing server");
         return;
@@ -2137,7 +2265,7 @@ import { theme } from "./ui/theme.js";
         decorSetsContent,
         coins: 10000
       });
-      console.log(
+      webhookInfo(
         "Discord: Grant result",
         JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
       );
@@ -2185,11 +2313,11 @@ import { theme } from "./ui/theme.js";
     });
 
     server.listen(port, () => {
-      console.log(`OK: Discord store webhook listening on ${port}${webhookPath}`);
-      console.log(`OK: Stripe webhook listening on ${port}${stripeWebhookPath}`);
+      webhookInfo(`OK: Discord store webhook listening on ${port}${webhookPath}`);
+      webhookInfo(`OK: Stripe webhook listening on ${port}${stripeWebhookPath}`);
       for (const cfg of voteWebhookConfigs) {
         const enabledText = cfg.auth ? "enabled" : "disabled";
-        console.log(`OK: ${cfg.label} vote webhook ${enabledText} on ${port}${cfg.path}`);
+        webhookInfo(`OK: ${cfg.label} vote webhook ${enabledText} on ${port}${cfg.path}`);
       }
     });
   }
