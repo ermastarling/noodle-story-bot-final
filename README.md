@@ -70,6 +70,25 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 - `npm run sim` — exercise the simulation harness (see below)
 - `npm run mobile:baseline` — run tests and create a baseline migration tag (`mobile-base-v1` by default)
 - `npm run mobile:bootstrap` — clone and bootstrap a dedicated mobile repository with `gh`
+- `npm run review:guard` — run local pre-review safety checks (env-doc drift, new stream-safety patterns, script memory-risk patterns)
+- `npm run review:all` — run lint + tests + pre-review guard
+- `npm run check:pr-checklist` — validate the active PR body against required checklist rules
+
+## Git Hooks
+
+Enable repo hooks once per clone/codespace:
+
+```bash
+npm run setup:hooks
+```
+
+The pre-push hook automatically runs:
+
+- `scripts/check-actions-pinned.sh`
+- `npm run review:all`
+- PR checklist validation (for branches with an existing PR)
+
+For a brand-new branch publish (no PR yet), the first push is allowed and the hook prints a reminder to create the PR with the required checklist completed before subsequent pushes.
 
 ## Command Registration Notes
 

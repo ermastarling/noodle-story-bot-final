@@ -1,4 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+updates="$(cat)"
+
 bash scripts/check-actions-pinned.sh
+npm run -s review:all
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+# Allow the very first publish of a new branch before PR exists.
+first_publish=0
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+	[[ -z "${local_ref:-}" ]] && continue
+	if [[ "${remote_sha}" == "0000000000000000000000000000000000000000" ]]; then
+		first_publish=1
+	fi
+done <<< "$updates"
+
+# Skip PR checklist enforcement for direct integration branches.
+if [[ "$branch" == "main" || "$branch" == "develop" ]]; then
+	exit 0
+fi
+
+if gh pr view --json number >/dev/null 2>&1; then
+	node scripts/validate-pr-checklist.js --current-pr
+	exit 0
+fi
+
+if [[ "$first_publish" -eq 1 ]]; then
+	echo "No PR detected yet for branch '$branch'. First push is allowed."
+	echo "Create the PR now using .github/pull_request_template.md and complete required checklist items before next push."
+	exit 0
+fi
+
+echo "Push blocked: no PR found for branch '$branch'."
+echo "Create a PR first, then push again. Checklist validation will run automatically on next push."
+exit 1
