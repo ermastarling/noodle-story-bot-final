@@ -606,6 +606,7 @@ import { theme } from "./ui/theme.js";
   let shardRecommendedAlertSent = false;
   let botListStatsHeartbeatHandle = null;
   let nextOfficialStatsSyncAllowedAt = 0;
+  let officialStatsUpdateQueue = Promise.resolve(false);
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -1511,94 +1512,102 @@ import { theme } from "./ui/theme.js";
   async function updateOfficialStatsChannels(precomputedCounts = null, { reason = "event" } = {}) {
     if (!officialStatsChannelsEnabled || !officialGuildId) return false;
 
-    const nowMs = Date.now();
-    const isIntervalReason = reason === "interval";
-    if (isIntervalReason && nextOfficialStatsSyncAllowedAt > nowMs) {
-      return false;
-    }
-
-    try {
-      const officialGuild = client.guilds.cache.get(officialGuildId)
-        || await client.guilds.fetch(officialGuildId).catch(() => null);
-      if (!officialGuild) return false;
-
-      const counts = precomputedCounts && typeof precomputedCounts === "object"
-        ? precomputedCounts
-        : getCurrentBotListCounts();
-      const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
-      const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
-      const officialMemberCount = Math.max(0, Number(officialGuild?.memberCount || 0));
-
-      if (
-        isIntervalReason
-        && lastOfficialStatsPush
-        && lastOfficialStatsPush.serverCount === serverCount
-        && lastOfficialStatsPush.shopsCount === shopsCount
-        && lastOfficialStatsPush.officialMemberCount === officialMemberCount
-      ) {
+    const runUpdate = async () => {
+      const nowMs = Date.now();
+      const isIntervalReason = reason === "interval";
+      if (isIntervalReason && nextOfficialStatsSyncAllowedAt > nowMs) {
         return false;
       }
 
-      const serverResult = await ensureOfficialReadonlyStatsChannel(
-        officialGuild,
-        officialServerCountChannelId,
-        {
-          marker: "noodle:stats:servers",
-          label: officialServerCountLabel,
-          count: serverCount
-        }
-      );
-      const shopsResult = await ensureOfficialReadonlyStatsChannel(
-        officialGuild,
-        officialShopCountChannelId,
-        {
-          marker: "noodle:stats:shops",
-          label: officialShopCountLabel,
-          count: shopsCount
-        }
-      );
-      const memberResult = await ensureOfficialReadonlyStatsChannel(
-        officialGuild,
-        officialMemberCountChannelId,
-        {
-          marker: "noodle:stats:official-members",
-          label: officialMemberCountLabel,
-          count: officialMemberCount
-        }
-      );
+      try {
+        const officialGuild = client.guilds.cache.get(officialGuildId)
+          || await client.guilds.fetch(officialGuildId).catch(() => null);
+        if (!officialGuild) return false;
 
-      const channelResults = [serverResult, shopsResult, memberResult];
-      const resolvedChannels = channelResults
-        .map((result) => result?.channel || null)
-        .filter(Boolean);
-      const allChannelsResolved = channelResults.every((result) => Boolean(result?.channel));
-      const allChannelsSynchronized = channelResults.every((result) => Boolean(result?.channel) && result?.synchronized === true);
+        const counts = precomputedCounts && typeof precomputedCounts === "object"
+          ? precomputedCounts
+          : getCurrentBotListCounts();
+        const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
+        const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
+        const officialMemberCount = Math.max(0, Number(officialGuild?.memberCount || 0));
 
-      if (serverResult?.channel?.id) officialServerCountChannelId = serverResult.channel.id;
-      if (shopsResult?.channel?.id) officialShopCountChannelId = shopsResult.channel.id;
-      if (memberResult?.channel?.id) officialMemberCountChannelId = memberResult.channel.id;
+        if (
+          isIntervalReason
+          && lastOfficialStatsPush
+          && lastOfficialStatsPush.serverCount === serverCount
+          && lastOfficialStatsPush.shopsCount === shopsCount
+          && lastOfficialStatsPush.officialMemberCount === officialMemberCount
+        ) {
+          return false;
+        }
 
-      if (resolvedChannels.length === 0) {
-        console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
+        const serverResult = await ensureOfficialReadonlyStatsChannel(
+          officialGuild,
+          officialServerCountChannelId,
+          {
+            marker: "noodle:stats:servers",
+            label: officialServerCountLabel,
+            count: serverCount
+          }
+        );
+        const shopsResult = await ensureOfficialReadonlyStatsChannel(
+          officialGuild,
+          officialShopCountChannelId,
+          {
+            marker: "noodle:stats:shops",
+            label: officialShopCountLabel,
+            count: shopsCount
+          }
+        );
+        const memberResult = await ensureOfficialReadonlyStatsChannel(
+          officialGuild,
+          officialMemberCountChannelId,
+          {
+            marker: "noodle:stats:official-members",
+            label: officialMemberCountLabel,
+            count: officialMemberCount
+          }
+        );
+
+        const channelResults = [serverResult, shopsResult, memberResult];
+        const resolvedChannels = channelResults
+          .map((result) => result?.channel || null)
+          .filter(Boolean);
+        const allChannelsResolved = channelResults.every((result) => Boolean(result?.channel));
+        const allChannelsSynchronized = channelResults.every((result) => Boolean(result?.channel) && result?.synchronized === true);
+
+        if (serverResult?.channel?.id) officialServerCountChannelId = serverResult.channel.id;
+        if (shopsResult?.channel?.id) officialShopCountChannelId = shopsResult.channel.id;
+        if (memberResult?.channel?.id) officialMemberCountChannelId = memberResult.channel.id;
+
+        if (resolvedChannels.length === 0) {
+          console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
+          return false;
+        }
+
+        if (allChannelsResolved && allChannelsSynchronized) {
+          lastOfficialStatsPush = {
+            serverCount,
+            shopsCount,
+            officialMemberCount,
+            sentAt: nowMs
+          };
+          nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
+        }
+
+        console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannels.length}/3`);
+        return true;
+      } catch (error) {
+        console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
         return false;
       }
+    };
 
-      if (allChannelsResolved && allChannelsSynchronized) {
-        lastOfficialStatsPush = {
-          serverCount,
-          shopsCount,
-          officialMemberCount,
-          sentAt: nowMs
-        };
-        nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
-      }
-
-      console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannels.length}/3`);
-      return true;
-    } catch (error) {
-      console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
-      return false;
-    }
+    const queuedRun = officialStatsUpdateQueue
+      .catch(() => false)
+      .then(runUpdate);
+    officialStatsUpdateQueue = queuedRun.then(() => false, () => false);
+    return queuedRun;
   }
 
   function getMessageSearchBlob(message) {
