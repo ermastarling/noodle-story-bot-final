@@ -105,7 +105,7 @@ export function emitTelemetry(event, payload = {}) {
   const stream = getTelemetryStream();
   if (!stream) return;
 
-  if (stream.writableLength > telemetryMaxBufferBytes) {
+  if (stream.writableNeedDrain || stream.writableLength >= telemetryMaxBufferBytes) {
     droppedByBuffer += 1;
     maybeLogDropSummary();
     return;
@@ -117,5 +117,9 @@ export function emitTelemetry(event, payload = {}) {
     event,
     payload: safePayload
   });
-  stream.write(`${line}\n`);
+  const accepted = stream.write(`${line}\n`);
+  if (!accepted) {
+    droppedByBuffer += 1;
+    maybeLogDropSummary();
+  }
 }
