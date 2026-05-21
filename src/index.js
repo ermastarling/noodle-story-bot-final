@@ -207,10 +207,29 @@ import { theme } from "./ui/theme.js";
     }
   };
 
+  const writeWebhookConsole = (level, args) => {
+    if (level === "error") {
+      console.error(...args);
+      return;
+    }
+    if (level === "warn") {
+      console.warn(...args);
+      return;
+    }
+    console.log(...args);
+  };
+
   function writeWebhookLog(level, args) {
+    const canWriteFile = webhookFileLoggingEnabled && webhookLogStream;
+    if (!canWriteFile) {
+      // If file logging is unavailable, keep webhook diagnostics visible in console.
+      writeWebhookConsole(level, args);
+      return;
+    }
+
     try {
       const line = args.map(formatLogPart).join(" ");
-      if (webhookFileLoggingEnabled && webhookLogStream && !webhookLogNeedsDrain) {
+      if (!webhookLogNeedsDrain) {
         const accepted = webhookLogStream.write(`[${new Date().toISOString()}] [${level.toUpperCase()}] ${line}\n`);
         if (!accepted) webhookLogNeedsDrain = true;
       }
@@ -218,9 +237,9 @@ import { theme } from "./ui/theme.js";
       // Ignore webhook log write failures.
     }
 
-    if (!WEBHOOK_LOG_TO_CONSOLE) return;
-    if (level !== "error") return;
-    console.error(...args);
+    if (WEBHOOK_LOG_TO_CONSOLE && level === "error") {
+      writeWebhookConsole(level, args);
+    }
   }
 
   const webhookInfo = (...args) => writeWebhookLog("info", args);

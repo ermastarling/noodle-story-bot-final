@@ -22,9 +22,9 @@ let droppedBySampling = 0;
 let droppedByMode = 0;
 let backpressureSignals = 0;
 let lastDropLogAt = 0;
+let telemetryBackpressureActive = false;
 
 function shouldEmitByMode(event) {
-  if (telemetryMode === "off" || telemetryMode === "none") return false;
   if (telemetryMode !== "slow") return true;
   return event === "interaction_slow_event" || event === "rate_limited";
 }
@@ -80,7 +80,11 @@ function getTelemetryStream() {
     telemetryStream.on("error", (error) => {
       telemetryInitFailed = true;
       telemetryStream = null;
+      telemetryBackpressureActive = false;
       console.error("Telemetry stream error:", error?.message ?? error);
+    });
+    telemetryStream.on("drain", () => {
+      telemetryBackpressureActive = false;
     });
     return telemetryStream;
   } catch (error) {
@@ -91,6 +95,8 @@ function getTelemetryStream() {
 }
 
 export function emitTelemetry(event, payload = {}) {
+  if (telemetryMode === "off" || telemetryMode === "none") return;
+
   if (!shouldEmitByMode(event)) {
     droppedByMode += 1;
     maybeLogDropSummary();
@@ -106,20 +112,23 @@ export function emitTelemetry(event, payload = {}) {
   const stream = getTelemetryStream();
   if (!stream) return;
 
-  if (stream.writableNeedDrain || stream.writableLength >= telemetryMaxBufferBytes) {
-    droppedByBuffer += 1;
-    maybeLogDropSummary();
-    return;
-  }
-
   const safePayload = normalizeTelemetryValue(payload ? { ...payload } : {});
   const line = JSON.stringify({
     ts: new Date().toISOString(),
     event,
     payload: safePayload
   });
+  const lineBytes = Buffer.byteLength(line) + 1;
+
+  if (telemetryBackpressureActive || stream.writableNeedDrain || (stream.writableLength + lineBytes) > telemetryMaxBufferBytes) {
+    droppedByBuffer += 1;
+    maybeLogDropSummary();
+    return;
+  }
+
   const accepted = stream.write(`${line}\n`);
   if (!accepted) {
+    telemetryBackpressureActive = true;
     backpressureSignals += 1;
     maybeLogDropSummary();
   }

@@ -575,13 +575,25 @@ async function main() {
     navSubroutePhaseFiltered = navSubroutePhaseEvents.filter((e) => e.ts >= start && e.ts <= latest);
   }
 
-  const allFilteredTs = [
-    ...filtered.map((e) => e.ts),
-    ...slowFiltered.map((e) => e.ts),
-    ...navPhaseFiltered.map((e) => e.ts),
-    ...navSubroutePhaseFiltered.map((e) => e.ts)
-  ];
-  if (allFilteredTs.length === 0) {
+  let totalEventCount = 0;
+  let earliest = null;
+  let latest = null;
+  const includeTs = (items) => {
+    for (const item of items) {
+      const ts = item.ts;
+      if (!Number.isFinite(ts)) continue;
+      totalEventCount += 1;
+      if (earliest == null || ts < earliest) earliest = ts;
+      if (latest == null || ts > latest) latest = ts;
+    }
+  };
+
+  includeTs(filtered);
+  includeTs(slowFiltered);
+  includeTs(navPhaseFiltered);
+  includeTs(navSubroutePhaseFiltered);
+
+  if (totalEventCount === 0 || earliest == null || latest == null) {
     process.stderr.write("No telemetry events found in the requested analysis window.\n");
     process.exit(1);
   }
@@ -592,13 +604,11 @@ async function main() {
   const slowPatterns = summarizeSlowEvents(slowFiltered);
   const navBottlenecks = summarizeNavPhases(navPhaseFiltered);
   const navSubrouteBottlenecks = summarizeNavSubroutePhases(navSubroutePhaseFiltered);
-  const earliest = Math.min(...allFilteredTs);
-  const latest = Math.max(...allFilteredTs);
 
   const report = {
     sourceFile: filePath,
     windowHours: Number.isFinite(args.windowHours) && args.windowHours > 0 ? args.windowHours : null,
-    totalEventCount: allFilteredTs.length,
+    totalEventCount,
     earliestTs: new Date(earliest).toISOString(),
     latestTs: new Date(latest).toISOString(),
     spanHours: r3((latest - earliest) / (60 * 60 * 1000)),
