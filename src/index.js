@@ -424,6 +424,10 @@ import { theme } from "./ui/theme.js";
   const officialStatsChannelRefreshIntervalMs = Number.isFinite(officialStatsChannelRefreshIntervalRaw)
     ? Math.max(60_000, Math.floor(officialStatsChannelRefreshIntervalRaw))
     : 10 * 60 * 1000;
+  const officialStatsMinIntervalRaw = Number(process.env.NOODLE_OFFICIAL_STATS_MIN_INTERVAL_MS || officialStatsChannelRefreshIntervalMs);
+  const officialStatsMinIntervalMs = Number.isFinite(officialStatsMinIntervalRaw) && officialStatsMinIntervalRaw >= 30_000
+    ? Math.floor(officialStatsMinIntervalRaw)
+    : officialStatsChannelRefreshIntervalMs;
   let officialStatsChannelRefreshHandle = null;
   const devAlertChannelId = process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "";
   const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
@@ -591,6 +595,7 @@ import { theme } from "./ui/theme.js";
   const invalidStatsCategoryLogged = new Set();
   const lastBotListStatsPushBySource = new Map();
   const nextStatsSyncAllowedAtBySource = new Map();
+  let lastOfficialStatsPush = null;
   const officialWelcomeAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_CHANNEL_IDS));
   const officialLevelAutoReactChannels = new Set(parseCsvValues(process.env.NOODLE_OFFICIAL_LEVEL_CHANNEL_IDS));
   const officialWelcomeKeywords = parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_KEYWORDS || "welcome,joined the server")
@@ -600,6 +605,7 @@ import { theme } from "./ui/theme.js";
   let shardNearThresholdAlertSent = false;
   let shardRecommendedAlertSent = false;
   let botListStatsHeartbeatHandle = null;
+  let nextOfficialStatsSyncAllowedAt = 0;
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -1512,6 +1518,22 @@ import { theme } from "./ui/theme.js";
       const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
       const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
       const officialMemberCount = Math.max(0, Number(officialGuild?.memberCount || 0));
+      const nowMs = Date.now();
+      const isIntervalReason = reason === "interval";
+
+      if (isIntervalReason && nextOfficialStatsSyncAllowedAt > nowMs) {
+        return false;
+      }
+
+      if (
+        isIntervalReason
+        && lastOfficialStatsPush
+        && lastOfficialStatsPush.serverCount === serverCount
+        && lastOfficialStatsPush.shopsCount === shopsCount
+        && lastOfficialStatsPush.officialMemberCount === officialMemberCount
+      ) {
+        return false;
+      }
 
       const serverChannel = await ensureOfficialReadonlyStatsChannel(
         officialGuild,
@@ -1550,6 +1572,14 @@ import { theme } from "./ui/theme.js";
         console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
         return false;
       }
+
+      lastOfficialStatsPush = {
+        serverCount,
+        shopsCount,
+        officialMemberCount,
+        sentAt: nowMs
+      };
+      nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
 
       console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannels.length}/3`);
       return true;
