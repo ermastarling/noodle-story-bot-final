@@ -1576,6 +1576,7 @@ import { theme } from "./ui/theme.js";
         const resolvedChannels = channelResults
           .map((result) => result?.channel || null)
           .filter(Boolean);
+        const resolvedChannelCount = resolvedChannels.length;
         const synchronizedResolvedChannelCount = channelResults.filter(
           (result) => Boolean(result?.channel) && result?.synchronized === true
         ).length;
@@ -1584,12 +1585,19 @@ import { theme } from "./ui/theme.js";
         if (shopsResult?.channel?.id) officialShopCountChannelId = shopsResult.channel.id;
         if (memberResult?.channel?.id) officialMemberCountChannelId = memberResult.channel.id;
 
-        if (resolvedChannels.length === 0) {
+        if (resolvedChannelCount === 0) {
           console.warn("⚠️ Official stats channels skipped: configure explicit NOODLE_OFFICIAL_*_CHANNEL_ID values.");
           return false;
         }
 
-        if (synchronizedResolvedChannelCount > 0) {
+        if (synchronizedResolvedChannelCount === 0) {
+          console.error(
+            `❌ Official stats channel sync had no successful channel updates (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannelCount}/3`
+          );
+          return false;
+        }
+
+        if (synchronizedResolvedChannelCount === resolvedChannelCount) {
           lastOfficialStatsPush = {
             serverCount,
             shopsCount,
@@ -1599,7 +1607,7 @@ import { theme } from "./ui/theme.js";
           nextOfficialStatsSyncAllowedAt = nowMs + officialStatsMinIntervalMs;
         }
 
-        console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannels.length}/3`);
+        console.log(`✅ Official stats channels updated (${reason}): servers=${serverCount}, shops=${shopsCount}, members=${officialMemberCount}, resolved=${resolvedChannelCount}/3, synchronized=${synchronizedResolvedChannelCount}/${resolvedChannelCount}`);
         return true;
       } catch (error) {
         console.error("❌ Failed to update official stats channels:", error?.stack ?? error);
