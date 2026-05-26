@@ -47,6 +47,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_WEBHOOK_LOG_TO_CONSOLE` - set `1` to mirror webhook `error` logs to console in addition to file output
 - `NOODLE_TOPGG_WEBHOOK_PATH` + `NOODLE_TOPGG_WEBHOOK_AUTH` (fallback: `TOPGG_WEBHOOK_AUTH`) - Top.gg vote webhook path/auth
 - `NOODLE_TOPGG_REQUIRE_SIGNATURE` - set `1` to require valid `x-topgg-signature` and disable token fallback for Top.gg webhooks
+- `NOODLE_RANKTOP_WEBHOOK_PATH` + `NOODLE_RANKTOP_WEBHOOK_AUTH` - Rank.top vote webhook path/auth
 - `NOODLE_DISCORDBOTLIST_WEBHOOK_PATH` + `NOODLE_DISCORDBOTLIST_WEBHOOK_AUTH` - Discord Bot List vote webhook
 - `NOODLE_VOIDBOTS_WEBHOOK_PATH` + `NOODLE_VOIDBOTS_WEBHOOK_AUTH` - Void Bots vote webhook
 - `NOODLE_DISCORDS_WEBHOOK_PATH` + `NOODLE_DISCORDS_WEBHOOK_AUTH` - Discords.com vote webhook
@@ -55,6 +56,10 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_DISCORDLISTGG_WEBHOOK_PATH` + `NOODLE_DISCORDLISTGG_WEBHOOK_AUTH` - DiscordList.gg vote webhook
 - `NOODLE_RADARCPDV_WEBHOOK_PATH` + `NOODLE_RADARCPDV_WEBHOOK_AUTH` - Radar.CPDV vote webhook
 - `NOODLE_TOPGG_TOKEN` (fallbacks: `TOPGG_TOKEN`, `TOPGG_API_TOKEN`) + `NOODLE_TOPGG_STATS_URL` - Top.gg server count sync target (`NOODLE_TOPGG_STATS_URL` optional; default built in)
+- `NOODLE_RANKTOP_TOKEN` + `NOODLE_RANKTOP_STATS_URL` - Rank.top server count sync target using `Authorization: Bearer <token>` (`NOODLE_RANKTOP_STATS_URL` optional; default `https://rank.top/api/bots/{botId}/post`)
+- `NOODLE_RANKTOP_SYNC_COMMANDS` - set `0` to disable Rank.top command-list sync (default enabled)
+- `NOODLE_RANKTOP_COMMANDS_URL` - optional Rank.top command-list endpoint override (default `https://rank.top/api/bots/{botId}/post`)
+- `NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS` - set `1` to include `noodle-dev` in Rank.top command list (default excluded)
 - `NOODLE_DISCORDBOTLIST_TOKEN` + `NOODLE_DISCORDBOTLIST_STATS_URL` - Discord Bot List stats sync target (`NOODLE_DISCORDBOTLIST_STATS_URL` optional; default built in). Sends `guilds`, `users`, and optional `voice_connections`.
 - `NOODLE_DISCORDBOTLIST_VOICE_CONNECTIONS` - optional static voice connection count value for Discord Bot List stats payloads
 - `NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS` - optional periodic stats heartbeat interval (default `900000` ms / 15 min)
@@ -101,6 +106,17 @@ NOODLE_TOPGG_WEBHOOK_AUTH=replace_with_topgg_webhook_auth
 NOODLE_TOPGG_TOKEN=replace_with_topgg_api_token
 # Optional override (default is built in)
 # NOODLE_TOPGG_STATS_URL=https://top.gg/api/bots/{botId}/stats
+
+# Rank.top
+NOODLE_RANKTOP_WEBHOOK_PATH=/ranktop/webhook
+NOODLE_RANKTOP_WEBHOOK_AUTH=replace_with_ranktop_webhook_auth
+NOODLE_RANKTOP_TOKEN=replace_with_ranktop_api_token
+# Optional override (default is built in)
+# NOODLE_RANKTOP_STATS_URL=https://rank.top/api/bots/{botId}/post
+# Optional: command-list sync controls
+# NOODLE_RANKTOP_SYNC_COMMANDS=1
+# NOODLE_RANKTOP_COMMANDS_URL=https://rank.top/api/bots/{botId}/post
+# NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS=0
 
 # Discord Bot List
 NOODLE_DISCORDBOTLIST_WEBHOOK_PATH=/discordbotlist/webhook

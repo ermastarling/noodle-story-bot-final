@@ -103,7 +103,7 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../g
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
-import { getVoteRewardStatus, claimTopggVoteReward, getVotePlatformStatusLines, getVotePlatformPages } from "../game/voteRewards.js";
+import { getVoteRewardStatus, claimTopggVoteReward, getVotePlatformStatusLines, getDisplayVotePlatformPages } from "../game/voteRewards.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge, grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import {
   applyCollectionProgressOnServe,
@@ -6452,10 +6452,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
-    const voteLinks = getVotePlatformStatusLines(latestPlayer).join("\n");
-    const voteLinkPages = getVotePlatformPages()
-      .filter((page) => page.supportsVoteRewards && page.voteUrl && page.isVoteLive !== false)
-      .slice(0, 8);
+    const maxButtonsPerRow = 5;
+    const maxLinkRows = 3;
+    const maxVoteLinkButtons = maxButtonsPerRow * maxLinkRows;
+    const voteLinkPages = getDisplayVotePlatformPages({ limit: maxVoteLinkButtons });
+    const voteLinks = getVotePlatformStatusLines(latestPlayer, { limit: maxVoteLinkButtons }).join("\n");
 
     const makeVoteLinkButton = (page) => new ButtonBuilder()
       .setLabel(page.label)
@@ -6463,17 +6464,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       .setURL(page.voteUrl);
 
     const voteSiteRows = [];
-    const firstRowPages = voteLinkPages.slice(0, 5);
-    if (firstRowPages.length) {
-      voteSiteRows.push(new ActionRowBuilder().addComponents(...firstRowPages.map(makeVoteLinkButton)));
+    for (let i = 0; i < voteLinkPages.length; i += maxButtonsPerRow) {
+      const rowPages = voteLinkPages.slice(i, i + maxButtonsPerRow);
+      if (!rowPages.length) continue;
+      voteSiteRows.push(new ActionRowBuilder().addComponents(...rowPages.map(makeVoteLinkButton)));
     }
 
-    const secondRowPages = voteLinkPages.slice(5, 8);
-    const secondRow = new ActionRowBuilder();
-    for (const page of secondRowPages) {
-      secondRow.addComponents(makeVoteLinkButton(page));
-    }
-    secondRow.addComponents(
+    const voteNavRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`noodle:nav:quests:${userId}`)
         .setLabel("Quests")
@@ -6485,7 +6482,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         .setEmoji(getButtonEmoji("vote"))
         .setStyle(ButtonStyle.Secondary)
     );
-    voteSiteRows.push(secondRow);
+      voteSiteRows.push(voteNavRow);
 
     const actionRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()

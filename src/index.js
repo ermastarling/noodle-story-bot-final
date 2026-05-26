@@ -448,6 +448,12 @@ import { theme } from "./ui/theme.js";
       auth: getVoteSourceToken("NOODLE_TOPGG_WEBHOOK_AUTH", "TOPGG_WEBHOOK_AUTH")
     },
     {
+      source: VOTE_SOURCES.RANKTOP,
+      label: "Rank.top",
+      path: process.env.NOODLE_RANKTOP_WEBHOOK_PATH || "/ranktop/webhook",
+      auth: getVoteSourceToken("NOODLE_RANKTOP_WEBHOOK_AUTH")
+    },
+    {
       source: VOTE_SOURCES.DISCORDBOTLIST,
       label: "Discord Bot List",
       path: process.env.NOODLE_DISCORDBOTLIST_WEBHOOK_PATH || "/discordbotlist/webhook",
@@ -492,12 +498,14 @@ import { theme } from "./ui/theme.js";
   ];
   const stableStatsEndpointDefaults = {
     [VOTE_SOURCES.TOPGG]: "https://top.gg/api/bots/{botId}/stats",
+    [VOTE_SOURCES.RANKTOP]: "https://rank.top/api/bots/{botId}/post",
     [VOTE_SOURCES.DISCORDBOTLIST]: "https://discordbotlist.com/api/v1/bots/{botId}/stats",
     [VOTE_SOURCES.DISCORDBOTSGG]: "https://discord.bots.gg/api/v1/bots/{botId}/stats"
   };
   const stableCommandListEndpointDefaults = {
     [VOTE_SOURCES.DISCORDBOTLIST]: "https://discordbotlist.com/api/v1/bots/{botId}/commands",
-    [VOTE_SOURCES.RADAR_CPDV]: "https://api.radarcord.net/bot/{botId}/commands"
+    [VOTE_SOURCES.RADAR_CPDV]: "https://api.radarcord.net/bot/{botId}/commands",
+    [VOTE_SOURCES.RANKTOP]: "https://rank.top/api/bots/{botId}/post"
   };
   const botListStatsConfigs = [
     {
@@ -506,6 +514,13 @@ import { theme } from "./ui/theme.js";
       endpoint: process.env.NOODLE_TOPGG_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.TOPGG],
       token: getVoteSourceToken("NOODLE_TOPGG_TOKEN", "TOPGG_TOKEN", "TOPGG_API_TOKEN"),
       bodyFormat: "server_count"
+    },
+    {
+      source: VOTE_SOURCES.RANKTOP,
+      label: "Rank.top",
+      endpoint: process.env.NOODLE_RANKTOP_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.RANKTOP],
+      token: getVoteSourceToken("NOODLE_RANKTOP_TOKEN"),
+      authScheme: "bearer"
     },
     {
       source: VOTE_SOURCES.DISCORDBOTLIST,
@@ -1185,24 +1200,40 @@ import { theme } from "./ui/theme.js";
   function extractVoteUserId(payload) {
     const candidates = [
       payload?.user,
+      payload?.voter,
       payload?.user?.id,
+      payload?.voter?.id,
       payload?.user?.platform_id,
       payload?.user?.platformId,
       payload?.user_id,
+      payload?.voter_id,
       payload?.userID,
+      payload?.voterID,
       payload?.userId,
+      payload?.voterId,
       payload?.userid,
+      payload?.voterid,
       payload?.id,
       payload?.sub,
       payload?.data?.user,
+      payload?.data?.voter,
       payload?.data?.user?.platform_id,
       payload?.data?.user?.platformId,
       payload?.data?.user?.id,
+      payload?.data?.voter?.id,
       payload?.data?.user_id,
+      payload?.data?.voter_id,
       payload?.data?.userID,
+      payload?.data?.voterID,
       payload?.data?.userId,
+      payload?.data?.voterId,
       payload?.data?.id,
       payload?.vote?.id,
+      payload?.vote?.voter,
+      payload?.vote?.voter_id,
+      payload?.vote?.voterID,
+      payload?.vote?.voterId,
+      payload?.vote?.voter?.id,
       payload?.event?.id,
       payload?.data?.platform_id,
       payload?.data?.platformId,
@@ -1213,9 +1244,13 @@ import { theme } from "./ui/theme.js";
       payload?.vote?.user?.platform_id,
       payload?.vote?.user?.platformId,
       payload?.event?.user_id,
+      payload?.event?.voter_id,
       payload?.event?.userID,
+      payload?.event?.voterID,
       payload?.event?.userId,
+      payload?.event?.voterId,
       payload?.event?.user?.id,
+      payload?.event?.voter?.id,
       payload?.event?.user?.platform_id,
       payload?.event?.user?.platformId
     ];
@@ -1294,6 +1329,15 @@ import { theme } from "./ui/theme.js";
     };
   }
 
+  function buildAuthorizationHeaderValue(tokenValue, authScheme = "raw") {
+    const token = String(tokenValue || "").trim();
+    if (!token) return "";
+    if (String(authScheme || "raw").toLowerCase() === "bearer") {
+      return /^bearer\s+/i.test(token) ? token : `Bearer ${token}`;
+    }
+    return token;
+  }
+
   async function updateSingleBotListServerCount(config, serverCount, userCount, { reason = "event" } = {}) {
     const endpoint = String(config?.endpoint || "").trim();
     const tokenValue = String(config?.token || "").trim();
@@ -1313,6 +1357,7 @@ import { theme } from "./ui/theme.js";
     }
 
     const targetUrl = renderStatsEndpoint(endpoint, resolvedBotId);
+    const authHeaderValue = buildAuthorizationHeaderValue(tokenValue, config?.authScheme);
     const sourceKey = String(config?.source || "").trim();
     const nowMs = Date.now();
     const minIntervalMs = Number.isFinite(config?.minSyncIntervalMs)
@@ -1335,7 +1380,7 @@ import { theme } from "./ui/theme.js";
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
-          Authorization: tokenValue,
+          Authorization: authHeaderValue,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(buildStatsBody(config, serverCount, userCount))
@@ -1764,6 +1809,17 @@ import { theme } from "./ui/theme.js";
     });
   }
 
+  function buildRankTopCommandsPayload(serverCount, userCount) {
+    return {
+      server_count: Number(serverCount) || 0,
+      user_count: Number.isFinite(userCount) && userCount >= 0 ? Math.floor(userCount) : 0,
+      commands: buildProviderCommandsPayload({
+        includeDevEnvVar: "NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS",
+        wrapInCommandsObject: false
+      })
+    };
+  }
+
   async function syncDiscordBotListCommands({ reason = "ready" } = {}) {
     const enabled = String(process.env.NOODLE_DISCORDBOTLIST_SYNC_COMMANDS || "1") !== "0";
     if (!enabled) return false;
@@ -1854,6 +1910,54 @@ import { theme } from "./ui/theme.js";
       return true;
     } catch (error) {
       console.error("❌ Radar.CPDV command sync threw:", error?.stack ?? error);
+      return false;
+    }
+  }
+
+  async function syncRankTopCommands({ reason = "ready" } = {}) {
+    const enabled = String(process.env.NOODLE_RANKTOP_SYNC_COMMANDS || "1") !== "0";
+    if (!enabled) return false;
+
+    const tokenValue = getVoteSourceToken("NOODLE_RANKTOP_TOKEN");
+    if (!tokenValue) {
+      console.log("INFO: Rank.top command sync skipped (missing token).");
+      return false;
+    }
+
+    const endpointTemplate = process.env.NOODLE_RANKTOP_COMMANDS_URL
+      || stableCommandListEndpointDefaults[VOTE_SOURCES.RANKTOP];
+    const resolvedBotId = String(client.user?.id || sharedBotId || BOT_ID_FALLBACK || "").trim();
+    if (!resolvedBotId) {
+      console.log("INFO: Rank.top command sync skipped (missing bot id).");
+      return false;
+    }
+
+    const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
+    const counts = getCurrentBotListCounts();
+    const commandsPayload = buildRankTopCommandsPayload(counts.serverCount, counts.userCount);
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          Authorization: buildAuthorizationHeaderValue(tokenValue, "bearer"),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(commandsPayload)
+      });
+
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => "");
+        console.error(
+          `❌ Rank.top command sync failed (${reason}): ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
+        );
+        return false;
+      }
+
+      console.log(`✅ Rank.top command list synced (${reason}): ${commandsPayload.commands.length} command(s)`);
+      return true;
+    } catch (error) {
+      console.error("❌ Rank.top command sync threw:", error?.stack ?? error);
       return false;
     }
   }
@@ -2498,6 +2602,7 @@ import { theme } from "./ui/theme.js";
     await updateOfficialStatsChannels(startupCounts, { reason: "ready" });
     await syncDiscordBotListCommands({ reason: "ready" });
     await syncRadarCpdvCommands({ reason: "ready" });
+    await syncRankTopCommands({ reason: "ready" });
     startBotListStatsHeartbeat();
 
     if (officialStatsChannelsEnabled && officialGuildId && !officialStatsChannelRefreshHandle) {
