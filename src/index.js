@@ -388,6 +388,96 @@ import { theme } from "./ui/theme.js";
     return "Something went a little sideways. Please try again.";
   }
 
+  function isMissingAccessError(err) {
+    if (!err) return false;
+
+    const codeCandidates = [
+      err?.code,
+      err?.status,
+      err?.rawError?.code,
+      err?.requestBody?.code
+    ];
+    const numericCode = codeCandidates
+      .map((value) => Number(value))
+      .find((value) => Number.isFinite(value));
+
+    if (numericCode === 50001 || numericCode === 50013) {
+      return true;
+    }
+
+    const text = [
+      err?.message,
+      err?.name,
+      err?.rawError?.message,
+      err?.data?.message
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return text.includes("missing access") || text.includes("missing permission");
+  }
+
+  async function sendMissingAccessDm(interaction) {
+    const user = interaction?.user;
+    if (!user?.send) return false;
+
+    const guildName = interaction?.guild?.name || "this server";
+    const channelRef = interaction?.channelId ? `<#${interaction.channelId}>` : "that channel";
+    const commandLabel = interaction?.commandName ? `/${interaction.commandName}` : "that action";
+
+    const EmbedCtor = Discord.EmbedBuilder || Discord.MessageEmbed || null;
+    const description = [
+      `I could not send a response for **${commandLabel}** in ${channelRef} on **${guildName}**.`,
+      "",
+      "I am missing channel access there.",
+      "Please try another channel or ask a server admin to grant me **View Channel**, **Send Messages**, and **Embed Links** permissions.",
+      ""
+    ].join("\n");
+
+    const embed = EmbedCtor
+      ? new EmbedCtor()
+        .setTitle(`Access Alert ${getIcon("warning")}`)
+        .setDescription(description)
+        .setColor(theme.colors.primary)
+        .setFooter({ text: `Owner: ${user?.tag ?? user?.username ?? "Unknown"}` })
+      : null;
+
+    try {
+      if (embed) {
+        await user.send({ embeds: [embed] });
+      } else {
+        await user.send({ content: description.replace(/\*\*/g, "") });
+      }
+      return true;
+    } catch (error) {
+      console.error("Missing-access DM fallback failed:", error?.message ?? error);
+      return false;
+    }
+  }
+
+  async function sendInteractionErrorWithFallback(interaction, message, originalError) {
+    try {
+      if (interaction.replied || interaction.deferred) {
+        try {
+          await interaction.deleteReply();
+        } catch (_) {
+          // Ignore when there is no editable reply to clear.
+        }
+        await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral, ephemeral: true });
+      } else {
+        await interaction.reply({ content: message, flags: MessageFlags.Ephemeral, ephemeral: true });
+      }
+      return true;
+    } catch (replyErr) {
+      console.error("Failed to send interaction error reply:", replyErr?.message ?? replyErr);
+      if (isMissingAccessError(originalError) || isMissingAccessError(replyErr)) {
+        await sendMissingAccessDm(interaction);
+      }
+      return false;
+    }
+  }
+
   process.on("unhandledRejection", (reason) => {
     console.error("UNHANDLED REJECTION:", reason?.stack ?? reason);
   });
@@ -3018,6 +3108,9 @@ import { theme } from "./ui/theme.js";
         return interaction.reply({ content: slowDownMsg, ephemeral: true });
       } catch (e) {
         console.error("RATE LIMIT REPLY ERROR:", e?.message ?? e);
+        if (isMissingAccessError(e)) {
+          await sendMissingAccessDm(interaction);
+        }
         return;
       }
     }
@@ -3099,15 +3192,8 @@ import { theme } from "./ui/theme.js";
         }
         try {
           const msg = friendlyErrorMessage(e);
-          if (interaction.replied || interaction.deferred) {
-            try {
-              await interaction.deleteReply();
-            } catch (_) {
-              // ignore if already gone
-            }
-            return interaction.followUp({ content: msg, ephemeral: true });
-          }
-          return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
+          await sendInteractionErrorWithFallback(interaction, msg, e);
+          return;
         } catch {}
         return;
       }
@@ -3145,16 +3231,7 @@ import { theme } from "./ui/theme.js";
 
       try {
         const msg = friendlyErrorMessage(e);
-        if (interaction.replied || interaction.deferred) {
-          try {
-            await interaction.deleteReply();
-          } catch (_) {
-            // ignore if already gone
-          }
-          await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
-        } else {
-          await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral, ephemeral: true });
-        }
+        await sendInteractionErrorWithFallback(interaction, msg, e);
       } catch (replyErr) {
         console.error("❌ Failed to send error reply:", replyErr?.message ?? replyErr);
       }
