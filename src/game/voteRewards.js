@@ -284,7 +284,7 @@ export function getVoteRewardStatus(player) {
   };
 }
 
-export function claimTopggVoteReward(player, now = nowTs()) {
+export function claimVoteRewards(player, now = nowTs()) {
   const state = ensureVoteState(player);
   const pendingClaims = Math.max(0, Number(state.pending_claims || 0));
   if (pendingClaims <= 0) {
@@ -318,4 +318,9 @@ export function claimTopggVoteReward(player, now = nowTs()) {
     leveledUp,
     pendingClaims: Math.max(0, Number(state.pending_claims || 0))
   };
+}
+
+// Backward-compatible alias for existing imports/callers.
+export function claimTopggVoteReward(player, now = nowTs()) {
+  return claimVoteRewards(player, now);
 }

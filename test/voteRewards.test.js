@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  claimTopggVoteReward,
+  claimVoteRewards,
   getDisplayVotePlatformPages,
   getVoteRewardStatus,
   getVotePlatformStatusLines,
@@ -30,7 +30,7 @@ test("Vote rewards: claim collects all pending rewards", () => {
   const player = mockPlayer();
   player.vote_rewards.pending_claims = 3;
 
-  const result = claimTopggVoteReward(player, 1234567890);
+  const result = claimVoteRewards(player, 1234567890);
 
   assert.equal(result.ok, true);
   assert.equal(result.claimsClaimed, 3);
@@ -54,7 +54,7 @@ test("Vote rewards: claim collects all pending rewards", () => {
 test("Vote rewards: claim fails when no pending rewards", () => {
   const player = mockPlayer();
 
-  const result = claimTopggVoteReward(player);
+  const result = claimVoteRewards(player);
 
   assert.equal(result.ok, false);
   assert.match(result.message, /No vote rewards are ready yet/i);
@@ -177,7 +177,7 @@ test("Vote rewards: Rank.top vote grants two pending claims and doubled payout",
   assert.equal(rankTopVote.duplicate, false);
   assert.equal(rankTopVote.pendingClaims, 2);
 
-  const claim = claimTopggVoteReward(player, now + 1_000);
+  const claim = claimVoteRewards(player, now + 1_000);
   assert.equal(claim.ok, true);
   assert.equal(claim.claimsClaimed, 2);
   assert.deepEqual(claim.reward, {

@@ -1295,6 +1295,9 @@ import { theme } from "./ui/theme.js";
   }
 
   function buildStatsBody(config, serverCount, userCount) {
+    if (config?.source === VOTE_SOURCES.RANKTOP) {
+      return buildRankTopPostPayload(serverCount, userCount);
+    }
     if (config?.bodyFormat === "server_count") {
       return { server_count: Number(serverCount) || 0 };
     }
@@ -1809,7 +1812,7 @@ import { theme } from "./ui/theme.js";
     });
   }
 
-  function buildRankTopCommandsPayload(serverCount, userCount) {
+  function buildRankTopPostPayload(serverCount, userCount) {
     return {
       server_count: Number(serverCount) || 0,
       user_count: Number.isFinite(userCount) && userCount >= 0 ? Math.floor(userCount) : 0,
@@ -1934,7 +1937,7 @@ import { theme } from "./ui/theme.js";
 
     const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
     const counts = getCurrentBotListCounts();
-    const commandsPayload = buildRankTopCommandsPayload(counts.serverCount, counts.userCount);
+    const commandsPayload = buildRankTopPostPayload(counts.serverCount, counts.userCount);
 
     try {
       const response = await fetch(targetUrl, {

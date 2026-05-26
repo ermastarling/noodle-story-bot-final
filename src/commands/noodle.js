@@ -103,7 +103,7 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../g
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
-import { getVoteRewardStatus, claimTopggVoteReward, getVotePlatformStatusLines, getDisplayVotePlatformPages } from "../game/voteRewards.js";
+import { getVoteRewardStatus, claimVoteRewards, getVotePlatformStatusLines, getDisplayVotePlatformPages } from "../game/voteRewards.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge, grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import {
   applyCollectionProgressOnServe,
@@ -6530,7 +6530,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const latestServerId = db ? getLatestServerIdForUser(db, userId) : null;
     const voteServerId = latestServerId || serverId;
     const latestPlayer = voteServerId ? ensurePlayer(voteServerId, userId) : p;
-    const result = claimTopggVoteReward(latestPlayer, now);
+    const result = claimVoteRewards(latestPlayer, now);
     if (!result.ok) {
       const embed = buildMenuEmbed({
         title: `${getIcon("vote")} Bot List Vote Rewards`,
