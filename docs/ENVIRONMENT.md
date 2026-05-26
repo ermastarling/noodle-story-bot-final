@@ -60,6 +60,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_RANKTOP_SYNC_COMMANDS` - set `0` to disable Rank.top command-list sync (default enabled); this also excludes `commands` from Rank.top periodic stats payloads to avoid unnecessary command reposting
 - `NOODLE_RANKTOP_COMMANDS_URL` - optional Rank.top command-list endpoint override (default `https://rank.top/api/bots/{botId}/post`)
 - `NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS` - set `1` to include `noodle-dev` in Rank.top command list (default excluded)
+- `NOODLE_DEBUG_RANKTOP_AUTH` - set `1` to emit redacted Rank.top auth diagnostics at startup and on stats/command sync requests (token lengths, whitespace/newline flags, hash prefixes, resolved bot id)
 - `NOODLE_DISCORDBOTLIST_TOKEN` + `NOODLE_DISCORDBOTLIST_STATS_URL` - Discord Bot List stats sync target (`NOODLE_DISCORDBOTLIST_STATS_URL` optional; default built in). Sends `guilds`, `users`, and optional `voice_connections`.
 - `NOODLE_DISCORDBOTLIST_VOICE_CONNECTIONS` - optional static voice connection count value for Discord Bot List stats payloads
 - `NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS` - optional periodic stats heartbeat interval (default `3600000` ms / 1 hour)
@@ -119,6 +120,8 @@ NOODLE_RANKTOP_TOKEN=replace_with_ranktop_api_token
 # NOODLE_RANKTOP_SYNC_COMMANDS=1
 # NOODLE_RANKTOP_COMMANDS_URL=https://rank.top/api/bots/{botId}/post
 # NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS=0
+# Optional: emit redacted runtime auth diagnostics for troubleshooting
+# NOODLE_DEBUG_RANKTOP_AUTH=0
 
 # Discord Bot List
 NOODLE_DISCORDBOTLIST_WEBHOOK_PATH=/discordbotlist/webhook

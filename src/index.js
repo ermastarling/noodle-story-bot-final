@@ -692,6 +692,62 @@ import { theme } from "./ui/theme.js";
   const voteDuplicateWindowMode = String(process.env.NOODLE_VOTE_DUPLICATE_WINDOW_MODE || "sliding").trim().toLowerCase() === "fixed"
     ? "fixed"
     : "sliding";
+  const rankTopAuthDebugEnabled = String(process.env.NOODLE_DEBUG_RANKTOP_AUTH || "0") === "1";
+
+  function buildRedactedEnvDiagnostics(name) {
+    const raw = process.env[name];
+    const value = raw == null ? "" : String(raw);
+    const trimmed = value.trim();
+    const hasValue = Boolean(trimmed);
+    return {
+      env: name,
+      present: raw != null,
+      trimmedPresent: hasValue,
+      rawLength: value.length,
+      trimmedLength: trimmed.length,
+      hasLeadingOrTrailingWhitespace: value.length !== trimmed.length,
+      hasNewline: /[\r\n]/.test(value),
+      hasTab: /\t/.test(value),
+      startsWithBearer: /^bearer\s+/i.test(trimmed),
+      sha256Prefix: hasValue ? crypto.createHash("sha256").update(trimmed).digest("hex").slice(0, 12) : null
+    };
+  }
+
+  function logRankTopEnvDiagnostics({ clientUserId = "" } = {}) {
+    if (!rankTopAuthDebugEnabled) return;
+    const configuredBotId = String(process.env.NOODLE_BOT_ID || "").trim();
+    const resolvedBotId = String(clientUserId || sharedBotId || BOT_ID_FALLBACK || "").trim();
+    const payload = {
+      token: buildRedactedEnvDiagnostics("NOODLE_RANKTOP_TOKEN"),
+      webhookAuth: buildRedactedEnvDiagnostics("NOODLE_RANKTOP_WEBHOOK_AUTH"),
+      statsUrl: String(process.env.NOODLE_RANKTOP_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.RANKTOP] || "").trim(),
+      commandsUrl: String(process.env.NOODLE_RANKTOP_COMMANDS_URL || stableCommandListEndpointDefaults[VOTE_SOURCES.RANKTOP] || "").trim(),
+      configuredBotId: configuredBotId || null,
+      resolvedBotId: resolvedBotId || null,
+      clientUserId: clientUserId || null
+    };
+    console.log("DEBUG Rank.top env diagnostics:", JSON.stringify(payload));
+  }
+
+  function logRankTopRequestDiagnostics(kind, tokenValue, targetUrl, authHeaderValue) {
+    if (!rankTopAuthDebugEnabled) return;
+    const trimmedToken = String(tokenValue || "").trim();
+    const trimmedAuthHeader = String(authHeaderValue || "").trim();
+    console.log(
+      `DEBUG Rank.top ${kind} auth diagnostics:`,
+      JSON.stringify({
+        targetUrl,
+        tokenLength: trimmedToken.length,
+        tokenHasNewline: /[\r\n]/.test(String(tokenValue || "")),
+        tokenStartsWithBearer: /^bearer\s+/i.test(trimmedToken),
+        authHeaderLength: trimmedAuthHeader.length,
+        authHeaderStartsWithBearer: /^bearer\s+/i.test(trimmedAuthHeader),
+        authHeaderSha256Prefix: trimmedAuthHeader
+          ? crypto.createHash("sha256").update(trimmedAuthHeader).digest("hex").slice(0, 12)
+          : null
+      })
+    );
+  }
   const disabledStatsSyncLogged = new Set();
   const missingStatsChannelIdLoggedMarkers = new Set();
   const configuredStatsChannelLoggedMarkers = new Set();
@@ -1451,6 +1507,9 @@ import { theme } from "./ui/theme.js";
 
     const targetUrl = renderStatsEndpoint(endpoint, resolvedBotId);
     const authHeaderValue = buildAuthorizationHeaderValue(tokenValue, config?.authScheme);
+    if (config?.source === VOTE_SOURCES.RANKTOP) {
+      logRankTopRequestDiagnostics("stats", tokenValue, targetUrl, authHeaderValue);
+    }
     const sourceKey = String(config?.source || "").trim();
     const nowMs = Date.now();
     const minIntervalMs = Number.isFinite(config?.minSyncIntervalMs)
@@ -2039,12 +2098,14 @@ import { theme } from "./ui/theme.js";
     const commandsPayload = buildRankTopPostPayload(counts.serverCount, counts.userCount, {
       includeCommands: true
     });
+    const authHeaderValue = buildAuthorizationHeaderValue(tokenValue, "bearer");
+    logRankTopRequestDiagnostics("commands", tokenValue, targetUrl, authHeaderValue);
 
     try {
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
-          Authorization: buildAuthorizationHeaderValue(tokenValue, "bearer"),
+          Authorization: authHeaderValue,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(commandsPayload)
@@ -2648,6 +2709,7 @@ import { theme } from "./ui/theme.js";
 
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
+    logRankTopEnvDiagnostics({ clientUserId: c.user?.id || "" });
 
     if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled) {
       if (!officialMessageContentIntentEnabled) {

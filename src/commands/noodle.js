@@ -2384,6 +2384,13 @@ function cozyError(errOrCode) {
   return friendlyErrorMessage(errOrCode);
 }
 
+function isMissingAccessError(err) {
+  if (!err) return false;
+  if (Number(err?.code) === 50001) return true;
+  const message = String(err?.message || "").toLowerCase();
+  return message.includes("missing access");
+}
+
 function friendlyErrorMessage(errOrCode) {
   const code = typeof errOrCode === "string" ? errOrCode : errOrCode?.code || errOrCode?.name || "";
   const message = String(typeof errOrCode === "string" ? errOrCode : errOrCode?.message || "").toLowerCase();
@@ -4363,11 +4370,17 @@ if (overrides?.messageId && !payload?.ephemeral) {
       return result;
     }
   } catch (e) {
-    console.error("Modal override target edit failed", {
+    const context = {
       ...buildInteractionFailureContext(interaction, overrides.messageId),
       errorCode: e?.code ?? null,
       errorMessage: e?.message ?? String(e)
-    });
+    };
+    if (isMissingAccessError(e)) {
+      // Expected in channels where the bot can't edit the referenced message.
+      console.warn("Modal override target edit skipped (missing access)", context);
+    } else {
+      console.error("Modal override target edit failed", context);
+    }
     // fall through to componentCommit
   }
 }
