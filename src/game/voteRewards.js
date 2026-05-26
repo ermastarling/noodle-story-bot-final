@@ -5,6 +5,7 @@ export const TOPGG_BOT_URL = "https://top.gg/bot/1460058511802105976/vote";
 
 export const VOTE_SOURCES = {
   TOPGG: "topgg",
+  RANKTOP: "ranktop",
   DISCORDBOTLIST: "discordbotlist",
   VOIDBOTS: "voidbots",
   DISCORDS: "discords",
@@ -17,6 +18,14 @@ export const VOTE_SOURCES = {
 };
 
 export const VOTE_PLATFORM_PAGES = [
+  {
+    source: VOTE_SOURCES.RANKTOP,
+    label: "Rank.top (2x rewards)",
+    voteUrl: "https://rank.top/bot/noodle-story",
+    isVoteLive: true,
+    supportsVoteRewards: true,
+    supportsServerCount: true
+  },
   {
     source: VOTE_SOURCES.TOPGG,
     label: "Top.gg",
@@ -107,6 +116,16 @@ const DEFAULT_VOTE_REWARD = {
   rep: 50
 };
 
+const VOTE_SOURCE_CLAIM_MULTIPLIERS = {
+  [VOTE_SOURCES.RANKTOP]: 2
+};
+
+function getVoteSourceClaimMultiplier(source) {
+  const sourceKey = String(source || "").trim().toLowerCase();
+  const configured = Number(VOTE_SOURCE_CLAIM_MULTIPLIERS[sourceKey] || 1);
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 1;
+}
+
 function ensureVoteState(player) {
   if (!player.vote_rewards) {
     player.vote_rewards = {
@@ -156,6 +175,7 @@ function normalizeDuplicateWindowMode(mode) {
 
 export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now = nowTs(), options = {}) {
   const { state, sourceState, sourceKey } = ensureVoteSourceState(player, source);
+  const claimMultiplier = getVoteSourceClaimMultiplier(sourceKey);
   const duplicateWindowMode = normalizeDuplicateWindowMode(options?.duplicateWindowMode);
   const lastWebhookAt = Number(sourceState.last_webhook_at || 0);
   const duplicateWindowMs = 5 * 60 * 1000;
@@ -182,7 +202,7 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
     };
   }
 
-  state.pending_claims += 1;
+  state.pending_claims += claimMultiplier;
   state.last_vote_at = now;
   state.last_webhook_at = now;
 
@@ -208,6 +228,22 @@ export function getVotePlatformPages() {
   return VOTE_PLATFORM_PAGES.map((page) => ({ ...page }));
 }
 
+function sortVotePlatformsForDisplay(pages) {
+  return [...pages].sort((a, b) => {
+    const aRankTop = a.source === VOTE_SOURCES.RANKTOP ? 1 : 0;
+    const bRankTop = b.source === VOTE_SOURCES.RANKTOP ? 1 : 0;
+    return bRankTop - aRankTop;
+  });
+}
+
+export function getDisplayVotePlatformPages({ limit } = {}) {
+  const pages = sortVotePlatformsForDisplay(
+    getVotePlatformPages().filter((page) => page.supportsVoteRewards && page.voteUrl && page.isVoteLive !== false)
+  );
+  if (!Number.isFinite(limit)) return pages;
+  return pages.slice(0, Math.max(0, Math.floor(limit)));
+}
+
 function getSourceLastVoteAt(player, source) {
   const state = ensureVoteState(player || {});
   const sourceKey = String(source || "").trim().toLowerCase();
@@ -227,9 +263,8 @@ function getSourceLastVoteAt(player, source) {
   return null;
 }
 
-export function getVotePlatformStatusLines(player) {
-  return getVotePlatformPages()
-    .filter((page) => page.supportsVoteRewards && page.voteUrl && page.isVoteLive !== false)
+export function getVotePlatformStatusLines(player, { limit } = {}) {
+  return getDisplayVotePlatformPages({ limit })
     .map((page) => {
       const sourceLastVoteAt = getSourceLastVoteAt(player, page.source);
       const lastVoteText = sourceLastVoteAt
@@ -249,7 +284,7 @@ export function getVoteRewardStatus(player) {
   };
 }
 
-export function claimTopggVoteReward(player, now = nowTs()) {
+export function claimVoteRewards(player, now = nowTs()) {
   const state = ensureVoteState(player);
   const pendingClaims = Math.max(0, Number(state.pending_claims || 0));
   if (pendingClaims <= 0) {
@@ -283,4 +318,9 @@ export function claimTopggVoteReward(player, now = nowTs()) {
     leveledUp,
     pendingClaims: Math.max(0, Number(state.pending_claims || 0))
   };
+}
+
+// Backward-compatible alias for existing imports/callers.
+export function claimTopggVoteReward(player, now = nowTs()) {
+  return claimVoteRewards(player, now);
 }

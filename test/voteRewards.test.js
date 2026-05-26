@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  claimTopggVoteReward,
+  claimVoteRewards,
+  getDisplayVotePlatformPages,
   getVoteRewardStatus,
+  getVotePlatformStatusLines,
   registerVoteFromSource,
   VOTE_SOURCES
 } from "../src/game/voteRewards.js";
@@ -28,7 +30,7 @@ test("Vote rewards: claim collects all pending rewards", () => {
   const player = mockPlayer();
   player.vote_rewards.pending_claims = 3;
 
-  const result = claimTopggVoteReward(player, 1234567890);
+  const result = claimVoteRewards(player, 1234567890);
 
   assert.equal(result.ok, true);
   assert.equal(result.claimsClaimed, 3);
@@ -52,7 +54,7 @@ test("Vote rewards: claim collects all pending rewards", () => {
 test("Vote rewards: claim fails when no pending rewards", () => {
   const player = mockPlayer();
 
-  const result = claimTopggVoteReward(player);
+  const result = claimVoteRewards(player);
 
   assert.equal(result.ok, false);
   assert.match(result.message, /No vote rewards are ready yet/i);
@@ -164,5 +166,55 @@ test("Vote rewards: fixed mode duplicate does not request persistence", () => {
 
   assert.equal(duplicateVote.duplicate, true);
   assert.equal(duplicateVote.shouldPersistDuplicate, false);
+});
+
+test("Vote rewards: Rank.top vote grants two pending claims and doubled payout", () => {
+  const now = 2_000_000;
+  const player = mockPlayer();
+
+  const rankTopVote = registerVoteFromSource(player, VOTE_SOURCES.RANKTOP, now);
+  assert.equal(rankTopVote.ok, true);
+  assert.equal(rankTopVote.duplicate, false);
+  assert.equal(rankTopVote.pendingClaims, 2);
+
+  const claim = claimVoteRewards(player, now + 1_000);
+  assert.equal(claim.ok, true);
+  assert.equal(claim.claimsClaimed, 2);
+  assert.deepEqual(claim.reward, {
+    coins: 2000,
+    sxp: 600,
+    rep: 100
+  });
+  assert.equal(player.coins, 2000);
+  assert.equal(player.rep, 100);
+  assert.equal(player.sxp_total, 600);
+  assert.equal(player.sxp_progress, 600);
+  assert.equal(player.lifetime.coins_earned, 2000);
+});
+
+test("Vote rewards: display pages are Rank.top-first and respect limit", () => {
+  const pages = getDisplayVotePlatformPages();
+  assert.ok(pages.length > 0);
+  assert.equal(pages[0].source, VOTE_SOURCES.RANKTOP);
+
+  const limited = getDisplayVotePlatformPages({ limit: 1 });
+  assert.equal(limited.length, 1);
+  assert.equal(limited[0].source, VOTE_SOURCES.RANKTOP);
+});
+
+test("Vote rewards: status lines follow display ordering and limit", () => {
+  const now = 3_000_000;
+  const player = mockPlayer();
+
+  registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now);
+  registerVoteFromSource(player, VOTE_SOURCES.RANKTOP, now + 10_000);
+
+  const lines = getVotePlatformStatusLines(player);
+  assert.ok(lines.length > 0);
+  assert.match(lines[0], /Rank\.top/i);
+
+  const limitedLines = getVotePlatformStatusLines(player, { limit: 1 });
+  assert.equal(limitedLines.length, 1);
+  assert.match(limitedLines[0], /Rank\.top/i);
 });
 
