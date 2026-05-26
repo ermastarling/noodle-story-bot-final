@@ -1492,6 +1492,53 @@ import { theme } from "./ui/theme.js";
     return token;
   }
 
+  function isRedirectStatus(status) {
+    const code = Number(status);
+    return code === 301 || code === 302 || code === 303 || code === 307 || code === 308;
+  }
+
+  async function postJsonWithAuthPreservedOnRedirect(targetUrl, headers, bodyObject, { providerLabel, reason } = {}) {
+    const requestBody = JSON.stringify(bodyObject);
+    const baseRequest = {
+      method: "POST",
+      headers,
+      body: requestBody,
+      redirect: "manual"
+    };
+
+    let response = await fetch(targetUrl, baseRequest);
+
+    if (!isRedirectStatus(response.status)) {
+      return response;
+    }
+
+    const locationHeader = String(response.headers.get("location") || "").trim();
+    if (!locationHeader) {
+      return response;
+    }
+
+    let redirectedUrl = "";
+    try {
+      redirectedUrl = new URL(locationHeader, targetUrl).toString();
+    } catch {
+      redirectedUrl = locationHeader;
+    }
+
+    console.warn(
+      `WARN: ${providerLabel || "Provider"} endpoint redirected (${reason || "event"}): ${response.status} -> ${redirectedUrl}`
+    );
+
+    // Re-POST with identical auth headers so providers behind redirects still receive credentials.
+    response = await fetch(redirectedUrl, {
+      method: "POST",
+      headers,
+      body: requestBody,
+      redirect: "manual"
+    });
+
+    return response;
+  }
+
   function buildProviderAuthHeaders(config, tokenValue, { authSchemeOverride } = {}) {
     const headers = {};
     const trimmedToken = String(tokenValue || "").trim();
@@ -1576,14 +1623,21 @@ import { theme } from "./ui/theme.js";
     }
 
     try {
-      const response = await fetch(targetUrl, {
-        method: "POST",
-        headers: {
-          ...authHeaders,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(buildStatsBody(config, serverCount, userCount))
-      });
+      const requestHeaders = {
+        ...authHeaders,
+        "Content-Type": "application/json"
+      };
+      const statsBody = buildStatsBody(config, serverCount, userCount);
+      const response = config?.source === VOTE_SOURCES.RANKTOP
+        ? await postJsonWithAuthPreservedOnRedirect(targetUrl, requestHeaders, statsBody, {
+          providerLabel: config.label,
+          reason
+        })
+        : await fetch(targetUrl, {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify(statsBody)
+        });
 
       if (!response.ok) {
         if (response.status === 429) {
@@ -2164,13 +2218,13 @@ import { theme } from "./ui/theme.js";
     );
 
     try {
-      const response = await fetch(targetUrl, {
-        method: "POST",
-        headers: {
-          ...authHeaders,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(commandsPayload)
+      const requestHeaders = {
+        ...authHeaders,
+        "Content-Type": "application/json"
+      };
+      const response = await postJsonWithAuthPreservedOnRedirect(targetUrl, requestHeaders, commandsPayload, {
+        providerLabel: "Rank.top",
+        reason
       });
 
       if (!response.ok) {
