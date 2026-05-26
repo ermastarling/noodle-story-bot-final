@@ -1500,16 +1500,29 @@ import { theme } from "./ui/theme.js";
     const authScheme = authSchemeOverride ?? config?.authScheme;
     const authHeaderName = String(config?.authHeaderName || "Authorization").trim() || "Authorization";
     const authHeaderValue = buildAuthorizationHeaderValue(trimmedToken, authScheme);
-    headers[authHeaderName] = authHeaderValue;
 
-    // Rank.top accepts API-key style auth; send both by default to avoid provider-side parser variance.
     if (config?.source === VOTE_SOURCES.RANKTOP) {
+      const includeAuthorizationHeader = String(process.env.NOODLE_RANKTOP_INCLUDE_AUTHORIZATION_HEADER || "1") !== "0";
+      const rankTopAuthScheme = String(process.env.NOODLE_RANKTOP_AUTH_SCHEME || authScheme || "bearer")
+        .trim()
+        .toLowerCase();
+      if (includeAuthorizationHeader) {
+        headers[authHeaderName] = buildAuthorizationHeaderValue(
+          trimmedToken,
+          rankTopAuthScheme === "raw" ? "raw" : "bearer"
+        );
+      }
+
+      // Rank.top accepts API-key style auth; send both by default to avoid provider-side parser variance.
       const includeApiKeyHeader = String(process.env.NOODLE_RANKTOP_INCLUDE_API_KEY_HEADER || "1") !== "0";
       if (includeApiKeyHeader) {
         const apiKeyHeaderName = String(process.env.NOODLE_RANKTOP_API_KEY_HEADER || "x-api-key").trim() || "x-api-key";
         headers[apiKeyHeaderName] = normalizeAuthToken(trimmedToken);
       }
+      return headers;
     }
+
+    headers[authHeaderName] = authHeaderValue;
 
     return headers;
   }
