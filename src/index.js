@@ -519,7 +519,8 @@ import { theme } from "./ui/theme.js";
       source: VOTE_SOURCES.RANKTOP,
       label: "Rank.top",
       endpoint: process.env.NOODLE_RANKTOP_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.RANKTOP],
-      token: getVoteSourceToken("NOODLE_RANKTOP_TOKEN")
+      token: getVoteSourceToken("NOODLE_RANKTOP_TOKEN"),
+      authScheme: "bearer"
     },
     {
       source: VOTE_SOURCES.DISCORDBOTLIST,
@@ -589,14 +590,14 @@ import { theme } from "./ui/theme.js";
     ? shardAlertRatioRaw
     : 0.8;
   const shardAlertThreshold = Math.max(1, Math.floor(shardGuildThreshold * shardAlertRatio));
-  const botListStatsSyncIntervalRaw = Number(process.env.NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS || 15 * 60 * 1000);
+  const botListStatsSyncIntervalRaw = Number(process.env.NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS || 60 * 60 * 1000);
   const botListStatsSyncIntervalMs = Number.isFinite(botListStatsSyncIntervalRaw) && botListStatsSyncIntervalRaw >= 60_000
     ? Math.floor(botListStatsSyncIntervalRaw)
-    : 15 * 60 * 1000;
-  const botListStatsMinIntervalRaw = Number(process.env.NOODLE_BOTLIST_STATS_MIN_INTERVAL_MS || 3 * 60 * 1000);
+    : 60 * 60 * 1000;
+  const botListStatsMinIntervalRaw = Number(process.env.NOODLE_BOTLIST_STATS_MIN_INTERVAL_MS || 60 * 60 * 1000);
   const botListStatsMinIntervalMs = Number.isFinite(botListStatsMinIntervalRaw) && botListStatsMinIntervalRaw >= 30_000
     ? Math.floor(botListStatsMinIntervalRaw)
-    : 3 * 60 * 1000;
+    : 60 * 60 * 1000;
   const topggRequireSignature = String(process.env.NOODLE_TOPGG_REQUIRE_SIGNATURE || "0") === "1";
   const voteDuplicateWindowMode = String(process.env.NOODLE_VOTE_DUPLICATE_WINDOW_MODE || "sliding").trim().toLowerCase() === "fixed"
     ? "fixed"
@@ -1953,7 +1954,7 @@ import { theme } from "./ui/theme.js";
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
-          Authorization: buildAuthorizationHeaderValue(tokenValue, "raw"),
+          Authorization: buildAuthorizationHeaderValue(tokenValue, "bearer"),
           "Content-Type": "application/json"
         },
         body: JSON.stringify(commandsPayload)

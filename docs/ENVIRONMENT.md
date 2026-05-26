@@ -56,14 +56,14 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_DISCORDLISTGG_WEBHOOK_PATH` + `NOODLE_DISCORDLISTGG_WEBHOOK_AUTH` - DiscordList.gg vote webhook
 - `NOODLE_RADARCPDV_WEBHOOK_PATH` + `NOODLE_RADARCPDV_WEBHOOK_AUTH` - Radar.CPDV vote webhook
 - `NOODLE_TOPGG_TOKEN` (fallbacks: `TOPGG_TOKEN`, `TOPGG_API_TOKEN`) + `NOODLE_TOPGG_STATS_URL` - Top.gg server count sync target (`NOODLE_TOPGG_STATS_URL` optional; default built in)
-- `NOODLE_RANKTOP_TOKEN` + `NOODLE_RANKTOP_STATS_URL` - Rank.top server count sync target using `Authorization: <token>` (`NOODLE_RANKTOP_STATS_URL` optional; default `https://rank.top/api/bots/{botId}/post`)
+- `NOODLE_RANKTOP_TOKEN` + `NOODLE_RANKTOP_STATS_URL` - Rank.top server count sync target using `Authorization: Bearer <token>` (`NOODLE_RANKTOP_STATS_URL` optional; default `https://rank.top/api/bots/{botId}/post`)
 - `NOODLE_RANKTOP_SYNC_COMMANDS` - set `0` to disable Rank.top command-list sync (default enabled); this also excludes `commands` from Rank.top periodic stats payloads to avoid unnecessary command reposting
 - `NOODLE_RANKTOP_COMMANDS_URL` - optional Rank.top command-list endpoint override (default `https://rank.top/api/bots/{botId}/post`)
 - `NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS` - set `1` to include `noodle-dev` in Rank.top command list (default excluded)
 - `NOODLE_DISCORDBOTLIST_TOKEN` + `NOODLE_DISCORDBOTLIST_STATS_URL` - Discord Bot List stats sync target (`NOODLE_DISCORDBOTLIST_STATS_URL` optional; default built in). Sends `guilds`, `users`, and optional `voice_connections`.
 - `NOODLE_DISCORDBOTLIST_VOICE_CONNECTIONS` - optional static voice connection count value for Discord Bot List stats payloads
-- `NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS` - optional periodic stats heartbeat interval (default `900000` ms / 15 min)
-- `NOODLE_BOTLIST_STATS_MIN_INTERVAL_MS` - optional minimum gap between stats POSTs per provider across ready/guild events/heartbeat (default `180000` ms / 3 min)
+- `NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS` - optional periodic stats heartbeat interval (default `3600000` ms / 1 hour)
+- `NOODLE_BOTLIST_STATS_MIN_INTERVAL_MS` - optional minimum gap between stats POSTs per provider across ready/guild events/heartbeat (default `3600000` ms / 1 hour)
 - `NOODLE_VOTE_DUPLICATE_WINDOW_MODE` - optional duplicate suppression mode for vote retries: `sliding` (default) extends the 5-minute window on repeated retries; `fixed` keeps a fixed window from first seen webhook
 - `NOODLE_DISCORDBOTLIST_SYNC_COMMANDS` - set `0` to disable Discord Bot List command-list sync (default enabled)
 - `NOODLE_DISCORDBOTLIST_COMMANDS_URL` - optional command-list endpoint override (default `https://discordbotlist.com/api/v1/bots/{botId}/commands`)
@@ -93,8 +93,10 @@ For variables that accept file paths, absolute paths are honored, and relative p
 ```dotenv
 # Shared webhook server
 NOODLE_WEBHOOK_PORT=3000
-# Optional: periodic bot-list stats heartbeat interval (default 15 min)
-# NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS=900000
+# Optional: periodic bot-list stats heartbeat interval (default 1 hour)
+# NOODLE_BOTLIST_STATS_SYNC_INTERVAL_MS=3600000
+# Optional: minimum gap between per-provider stats sync attempts (default 1 hour)
+# NOODLE_BOTLIST_STATS_MIN_INTERVAL_MS=3600000
 # Optional: vote duplicate suppression mode (`sliding` default, or `fixed`)
 # NOODLE_VOTE_DUPLICATE_WINDOW_MODE=sliding
 
