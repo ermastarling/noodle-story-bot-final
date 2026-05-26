@@ -2189,6 +2189,71 @@ import { theme } from "./ui/theme.js";
     }
   }
 
+  async function runRankTopAuthPreflight({ reason = "ready" } = {}) {
+    const enabled = String(process.env.NOODLE_RANKTOP_AUTH_PREFLIGHT || "0") === "1";
+    if (!enabled) return false;
+
+    const tokenValue = getVoteSourceToken("NOODLE_RANKTOP_TOKEN");
+    if (!tokenValue) {
+      console.log("INFO: Rank.top auth preflight skipped (missing token).");
+      return false;
+    }
+
+    const endpointTemplate = String(
+      process.env.NOODLE_RANKTOP_PREFLIGHT_URL || "https://rank.top/api/bots/{botId}/details"
+    ).trim();
+    const resolvedBotId = String(client.user?.id || sharedBotId || BOT_ID_FALLBACK || "").trim();
+    if (!resolvedBotId) {
+      console.log("INFO: Rank.top auth preflight skipped (missing bot id).");
+      return false;
+    }
+
+    const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
+    const authHeaders = buildProviderAuthHeaders(
+      {
+        source: VOTE_SOURCES.RANKTOP,
+        authScheme: "bearer",
+        authHeaderName: "Authorization"
+      },
+      tokenValue,
+      { authSchemeOverride: "bearer" }
+    );
+    const rankTopApiKeyHeaderName = String(process.env.NOODLE_RANKTOP_API_KEY_HEADER || "x-api-key").trim() || "x-api-key";
+    logRankTopRequestDiagnostics(
+      "preflight",
+      tokenValue,
+      targetUrl,
+      authHeaders.Authorization || authHeaders.authorization || "",
+      authHeaders[rankTopApiKeyHeaderName] || ""
+    );
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: "GET",
+        headers: {
+          ...authHeaders
+        }
+      });
+      const responseBody = await response.text().catch(() => "");
+      const bodySnippet = responseBody ? responseBody.slice(0, 500) : "";
+
+      if (!response.ok) {
+        console.error(
+          `❌ Rank.top auth preflight failed (${reason}): ${response.status} ${response.statusText}${bodySnippet ? ` - ${bodySnippet}` : ""}`
+        );
+        return false;
+      }
+
+      console.log(
+        `✅ Rank.top auth preflight passed (${reason}): ${response.status}${bodySnippet ? ` - ${bodySnippet}` : ""}`
+      );
+      return true;
+    } catch (error) {
+      console.error("❌ Rank.top auth preflight threw:", error?.stack ?? error);
+      return false;
+    }
+  }
+
   function startBotListStatsHeartbeat() {
     if (botListStatsHeartbeatHandle) return;
     if (!hasAnyConfiguredBotListStatsSync()) {
@@ -2830,6 +2895,7 @@ import { theme } from "./ui/theme.js";
     await updateOfficialStatsChannels(startupCounts, { reason: "ready" });
     await syncDiscordBotListCommands({ reason: "ready" });
     await syncRadarCpdvCommands({ reason: "ready" });
+    await runRankTopAuthPreflight({ reason: "ready" });
     await syncRankTopCommands({ reason: "ready" });
     startBotListStatsHeartbeat();
 

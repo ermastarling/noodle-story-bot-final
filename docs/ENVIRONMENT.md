@@ -61,6 +61,8 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_RANKTOP_AUTH_SCHEME` - Authorization header scheme for Rank.top outbound sync: `bearer` (default) or `raw`
 - `NOODLE_RANKTOP_INCLUDE_API_KEY_HEADER` - set `0` to stop sending an API-key header for Rank.top outbound sync (default `1` sends both `Authorization: Bearer <token>` and API-key header)
 - `NOODLE_RANKTOP_API_KEY_HEADER` - optional API-key header name for Rank.top outbound sync (default `x-api-key`)
+- `NOODLE_RANKTOP_AUTH_PREFLIGHT` - set `1` to run a startup Rank.top auth preflight GET request and log the exact API response status/body snippet
+- `NOODLE_RANKTOP_PREFLIGHT_URL` - optional preflight endpoint template with `{botId}` replacement (default `https://rank.top/api/bots/{botId}/details`)
 - `NOODLE_RANKTOP_SYNC_COMMANDS` - set `0` to disable Rank.top command-list sync (default enabled); this also excludes `commands` from Rank.top periodic stats payloads to avoid unnecessary command reposting
 - `NOODLE_RANKTOP_COMMANDS_URL` - optional Rank.top command-list endpoint override (default `https://rank.top/api/bots/{botId}/post`)
 - `NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS` - set `1` to include `noodle-dev` in Rank.top command list (default excluded)
@@ -125,6 +127,9 @@ NOODLE_RANKTOP_TOKEN=replace_with_ranktop_api_token
 # NOODLE_RANKTOP_AUTH_SCHEME=bearer
 # NOODLE_RANKTOP_INCLUDE_API_KEY_HEADER=1
 # NOODLE_RANKTOP_API_KEY_HEADER=x-api-key
+# Optional: startup auth preflight diagnostics
+# NOODLE_RANKTOP_AUTH_PREFLIGHT=0
+# NOODLE_RANKTOP_PREFLIGHT_URL=https://rank.top/api/bots/{botId}/details
 # Optional: command-list sync controls
 # NOODLE_RANKTOP_SYNC_COMMANDS=1
 # NOODLE_RANKTOP_COMMANDS_URL=https://rank.top/api/bots/{botId}/post
