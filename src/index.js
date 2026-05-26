@@ -2297,7 +2297,7 @@ import { theme } from "./ui/theme.js";
     }
 
     const endpointTemplate = String(
-      process.env.NOODLE_RANKTOP_PREFLIGHT_URL || "https://rank.top/api/bots/{botId}/details"
+      process.env.NOODLE_RANKTOP_PREFLIGHT_URL || "https://rank.top/api/bots/{botId}/stats"
     ).trim();
     const resolvedBotId = String(client.user?.id || sharedBotId || BOT_ID_FALLBACK || "").trim();
     if (!resolvedBotId) {
@@ -2306,6 +2306,9 @@ import { theme } from "./ui/theme.js";
     }
 
     const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
+    if (/\/bots\/\{?botId\}?\/details/i.test(endpointTemplate) || /\/bots\/.+\/details/i.test(targetUrl)) {
+      console.warn("WARN: Rank.top preflight is pointed at /details, which may be public and not validate API key auth for /post.");
+    }
     const authHeaders = buildProviderAuthHeaders(
       {
         source: VOTE_SOURCES.RANKTOP,
