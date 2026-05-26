@@ -729,10 +729,11 @@ import { theme } from "./ui/theme.js";
     console.log("DEBUG Rank.top env diagnostics:", JSON.stringify(payload));
   }
 
-  function logRankTopRequestDiagnostics(kind, tokenValue, targetUrl, authHeaderValue) {
+  function logRankTopRequestDiagnostics(kind, tokenValue, targetUrl, authHeaderValue, apiKeyHeaderValue = "") {
     if (!rankTopAuthDebugEnabled) return;
     const trimmedToken = String(tokenValue || "").trim();
     const trimmedAuthHeader = String(authHeaderValue || "").trim();
+    const trimmedApiKeyHeader = String(apiKeyHeaderValue || "").trim();
     console.log(
       `DEBUG Rank.top ${kind} auth diagnostics:`,
       JSON.stringify({
@@ -744,6 +745,10 @@ import { theme } from "./ui/theme.js";
         authHeaderStartsWithBearer: /^bearer\s+/i.test(trimmedAuthHeader),
         authHeaderSha256Prefix: trimmedAuthHeader
           ? crypto.createHash("sha256").update(trimmedAuthHeader).digest("hex").slice(0, 12)
+          : null,
+        apiKeyHeaderLength: trimmedApiKeyHeader.length,
+        apiKeyHeaderSha256Prefix: trimmedApiKeyHeader
+          ? crypto.createHash("sha256").update(trimmedApiKeyHeader).digest("hex").slice(0, 12)
           : null
       })
     );
@@ -1487,6 +1492,28 @@ import { theme } from "./ui/theme.js";
     return token;
   }
 
+  function buildProviderAuthHeaders(config, tokenValue, { authSchemeOverride } = {}) {
+    const headers = {};
+    const trimmedToken = String(tokenValue || "").trim();
+    if (!trimmedToken) return headers;
+
+    const authScheme = authSchemeOverride ?? config?.authScheme;
+    const authHeaderName = String(config?.authHeaderName || "Authorization").trim() || "Authorization";
+    const authHeaderValue = buildAuthorizationHeaderValue(trimmedToken, authScheme);
+    headers[authHeaderName] = authHeaderValue;
+
+    // Rank.top accepts API-key style auth; send both by default to avoid provider-side parser variance.
+    if (config?.source === VOTE_SOURCES.RANKTOP) {
+      const includeApiKeyHeader = String(process.env.NOODLE_RANKTOP_INCLUDE_API_KEY_HEADER || "1") !== "0";
+      if (includeApiKeyHeader) {
+        const apiKeyHeaderName = String(process.env.NOODLE_RANKTOP_API_KEY_HEADER || "x-api-key").trim() || "x-api-key";
+        headers[apiKeyHeaderName] = normalizeAuthToken(trimmedToken);
+      }
+    }
+
+    return headers;
+  }
+
   async function updateSingleBotListServerCount(config, serverCount, userCount, { reason = "event" } = {}) {
     const endpoint = String(config?.endpoint || "").trim();
     const tokenValue = String(config?.token || "").trim();
@@ -1506,9 +1533,16 @@ import { theme } from "./ui/theme.js";
     }
 
     const targetUrl = renderStatsEndpoint(endpoint, resolvedBotId);
-    const authHeaderValue = buildAuthorizationHeaderValue(tokenValue, config?.authScheme);
+    const authHeaders = buildProviderAuthHeaders(config, tokenValue);
     if (config?.source === VOTE_SOURCES.RANKTOP) {
-      logRankTopRequestDiagnostics("stats", tokenValue, targetUrl, authHeaderValue);
+      const rankTopApiKeyHeaderName = String(process.env.NOODLE_RANKTOP_API_KEY_HEADER || "x-api-key").trim() || "x-api-key";
+      logRankTopRequestDiagnostics(
+        "stats",
+        tokenValue,
+        targetUrl,
+        authHeaders.Authorization || authHeaders.authorization || "",
+        authHeaders[rankTopApiKeyHeaderName] || ""
+      );
     }
     const sourceKey = String(config?.source || "").trim();
     const nowMs = Date.now();
@@ -1532,7 +1566,7 @@ import { theme } from "./ui/theme.js";
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
-          Authorization: authHeaderValue,
+          ...authHeaders,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(buildStatsBody(config, serverCount, userCount))
@@ -2098,14 +2132,29 @@ import { theme } from "./ui/theme.js";
     const commandsPayload = buildRankTopPostPayload(counts.serverCount, counts.userCount, {
       includeCommands: true
     });
-    const authHeaderValue = buildAuthorizationHeaderValue(tokenValue, "bearer");
-    logRankTopRequestDiagnostics("commands", tokenValue, targetUrl, authHeaderValue);
+    const authHeaders = buildProviderAuthHeaders(
+      {
+        source: VOTE_SOURCES.RANKTOP,
+        authScheme: "bearer",
+        authHeaderName: "Authorization"
+      },
+      tokenValue,
+      { authSchemeOverride: "bearer" }
+    );
+    const rankTopApiKeyHeaderName = String(process.env.NOODLE_RANKTOP_API_KEY_HEADER || "x-api-key").trim() || "x-api-key";
+    logRankTopRequestDiagnostics(
+      "commands",
+      tokenValue,
+      targetUrl,
+      authHeaders.Authorization || authHeaders.authorization || "",
+      authHeaders[rankTopApiKeyHeaderName] || ""
+    );
 
     try {
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
-          Authorization: authHeaderValue,
+          ...authHeaders,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(commandsPayload)

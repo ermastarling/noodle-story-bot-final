@@ -56,7 +56,9 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_DISCORDLISTGG_WEBHOOK_PATH` + `NOODLE_DISCORDLISTGG_WEBHOOK_AUTH` - DiscordList.gg vote webhook
 - `NOODLE_RADARCPDV_WEBHOOK_PATH` + `NOODLE_RADARCPDV_WEBHOOK_AUTH` - Radar.CPDV vote webhook
 - `NOODLE_TOPGG_TOKEN` (fallbacks: `TOPGG_TOKEN`, `TOPGG_API_TOKEN`) + `NOODLE_TOPGG_STATS_URL` - Top.gg server count sync target (`NOODLE_TOPGG_STATS_URL` optional; default built in)
-- `NOODLE_RANKTOP_TOKEN` + `NOODLE_RANKTOP_STATS_URL` - Rank.top server count sync target using `Authorization: Bearer <token>` (`NOODLE_RANKTOP_STATS_URL` optional; default `https://rank.top/api/bots/{botId}/post`)
+- `NOODLE_RANKTOP_TOKEN` + `NOODLE_RANKTOP_STATS_URL` - Rank.top server count sync target (`NOODLE_RANKTOP_STATS_URL` optional; default `https://rank.top/api/bots/{botId}/post`)
+- `NOODLE_RANKTOP_INCLUDE_API_KEY_HEADER` - set `0` to stop sending an API-key header for Rank.top outbound sync (default `1` sends both `Authorization: Bearer <token>` and API-key header)
+- `NOODLE_RANKTOP_API_KEY_HEADER` - optional API-key header name for Rank.top outbound sync (default `x-api-key`)
 - `NOODLE_RANKTOP_SYNC_COMMANDS` - set `0` to disable Rank.top command-list sync (default enabled); this also excludes `commands` from Rank.top periodic stats payloads to avoid unnecessary command reposting
 - `NOODLE_RANKTOP_COMMANDS_URL` - optional Rank.top command-list endpoint override (default `https://rank.top/api/bots/{botId}/post`)
 - `NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS` - set `1` to include `noodle-dev` in Rank.top command list (default excluded)
@@ -116,6 +118,9 @@ NOODLE_RANKTOP_WEBHOOK_AUTH=replace_with_ranktop_webhook_auth
 NOODLE_RANKTOP_TOKEN=replace_with_ranktop_api_token
 # Optional override (default is built in)
 # NOODLE_RANKTOP_STATS_URL=https://rank.top/api/bots/{botId}/post
+# Optional: dual-auth header controls for Rank.top outbound sync
+# NOODLE_RANKTOP_INCLUDE_API_KEY_HEADER=1
+# NOODLE_RANKTOP_API_KEY_HEADER=x-api-key
 # Optional: command-list sync controls
 # NOODLE_RANKTOP_SYNC_COMMANDS=1
 # NOODLE_RANKTOP_COMMANDS_URL=https://rank.top/api/bots/{botId}/post
