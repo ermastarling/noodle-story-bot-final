@@ -1512,33 +1512,29 @@ import { theme } from "./ui/theme.js";
 
     let response = await fetch(targetUrl, baseRequest);
 
-    if (!isRedirectStatus(response.status)) {
-      return response;
+    if (isRedirectStatus(response.status)) {
+      const locationHeader = String(response.headers.get("location") || "").trim();
+      if (locationHeader) {
+        let redirectedUrl = "";
+        try {
+          redirectedUrl = new URL(locationHeader, targetUrl).toString();
+        } catch {
+          redirectedUrl = locationHeader;
+        }
+
+        console.warn(
+          `WARN: ${providerLabel || "Provider"} endpoint redirected (${reason || "event"}): ${response.status} -> ${redirectedUrl}`
+        );
+
+        // Re-POST with identical auth headers so providers behind redirects still receive credentials.
+        response = await fetch(redirectedUrl, {
+          method: "POST",
+          headers,
+          body: requestBody,
+          redirect: "manual"
+        });
+      }
     }
-
-    const locationHeader = String(response.headers.get("location") || "").trim();
-    if (!locationHeader) {
-      return response;
-    }
-
-    let redirectedUrl = "";
-    try {
-      redirectedUrl = new URL(locationHeader, targetUrl).toString();
-    } catch {
-      redirectedUrl = locationHeader;
-    }
-
-    console.warn(
-      `WARN: ${providerLabel || "Provider"} endpoint redirected (${reason || "event"}): ${response.status} -> ${redirectedUrl}`
-    );
-
-    // Re-POST with identical auth headers so providers behind redirects still receive credentials.
-    response = await fetch(redirectedUrl, {
-      method: "POST",
-      headers,
-      body: requestBody,
-      redirect: "manual"
-    });
 
     const provider = String(providerLabel || "");
     const isRankTop = provider.toLowerCase() === "rank.top";
