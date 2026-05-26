@@ -519,8 +519,7 @@ import { theme } from "./ui/theme.js";
       source: VOTE_SOURCES.RANKTOP,
       label: "Rank.top",
       endpoint: process.env.NOODLE_RANKTOP_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.RANKTOP],
-      token: getVoteSourceToken("NOODLE_RANKTOP_TOKEN"),
-      authScheme: "bearer"
+      token: getVoteSourceToken("NOODLE_RANKTOP_TOKEN")
     },
     {
       source: VOTE_SOURCES.DISCORDBOTLIST,
@@ -1954,7 +1953,7 @@ import { theme } from "./ui/theme.js";
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
-          Authorization: buildAuthorizationHeaderValue(tokenValue, "bearer"),
+          Authorization: buildAuthorizationHeaderValue(tokenValue, "raw"),
           "Content-Type": "application/json"
         },
         body: JSON.stringify(commandsPayload)
