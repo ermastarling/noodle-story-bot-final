@@ -1497,7 +1497,11 @@ import { theme } from "./ui/theme.js";
     return code === 301 || code === 302 || code === 303 || code === 307 || code === 308;
   }
 
-  async function postJsonWithAuthPreservedOnRedirect(targetUrl, headers, bodyObject, { providerLabel, reason } = {}) {
+  async function postJsonWithAuthPreservedOnRedirect(targetUrl, headers, bodyObject, {
+    providerLabel,
+    reason,
+    tokenValue = ""
+  } = {}) {
     const requestBody = JSON.stringify(bodyObject);
     const baseRequest = {
       method: "POST",
@@ -1536,7 +1540,48 @@ import { theme } from "./ui/theme.js";
       redirect: "manual"
     });
 
-    return response;
+    const provider = String(providerLabel || "");
+    const isRankTop = provider.toLowerCase() === "rank.top";
+    if (!isRankTop || response.ok) {
+      return response;
+    }
+
+    if (response.status !== 401) {
+      return response;
+    }
+
+    const responseText = await response.clone().text().catch(() => "");
+    if (!/missing authorization token/i.test(responseText)) {
+      return response;
+    }
+
+    const trimmedToken = String(tokenValue || "").trim();
+    if (!trimmedToken) {
+      return response;
+    }
+
+    const retryHeaders = {
+      ...headers,
+      // Some gateway paths can strip Authorization on POST; provide redundant auth channels.
+      "x-authorization": buildAuthorizationHeaderValue(trimmedToken, "bearer"),
+      "x-api-key": normalizeAuthToken(trimmedToken)
+    };
+    const retryHeaderKeys = Object.keys(retryHeaders)
+      .map((key) => String(key || "").toLowerCase())
+      .sort()
+      .join(",");
+
+    console.warn(
+      `WARN: ${provider} retrying POST with fallback auth headers (${reason || "event"}) after 401 Missing authorization token.`
+    );
+    console.log(`DEBUG ${provider} retry auth header keys: ${retryHeaderKeys}`);
+
+    return fetch(targetUrl, {
+      method: "POST",
+      headers: retryHeaders,
+      body: requestBody,
+      redirect: "manual"
+    });
   }
 
   function buildProviderAuthHeaders(config, tokenValue, { authSchemeOverride } = {}) {
@@ -1631,7 +1676,8 @@ import { theme } from "./ui/theme.js";
       const response = config?.source === VOTE_SOURCES.RANKTOP
         ? await postJsonWithAuthPreservedOnRedirect(targetUrl, requestHeaders, statsBody, {
           providerLabel: config.label,
-          reason
+          reason,
+          tokenValue
         })
         : await fetch(targetUrl, {
           method: "POST",
@@ -2224,7 +2270,8 @@ import { theme } from "./ui/theme.js";
       };
       const response = await postJsonWithAuthPreservedOnRedirect(targetUrl, requestHeaders, commandsPayload, {
         providerLabel: "Rank.top",
-        reason
+        reason,
+        tokenValue
       });
 
       if (!response.ok) {
