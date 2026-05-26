@@ -1812,15 +1812,24 @@ import { theme } from "./ui/theme.js";
     });
   }
 
-  function buildRankTopPostPayload(serverCount, userCount) {
-    return {
+  function buildRankTopPostPayload(serverCount, userCount, { includeCommands } = {}) {
+    const includeCommandsFlag = includeCommands == null
+      ? String(process.env.NOODLE_RANKTOP_SYNC_COMMANDS || "1") !== "0"
+      : Boolean(includeCommands);
+
+    const payload = {
       server_count: Number(serverCount) || 0,
-      user_count: Number.isFinite(userCount) && userCount >= 0 ? Math.floor(userCount) : 0,
-      commands: buildProviderCommandsPayload({
+      user_count: Number.isFinite(userCount) && userCount >= 0 ? Math.floor(userCount) : 0
+    };
+
+    if (includeCommandsFlag) {
+      payload.commands = buildProviderCommandsPayload({
         includeDevEnvVar: "NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS",
         wrapInCommandsObject: false
-      })
-    };
+      });
+    }
+
+    return payload;
   }
 
   async function syncDiscordBotListCommands({ reason = "ready" } = {}) {
@@ -1937,7 +1946,9 @@ import { theme } from "./ui/theme.js";
 
     const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
     const counts = getCurrentBotListCounts();
-    const commandsPayload = buildRankTopPostPayload(counts.serverCount, counts.userCount);
+    const commandsPayload = buildRankTopPostPayload(counts.serverCount, counts.userCount, {
+      includeCommands: true
+    });
 
     try {
       const response = await fetch(targetUrl, {
