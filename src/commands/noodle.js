@@ -1814,7 +1814,39 @@ if (showTakeout) {
 return row;
 }
 
-function noodleTakeoutActionRow(userId, { disableOpen = false, disableClaim = false } = {}) {
+function noodleTakeoutActionRow(userId, { activeShift = false, disableOpen = false, disableClaim = false, disableServe = false } = {}) {
+  if (activeShift) {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:takeout:${userId}`)
+        .setLabel("Counter")
+        .setEmoji(getButtonEmoji("orders"))
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:pick:takeout_cook:${userId}`)
+        .setLabel("Counter Cook")
+        .setEmoji(getButtonEmoji("cook"))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:pick:takeout_serve:${userId}`)
+        .setLabel("Counter Serve")
+        .setEmoji(getButtonEmoji("serve"))
+        .setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Success)
+        .setDisabled(disableServe),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:takeout_claim:${userId}`)
+        .setLabel("Claim")
+        .setEmoji(getButtonEmoji("coins"))
+        .setStyle(disableClaim ? ButtonStyle.Secondary : ButtonStyle.Primary)
+        .setDisabled(disableClaim),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:orders:${userId}`)
+        .setLabel("Back")
+        .setEmoji(getButtonEmoji("back"))
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:takeout:${userId}`)
@@ -4007,6 +4039,244 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   };
 }
 
+function getTakeoutRecipeNeedRows(player, takeoutState) {
+  const menuRecipeIds = (takeoutState?.menu_recipe_ids ?? []).filter(Boolean);
+  const menuSet = new Set(menuRecipeIds);
+  const snapshot = Array.isArray(takeoutState?.shift?.idle_order_board_snapshot)
+    ? takeoutState.shift.idle_order_board_snapshot
+    : [];
+
+  const neededByRecipe = {};
+  for (const row of snapshot) {
+    const recipeId = String(row?.recipe_id || "").trim();
+    if (!recipeId) continue;
+    if (menuSet.size > 0 && !menuSet.has(recipeId)) continue;
+    const need = Math.max(0, Math.floor(Number(row?.visible_order_count || 0) || 0));
+    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + need;
+  }
+
+  return menuRecipeIds.map((recipeId) => {
+    const need = Math.max(0, neededByRecipe[recipeId] ?? 0);
+    const ready = getTotalBowlsForRecipe(player, recipeId);
+    const short = Math.max(0, need - ready);
+    return { recipeId, need, ready, short };
+  });
+}
+
+function buildTakeoutNeededIngredientsBlock(player, takeoutState, { maxLines = 10 } = {}) {
+  const recipeNeeds = getTakeoutRecipeNeedRows(player, takeoutState).filter((entry) => entry.short > 0);
+  if (!recipeNeeds.length) {
+    return `${getIcon("basket")} **Needed Ingredients (Counter Orders)**\n_All ingredients currently ready for remaining counter orders._`;
+  }
+
+  const neededByIngredient = {};
+  for (const entry of recipeNeeds) {
+    const recipe = content.recipes?.[entry.recipeId];
+    if (!recipe) continue;
+    getRelevantRecipeIngredients(player, recipe).forEach((ing) => {
+      if (isIngredientOptionalForPlayer(player, ing)) return;
+      const qty = Math.max(0, Math.floor(Number(ing?.qty || 0) || 0));
+      if (qty <= 0) return;
+      neededByIngredient[ing.item_id] = (neededByIngredient[ing.item_id] ?? 0) + (qty * entry.short);
+    });
+  }
+
+  const shortageRows = Object.entries(neededByIngredient)
+    .map(([itemId, needed]) => {
+      const have = Math.max(0, Math.floor(Number(player.inv_ingredients?.[itemId] || 0) || 0));
+      const short = Math.max(0, needed - have);
+      return { itemId, needed, have, short };
+    })
+    .filter((row) => row.short > 0)
+    .sort((a, b) => displayItemName(a.itemId).localeCompare(displayItemName(b.itemId), "en", { sensitivity: "base" }));
+
+  if (!shortageRows.length) {
+    return `${getIcon("basket")} **Needed Ingredients (Counter Orders)**\n_All ingredients currently ready for remaining counter orders._`;
+  }
+
+  const lines = shortageRows.slice(0, maxLines).map((row) => (
+    `• ${displayItemName(row.itemId)} — need **${row.needed}**, have **${row.have}** (short **${row.short}**)`
+  ));
+  const more = shortageRows.length > maxLines ? `\n…and **${shortageRows.length - maxLines}** more` : "";
+
+  return `${getIcon("basket")} **Needed Ingredients (Counter Orders)**\n${lines.join("\n")}${more}`;
+}
+
+function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0 }) {
+  const menuRecipeIds = (takeout?.menu_recipe_ids ?? []).filter((rid) => content.recipes?.[rid]);
+  if (!menuRecipeIds.length) {
+    return { content: `${getIcon("warning")} Your takeout menu is empty. Set a menu first.`, ephemeral: true };
+  }
+
+  const sortKey = (rid) => {
+    const r = content.recipes?.[rid];
+    return (r?.name ?? displayItemName(rid, content) ?? "").toLowerCase();
+  };
+  const sorted = [...menuRecipeIds].sort((a, b) => sortKey(a).localeCompare(sortKey(b), "en", { sensitivity: "base" }));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / 25));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+
+  const opts = sorted
+    .slice(safePage * 25, (safePage + 1) * 25)
+    .map((rid) => {
+      const r = content.recipes?.[rid];
+      const relevantIngredients = getRelevantRecipeIngredients(p, r);
+      const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
+      const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
+
+      const ingTokens = relevantIngredients.map((ing) => {
+        const have = Math.max(0, p.inv_ingredients?.[ing.item_id] ?? 0);
+        const name = displayItemName(ing.item_id);
+        const base = `${name}:${have}`;
+        return isIngredientOptionalForPlayer(p, ing) ? `${base} (opt)` : base;
+      });
+
+      const maxCookable = relevantIngredients
+        .filter((ing) => !isIngredientOptionalForPlayer(p, ing) && (ing?.qty ?? 0) > 0)
+        .map((ing) => Math.floor((p.inv_ingredients?.[ing.item_id] ?? 0) / (ing.qty ?? 1)))
+        .reduce((min, cur) => Math.min(min, cur), Infinity);
+      const cookable = Number.isFinite(maxCookable) ? Math.max(0, maxCookable) : 0;
+
+      const descRaw = ingTokens.length
+        ? `${ingTokens.join(" · ")} | Max ${cookable}`
+        : `Max ${cookable}`;
+      const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
+
+      const option = { label, value: rid, description };
+      if (cookable > 0) {
+        const emoji = getButtonEmoji("status_complete");
+        if (emoji) option.emoji = emoji;
+      }
+      return option;
+    });
+
+  const needRows = getTakeoutRecipeNeedRows(p, takeout)
+    .filter((entry) => entry.need > 0)
+    .map((entry) => {
+      const line = `• ${displayRecipeName(entry.recipeId)} — need **${entry.need}**, ready **${entry.ready}** (cook **${entry.short}** more)`;
+      return { ...entry, line };
+    })
+    .sort((a, b) => {
+      if (b.short !== a.short) return b.short - a.short;
+      return displayRecipeName(a.recipeId).localeCompare(displayRecipeName(b.recipeId), "en", { sensitivity: "base" });
+    });
+
+  const cookNeedsText = needRows.length
+    ? `${getIcon("cook")} Counter orders to cook:\n${needRows.slice(0, 6).map((x) => x.line).join("\n")}${needRows.length > 6 ? "\n…" : ""}`
+    : "";
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:pick:cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
+    .setPlaceholder("Select a recipe to cook")
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(opts);
+
+  const cookEmbed = buildMenuEmbed({
+    title: `${getIcon("cook")} Counter Cook`,
+    description: totalPages > 1
+      ? `Select a recipe to cook:\n(page ${safePage + 1}/${totalPages})`
+      : "Select a recipe to cook:",
+    user: ownerUser
+  });
+
+  if (cookNeedsText) {
+    const baseDesc = cookEmbed?.data?.description ?? cookEmbed?.description ?? "";
+    const combined = baseDesc ? `${baseDesc}\n\n${cookNeedsText}` : cookNeedsText;
+    cookEmbed.setDescription(combined);
+  }
+
+  const canCounterServe = needRows.some((entry) => entry.need > 0 && entry.ready > 0);
+  const navRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:takeout_cook:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:takeout_cook:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+      )
+    : null;
+
+  const components = [new ActionRowBuilder().addComponents(menu)];
+  if (navRow) components.push(navRow);
+  components.push(
+    noodleTakeoutActionRow(userId, {
+      activeShift: true,
+      disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
+      disableServe: !canCounterServe
+    }),
+    noodleMainMenuRowNoOrders(userId)
+  );
+
+  return { content: " ", embeds: [cookEmbed], components };
+}
+
+function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
+  const needRows = getTakeoutRecipeNeedRows(p, takeout).filter((entry) => entry.need > 0);
+  if (!needRows.length) {
+    return { content: `${getIcon("help")} No counter orders remain to serve right now.`, ephemeral: true };
+  }
+
+  const opts = needRows
+    .slice()
+    .sort((a, b) => displayRecipeName(a.recipeId).localeCompare(displayRecipeName(b.recipeId), "en", { sensitivity: "base" }))
+    .map((entry) => {
+      const labelRaw = `${displayRecipeName(entry.recipeId)} — ${entry.ready} ready`;
+      const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
+      const descRaw = `Remaining ${entry.need}`;
+      const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
+      const option = { label, value: entry.recipeId, description };
+      if (entry.ready > 0) {
+        const emoji = getButtonEmoji("status_complete");
+        if (emoji) option.emoji = emoji;
+      }
+      return option;
+    })
+    .slice(0, 25);
+
+  const missingLines = needRows
+    .filter((entry) => entry.short > 0)
+    .map((entry) => `• ${displayRecipeName(entry.recipeId)} — need **${entry.need}**, ready **${entry.ready}** (cook **${entry.short}** more)`);
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:pick:takeout_serve_select:${userId}`)
+    .setPlaceholder("Select a recipe to serve")
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(opts);
+
+  const descBase = "Select counter orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
+  const descWithMissing = missingLines.length
+    ? `${descBase}\n\n${getIcon("basket")} Missing bowls\n${missingLines.join("\n")}`
+    : descBase;
+
+  const serveEmbed = buildMenuEmbed({
+    title: `${getIcon("bowl")} Counter Serve`,
+    description: descWithMissing,
+    user: ownerUser
+  });
+
+  const canCounterServe = needRows.some((entry) => entry.ready > 0);
+  return {
+    content: " ",
+    embeds: [serveEmbed],
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      noodleTakeoutActionRow(userId, {
+        activeShift: true,
+        disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
+        disableServe: !canCounterServe
+      }),
+      noodleMainMenuRowNoOrders(userId)
+    ]
+  };
+}
+
 function getAllowedForageIdsForPlayer(player) {
   const allowed = getUnlockedIngredientIds(player, content);
   return (FORAGE_ITEM_IDS ?? []).filter((id) => allowed.has(id));
@@ -6034,7 +6304,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 }
 
 /* ---------------- RECIPES ---------------- */
-if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub === "takeout_claim") {
+if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub === "takeout_claim" || sub === "takeout_cook" || sub === "takeout_serve") {
   if (!db) {
     const unavailableEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Take Out Counter`,
@@ -6159,6 +6429,9 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           .map((rid) => `• ${displayRecipeName(rid)} — **${countByRecipe.get(rid) ?? 0}** orders`)
           .join("\n")
         : "_No menu configured yet._";
+      const neededIngredientsBlock = active
+        ? buildTakeoutNeededIngredientsBlock(p, takeout, { maxLines: 8 })
+        : null;
 
       const statusBits = [];
       if (active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0) {
@@ -6193,7 +6466,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const description = [
         banner,
-        "Set your counter menu, start a cozy 12-hour shift, and collect idle earnings. While the shift is active, your main **Order Board** is idle and all service happens from **Take Out Counter**.",
+        "Set your counter menu, start a cozy 12-hour shift, and collect idle earnings. While the shift is active, your main **Order Board** is idle and all service happens from the **Take Out Counter**.",
         "",
         takeoutCatchup?.processedHours > 0
           ? `${getIcon("time")} **${takeoutCatchup.processedHours}h** & earned **${takeoutCatchup.earned}c** while you were away.`
@@ -6201,7 +6474,9 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         "\u200b",
         statusBits.join("\n"),
         "\n**Counter Menu**",
-        counterMenuLines
+        counterMenuLines,
+        "",
+        neededIngredientsBlock
       ].filter(Boolean).join("\n");
 
       const embed = buildMenuEmbed({
@@ -6213,6 +6488,11 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const canOpenShift = !active && takeout.menu_recipe_ids.length >= menuLimits.minRequired;
       const canClaim = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0)) > 0;
+      const canCounterServe = active && takeout.menu_recipe_ids.some((rid) => {
+        const remaining = Math.max(0, Math.floor(Number(countByRecipe.get(rid) || 0) || 0));
+        if (remaining <= 0) return false;
+        return getTotalBowlsForRecipe(p, rid) > 0;
+      });
       const menuPicker = showMenuPicker
         ? buildTakeoutMenuPickerRows(userId, {
             availableRecipeIds,
@@ -6228,7 +6508,12 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         embeds: [embed],
         components: [
           ...(menuPicker?.rows ?? []),
-          noodleTakeoutActionRow(userId, { disableOpen: !canOpenShift, disableClaim: !canClaim }),
+          noodleTakeoutActionRow(userId, {
+            activeShift: active,
+            disableOpen: !canOpenShift,
+            disableClaim: !canClaim,
+            disableServe: !canCounterServe
+          }),
           noodleMainMenuRowNoOrders(userId)
         ],
         ephemeral
@@ -6355,6 +6640,147 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       );
     }
 
+    if (sub === "takeout_cook") {
+      if (!isTakeoutShiftActive(p, now)) {
+        return finalize(renderStatus(`${getIcon("help")} Start a shift to use **Counter Cook**.` , { ephemeral: true }));
+      }
+      const rawPage = Number(opt.getInteger("page") ?? 0);
+      return finalize(buildTakeoutCookPickerPayload({
+        userId,
+        p,
+        takeout,
+        ownerUser: interaction.member ?? interaction.user,
+        page: Number.isFinite(rawPage) ? rawPage : 0
+      }));
+    }
+
+    if (sub === "takeout_serve") {
+      if (!isTakeoutShiftActive(p, now)) {
+        return finalize(renderStatus(`${getIcon("help")} Start a shift to use **Counter Serve**.`, { ephemeral: true }));
+      }
+
+      const selectedRecipeId = resolveCanonicalRecipeId(String(opt.getString("recipe") || "").trim());
+      const snapshot = Array.isArray(takeout.shift?.idle_order_board_snapshot)
+        ? takeout.shift.idle_order_board_snapshot
+        : [];
+      const menuSet = new Set(takeout.menu_recipe_ids || []);
+
+      if (!selectedRecipeId) {
+        return finalize(buildTakeoutServePickerPayload({
+          userId,
+          p,
+          takeout,
+          ownerUser: interaction.member ?? interaction.user
+        }));
+      }
+
+      if (!menuSet.has(selectedRecipeId)) {
+        return finalize(renderStatus(`${getIcon("warning")} That recipe is not on your current takeout menu.`, { ephemeral: true }));
+      }
+
+      const snapshotRow = snapshot.find((x) => String(x?.recipe_id || "") === selectedRecipeId);
+      if (!snapshotRow || Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0)) <= 0) {
+        return finalize(renderStatus(`${getIcon("help")} No remaining counter orders for **${displayRecipeName(selectedRecipeId)}**.`, { ephemeral: true }));
+      }
+
+      const bowlEntry = getBestBowlEntry(p, selectedRecipeId);
+      const bowl = bowlEntry?.bowl ?? null;
+      if (!bowl || (bowl.qty ?? 0) <= 0) {
+        return finalize(renderStatus(`${getIcon("basket")} You need a ready bowl of **${displayRecipeName(selectedRecipeId)}** first.`, { ephemeral: true }));
+      }
+
+      const servedAt = nowTs();
+      const recipe = content.recipes?.[selectedRecipeId] ?? null;
+      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+      const activeEventEffects = getActiveEventEffects(eventsContent, s);
+      const rewards = computeServeRewards({
+        serverId,
+        tier: recipe?.tier ?? "common",
+        npcArchetype: null,
+        isLimitedTime: false,
+        servedAtMs: servedAt,
+        acceptedAtMs: servedAt,
+        speedWindowSeconds: 180,
+        player: p,
+        recipe,
+        content,
+        effects: combinedEffects,
+        eventEffects: activeEventEffects
+      });
+
+      const bowlQuality = normalizeQuality(bowl.quality);
+      const qualityMult = getQualityMultiplier(bowlQuality);
+      rewards.coins = Math.floor(rewards.coins * qualityMult);
+      rewards.rep = Math.floor(rewards.rep * qualityMult);
+      rewards.sxp = Math.floor(rewards.sxp * qualityMult);
+
+      bowl.qty -= 1;
+      if (bowl.qty <= 0) delete p.inv_bowls[bowlEntry?.key ?? selectedRecipeId];
+
+      snapshotRow.visible_order_count = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0) - 1);
+
+      if (!hasHouse247Perk(p)) {
+        const { totalCount, consumedSet } = getOrdersMeta(p);
+        for (let idx = 0; idx < totalCount; idx += 1) {
+          if (!consumedSet.has(idx)) {
+            markOrderConsumed(p, idx);
+            break;
+          }
+        }
+      }
+
+      p.coins = (Number.isFinite(p.coins) ? p.coins : 0) + rewards.coins;
+      p.rep = (Number.isFinite(p.rep) ? p.rep : 0) + rewards.rep;
+      p.sxp_total = (Number.isFinite(p.sxp_total) ? p.sxp_total : 0) + rewards.sxp;
+      p.sxp_progress = (Number.isFinite(p.sxp_progress) ? p.sxp_progress : 0) + rewards.sxp;
+      if (!p.lifetime) p.lifetime = {};
+      p.lifetime.orders_served = (p.lifetime.orders_served ?? 0) + 1;
+      p.lifetime.bowls_served_total = (p.lifetime.bowls_served_total ?? 0) + 1;
+      p.lifetime.coins_earned = (p.lifetime.coins_earned ?? 0) + rewards.coins;
+      const leveledUp = applySxpLevelUp(p);
+
+      const discoveryMessages = [];
+      if (bowlQuality !== "salvage") {
+        const dayKey = dayKeyUTC(servedAt);
+        const discoveryRng = makeStreamRng({
+          mode: "seeded",
+          seed: 12345,
+          streamName: "discovery",
+          serverId,
+          dayKey,
+          extra: `${selectedRecipeId}_${servedAt}`
+        });
+        const discoveries = rollRecipeDiscovery({
+          player: p,
+          content,
+          npcArchetype: null,
+          tier: recipe?.tier ?? "common",
+          rng: discoveryRng,
+          activeSeason: s.season,
+          activeEventId: s.active_event_id ?? null
+        });
+        for (const discovery of discoveries ?? []) {
+          const result = applyDiscovery(p, discovery, content, discoveryRng, { badgesContent });
+          if (result?.message) discoveryMessages.push(result.message);
+        }
+      }
+
+      const remainingForRecipe = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0));
+      const serveSummary = [
+        `${getIcon("serve")} Served **${displayRecipeName(selectedRecipeId)}** from the takeout counter.`,
+        `${getIcon("coins")} +${rewards.coins}c · ${getIcon("rep")} +${rewards.rep} rep · ${getIcon("sxp")} +${rewards.sxp} sxp`,
+        `${getIcon("orders")} Remaining counter orders for this recipe: **${remainingForRecipe}**`
+      ];
+      if (leveledUp) {
+        serveSummary.push(`${getIcon("status_complete")} Level up! You are now **Lv.${Math.max(1, Number(p.sxp_level || 1))}**.`);
+      }
+      if (discoveryMessages.length > 0) {
+        serveSummary.push(discoveryMessages.join("\n"));
+      }
+
+      return finalize(renderStatus(serveSummary.join("\n\n")));
+    }
+
     if (sub === "takeout_claim") {
       const claimed = claimTakeoutEarnings(p, { now });
       if (!claimed.ok) {
@@ -6376,7 +6802,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         unclaimedCoinsAfter: Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0))
       });
 
-      return finalize(renderStatus(`${getIcon("coins")} Claimed **${claimed.amount}c** from takeout idle earnings.`));
+      return finalize(renderStatus(`${getIcon("coins")} Claimed **${claimed.amount}c** from the takeout idle earnings.`));
     }
 
     return finalize(renderStatus());
@@ -10839,6 +11265,25 @@ if (action === "cook") {
   return componentCommit(interaction, payload);
 }
 
+if (action === "takeout_cook") {
+  const rawPage = Number(parts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  return runNoodle(interaction, {
+    sub: "takeout_cook",
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      integers: { page }
+    }
+  });
+}
+
+if (action === "takeout_serve") {
+  return runNoodle(interaction, {
+    sub: "takeout_serve",
+    overrides: { messageId: interaction.message?.id ?? null }
+  });
+}
+
 return componentCommit(interaction, { content: "Unknown picker action.", ephemeral: true });
 
 }
@@ -10896,6 +11341,14 @@ if (cid.startsWith("noodle:pick:serve_select:")) {
   return await runNoodle(interaction, {
     sub: "serve",
     overrides: { strings: { order_id: orderIds.join(",") } }
+  });
+}
+
+if (cid.startsWith("noodle:pick:takeout_serve_select:")) {
+  const recipeId = interaction.values?.[0] ?? "";
+  return await runNoodle(interaction, {
+    sub: "takeout_serve",
+    overrides: { strings: { recipe: recipeId }, messageId: interaction.message?.id ?? null }
   });
 }
 
