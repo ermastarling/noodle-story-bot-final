@@ -2112,9 +2112,14 @@ import { theme } from "./ui/theme.js";
       || ""
     ).trim();
 
+    const normalizedServerCount = Number(serverCount) || 0;
+    const normalizedUserCount = Number.isFinite(userCount) && userCount >= 0 ? Math.floor(userCount) : 0;
     const payload = {
-      server_count: Number(serverCount) || 0,
-      user_count: Number.isFinite(userCount) && userCount >= 0 ? Math.floor(userCount) : 0
+      // Rank.top SDK posts camelCase fields; keep snake_case too for backward compatibility.
+      serverCount: normalizedServerCount,
+      userCount: normalizedUserCount,
+      server_count: normalizedServerCount,
+      user_count: normalizedUserCount
     };
 
     if (postAuthorization) {
@@ -2146,10 +2151,7 @@ import { theme } from "./ui/theme.js";
           .map((command) => ({
             id: String(command?.id || "").trim(),
             name: String(command?.name || "").trim(),
-            description: String(command?.description || "").trim(),
-            ...(Array.isArray(command?.options) && command.options.length > 0
-              ? { options: command.options }
-              : {})
+            description: String(command?.description || "").trim()
           }))
           .filter((command) => command.id && command.name && command.description);
       }
@@ -2166,10 +2168,7 @@ import { theme } from "./ui/theme.js";
       .map((command) => ({
         id: String(command?.name || "").trim(),
         name: String(command?.name || "").trim(),
-        description: String(command?.description || "").trim(),
-        ...(Array.isArray(command?.options) && command.options.length > 0
-          ? { options: command.options }
-          : {})
+        description: String(command?.description || "").trim()
       }))
       .filter((command) => command.id && command.name && command.description);
   }
@@ -2268,7 +2267,7 @@ import { theme } from "./ui/theme.js";
     }
   }
 
-  async function syncRankTopCommands({ reason = "ready" } = {}) {
+  async function syncRankTopCommands({ reason = "ready", precomputedCounts = null } = {}) {
     const enabled = String(process.env.NOODLE_RANKTOP_SYNC_COMMANDS || "1") !== "0";
     if (!enabled) return false;
 
@@ -2287,7 +2286,9 @@ import { theme } from "./ui/theme.js";
     }
 
     const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
-    const counts = getCurrentBotListCounts();
+    const counts = precomputedCounts && typeof precomputedCounts === "object"
+      ? precomputedCounts
+      : getCurrentBotListCounts();
     const rankTopCommandsPayload = await buildRankTopCommandsPayload();
     const commandsPayload = buildRankTopPostPayload(counts.serverCount, counts.userCount, {
       includeCommands: true,
@@ -3048,7 +3049,7 @@ import { theme } from "./ui/theme.js";
     await syncDiscordBotListCommands({ reason: "ready" });
     await syncRadarCpdvCommands({ reason: "ready" });
     await runRankTopAuthPreflight({ reason: "ready" });
-    await syncRankTopCommands({ reason: "ready" });
+    await syncRankTopCommands({ reason: "ready", precomputedCounts: startupCounts });
     startBotListStatsHeartbeat();
 
     if (officialStatsChannelsEnabled && officialGuildId && !officialStatsChannelRefreshHandle) {
