@@ -6930,102 +6930,135 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         return finalize(renderStatus(`${getIcon("help")} No remaining counter orders for **${displayRecipeName(selectedRecipeId)}**.`, { ephemeral: true }));
       }
 
-      const bowlEntry = getBestBowlEntry(p, selectedRecipeId);
-      const bowl = bowlEntry?.bowl ?? null;
-      if (!bowl || (bowl.qty ?? 0) <= 0) {
+      const readyForRecipe = getTotalBowlsForRecipe(p, selectedRecipeId);
+      if (readyForRecipe <= 0) {
         return finalize(renderStatus(`${getIcon("basket")} You need a ready bowl of **${displayRecipeName(selectedRecipeId)}** first.`, { ephemeral: true }));
       }
 
-      const servedAt = nowTs();
-      const recipe = content.recipes?.[selectedRecipeId] ?? null;
-      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-      const activeEventEffects = getActiveEventEffects(eventsContent, s);
-      const rewards = computeServeRewards({
-        serverId,
-        tier: recipe?.tier ?? "common",
-        npcArchetype: null,
-        isLimitedTime: false,
-        servedAtMs: servedAt,
-        acceptedAtMs: servedAt,
-        speedWindowSeconds: 180,
-        player: p,
-        recipe,
-        content,
-        effects: combinedEffects,
-        eventEffects: activeEventEffects
-      });
-
-      const bowlQuality = normalizeQuality(bowl.quality);
-      const qualityMult = getQualityMultiplier(bowlQuality);
-      rewards.coins = Math.floor(rewards.coins * qualityMult);
-      rewards.rep = Math.floor(rewards.rep * qualityMult);
-      rewards.sxp = Math.floor(rewards.sxp * qualityMult);
-
-      bowl.qty -= 1;
-      if (bowl.qty <= 0) delete p.inv_bowls[bowlEntry?.key ?? selectedRecipeId];
-
-      snapshotRow.visible_order_count = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0) - 1);
-
-      if (!hasHouse247Perk(p)) {
-        const { totalCount, consumedSet } = getOrdersMeta(p);
-        for (let idx = 0; idx < totalCount; idx += 1) {
-          if (!consumedSet.has(idx)) {
-            markOrderConsumed(p, idx);
-            break;
-          }
-        }
+      const availableCounterOrders = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0));
+      const servingsToProcess = Math.min(readyForRecipe, availableCounterOrders);
+      if (servingsToProcess <= 0) {
+        return finalize(renderStatus(`${getIcon("help")} No remaining counter orders for **${displayRecipeName(selectedRecipeId)}**.`, { ephemeral: true }));
       }
 
-      p.coins = (Number.isFinite(p.coins) ? p.coins : 0) + rewards.coins;
-      p.rep = (Number.isFinite(p.rep) ? p.rep : 0) + rewards.rep;
-      p.sxp_total = (Number.isFinite(p.sxp_total) ? p.sxp_total : 0) + rewards.sxp;
-      p.sxp_progress = (Number.isFinite(p.sxp_progress) ? p.sxp_progress : 0) + rewards.sxp;
-      if (!p.lifetime) p.lifetime = {};
-      p.lifetime.orders_served = (p.lifetime.orders_served ?? 0) + 1;
-      p.lifetime.bowls_served_total = (p.lifetime.bowls_served_total ?? 0) + 1;
-      p.lifetime.coins_earned = (p.lifetime.coins_earned ?? 0) + rewards.coins;
-      const leveledUp = applySxpLevelUp(p);
-
+      let totalCoins = 0;
+      let totalRep = 0;
+      let totalSxp = 0;
+      let servedCount = 0;
+      let leveledUp = false;
       const discoveryMessages = [];
-      if (bowlQuality !== "salvage") {
-        const dayKey = dayKeyUTC(servedAt);
-        const discoveryRng = makeStreamRng({
-          mode: "seeded",
-          seed: 12345,
-          streamName: "discovery",
+
+      for (let i = 0; i < servingsToProcess; i += 1) {
+        const bowlEntry = getBestBowlEntry(p, selectedRecipeId);
+        const bowl = bowlEntry?.bowl ?? null;
+        if (!bowl || (bowl.qty ?? 0) <= 0) break;
+
+        const servedAt = nowTs();
+        const recipe = content.recipes?.[selectedRecipeId] ?? null;
+        const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+        const activeEventEffects = getActiveEventEffects(eventsContent, s);
+        const rewards = computeServeRewards({
           serverId,
-          dayKey,
-          extra: `${selectedRecipeId}_${servedAt}`
-        });
-        const discoveries = rollRecipeDiscovery({
-          player: p,
-          content,
-          npcArchetype: null,
           tier: recipe?.tier ?? "common",
-          rng: discoveryRng,
-          activeSeason: s.season,
-          activeEventId: s.active_event_id ?? null
+          npcArchetype: null,
+          isLimitedTime: false,
+          servedAtMs: servedAt,
+          acceptedAtMs: servedAt,
+          speedWindowSeconds: 180,
+          player: p,
+          recipe,
+          content,
+          effects: combinedEffects,
+          eventEffects: activeEventEffects
         });
-        for (const discovery of discoveries ?? []) {
-          const result = applyDiscovery(p, discovery, content, discoveryRng, { badgesContent });
-          if (result?.message) discoveryMessages.push(result.message);
+
+        const bowlQuality = normalizeQuality(bowl.quality);
+        const qualityMult = getQualityMultiplier(bowlQuality);
+        rewards.coins = Math.floor(rewards.coins * qualityMult);
+        rewards.rep = Math.floor(rewards.rep * qualityMult);
+        rewards.sxp = Math.floor(rewards.sxp * qualityMult);
+
+        bowl.qty -= 1;
+        if (bowl.qty <= 0) delete p.inv_bowls[bowlEntry?.key ?? selectedRecipeId];
+
+        snapshotRow.visible_order_count = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0) - 1);
+
+        if (!hasHouse247Perk(p)) {
+          const { totalCount, consumedSet } = getOrdersMeta(p);
+          for (let idx = 0; idx < totalCount; idx += 1) {
+            if (!consumedSet.has(idx)) {
+              markOrderConsumed(p, idx);
+              break;
+            }
+          }
+        }
+
+        p.coins = (Number.isFinite(p.coins) ? p.coins : 0) + rewards.coins;
+        p.rep = (Number.isFinite(p.rep) ? p.rep : 0) + rewards.rep;
+        p.sxp_total = (Number.isFinite(p.sxp_total) ? p.sxp_total : 0) + rewards.sxp;
+        p.sxp_progress = (Number.isFinite(p.sxp_progress) ? p.sxp_progress : 0) + rewards.sxp;
+        if (!p.lifetime) p.lifetime = {};
+        p.lifetime.orders_served = (p.lifetime.orders_served ?? 0) + 1;
+        p.lifetime.bowls_served_total = (p.lifetime.bowls_served_total ?? 0) + 1;
+        p.lifetime.coins_earned = (p.lifetime.coins_earned ?? 0) + rewards.coins;
+        leveledUp = applySxpLevelUp(p) || leveledUp;
+
+        totalCoins += rewards.coins;
+        totalRep += rewards.rep;
+        totalSxp += rewards.sxp;
+        servedCount += 1;
+
+        if (bowlQuality !== "salvage") {
+          const dayKey = dayKeyUTC(servedAt);
+          const discoveryRng = makeStreamRng({
+            mode: "seeded",
+            seed: 12345,
+            streamName: "discovery",
+            serverId,
+            dayKey,
+            extra: `${selectedRecipeId}_${servedAt}_${i}`
+          });
+          const discoveries = rollRecipeDiscovery({
+            player: p,
+            content,
+            npcArchetype: null,
+            tier: recipe?.tier ?? "common",
+            rng: discoveryRng,
+            activeSeason: s.season,
+            activeEventId: s.active_event_id ?? null
+          });
+          for (const discovery of discoveries ?? []) {
+            const result = applyDiscovery(p, discovery, content, discoveryRng, { badgesContent });
+            if (result?.message) discoveryMessages.push(result.message);
+          }
         }
       }
 
       const remainingForRecipe = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0));
       const serveSummary = [
-        `${getIcon("serve")} Served **${displayRecipeName(selectedRecipeId)}** from the takeout counter.`,
-        `${getIcon("coins")} +${rewards.coins}c · ${getIcon("rep")} +${rewards.rep} rep · ${getIcon("sxp")} +${rewards.sxp} sxp`,
+        `${getIcon("serve")} Served **${servedCount}× ${displayRecipeName(selectedRecipeId)}** from the takeout counter.`,
+        `${getIcon("coins")} +${totalCoins}c · ${getIcon("rep")} +${totalRep} rep · ${getIcon("sxp")} +${totalSxp} sxp`,
         `${getIcon("orders")} Remaining counter orders for this recipe: **${remainingForRecipe}**`
       ];
       if (leveledUp) {
         serveSummary.push(`${getIcon("status_complete")} Level up! You are now **Lv.${Math.max(1, Number(p.sxp_level || 1))}**.`);
       }
       if (discoveryMessages.length > 0) {
-        serveSummary.push(discoveryMessages.join("\n"));
+        serveSummary.push(discoveryMessages.slice(0, 4).join("\n"));
       }
 
-      return finalize(renderStatus(serveSummary.join("\n\n")));
+      const confirmationEmbed = buildMenuEmbed({
+        title: `${getIcon("serve")} Counter Serve`,
+        description: serveSummary.join("\n\n"),
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+      const statusPayload = renderStatus();
+      return finalize({
+        ...statusPayload,
+        content: " ",
+        embeds: [confirmationEmbed, ...(statusPayload.embeds ?? [])]
+      });
     }
 
     if (sub === "takeout_claim") {
