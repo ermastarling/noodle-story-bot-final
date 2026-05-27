@@ -1813,6 +1813,33 @@ if (showTakeout) {
 return row;
 }
 
+function noodleTakeoutActionRow(userId, { disableOpen = false, disableClaim = false } = {}) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:takeout:${userId}`)
+      .setLabel("Status")
+      .setEmoji(getButtonEmoji("orders"))
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:takeout_menu:${userId}`)
+      .setLabel("Set Menu")
+      .setEmoji(getButtonEmoji("recipes"))
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:takeout_open:${userId}`)
+      .setLabel("Open")
+      .setEmoji(getButtonEmoji("status_complete"))
+      .setStyle(disableOpen ? ButtonStyle.Secondary : ButtonStyle.Success)
+      .setDisabled(disableOpen),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:takeout_claim:${userId}`)
+      .setLabel("Claim")
+      .setEmoji(getButtonEmoji("coins"))
+      .setStyle(disableClaim ? ButtonStyle.Secondary : ButtonStyle.Primary)
+      .setDisabled(disableClaim)
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Small helpers                                                      */
 /* ------------------------------------------------------------------ */
@@ -6090,7 +6117,18 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         color: theme.colors.success
       });
 
-      return { content: " ", embeds: [embed], ephemeral };
+      const canOpenShift = !active && takeout.menu_recipe_ids.length >= menuLimits.minRequired;
+      const canClaim = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0)) > 0;
+
+      return {
+        content: " ",
+        embeds: [embed],
+        components: [
+          noodleTakeoutActionRow(userId, { disableOpen: !canOpenShift, disableClaim: !canClaim }),
+          noodleMainMenuRowNoOrders(userId)
+        ],
+        ephemeral
+      };
     };
 
     if (sub === "takeout_menu") {
