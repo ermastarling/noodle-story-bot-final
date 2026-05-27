@@ -6116,10 +6116,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const shiftSnapshotOrderCount = snapshot
         .reduce((sum, row) => sum + Math.max(0, Math.floor(Number(row?.total_orders || row?.visible_order_count || 0) || 0)), 0);
 
-      const menuLine = takeout.menu_recipe_ids.length > 0
-        ? takeout.menu_recipe_ids.map((rid) => `• ${displayRecipeName(rid)}`).join("\n")
-        : "_No menu configured yet._";
-
       const countByRecipe = new Map();
       for (const row of snapshot) {
         const rid = String(row?.recipe_id || "").trim();
@@ -6128,11 +6124,11 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         countByRecipe.set(rid, count);
       }
 
-      const visibleCounts = takeout.menu_recipe_ids.length > 0
+      const counterMenuLines = takeout.menu_recipe_ids.length > 0
         ? takeout.menu_recipe_ids
-          .map((rid) => `• ${displayRecipeName(rid)}: **${countByRecipe.get(rid) ?? 0}**`)
+          .map((rid) => `• ${displayRecipeName(rid)} — **${countByRecipe.get(rid) ?? 0}** orders`)
           .join("\n")
-        : "_No counter orders to show yet._";
+        : "_No menu configured yet._";
 
       const previewNow = active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0
         ? shiftEndsAt + 1000
@@ -6160,6 +6156,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const statusBits = [];
       if (active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0) {
         statusBits.push(`${getIcon("time")} **Shift Active** until <t:${Math.floor(shiftEndsAt / 1000)}:R> (<t:${Math.floor(shiftEndsAt / 1000)}:f>)`);
+        statusBits.push(`${getIcon("orders")} Your main order board is resting right now. Cozy up here and serve through the counter while this shift runs.`);
       } else {
         statusBits.push(`${getIcon("status_pending")} **Shift Inactive**`);
       }
@@ -6168,7 +6165,10 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       if (Number.isFinite(shiftStartedAt) && shiftStartedAt > 0) {
         statusBits.push(`${getIcon("calendar")} Last start: <t:${Math.floor(shiftStartedAt / 1000)}:f>`);
       }
-      statusBits.push(`${getIcon("coins")} Unclaimed idle coins: **${takeout.earned_unclaimed_coins || 0}c**`);
+      const unclaimedIdleCoins = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0));
+      if (unclaimedIdleCoins > 0) {
+        statusBits.push(`${getIcon("coins")} Unclaimed idle coins: **${unclaimedIdleCoins}c**`);
+      }
       if (shiftOperatingCost > 0) {
         statusBits.push(`${getIcon("coins")} Fixed shift operating cost paid: **${shiftOperatingCost}c**`);
       }
@@ -6178,21 +6178,22 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       if (shiftSnapshotOrderCount > 0) {
         statusBits.push(`${getIcon("orders")} Shift snapshot orders: **${shiftSnapshotOrderCount}** total`);
       }
-      statusBits.push(`${getIcon("time")} Processed hours: **${processedHours}/${TAKEOUT_SHIFT_DURATION_HOURS}**`);
-      statusBits.push(`${getIcon("time")} Remaining hours: **${remainingHours}**`);
+      if (active) {
+        statusBits.push(`${getIcon("time")} Processed hours: **${processedHours}/${TAKEOUT_SHIFT_DURATION_HOURS}**`);
+        statusBits.push(`${getIcon("time")} Remaining hours: **${remainingHours}**`);
+      }
       statusBits.push(`${getIcon("help")} Menu size: **${takeout.menu_recipe_ids.length}** (min ${menuLimits.minRequired}, max ${menuLimits.maxAllowed})`);
 
       const description = [
         banner,
-        "Run a 12-hour counter shift with your selected menu, pay ingredient costs up front, and claim idle coin earnings when ready.",
+        "Run a cozy 12-hour counter shift with your selected menu, pay ingredient costs up front, and claim idle coin earnings when ready.",
+        "",
         takeoutCatchup?.processedHours > 0
           ? `${getIcon("time")} Catch-up processed **${takeoutCatchup.processedHours}h** and accrued **${takeoutCatchup.earned}c** while you were away.`
           : null,
         statusBits.join("\n"),
         "\n**Counter Menu**",
-        menuLine,
-        "\n**Visible Order Counts**",
-        visibleCounts
+        counterMenuLines
       ].filter(Boolean).join("\n");
 
       const embed = buildMenuEmbed({
