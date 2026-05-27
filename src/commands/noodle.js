@@ -89,6 +89,7 @@ import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js
 import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
 import {
   applySubscriptionEntitlementEvent,
+  applyMonthlySubscriptionCoinGrant,
   SUBSCRIPTION_PERKS,
   ensureSubscriptionState,
   getOrderAcceptCap,
@@ -734,6 +735,20 @@ function isDevAdmin(userId) {
 
 function hasHouse247Perk(player) {
   return hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, nowTs());
+}
+
+function applyHouse247OrderBoardOverride(player) {
+  const orderCap = Math.max(0, Math.floor(Number(getOrderAcceptCap(player, nowTs()) || 0) || 0));
+  const currentTotal = Math.max(0, Math.floor(Number(player?.orders_total_count || 0) || 0));
+  if (orderCap <= currentTotal) return;
+
+  player.orders_total_count = orderCap;
+  const consumedCount = Array.isArray(player?.orders_consumed_indices)
+    ? player.orders_consumed_indices.length
+    : 0;
+  if (consumedCount < orderCap) {
+    player.orders_depleted_day = null;
+  }
 }
 
 function buildHelpPage({ page, userId, user }) {
@@ -1769,7 +1784,13 @@ function noodleOrdersActionRowWithBack(userId, { highlightAccept = true, disable
   );
 }
 
-function noodleOrdersMenuActionRow(userId, { showCancel = false, highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
+function noodleOrdersMenuActionRow(userId, {
+  showCancel = false,
+  highlightAccept = true,
+  disableAccept = false,
+  disableServe = false,
+  showTakeout = false
+} = {}) {
 const acceptStyle = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
 const row = new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(acceptStyle).setDisabled(disableAccept),
@@ -1780,6 +1801,12 @@ new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve")
 if (showCancel) {
   row.addComponents(
     new ButtonBuilder().setCustomId(`noodle:pick:cancel:${userId}`).setLabel("Cancel").setEmoji(getButtonEmoji("cancel")).setStyle(ButtonStyle.Danger)
+  );
+}
+
+if (showTakeout) {
+  row.addComponents(
+    new ButtonBuilder().setCustomId(`noodle:nav:takeout:${userId}`).setLabel("Takeout").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Success)
   );
 }
 
@@ -3499,6 +3526,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   const activeEventId = s.active_event_id ?? null;
   rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+  applyHouse247OrderBoardOverride(p);
 
   const pageSize = 25;
   const { totalCount, consumedSet, availableCount } = getOrdersMeta(p);
@@ -4848,6 +4876,7 @@ if (inDevPath && sub === "subscriptions_toggle") {
 
     const beforeStates = {};
     const afterStates = {};
+    let totalGrant = 0;
     for (const perkId of selectedPerkIds) {
       beforeStates[perkId] = hasActivePerk(targetPlayer, perkId, now);
       applySubscriptionEntitlementEvent(targetPlayer, {
@@ -4858,6 +4887,17 @@ if (inDevPath && sub === "subscriptions_toggle") {
         periodEndAt,
         now
       });
+      if (active) {
+        const grantResult = applyMonthlySubscriptionCoinGrant(targetPlayer, {
+          perkId,
+          periodStartAt: now,
+          periodEndAt,
+          now
+        });
+        if (grantResult?.granted) {
+          totalGrant += Math.max(0, Math.floor(Number(grantResult.amount || 0) || 0));
+        }
+      }
       afterStates[perkId] = hasActivePerk(targetPlayer, perkId, now);
     }
 
@@ -4877,6 +4917,7 @@ if (inDevPath && sub === "subscriptions_toggle") {
       `${getIcon("status_complete")} Updated subscriptions for <@${targetUserId}> (${targetUserId}) on server ${targetServerId}.`,
       `Mode: ${active ? `enable (${durationDays} day${durationDays === 1 ? "" : "s"})` : "disable"}`,
       ...stateLines,
+      active ? `Subscription coin grant awarded now: **${totalGrant}c**` : null,
       reason ? `Reason: ${reason}` : null,
       !existingPlayer ? "Note: Created a new player profile for this target." : null
     ].filter(Boolean);
@@ -6098,6 +6139,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const set = buildSettingsMap(settingsCatalog, s.settings);
       s.season = computeActiveSeason(set);
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, s.active_event_id ?? null);
+      applyHouse247OrderBoardOverride(p);
 
       const boardOrderTotal = Math.max(0, Math.floor(Number(p.orders_total_count || 0) || 0));
       const unlimitedOrders = hasHouse247Perk(p);
@@ -6667,6 +6709,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const prevOrdersDay = p.orders_day;
     ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+    applyHouse247OrderBoardOverride(p);
     ensureQuests(p, questsContent, userId, now, questOptions);
 
     // Force market stock refresh to align with daily order reset
@@ -6693,6 +6736,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (resilience.applied && p.resilience?.temp_recipes?.length > 0) {
       p.orders_day = null; // Force regeneration
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+      applyHouse247OrderBoardOverride(p);
     }
 
     progressionPrepared = true;
@@ -6739,6 +6783,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       // Regenerate orders for normal play after recovery
       p.orders_day = null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+      applyHouse247OrderBoardOverride(p);
     }
     
     const spoilageMessages = timeCatchup?.spoilage?.messages ?? [];
@@ -7904,6 +7949,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       unlockLines.push(`${getIcon("sparkle")} New recipes unlocked: ${recipeNames}.`);
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+      applyHouse247OrderBoardOverride(p);
     }
 
     const rejectedText = Object.keys(rejected || {}).length
@@ -8757,7 +8803,9 @@ ${lines.join("\n")}`;
     if (remaining > 0) {
       parts.push(
         "**Today’s Orders**",
-        `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
+        hasHouse247Perk(p)
+          ? `${getIcon("sparkle")} 24/7 House active: unlimited order capacity and market stock. Tap **Accept** below to start serving customers.`
+          : `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
       );
     } else if (acceptedLines.length) {
       parts.push(
@@ -8784,13 +8832,11 @@ ${lines.join("\n")}`;
 
     const tutSuffix = tutorialSuffix(p);
     if (tutSuffix) parts.push("", tutSuffix);
-    if (hasHouse247Perk(p)) {
-      parts.push("", `${getIcon("sparkle")} 24/7 House active: unlimited order capacity and market stock.`);
-    }
 
     const showCancel = acceptedEntries.length > 0;
     const highlightAccept = acceptedEntries.length === 0 && remaining > 0;
     const disableAccept = remaining <= 0;
+    const showTakeout = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
     const menuEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Orders`,
       description: parts.join("\n"),
@@ -8808,7 +8854,13 @@ ${lines.join("\n")}`;
       components: tutorialRows
         ? tutorialRows
         : [
-            noodleOrdersMenuActionRow(userId, { showCancel, highlightAccept, disableAccept, disableServe: acceptedEntries.length === 0 }),
+            noodleOrdersMenuActionRow(userId, {
+              showCancel,
+              highlightAccept,
+              disableAccept,
+              disableServe: acceptedEntries.length === 0,
+              showTakeout
+            }),
             noodleMainMenuRowNoOrders(userId)
           ]
     });
@@ -9609,6 +9661,7 @@ ${lines.join("\n")}`;
     if (recipeUnlocked) {
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+      applyHouse247OrderBoardOverride(p);
       const friendlyNames = unlockedRecipeNames.length
         ? unlockedRecipeNames.length === 1
           ? unlockedRecipeNames[0]
