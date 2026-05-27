@@ -80,10 +80,11 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_VOIDBOTS_TOKEN` + `NOODLE_VOIDBOTS_STATS_URL` - Void Bots server count sync target
 - `NOODLE_DISCORDS_TOKEN` + `NOODLE_DISCORDS_STATS_URL` - Discords.com server count sync target
 - `NOODLE_BOTLISTME_TOKEN` + `NOODLE_BOTLISTME_STATS_URL` - BotList.me server count sync target
+- `NOODLE_BOTLISTME_SYNC_STATS` - set `0` to pause BotList.me outbound server-count sync attempts without removing webhook or token config
 - `NOODLE_DISCORDBOTSGG_TOKEN` + `NOODLE_DISCORDBOTSGG_STATS_URL` - Discord.Bots.gg server count sync target using `guildCount` payload format (no vote rewards; `NOODLE_DISCORDBOTSGG_STATS_URL` optional; default built in)
-- `NOODLE_STELLARBOTLIST_TOKEN` + `NOODLE_STELLARBOTLIST_STATS_URL` - Stellar Bot List server count sync target
 - `NOODLE_DISCORDLISTGG_TOKEN` + `NOODLE_DISCORDLISTGG_STATS_URL` - DiscordList.gg server count sync target
 - `NOODLE_RADARCPDV_TOKEN` + `NOODLE_RADARCPDV_STATS_URL` - Radar.CPDV server count sync target
+- `NOODLE_RADARCPDV_SYNC_STATS` - set `0` to pause Radar.CPDV outbound server-count sync attempts without removing webhook or token config
 - `NOODLE_RADARCPDV_SYNC_COMMANDS` - set `0` to disable Radar.CPDV command-list sync (default enabled)
 - `NOODLE_RADARCPDV_COMMANDS_URL` - optional Radar.CPDV command-list endpoint override (default `https://api.radarcord.net/bot/{botId}/commands`)
 - `NOODLE_RADARCPDV_INCLUDE_DEV_COMMANDS` - set `1` to include `noodle-dev` in Radar.CPDV command list (default excluded)
@@ -159,6 +160,8 @@ NOODLE_RADARCPDV_WEBHOOK_PATH=/radarcpdv/webhook
 NOODLE_RADARCPDV_WEBHOOK_AUTH=replace_with_radarcpdv_webhook_auth
 NOODLE_RADARCPDV_TOKEN=replace_with_radarcpdv_api_token
 NOODLE_RADARCPDV_STATS_URL=https://api.radarcord.net/bot/{botId}/stats
+# Optional: pause outbound server-count sync without removing token
+# NOODLE_RADARCPDV_SYNC_STATS=1
 # Optional: command-list sync controls
 # NOODLE_RADARCPDV_SYNC_COMMANDS=1
 # NOODLE_RADARCPDV_COMMANDS_URL=https://api.radarcord.net/bot/{botId}/commands
@@ -186,8 +189,7 @@ NOODLE_DISCORDS_STATS_URL=https://discords.com/bots/api/bot/{botId}/setservers
 # Stellar Bot List
 NOODLE_STELLARBOTLIST_WEBHOOK_PATH=/stellarbotlist/webhook
 NOODLE_STELLARBOTLIST_WEBHOOK_AUTH=replace_with_stellarbotlist_webhook_auth
-NOODLE_STELLARBOTLIST_TOKEN=replace_with_stellarbotlist_api_token
-# No server-count stats URL is configured for this provider.
+# Webhook-only provider (no outbound server-count sync configured).
 
 # Discord.Bots.gg (server count only; no vote rewards)
 NOODLE_DISCORDBOTSGG_TOKEN=replace_with_discordbotsgg_api_token
@@ -203,6 +205,8 @@ NOODLE_BOTLISTME_WEBHOOK_PATH=/botlistme/webhook
 NOODLE_BOTLISTME_WEBHOOK_AUTH=replace_with_botlistme_webhook_auth
 NOODLE_BOTLISTME_TOKEN=replace_with_botlistme_api_token
 NOODLE_BOTLISTME_STATS_URL=https://api.botlist.me/api/v1/bots/{botId}/stats
+# Optional: pause outbound server-count sync without removing token
+# NOODLE_BOTLISTME_SYNC_STATS=1
 
 # Shared bot id template replacement for URLs that use {botId}
 NOODLE_BOT_ID=1460058511802105976

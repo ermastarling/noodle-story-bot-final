@@ -635,7 +635,8 @@ import { theme } from "./ui/theme.js";
       source: VOTE_SOURCES.BOTLIST_ME,
       label: "BotList.me",
       endpoint: process.env.NOODLE_BOTLISTME_STATS_URL || "",
-      token: getVoteSourceToken("NOODLE_BOTLISTME_TOKEN")
+      token: getVoteSourceToken("NOODLE_BOTLISTME_TOKEN"),
+      enabled: String(process.env.NOODLE_BOTLISTME_SYNC_STATS || "1") !== "0"
     },
     {
       source: VOTE_SOURCES.DISCORDBOTSGG,
@@ -643,12 +644,6 @@ import { theme } from "./ui/theme.js";
       endpoint: process.env.NOODLE_DISCORDBOTSGG_STATS_URL || stableStatsEndpointDefaults[VOTE_SOURCES.DISCORDBOTSGG],
       token: getVoteSourceToken("NOODLE_DISCORDBOTSGG_TOKEN"),
       bodyFormat: "discordbotsgg_stats"
-    },
-    {
-      source: VOTE_SOURCES.STELLARBOTLIST,
-      label: "Stellar Bot List",
-      endpoint: process.env.NOODLE_STELLARBOTLIST_STATS_URL || "",
-      token: getVoteSourceToken("NOODLE_STELLARBOTLIST_TOKEN")
     },
     {
       source: VOTE_SOURCES.DISCORDLIST_GG,
@@ -660,7 +655,8 @@ import { theme } from "./ui/theme.js";
       source: VOTE_SOURCES.RADAR_CPDV,
       label: "Radar.CPDV",
       endpoint: process.env.NOODLE_RADARCPDV_STATS_URL || "",
-      token: getVoteSourceToken("NOODLE_RADARCPDV_TOKEN")
+      token: getVoteSourceToken("NOODLE_RADARCPDV_TOKEN"),
+      enabled: String(process.env.NOODLE_RADARCPDV_SYNC_STATS || "1") !== "0"
     },
     {
       source: VOTE_SOURCES.DISCORDEXTREME_LIST,
@@ -1415,6 +1411,7 @@ import { theme } from "./ui/theme.js";
 
   function hasAnyConfiguredBotListStatsSync() {
     return botListStatsConfigs.some((config) => {
+      if (config?.enabled === false) return false;
       const endpoint = String(config?.endpoint || "").trim();
       const tokenValue = String(config?.token || "").trim();
       return Boolean(endpoint && tokenValue);
@@ -1570,7 +1567,9 @@ import { theme } from "./ui/theme.js";
     console.warn(
       `WARN: ${provider} retrying POST with fallback auth headers (${reason || "event"}) after 401 Missing authorization token.`
     );
-    console.log(`DEBUG ${provider} retry auth header keys: ${retryHeaderKeys}`);
+    if (rankTopAuthDebugEnabled) {
+      console.log(`DEBUG ${provider} retry auth header keys: ${retryHeaderKeys}`);
+    }
 
     return fetch(targetUrl, {
       method: "POST",
@@ -1616,6 +1615,14 @@ import { theme } from "./ui/theme.js";
   }
 
   async function updateSingleBotListServerCount(config, serverCount, userCount, { reason = "event" } = {}) {
+    if (config?.enabled === false) {
+      if (!disabledStatsSyncLogged.has(config.source)) {
+        disabledStatsSyncLogged.add(config.source);
+        console.log(`INFO: ${config.label} server count sync disabled (paused by env).`);
+      }
+      return false;
+    }
+
     const endpoint = String(config?.endpoint || "").trim();
     const tokenValue = String(config?.token || "").trim();
 
