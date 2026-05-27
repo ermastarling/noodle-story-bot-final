@@ -6117,20 +6117,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const shiftSnapshotOrderCount = snapshot
         .reduce((sum, row) => sum + Math.max(0, Math.floor(Number(row?.total_orders || row?.visible_order_count || 0) || 0)), 0);
 
-      const countByRecipe = new Map();
-      for (const row of snapshot) {
-        const rid = String(row?.recipe_id || "").trim();
-        if (!rid) continue;
-        const count = Math.max(0, Math.floor(Number(row?.visible_order_count) || 0));
-        countByRecipe.set(rid, count);
-      }
-
-      const counterMenuLines = takeout.menu_recipe_ids.length > 0
-        ? takeout.menu_recipe_ids
-          .map((rid) => `• ${displayRecipeName(rid)} — **${countByRecipe.get(rid) ?? 0}** orders`)
-          .join("\n")
-        : "_No menu configured yet._";
-
       const previewNow = active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0
         ? shiftEndsAt + 1000
         : now;
@@ -6154,10 +6140,30 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         Math.floor(Number(previewResult?.snapshotOrderTotal || 0) || 0)
       );
 
+      const nextShiftSnapshot = Array.isArray(previewResult?.snapshot) ? previewResult.snapshot : [];
+      const counterMenuSnapshot = active
+        ? snapshot
+        : (nextShiftSnapshot.length > 0 ? nextShiftSnapshot : snapshot);
+
+      const countByRecipe = new Map();
+      for (const row of counterMenuSnapshot) {
+        const rid = String(row?.recipe_id || "").trim();
+        if (!rid) continue;
+        const rawCount = active ? row?.visible_order_count : (row?.total_orders ?? row?.visible_order_count);
+        const count = Math.max(0, Math.floor(Number(rawCount) || 0));
+        countByRecipe.set(rid, count);
+      }
+
+      const counterMenuLines = takeout.menu_recipe_ids.length > 0
+        ? takeout.menu_recipe_ids
+          .map((rid) => `• ${displayRecipeName(rid)} — **${countByRecipe.get(rid) ?? 0}** orders`)
+          .join("\n")
+        : "_No menu configured yet._";
+
       const statusBits = [];
       if (active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0) {
         statusBits.push(`${getIcon("time")} **Shift Active** until <t:${Math.floor(shiftEndsAt / 1000)}:R> (<t:${Math.floor(shiftEndsAt / 1000)}:f>)`);
-        statusBits.push(`${getIcon("orders")} Your main order board is resting right now. Cozy up here and serve through the counter while this shift runs.`);
+        statusBits.push(`${getIcon("orders")} Your Shop's Order Board is idle right now. Serve from the Takeout Counter while this shift runs.`);
       } else {
         statusBits.push(`${getIcon("status_pending")} **Shift Inactive**`);
       }
@@ -6171,16 +6177,16 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         statusBits.push(`${getIcon("coins")} Unclaimed idle coins: **${unclaimedIdleCoins}c**`);
       }
       if (shiftOperatingCost > 0) {
-        statusBits.push(`${getIcon("coins")} Fixed shift operating cost paid: **${shiftOperatingCost}c**`);
+        statusBits.push(`${getIcon("coins")} Ingredients cost paid: **${shiftOperatingCost}c**`);
       }
       if (coveredIngredientsCount > 0) {
-        statusBits.push(`${getIcon("basket")} Covered ingredients reserved for idle shift: **${coveredIngredientsCount}** units`);
+        statusBits.push(`${getIcon("basket")} Ingredients reserved for idle shift: **${coveredIngredientsCount}** units`);
       }
       if (shiftSnapshotOrderCount > 0) {
-        statusBits.push(`${getIcon("orders")} Shift snapshot orders: **${shiftSnapshotOrderCount}** total`);
+        statusBits.push(`${getIcon("orders")} Shift orders: **${shiftSnapshotOrderCount}** total`);
       }
       if (active) {
-        statusBits.push(`${getIcon("time")} Processed hours: **${processedHours}/${TAKEOUT_SHIFT_DURATION_HOURS}**`);
+        statusBits.push(`${getIcon("time")} Completed hours: **${processedHours}/${TAKEOUT_SHIFT_DURATION_HOURS}**`);
         statusBits.push(`${getIcon("time")} Remaining hours: **${remainingHours}**`);
       }
       statusBits.push(`${getIcon("help")} Menu size: **${takeout.menu_recipe_ids.length}** (min ${menuLimits.minRequired}, max ${menuLimits.maxAllowed})`);
@@ -6190,8 +6196,9 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         "Set your counter menu, start a cozy 12-hour shift, and collect idle earnings. While the shift is active, your main **Order Board** is idle and all service happens from **Take Out Counter**.",
         "",
         takeoutCatchup?.processedHours > 0
-          ? `${getIcon("time")} Catch-up processed **${takeoutCatchup.processedHours}h** and accrued **${takeoutCatchup.earned}c** while you were away.`
+          ? `${getIcon("time")} **${takeoutCatchup.processedHours}h** & earned **${takeoutCatchup.earned}c** while you were away.`
           : null,
+        "\u200b",
         statusBits.join("\n"),
         "\n**Counter Menu**",
         counterMenuLines
