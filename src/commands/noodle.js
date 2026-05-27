@@ -9,7 +9,7 @@ import {
   FORAGE_ITEM_IDS,
   RARE_FORAGE_ITEM_IDS
 } from "../game/forage.js";
-import { addIngredientsToInventory, removeIngredientsFromInventory } from "../game/inventory.js";
+import { addIngredientsToInventory, removeIngredientsFromInventory, checkIngredientCapacity } from "../game/inventory.js";
 import {
   advanceTutorial,
   ensureTutorial,
@@ -12350,7 +12350,9 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
           const stock = p2.market_stock?.[id3] ?? 0;
           const type = normalizeIngredientType(id3);
           const remaining = remainingByType[type] ?? 0;
-          const qtyToBuy = Math.min(qty3, remaining);
+          const capacity = checkIngredientCapacity(p2, id3, 0);
+          const stackRemaining = Math.max(0, (capacity.maxCapacity ?? 0) - (capacity.currentQty ?? 0));
+          const qtyToBuy = Math.min(qty3, remaining, stackRemaining);
 
           if (qtyToBuy <= 0) {
             capacityReduced = true;
