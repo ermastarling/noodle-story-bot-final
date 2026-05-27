@@ -3427,6 +3427,22 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
     });
   }
 
+  const takeoutState = ensureTakeoutState(p);
+  const takeoutActive = isTakeoutShiftActive(p, nowTs());
+  if (takeoutActive) {
+    const takeoutNeedRows = getTakeoutRecipeNeedRows(p, takeoutState).filter((entry) => entry.short > 0);
+    for (const entry of takeoutNeedRows) {
+      const recipe = content.recipes?.[entry.recipeId];
+      if (!recipe?.ingredients) continue;
+      getRelevantRecipeIngredients(p, recipe).forEach((ing) => {
+        if (isIngredientOptionalForPlayer(p, ing)) return;
+        const qty = Math.max(0, Math.floor(Number(ing?.qty || 0) || 0));
+        if (qty <= 0) return;
+        allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (qty * entry.short);
+      });
+    }
+  }
+
   const shortages = Object.entries(allNeeded)
     .map(([id, needed]) => {
       const have = p.inv_ingredients?.[id] ?? 0;
@@ -3439,7 +3455,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
     (s) => MARKET_ITEM_IDS.includes(s.id) && !FORAGE_ITEM_IDS.includes(s.id)
   );
 
-  const showShoppingList = acceptedEntries.length > 0;
+  const showShoppingList = acceptedEntries.length > 0 || takeoutActive;
   const maxShoppingLines = 8;
   const shoppingLines = shoppingShortages
     .slice(0, maxShoppingLines)
@@ -4073,13 +4089,10 @@ function getTakeoutRecipeNeedRows(player, takeoutState) {
   });
 }
 
-function buildTakeoutNeededIngredientsBlock(player, takeoutState, { maxLines = 10 } = {}) {
+function getTakeoutIngredientShortages(player, takeoutState) {
   const recipeNeeds = getTakeoutRecipeNeedRows(player, takeoutState).filter((entry) => entry.short > 0);
-  if (!recipeNeeds.length) {
-    return `${getIcon("basket")} **Needed Ingredients (Counter Orders)**\n_All ingredients currently ready for remaining counter orders._`;
-  }
-
   const neededByIngredient = {};
+
   for (const entry of recipeNeeds) {
     const recipe = content.recipes?.[entry.recipeId];
     if (!recipe) continue;
@@ -4091,7 +4104,7 @@ function buildTakeoutNeededIngredientsBlock(player, takeoutState, { maxLines = 1
     });
   }
 
-  const shortageRows = Object.entries(neededByIngredient)
+  return Object.entries(neededByIngredient)
     .map(([itemId, needed]) => {
       const have = Math.max(0, Math.floor(Number(player.inv_ingredients?.[itemId] || 0) || 0));
       const short = Math.max(0, needed - have);
@@ -4099,7 +4112,10 @@ function buildTakeoutNeededIngredientsBlock(player, takeoutState, { maxLines = 1
     })
     .filter((row) => row.short > 0)
     .sort((a, b) => displayItemName(a.itemId).localeCompare(displayItemName(b.itemId), "en", { sensitivity: "base" }));
+}
 
+function buildTakeoutNeededIngredientsBlock(player, takeoutState, { maxLines = 10 } = {}) {
+  const shortageRows = getTakeoutIngredientShortages(player, takeoutState);
   if (!shortageRows.length) {
     return `${getIcon("basket")} **Needed Ingredients (Counter Orders)**\n_All ingredients currently ready for remaining counter orders._`;
   }
@@ -4109,7 +4125,7 @@ function buildTakeoutNeededIngredientsBlock(player, takeoutState, { maxLines = 1
   ));
   const more = shortageRows.length > maxLines ? `\n…and **${shortageRows.length - maxLines}** more` : "";
 
-  return `${getIcon("basket")} **Needed Ingredients (Counter Orders)**\n${lines.join("\n")}${more}`;
+  return `${getIcon("basket")} **Needed Ingredients**\n${lines.join("\n")}${more}`;
 }
 
 function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0 }) {
@@ -4287,34 +4303,48 @@ function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
   };
 }
 
-function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser }) {
+function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
   const needRows = getTakeoutRecipeNeedRows(p, takeout)
     .filter((entry) => entry.need > 0)
     .sort((a, b) => {
       if (b.short !== a.short) return b.short - a.short;
       return displayRecipeName(a.recipeId).localeCompare(displayRecipeName(b.recipeId), "en", { sensitivity: "base" });
     });
+  const shortageRows = getTakeoutIngredientShortages(p, takeout);
+  const perPage = 14;
+  const totalPages = Math.max(1, Math.ceil(shortageRows.length / perPage));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const pageRows = shortageRows.slice(safePage * perPage, (safePage + 1) * perPage);
+
+  const neededIngredientLines = pageRows.length
+    ? pageRows
+      .map((row) => `• ${displayItemName(row.itemId)} — need **${row.needed}**, have **${row.have}** (short **${row.short}**)`)
+      .join("\n")
+    : "_All ingredients currently ready for remaining counter orders._";
 
   const remainingOrderLines = needRows.length
     ? needRows
-      .slice(0, 10)
+      .slice(0, 12)
       .map((entry) => `• ${displayRecipeName(entry.recipeId)} — need **${entry.need}**, ready **${entry.ready}** (cook **${entry.short}** more)`)
       .join("\n")
     : "_No remaining active counter orders._";
+  const hiddenOrderCount = Math.max(0, needRows.length - 12);
+  const hiddenOrderSuffix = hiddenOrderCount > 0 ? `\n…and **${hiddenOrderCount}** more order lines` : "";
+  const ingredientPageSuffix = shortageRows.length > 0 ? `\n\nPage **${safePage + 1}/${totalPages}**` : "";
 
-  const neededIngredientsBlock = buildTakeoutNeededIngredientsBlock(p, takeout, { maxLines: 20 });
   const description = [
-    "Needed ingredients for your remaining active counter orders (after counting ready bowls).",
+    "Ingredients needed for your remaining active counter orders (after counting ready bowls).",
     "",
     "**Remaining Counter Orders**",
-    remainingOrderLines,
+    `${remainingOrderLines}${hiddenOrderSuffix}`,
     "",
-    neededIngredientsBlock
+    `${getIcon("basket")} **Needed Ingredients**`,
+    `${neededIngredientLines}${ingredientPageSuffix}`
   ].join("\n");
 
   const canCounterServe = needRows.some((entry) => entry.ready > 0);
   const embed = buildMenuEmbed({
-    title: `${getIcon("basket")} Counter Ingredients`,
+    title: `${getIcon("basket")} Counter Order Ingredients`,
     description,
     user: ownerUser,
     color: theme.colors.success
@@ -4324,6 +4354,22 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser }) {
     content: " ",
     embeds: [embed],
     components: [
+      ...(totalPages > 1
+        ? [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`noodle:nav:takeout_needs:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
+                .setLabel("Prev")
+                .setEmoji(getButtonEmoji("back"))
+                .setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder()
+                .setCustomId(`noodle:nav:takeout_needs:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
+                .setLabel("Next")
+                .setEmoji(getButtonEmoji("next"))
+                .setStyle(ButtonStyle.Secondary)
+            )
+          ]
+        : []),
       noodleTakeoutActionRow(userId, {
         activeShift: true,
         disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
@@ -6561,7 +6607,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         statusBits.push(`${getIcon("basket")} Ingredients reserved for idle shift: **${coveredIngredientsCount}** units`);
       }
       if (shiftSnapshotOrderCount > 0) {
-        statusBits.push(`${getIcon("orders")} Shift orders: **${shiftSnapshotOrderCount}** total`);
+        statusBits.push(`${getIcon("orders")} Idle orders: **${shiftSnapshotOrderCount}** total`);
       }
       if (active) {
         statusBits.push(`${getIcon("time")} Completed hours: **${processedHours}/${TAKEOUT_SHIFT_DURATION_HOURS}**`);
@@ -6810,13 +6856,15 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
     if (sub === "takeout_needs") {
       if (!isTakeoutShiftActive(p, now)) {
-        return finalize(renderStatus(`${getIcon("help")} Start a shift to view **Counter Ingredients**.`, { ephemeral: true }));
+        return finalize(renderStatus(`${getIcon("help")} Start a shift to view **Counter Order Ingredients**.`, { ephemeral: true }));
       }
+      const rawPage = Number(opt.getInteger("page") ?? 0);
       return finalize(buildTakeoutNeedsPayload({
         userId,
         p,
         takeout,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page: Number.isFinite(rawPage) ? rawPage : 0
       }));
     }
 
