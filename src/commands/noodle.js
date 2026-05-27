@@ -1746,6 +1746,15 @@ new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profil
 );
 }
 
+function noodleMainMenuRowNoOrdersWithBack(userId) {
+return new ActionRowBuilder().addComponents(
+new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("pantry")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary),
+new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
+);
+}
+
 function noodleOrdersActionRow(userId, { highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
   const acceptStyle = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
   return new ActionRowBuilder().addComponents(
@@ -1824,6 +1833,11 @@ function noodleTakeoutActionRow(userId, { activeShift = false, disableOpen = fal
         .setEmoji(getButtonEmoji("orders"))
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
+        .setCustomId(`noodle:nav:takeout_needs:${userId}`)
+        .setLabel("Ingredients")
+        .setEmoji(getButtonEmoji("basket"))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
         .setCustomId(`noodle:pick:takeout_cook:${userId}`)
         .setLabel("Counter Cook")
         .setEmoji(getButtonEmoji("cook"))
@@ -1839,12 +1853,7 @@ function noodleTakeoutActionRow(userId, { activeShift = false, disableOpen = fal
         .setLabel("Claim")
         .setEmoji(getButtonEmoji("coins"))
         .setStyle(disableClaim ? ButtonStyle.Secondary : ButtonStyle.Primary)
-        .setDisabled(disableClaim),
-      new ButtonBuilder()
-        .setCustomId(`noodle:nav:orders:${userId}`)
-        .setLabel("Back")
-        .setEmoji(getButtonEmoji("back"))
-        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(disableClaim)
     );
   }
 
@@ -4211,7 +4220,7 @@ function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0
       disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
       disableServe: !canCounterServe
     }),
-    noodleMainMenuRowNoOrders(userId)
+    noodleMainMenuRowNoOrdersWithBack(userId)
   );
 
   return { content: " ", embeds: [cookEmbed], components };
@@ -4273,7 +4282,54 @@ function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
         disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
         disableServe: !canCounterServe
       }),
-      noodleMainMenuRowNoOrders(userId)
+      noodleMainMenuRowNoOrdersWithBack(userId)
+    ]
+  };
+}
+
+function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser }) {
+  const needRows = getTakeoutRecipeNeedRows(p, takeout)
+    .filter((entry) => entry.need > 0)
+    .sort((a, b) => {
+      if (b.short !== a.short) return b.short - a.short;
+      return displayRecipeName(a.recipeId).localeCompare(displayRecipeName(b.recipeId), "en", { sensitivity: "base" });
+    });
+
+  const remainingOrderLines = needRows.length
+    ? needRows
+      .slice(0, 10)
+      .map((entry) => `• ${displayRecipeName(entry.recipeId)} — need **${entry.need}**, ready **${entry.ready}** (cook **${entry.short}** more)`)
+      .join("\n")
+    : "_No remaining active counter orders._";
+
+  const neededIngredientsBlock = buildTakeoutNeededIngredientsBlock(p, takeout, { maxLines: 20 });
+  const description = [
+    "Needed ingredients for your remaining active counter orders (after counting ready bowls).",
+    "",
+    "**Remaining Counter Orders**",
+    remainingOrderLines,
+    "",
+    neededIngredientsBlock
+  ].join("\n");
+
+  const canCounterServe = needRows.some((entry) => entry.ready > 0);
+  const embed = buildMenuEmbed({
+    title: `${getIcon("basket")} Counter Ingredients`,
+    description,
+    user: ownerUser,
+    color: theme.colors.success
+  });
+
+  return {
+    content: " ",
+    embeds: [embed],
+    components: [
+      noodleTakeoutActionRow(userId, {
+        activeShift: true,
+        disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
+        disableServe: !canCounterServe
+      }),
+      noodleMainMenuRowNoOrdersWithBack(userId)
     ]
   };
 }
@@ -6305,7 +6361,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 }
 
 /* ---------------- RECIPES ---------------- */
-if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub === "takeout_claim" || sub === "takeout_cook" || sub === "takeout_serve") {
+if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub === "takeout_claim" || sub === "takeout_cook" || sub === "takeout_serve" || sub === "takeout_needs") {
   if (!db) {
     const unavailableEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Take Out Counter`,
@@ -6448,7 +6504,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     const renderStatus = (banner = null, { ephemeral = false, showMenuPicker = false, menuPage = requestedMenuPage } = {}) => {
       const active = isTakeoutShiftActive(p, nowTs());
       const shiftEndsAt = Number(takeout.shift?.ends_at || 0);
-      const shiftStartedAt = Number(takeout.shift?.started_at || 0);
       const processedHours = Math.max(0, Math.floor(Number(takeout.shift?.last_processed_hour_index || 0) || 0));
       const remainingHours = Math.max(0, TAKEOUT_SHIFT_DURATION_HOURS - processedHours);
       const snapshot = Array.isArray(takeout.shift?.idle_order_board_snapshot)
@@ -6486,21 +6541,14 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           .map((rid) => `• ${displayRecipeName(rid)} — **${countByRecipe.get(rid) ?? 0}** orders`)
           .join("\n")
         : "_No menu configured yet._";
-      const neededIngredientsBlock = active
-        ? buildTakeoutNeededIngredientsBlock(p, takeout, { maxLines: 8 })
-        : null;
 
       const statusBits = [];
       if (active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0) {
-        statusBits.push(`${getIcon("time")} **Shift Active** until <t:${Math.floor(shiftEndsAt / 1000)}:R> (<t:${Math.floor(shiftEndsAt / 1000)}:f>)`);
-        statusBits.push(`${getIcon("orders")} Your Shop's Order Board is idle right now. Serve from the Takeout Counter while this shift runs.`);
+        statusBits.push(`${getIcon("time")} **Shift Active,** ends <t:${Math.floor(shiftEndsAt / 1000)}:R> (<t:${Math.floor(shiftEndsAt / 1000)}:f>)`);
       } else {
         statusBits.push(`${getIcon("status_pending")} **Shift Inactive**`);
-      }
-      statusBits.push(`${getIcon("coins")} Next shift ingredient cost: **${projectedOperatingCost}c**`);
-      statusBits.push(`${getIcon("orders")} Next shift expected orders served: **${projectedOrders}**`);
-      if (Number.isFinite(shiftStartedAt) && shiftStartedAt > 0) {
-        statusBits.push(`${getIcon("calendar")} Last start: <t:${Math.floor(shiftStartedAt / 1000)}:f>`);
+        statusBits.push(`${getIcon("coins")} Next shift ingredient cost: **${projectedOperatingCost}c**`);
+        statusBits.push(`${getIcon("orders")} Next shift expected orders served: **${projectedOrders}**`);
       }
       const unclaimedIdleCoins = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0));
       if (unclaimedIdleCoins > 0) {
@@ -6531,9 +6579,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         "\u200b",
         statusBits.join("\n"),
         "\n**Counter Menu**",
-        counterMenuLines,
-        "",
-        neededIngredientsBlock
+        counterMenuLines
       ].filter(Boolean).join("\n");
 
       const embed = buildMenuEmbed({
@@ -6571,7 +6617,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
             disableClaim: !canClaim,
             disableServe: !canCounterServe
           }),
-          noodleMainMenuRowNoOrders(userId)
+          active ? noodleMainMenuRowNoOrdersWithBack(userId) : noodleMainMenuRowNoOrders(userId)
         ],
         ephemeral
       };
@@ -6742,8 +6788,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       return finalize(
         renderStatus(
-          `${getIcon("status_complete")} Shift opened for **${TAKEOUT_SHIFT_DURATION_HOURS}h** with **${openResult.snapshotOrderTotal}** snapshot orders and a fixed operating cost of **${openResult.operatingCost}c**. ` +
-          `Idle ingredients are pre-covered and isolated from your pantry, and you can start another shift after this one ends.`
+          `${getIcon("status_complete")} Shift started for **${TAKEOUT_SHIFT_DURATION_HOURS}h** with **${openResult.snapshotOrderTotal}** orders and an ingredient cost of **${openResult.operatingCost}c**. ` +
+          `Ingredients needed for idle earnings are reserved while the shift is active.`, { ephemeral: true }
         )
       );
     }
@@ -6759,6 +6805,18 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         takeout,
         ownerUser: interaction.member ?? interaction.user,
         page: Number.isFinite(rawPage) ? rawPage : 0
+      }));
+    }
+
+    if (sub === "takeout_needs") {
+      if (!isTakeoutShiftActive(p, now)) {
+        return finalize(renderStatus(`${getIcon("help")} Start a shift to view **Counter Ingredients**.`, { ephemeral: true }));
+      }
+      return finalize(buildTakeoutNeedsPayload({
+        userId,
+        p,
+        takeout,
+        ownerUser: interaction.member ?? interaction.user
       }));
     }
 
@@ -9495,7 +9553,7 @@ ${lines.join("\n")}`;
       parts.push(
         "**Today’s Orders**",
         hasHouse247Perk(p)
-          ? `${getIcon("sparkle")} 24/7 House active: unlimited orders. Tap **Accept** below to start serving customers.`
+          ? `${getIcon("sparkle")} **24/7 House active: unlimited orders.** Tap **Accept** below to start serving customers.`
           : `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
       );
     } else if (acceptedLines.length) {
