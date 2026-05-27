@@ -1840,34 +1840,63 @@ function noodleTakeoutActionRow(userId, { disableOpen = false, disableClaim = fa
   );
 }
 
-function buildTakeoutMenuSelectRow(userId, {
+function buildTakeoutMenuPickerRows(userId, {
   availableRecipeIds = [],
   selectedRecipeIds = [],
   minRequired = 1,
-  maxAllowed = 1
+  maxAllowed = 1,
+  page = 0
 } = {}) {
-  const options = [...availableRecipeIds]
+  const pageSize = 25;
+  const sortedRecipeIds = [...availableRecipeIds]
     .sort((a, b) => displayRecipeName(a).localeCompare(displayRecipeName(b), undefined, { sensitivity: "base" }))
-    .slice(0, 25)
+    .filter(Boolean);
+
+  if (!sortedRecipeIds.length) return null;
+
+  const totalPages = Math.max(1, Math.ceil(sortedRecipeIds.length / pageSize));
+  const rawPage = Number.isFinite(page) ? page : 0;
+  const safePage = Math.max(0, Math.min(rawPage, totalPages - 1));
+  const pageRecipeIds = sortedRecipeIds.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  const options = pageRecipeIds
     .map((recipeId) => ({
       label: displayRecipeName(recipeId).slice(0, 100),
       value: recipeId,
       default: selectedRecipeIds.includes(recipeId)
     }));
 
-  if (!options.length) return null;
-
   const safeMax = Math.max(1, Math.min(maxAllowed, options.length));
   const safeMin = Math.max(1, Math.min(minRequired, safeMax));
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:takeout:menu_select:${userId}`)
+    .setCustomId(`noodle:takeout:menu_select:${userId}:${safePage}`)
     .setPlaceholder("Pick recipes for your takeout menu")
     .setMinValues(safeMin)
     .setMaxValues(safeMax)
     .addOptions(options);
 
-  return new ActionRowBuilder().addComponents(menu);
+  const rows = [new ActionRowBuilder().addComponents(menu)];
+  if (totalPages > 1) {
+    const prevPage = safePage <= 0 ? totalPages - 1 : safePage - 1;
+    const nextPage = safePage >= totalPages - 1 ? 0 : safePage + 1;
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:takeout_menu:${userId}:${prevPage}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`noodle:nav:takeout_menu:${userId}:${nextPage}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
+  }
+
+  return { rows, safePage, totalPages };
 }
 
 /* ------------------------------------------------------------------ */
@@ -6069,8 +6098,10 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     }
 
     const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
+    const requestedMenuPageRaw = Number(opt.getInteger("page") ?? 0);
+    const requestedMenuPage = Number.isFinite(requestedMenuPageRaw) ? Math.max(0, requestedMenuPageRaw) : 0;
 
-    const renderStatus = (banner = null, { ephemeral = false, showMenuPicker = false } = {}) => {
+    const renderStatus = (banner = null, { ephemeral = false, showMenuPicker = false, menuPage = requestedMenuPage } = {}) => {
       const active = isTakeoutShiftActive(p, nowTs());
       const shiftEndsAt = Number(takeout.shift?.ends_at || 0);
       const shiftStartedAt = Number(takeout.shift?.started_at || 0);
@@ -6149,12 +6180,13 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const canOpenShift = !active && takeout.menu_recipe_ids.length >= menuLimits.minRequired;
       const canClaim = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0)) > 0;
-      const menuPickerRow = showMenuPicker
-        ? buildTakeoutMenuSelectRow(userId, {
+      const menuPicker = showMenuPicker
+        ? buildTakeoutMenuPickerRows(userId, {
             availableRecipeIds,
             selectedRecipeIds: takeout.menu_recipe_ids,
             minRequired: menuLimits.minRequired,
-            maxAllowed: menuLimits.maxAllowed
+            maxAllowed: menuLimits.maxAllowed,
+            page: menuPage
           })
         : null;
 
@@ -6162,7 +6194,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         content: " ",
         embeds: [embed],
         components: [
-          ...(menuPickerRow ? [menuPickerRow] : []),
+          ...(menuPicker?.rows ?? []),
           noodleTakeoutActionRow(userId, { disableOpen: !canOpenShift, disableClaim: !canClaim }),
           noodleMainMenuRowNoOrders(userId)
         ],
@@ -6176,7 +6208,10 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         if (!availableRecipeIds.length) {
           return finalize(renderStatus(`${getIcon("warning")} You need at least one learned recipe before setting a takeout menu.`, { ephemeral: true }));
         }
-        return finalize(renderStatus(`${getIcon("recipes")} Pick recipes below to set your takeout menu.`, { showMenuPicker: true }));
+        return finalize(renderStatus(`${getIcon("recipes")} Pick recipes below to set your takeout menu.`, {
+          showMenuPicker: true,
+          menuPage: requestedMenuPage
+        }));
       }
 
       const requestedIds = rawRecipes
@@ -6208,7 +6243,10 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         }));
       }
 
-      return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`, { showMenuPicker: true }));
+      return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`, {
+        showMenuPicker: true,
+        menuPage: requestedMenuPage
+      }));
     }
 
     if (sub === "takeout_open") {
@@ -10751,7 +10789,10 @@ if (interaction.isSelectMenu?.()) {
 const cid = interaction.customId;
 
 if (cid.startsWith("noodle:takeout:menu_select:")) {
-  const owner = cid.split(":")[3];
+  const idParts = cid.split(":");
+  const owner = idParts[3];
+  const rawPage = Number(idParts[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   if (owner && owner !== interaction.user.id) {
     return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
   }
@@ -10765,6 +10806,7 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
     sub: "takeout_menu",
     overrides: {
       strings: { recipes: selectedRecipeIds.join(",") },
+      integers: { page },
       messageId: interaction.message?.id ?? null
     }
   });
@@ -11823,12 +11865,12 @@ const noodleCommandData = new SlashCommandBuilder()
       .addSubcommand((sc) =>
         sc
           .setName("menu")
-          .setDescription("Set your Take Out Counter menu (comma-separated recipe ids).")
+          .setDescription("Set your Take Out Counter menu using a recipe picker.")
           .addStringOption((o) =>
             o
               .setName("recipes")
-              .setDescription("Comma-separated recipe ids (max 10).")
-              .setRequired(true)
+              .setDescription("Optional legacy input: comma-separated recipe ids (max 10).")
+              .setRequired(false)
           )
       )
       .addSubcommand((sc) => sc.setName("open").setDescription("Open a 12-hour takeout shift."))
