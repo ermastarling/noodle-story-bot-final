@@ -103,6 +103,7 @@ import {
   setTakeoutMenu,
   isTakeoutShiftActive,
   claimTakeoutEarnings,
+  openTakeoutShift,
   startTakeoutShiftWithCoverage,
   processTakeoutCatchup
 } from "../game/takeout.js";
@@ -6371,6 +6372,78 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
     const requestedMenuPageRaw = Number(opt.getInteger("page") ?? 0);
     const requestedMenuPage = Number.isFinite(requestedMenuPageRaw) ? Math.max(0, requestedMenuPageRaw) : 0;
+    const TAKEOUT_QUOTE_TTL_MS = 10 * 60 * 1000;
+    const menuKey = (ids = []) => (Array.isArray(ids) ? ids.map((id) => String(id || "").trim()).filter(Boolean).join("|") : "");
+    const currentMenuKey = menuKey(takeout.menu_recipe_ids || []);
+
+    const clearTakeoutQuote = () => {
+      takeout.next_shift_quote = null;
+    };
+
+    const readValidTakeoutQuote = ({ nowMs }) => {
+      const quote = takeout?.next_shift_quote;
+      if (!quote || typeof quote !== "object") return null;
+      const quoteExpiresAt = Number(quote.expires_at || 0);
+      const quoteCreatedAt = Number(quote.created_at || 0);
+      const quoteMenuKey = String(quote.menu_key || "");
+      const snapshot = Array.isArray(quote.snapshot) ? quote.snapshot : [];
+      const requiredIngredients = (quote.required_ingredients && typeof quote.required_ingredients === "object")
+        ? quote.required_ingredients
+        : {};
+      const snapshotOrderTotal = Math.max(0, Math.floor(Number(quote.snapshot_order_total || 0) || 0));
+      const operatingCost = Math.max(0, Math.floor(Number(quote.operating_cost || 0) || 0));
+      if (!Number.isFinite(quoteExpiresAt) || quoteExpiresAt <= nowMs) return null;
+      if (!Number.isFinite(quoteCreatedAt) || quoteCreatedAt <= 0) return null;
+      if (!quoteMenuKey || quoteMenuKey !== currentMenuKey) return null;
+      if (!snapshot.length) return null;
+      return {
+        createdAt: quoteCreatedAt,
+        expiresAt: quoteExpiresAt,
+        menuKey: quoteMenuKey,
+        snapshotOrderTotal,
+        operatingCost,
+        requiredIngredients,
+        snapshot
+      };
+    };
+
+    const buildAndStoreTakeoutQuote = ({ nowMs }) => {
+      const set = buildSettingsMap(settingsCatalog, s.settings);
+      s.season = computeActiveSeason(set);
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, s.active_event_id ?? null);
+      applyHouse247OrderBoardOverride(p);
+
+      const boardOrderTotal = Math.max(0, Math.floor(Number(p.orders_total_count || 0) || 0));
+      const unlimitedOrders = hasHouse247Perk(p);
+      const previewPlayer = JSON.parse(JSON.stringify(p));
+      const previewResult = startTakeoutShiftWithCoverage(previewPlayer, {
+        now: nowMs,
+        boardOrderTotal,
+        unlimitedOrders,
+        recipes: content.recipes ?? {},
+        marketPrices: s.market_prices ?? {},
+        items: content.items ?? {}
+      });
+
+      const quote = {
+        created_at: nowMs,
+        expires_at: nowMs + TAKEOUT_QUOTE_TTL_MS,
+        menu_key: currentMenuKey,
+        board_order_total: boardOrderTotal,
+        unlimited_orders: unlimitedOrders,
+        snapshot_order_total: Math.max(0, Math.floor(Number(previewResult?.snapshotOrderTotal || 0) || 0)),
+        operating_cost: Math.max(0, Math.floor(Number(previewResult?.operatingCost || 0) || 0)),
+        required_ingredients: previewResult?.requiredIngredients ?? {},
+        snapshot: Array.isArray(previewResult?.snapshot) ? previewResult.snapshot : []
+      };
+
+      if (!quote.snapshot.length || quote.snapshot_order_total <= 0) {
+        return null;
+      }
+
+      takeout.next_shift_quote = quote;
+      return readValidTakeoutQuote({ nowMs });
+    };
 
     const renderStatus = (banner = null, { ephemeral = false, showMenuPicker = false, menuPage = requestedMenuPage } = {}) => {
       const active = isTakeoutShiftActive(p, nowTs());
@@ -6387,30 +6460,14 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const shiftSnapshotOrderCount = snapshot
         .reduce((sum, row) => sum + Math.max(0, Math.floor(Number(row?.total_orders || row?.visible_order_count || 0) || 0)), 0);
 
-      const previewNow = active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0
-        ? shiftEndsAt + 1000
-        : now;
-      const previewPlayer = JSON.parse(JSON.stringify(p));
-      const previewBoardOrderTotal = Math.max(0, Math.floor(Number(p.orders_total_count || 0) || 0));
-      const previewResult = startTakeoutShiftWithCoverage(previewPlayer, {
-        now: previewNow,
-        boardOrderTotal: previewBoardOrderTotal,
-        unlimitedOrders: hasHouse247Perk(p),
-        recipes: content.recipes ?? {},
-        marketPrices: s.market_prices ?? {},
-        items: content.items ?? {}
-      });
-
-      const projectedOperatingCost = Math.max(
-        0,
-        Math.floor(Number(previewResult?.operatingCost || 0) || 0)
-      );
-      const projectedOrders = Math.max(
-        0,
-        Math.floor(Number(previewResult?.snapshotOrderTotal || 0) || 0)
-      );
-
-      const nextShiftSnapshot = Array.isArray(previewResult?.snapshot) ? previewResult.snapshot : [];
+      const quoteNow = nowTs();
+      let nextShiftQuote = readValidTakeoutQuote({ nowMs: quoteNow });
+      if (!active && !nextShiftQuote) {
+        nextShiftQuote = buildAndStoreTakeoutQuote({ nowMs: quoteNow });
+      }
+      const projectedOperatingCost = Math.max(0, Math.floor(Number(nextShiftQuote?.operatingCost || 0) || 0));
+      const projectedOrders = Math.max(0, Math.floor(Number(nextShiftQuote?.snapshotOrderTotal || 0) || 0));
+      const nextShiftSnapshot = Array.isArray(nextShiftQuote?.snapshot) ? nextShiftQuote.snapshot : [];
       const counterMenuSnapshot = active
         ? snapshot
         : (nextShiftSnapshot.length > 0 ? nextShiftSnapshot : snapshot);
@@ -6559,6 +6616,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           recipe_id: rid,
           visible_order_count: 0
         }));
+        clearTakeoutQuote();
       }
 
       return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`, {
@@ -6579,15 +6637,63 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const boardOrderTotal = Math.max(0, Math.floor(Number(p.orders_total_count || 0) || 0));
       const unlimitedOrders = hasHouse247Perk(p);
+      const validQuote = readValidTakeoutQuote({ nowMs: now }) ?? buildAndStoreTakeoutQuote({ nowMs: now });
+      let openResult = null;
 
-      const openResult = startTakeoutShiftWithCoverage(p, {
-        now,
-        boardOrderTotal,
-        unlimitedOrders,
-        recipes: content.recipes ?? {},
-        marketPrices: s.market_prices ?? {},
-        items: content.items ?? {}
-      });
+      if (validQuote) {
+        const playerCoins = Math.max(0, Math.floor(Number(p.coins || 0) || 0));
+        if (playerCoins < validQuote.operatingCost) {
+          openResult = {
+            ok: false,
+            reason: "insufficient_coins",
+            operatingCost: validQuote.operatingCost,
+            snapshotOrderTotal: validQuote.snapshotOrderTotal,
+            requiredIngredients: validQuote.requiredIngredients,
+            snapshot: validQuote.snapshot
+          };
+        } else {
+          p.coins = playerCoins - validQuote.operatingCost;
+          const opened = openTakeoutShift(p, {
+            now,
+            snapshot: validQuote.snapshot,
+            snapshotOrderTotal: validQuote.snapshotOrderTotal,
+            requiredIngredients: validQuote.requiredIngredients,
+            coveredIngredients: validQuote.requiredIngredients,
+            operatingCost: validQuote.operatingCost,
+            operatingCostMarker: `takeout_shift:${validQuote.createdAt}`
+          });
+          if (!opened.ok) {
+            p.coins = playerCoins;
+            openResult = {
+              ok: false,
+              reason: opened.reason,
+              operatingCost: validQuote.operatingCost,
+              snapshotOrderTotal: validQuote.snapshotOrderTotal,
+              requiredIngredients: validQuote.requiredIngredients,
+              snapshot: validQuote.snapshot
+            };
+          } else {
+            openResult = {
+              ok: true,
+              startedAt: opened.startedAt,
+              endsAt: opened.endsAt,
+              snapshotOrderTotal: validQuote.snapshotOrderTotal,
+              operatingCost: validQuote.operatingCost,
+              requiredIngredients: validQuote.requiredIngredients,
+              snapshot: validQuote.snapshot
+            };
+          }
+        }
+      } else {
+        openResult = startTakeoutShiftWithCoverage(p, {
+          now,
+          boardOrderTotal,
+          unlimitedOrders,
+          recipes: content.recipes ?? {},
+          marketPrices: s.market_prices ?? {},
+          items: content.items ?? {}
+        });
+      }
       if (!openResult.ok && openResult.reason === "shift_active") {
         emitTelemetry("takeout_shift_start_blocked", {
           userId,
@@ -6631,6 +6737,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         startsAt: openResult.startedAt,
         endsAt: openResult.endsAt
       });
+
+      clearTakeoutQuote();
 
       return finalize(
         renderStatus(
@@ -9387,7 +9495,7 @@ ${lines.join("\n")}`;
       parts.push(
         "**Today’s Orders**",
         hasHouse247Perk(p)
-          ? `${getIcon("sparkle")} 24/7 House active: unlimited order capacity and market stock. Tap **Accept** below to start serving customers.`
+          ? `${getIcon("sparkle")} 24/7 House active: unlimited orders. Tap **Accept** below to start serving customers.`
           : `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
       );
     } else if (acceptedLines.length) {
