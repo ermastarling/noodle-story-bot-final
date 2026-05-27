@@ -2939,9 +2939,17 @@ import { theme } from "./ui/theme.js";
           periodEndAt,
           now: Date.now()
         });
-        const subscriptionIdempotencyKey = entitlementId
-          ? `discord_subscription:${eventType}:${entitlementId}`
-          : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}`;
+        const subscriptionIdempotencyKey = (() => {
+          // Discord can reuse entitlement IDs across renewals; include billing period on updates.
+          if (eventType === "ENTITLEMENT_UPDATE") {
+            return entitlementId
+              ? `discord_subscription:${eventType}:${entitlementId}:${billingPeriodKey}`
+              : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}`;
+          }
+          return entitlementId
+            ? `discord_subscription:${eventType}:${entitlementId}`
+            : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}`;
+        })();
 
         const cached = getIdempotentResult(db, subscriptionIdempotencyKey);
         if (cached) {
