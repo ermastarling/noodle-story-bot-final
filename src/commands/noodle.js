@@ -88,6 +88,7 @@ import {
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
 import {
+  applySubscriptionEntitlementEvent,
   SUBSCRIPTION_PERKS,
   ensureSubscriptionState,
   getOrderAcceptCap,
@@ -4415,7 +4416,7 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "subscriptions" || sub === "dashboard";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "subscriptions" || sub === "subscriptions_toggle" || sub === "dashboard";
 const inDevPath = group === "dev" || isDevSubcommand;
 
 const buildDevStatusEmbed = () => {
@@ -4785,6 +4786,104 @@ if (inDevPath && sub === "subscriptions") {
     return commit({
       content: " ",
       embeds: [embed],
+      ephemeral: true
+    });
+  });
+}
+
+if (inDevPath && sub === "subscriptions_toggle") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const perkSelection = String(opt.getString("perk") || "").trim().toLowerCase();
+  const active = opt.getBoolean("active");
+  const durationDaysRaw = Number(opt.getInteger("duration_days"));
+  const durationDays = Number.isFinite(durationDaysRaw) && durationDaysRaw > 0
+    ? Math.floor(durationDaysRaw)
+    : 30;
+  const reason = String(opt.getString("reason") || "").trim();
+
+  if (!targetUserId) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to update.", isError: true })],
+      ephemeral: true
+    });
+  }
+  if (active == null) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Provide active=true or active=false.", isError: true })],
+      ephemeral: true
+    });
+  }
+  if (!db) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ephemeral: true
+    });
+  }
+
+  let selectedPerkIds;
+  if (perkSelection === "both") {
+    selectedPerkIds = [SUBSCRIPTION_PERKS.HOUSE_247, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER];
+  } else if (perkSelection === SUBSCRIPTION_PERKS.HOUSE_247 || perkSelection === SUBSCRIPTION_PERKS.TAKEOUT_COUNTER) {
+    selectedPerkIds = [perkSelection];
+  } else {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Invalid perk selection. Use house_247, takeout_counter, or both.", isError: true })],
+      ephemeral: true
+    });
+  }
+
+  const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
+  return await withLock(db, lockKey, owner, 8000, async () => {
+    const existingPlayer = getPlayer(db, targetServerId, targetUserId);
+    const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
+    const now = nowTs();
+    const periodEndAt = active ? (now + (durationDays * 24 * 60 * 60 * 1000)) : now;
+    const eventType = active ? "ENTITLEMENT_UPDATE" : "ENTITLEMENT_DELETE";
+
+    const beforeStates = {};
+    const afterStates = {};
+    for (const perkId of selectedPerkIds) {
+      beforeStates[perkId] = hasActivePerk(targetPlayer, perkId, now);
+      applySubscriptionEntitlementEvent(targetPlayer, {
+        perkId,
+        eventType,
+        entitlementId: `dev_manual:${perkId}:${targetUserId}`,
+        periodStartAt: active ? now : null,
+        periodEndAt,
+        now
+      });
+      afterStates[perkId] = hasActivePerk(targetPlayer, perkId, now);
+    }
+
+    upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
+
+    const perkNames = {
+      [SUBSCRIPTION_PERKS.HOUSE_247]: "24/7 House",
+      [SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]: "Take Out Counter"
+    };
+    const stateLines = selectedPerkIds.map((perkId) => {
+      const before = beforeStates[perkId] ? "ACTIVE" : "inactive";
+      const after = afterStates[perkId] ? "ACTIVE" : "inactive";
+      return `• ${perkNames[perkId]} (${perkId}): ${before} -> ${after}`;
+    });
+
+    const messageLines = [
+      `${getIcon("status_complete")} Updated subscriptions for <@${targetUserId}> (${targetUserId}) on server ${targetServerId}.`,
+      `Mode: ${active ? `enable (${durationDays} day${durationDays === 1 ? "" : "s"})` : "disable"}`,
+      ...stateLines,
+      reason ? `Reason: ${reason}` : null,
+      !existingPlayer ? "Note: Created a new player profile for this target." : null
+    ].filter(Boolean);
+
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: messageLines.join("\n") })],
       ephemeral: true
     });
   });

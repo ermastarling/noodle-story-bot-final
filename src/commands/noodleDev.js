@@ -65,6 +65,55 @@ const noodleDevData = new SlashCommandBuilder()
           .setDescription("Override server ID (defaults to current guild)")
           .setRequired(false)
       )
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("subscriptions_toggle")
+      .setDescription("Dev only.")
+      .addUserOption((o) => o.setName("user").setDescription("User to update").setRequired(false))
+      .addStringOption((o) =>
+        o
+          .setName("user_id")
+          .setDescription("User ID (use if the user left the server)")
+          .setRequired(false)
+      )
+      .addStringOption((o) =>
+        o
+          .setName("server_id")
+          .setDescription("Override server ID (defaults to current guild)")
+          .setRequired(false)
+      )
+      .addStringOption((o) =>
+        o
+          .setName("perk")
+          .setDescription("Perk to toggle")
+          .setRequired(true)
+          .addChoices(
+            { name: "24/7 House", value: "house_247" },
+            { name: "Take Out Counter", value: "takeout_counter" },
+            { name: "Both Perks", value: "both" }
+          )
+      )
+      .addBooleanOption((o) =>
+        o
+          .setName("active")
+          .setDescription("Set perk state (true=enable, false=disable)")
+          .setRequired(true)
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName("duration_days")
+          .setDescription("When enabling, perk duration in days (default 30)")
+          .setRequired(false)
+          .setMinValue(1)
+          .setMaxValue(365)
+      )
+      .addStringOption((o) =>
+        o
+          .setName("reason")
+          .setDescription("Optional audit reason")
+          .setRequired(false)
+      )
   );
 
 export const noodleDevCommand = {
