@@ -2104,10 +2104,8 @@ import { theme } from "./ui/theme.js";
     });
   }
 
-  function buildRankTopPostPayload(serverCount, userCount, { includeCommands } = {}) {
-    const includeCommandsFlag = includeCommands == null
-      ? String(process.env.NOODLE_RANKTOP_SYNC_COMMANDS || "1") !== "0"
-      : Boolean(includeCommands);
+  function buildRankTopPostPayload(serverCount, userCount, { includeCommands = false, commandsPayload = null } = {}) {
+    const includeCommandsFlag = Boolean(includeCommands);
     const postAuthorization = String(
       process.env.NOODLE_RANKTOP_POST_AUTHORIZATION
       || process.env.NOODLE_RANKTOP_WEBHOOK_AUTH
@@ -2124,13 +2122,56 @@ import { theme } from "./ui/theme.js";
     }
 
     if (includeCommandsFlag) {
-      payload.commands = buildProviderCommandsPayload({
-        includeDevEnvVar: "NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS",
-        wrapInCommandsObject: false
-      });
+      const normalizedCommands = Array.isArray(commandsPayload)
+        ? commandsPayload
+        : [];
+      payload.commands = normalizedCommands;
     }
 
     return payload;
+  }
+
+  async function buildRankTopCommandsPayload() {
+    const includeDevCommands = String(process.env.NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS || "0") === "1";
+
+    try {
+      const fetchedCommands = await client.application?.commands?.fetch?.();
+      const commandItems = fetchedCommands?.map
+        ? fetchedCommands.map((command) => command)
+        : [];
+
+      if (commandItems.length > 0) {
+        return commandItems
+          .filter((command) => includeDevCommands || String(command?.name || "").trim() !== "noodle-dev")
+          .map((command) => ({
+            id: String(command?.id || "").trim(),
+            name: String(command?.name || "").trim(),
+            description: String(command?.description || "").trim(),
+            ...(Array.isArray(command?.options) && command.options.length > 0
+              ? { options: command.options }
+              : {})
+          }))
+          .filter((command) => command.id && command.name && command.description);
+      }
+    } catch (error) {
+      console.warn("WARN: Rank.top command payload falling back to local command definitions:", error?.message ?? error);
+    }
+
+    // Fallback: local definitions may not include deployed command IDs; provide stable synthetic IDs.
+    const fallbackCommands = buildProviderCommandsPayload({
+      includeDevEnvVar: "NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS",
+      wrapInCommandsObject: false
+    });
+    return fallbackCommands
+      .map((command) => ({
+        id: String(command?.name || "").trim(),
+        name: String(command?.name || "").trim(),
+        description: String(command?.description || "").trim(),
+        ...(Array.isArray(command?.options) && command.options.length > 0
+          ? { options: command.options }
+          : {})
+      }))
+      .filter((command) => command.id && command.name && command.description);
   }
 
   async function syncDiscordBotListCommands({ reason = "ready" } = {}) {
@@ -2247,8 +2288,10 @@ import { theme } from "./ui/theme.js";
 
     const targetUrl = renderStatsEndpoint(endpointTemplate, resolvedBotId);
     const counts = getCurrentBotListCounts();
+    const rankTopCommandsPayload = await buildRankTopCommandsPayload();
     const commandsPayload = buildRankTopPostPayload(counts.serverCount, counts.userCount, {
-      includeCommands: true
+      includeCommands: true,
+      commandsPayload: rankTopCommandsPayload
     });
     const authHeaders = buildProviderAuthHeaders(
       {
