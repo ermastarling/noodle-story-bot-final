@@ -47,6 +47,24 @@ const noodleDevData = new SlashCommandBuilder()
           .setDescription("Force repair even if global profile score is not lower")
           .setRequired(false)
       )
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("subscriptions")
+      .setDescription("Dev only.")
+      .addUserOption((o) => o.setName("user").setDescription("User to inspect").setRequired(false))
+      .addStringOption((o) =>
+        o
+          .setName("user_id")
+          .setDescription("User ID (use if the user left the server)")
+          .setRequired(false)
+      )
+      .addStringOption((o) =>
+        o
+          .setName("server_id")
+          .setDescription("Override server ID (defaults to current guild)")
+          .setRequired(false)
+      )
   );
 
 export const noodleDevCommand = {

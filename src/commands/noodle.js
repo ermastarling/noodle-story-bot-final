@@ -88,6 +88,23 @@ import {
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
 import {
+  SUBSCRIPTION_PERKS,
+  ensureSubscriptionState,
+  getOrderAcceptCap,
+  hasActivePerk,
+  hasUnlimitedMarketStock
+} from "../game/subscriptions.js";
+import {
+  TAKEOUT_SHIFT_DURATION_HOURS,
+  ensureTakeoutState,
+  getTakeoutMenuLimits,
+  setTakeoutMenu,
+  isTakeoutShiftActive,
+  claimTakeoutEarnings,
+  startTakeoutShiftWithCoverage,
+  processTakeoutCatchup
+} from "../game/takeout.js";
+import {
   applyResilienceMechanics,
   getAvailableRecipes,
   clearTemporaryRecipes,
@@ -712,6 +729,10 @@ function buildMarketRefreshFooterText(existingFooterText, marketRestockMs, nowMs
 
 function isDevAdmin(userId) {
   return String(userId ?? "") === DEV_ADMIN_USER_ID;
+}
+
+function hasHouse247Perk(player) {
+  return hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, nowTs());
 }
 
 function buildHelpPage({ page, userId, user }) {
@@ -2576,6 +2597,7 @@ function ensurePlayer(serverId, userId) {
   if (!p.seasons) {
     p.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
   }
+  ensureTakeoutState(p);
   return p;
 }
 
@@ -3151,6 +3173,7 @@ return null;
 function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSellButton = true }) {
   if (!s.market_prices) s.market_prices = {};
   if (!p.market_stock) p.market_stock = {};
+  const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
 
   const allowed = getUnlockedIngredientIds(p, content);
 
@@ -3162,8 +3185,8 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
       if (!it) return null;
 
       const price = s.market_prices?.[id] ?? it.base_price ?? 0;
-      const stock = p.market_stock?.[id] ?? 0;
-      if (stock <= 0) return null;
+      const stock = unlimitedMarketStock ? "unlimited" : (p.market_stock?.[id] ?? 0);
+      if (!unlimitedMarketStock && Number(stock) <= 0) return null;
 
       const ownedQty = p.inv_ingredients?.[id] ?? 0;
       const labelRaw = `${it.name} — ${price}c (stock ${stock}, you have ${ownedQty})`;
@@ -3278,6 +3301,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
   const descriptionLines = [
     "Select up to **5** items",
     "When you’re done selecting, if on Desktop, press **Esc** to continue",
+    unlimitedMarketStock ? `${getIcon("sparkle")} 24/7 House active: market stock is **unlimited**.` : null,
     shoppingList ? "" : null,
     shoppingList,
     "",
@@ -4391,7 +4415,7 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "dashboard";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "subscriptions" || sub === "dashboard";
 const inDevPath = group === "dev" || isDevSubcommand;
 
 const buildDevStatusEmbed = () => {
@@ -4675,6 +4699,92 @@ if (inDevPath && sub === "repair_profile") {
             `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`
         })
       ],
+      ephemeral: true
+    });
+  });
+}
+
+if (inDevPath && sub === "subscriptions") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+
+  if (!targetUserId) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to inspect.", isError: true })],
+      ephemeral: true
+    });
+  }
+  if (!db) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ephemeral: true
+    });
+  }
+
+  const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
+  return await withLock(db, lockKey, owner, 8000, async () => {
+    const targetPlayer = getPlayer(db, targetServerId, targetUserId);
+    if (!targetPlayer) {
+      return commit({
+        content: " ",
+        embeds: [
+          buildDevMessageEmbed({
+            message: `${getIcon("error")} No profile found for <@${targetUserId}> on server ${targetServerId}.`,
+            isError: true
+          })
+        ],
+        ephemeral: true
+      });
+    }
+
+    const subscriptions = ensureSubscriptionState(targetPlayer);
+    const perks = subscriptions.perks ?? {};
+    const now = nowTs();
+
+    const formatTime = (ts) => {
+      const n = Number(ts);
+      if (!Number.isFinite(n) || n <= 0) return "-";
+      return `<t:${Math.floor(n / 1000)}:f> (<t:${Math.floor(n / 1000)}:R>)`;
+    };
+
+    const perkLines = Object.values(SUBSCRIPTION_PERKS).map((perkId) => {
+      const state = perks[perkId] ?? {};
+      const activeNow = hasActivePerk(targetPlayer, perkId, now);
+      const name = perkId === SUBSCRIPTION_PERKS.HOUSE_247 ? "24/7 House" : "Take Out Counter";
+      const status = activeNow ? "ACTIVE" : "inactive";
+      return [
+        `**${name}** (${perkId})`,
+        `• status: ${status}`,
+        `• entitlement_id: ${state.entitlement_id ?? "-"}`,
+        `• period_start_at: ${formatTime(state.period_start_at)}`,
+        `• period_end_at: ${formatTime(state.period_end_at)}`,
+        `• last_coin_grant_period: ${state.last_coin_grant_period ?? "-"}`,
+        `• last_coin_grant_at: ${formatTime(state.last_coin_grant_at)}`,
+        `• last_event_type: ${state.last_event_type ?? "-"}`,
+        `• last_event_at: ${formatTime(state.last_event_at)}`
+      ].join("\n");
+    });
+
+    const description = [
+      `User: <@${targetUserId}> (${targetUserId})`,
+      `Server: ${targetServerId}`,
+      `Coins: ${Number(targetPlayer.coins || 0).toLocaleString()}`,
+      "",
+      ...perkLines
+    ].join("\n\n");
+
+    const embed = buildMenuEmbed({
+      title: `${getIcon("stats")} Subscription State`,
+      description,
+      user: interaction.member ?? interaction.user
+    });
+
+    return commit({
+      content: " ",
+      embeds: [embed],
       ephemeral: true
     });
   });
@@ -5697,6 +5807,293 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 }
 
 /* ---------------- RECIPES ---------------- */
+if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub === "takeout_claim") {
+  if (!db) {
+    const unavailableEmbed = buildMenuEmbed({
+      title: `${getIcon("orders")} Take Out Counter`,
+      description: `${getIcon("error")} Database unavailable in this environment.`,
+      user: interaction.member ?? interaction.user,
+      color: theme.colors.warning
+    });
+    return commit({ content: " ", embeds: [unavailableEmbed], ephemeral: true });
+  }
+
+  const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+    const p = ensurePlayer(serverId, userId);
+    const s = ensureServer(serverId);
+    unlockNoticePlayer = p;
+    const now = nowTs();
+    const takeoutEnabled = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now);
+
+    const finalize = (payload) => {
+      if (db) {
+        upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      }
+      return payload;
+    };
+
+    if (!takeoutEnabled) {
+      const lockedEmbed = buildMenuEmbed({
+        title: `${getIcon("orders")} Take Out Counter`,
+        description: `${getIcon("lock")} Take Out Counter requires an active subscription entitlement.`,
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.warning
+      });
+      return finalize({
+        content: " ",
+        embeds: [lockedEmbed],
+        ephemeral: true
+      });
+    }
+
+    const takeout = ensureTakeoutState(p);
+    const takeoutCatchup = processTakeoutCatchup(p, {
+      now,
+      recipes: content.recipes ?? {},
+      marketPrices: s.market_prices ?? {},
+      items: content.items ?? {}
+    });
+    if ((takeoutCatchup?.processedHours ?? 0) > 0) {
+      emitTelemetry("takeout_shift_catchup", {
+        userId,
+        serverId,
+        processedHours: takeoutCatchup.processedHours,
+        earnedCoins: takeoutCatchup.earned,
+        totalProcessedHours: takeoutCatchup.totalProcessedHours,
+        completed: Boolean(takeoutCatchup.completed)
+      });
+    }
+
+    const availableRecipeIds = getValidAvailableRecipeIds(p);
+    const availableRecipeSet = new Set(availableRecipeIds);
+    const existingMenu = (takeout.menu_recipe_ids || []).filter((recipeId) => availableRecipeSet.has(recipeId));
+    if (existingMenu.length !== (takeout.menu_recipe_ids || []).length) {
+      takeout.menu_recipe_ids = existingMenu;
+    }
+
+    const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
+
+    const renderStatus = (banner = null, { ephemeral = false } = {}) => {
+      const active = isTakeoutShiftActive(p, nowTs());
+      const shiftEndsAt = Number(takeout.shift?.ends_at || 0);
+      const shiftStartedAt = Number(takeout.shift?.started_at || 0);
+      const processedHours = Math.max(0, Math.floor(Number(takeout.shift?.last_processed_hour_index || 0) || 0));
+      const remainingHours = Math.max(0, TAKEOUT_SHIFT_DURATION_HOURS - processedHours);
+      const snapshot = Array.isArray(takeout.shift?.idle_order_board_snapshot)
+        ? takeout.shift.idle_order_board_snapshot
+        : [];
+      const shiftOperatingCost = Math.max(0, Math.floor(Number(takeout.shift?.operating_cost || 0) || 0));
+      const coveredIngredientsCount = Object.values(takeout.shift?.covered_ingredients ?? {})
+        .reduce((sum, qty) => sum + Math.max(0, Math.floor(Number(qty || 0) || 0)), 0);
+      const shiftSnapshotOrderCount = snapshot
+        .reduce((sum, row) => sum + Math.max(0, Math.floor(Number(row?.total_orders || row?.visible_order_count || 0) || 0)), 0);
+
+      const menuLine = takeout.menu_recipe_ids.length > 0
+        ? takeout.menu_recipe_ids.map((rid) => `• ${displayRecipeName(rid)}`).join("\n")
+        : "_No menu configured yet._";
+
+      const countByRecipe = new Map();
+      for (const row of snapshot) {
+        const rid = String(row?.recipe_id || "").trim();
+        if (!rid) continue;
+        const count = Math.max(0, Math.floor(Number(row?.visible_order_count) || 0));
+        countByRecipe.set(rid, count);
+      }
+
+      const visibleCounts = takeout.menu_recipe_ids.length > 0
+        ? takeout.menu_recipe_ids
+          .map((rid) => `• ${displayRecipeName(rid)}: **${countByRecipe.get(rid) ?? 0}**`)
+          .join("\n")
+        : "_No counter orders to show yet._";
+
+      const statusBits = [];
+      if (active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0) {
+        statusBits.push(`${getIcon("time")} **Shift Active** until <t:${Math.floor(shiftEndsAt / 1000)}:R> (<t:${Math.floor(shiftEndsAt / 1000)}:f>)`);
+        statusBits.push(`${getIcon("refresh")} Next eligible shift: <t:${Math.floor(shiftEndsAt / 1000)}:R>`);
+      } else {
+        statusBits.push(`${getIcon("status_pending")} **Shift Inactive**`);
+        statusBits.push(`${getIcon("refresh")} Next eligible shift: **Now**`);
+      }
+      if (Number.isFinite(shiftStartedAt) && shiftStartedAt > 0) {
+        statusBits.push(`${getIcon("calendar")} Last start: <t:${Math.floor(shiftStartedAt / 1000)}:f>`);
+      }
+      statusBits.push(`${getIcon("coins")} Unclaimed idle coins: **${takeout.earned_unclaimed_coins || 0}c**`);
+      if (shiftOperatingCost > 0) {
+        statusBits.push(`${getIcon("coins")} Fixed shift operating cost paid: **${shiftOperatingCost}c**`);
+      }
+      if (coveredIngredientsCount > 0) {
+        statusBits.push(`${getIcon("basket")} Covered ingredients reserved for idle shift: **${coveredIngredientsCount}** units`);
+      }
+      if (shiftSnapshotOrderCount > 0) {
+        statusBits.push(`${getIcon("orders")} Shift snapshot orders: **${shiftSnapshotOrderCount}** total`);
+      }
+      statusBits.push(`${getIcon("time")} Processed hours: **${processedHours}/${TAKEOUT_SHIFT_DURATION_HOURS}**`);
+      statusBits.push(`${getIcon("time")} Remaining hours: **${remainingHours}**`);
+      statusBits.push(`${getIcon("help")} Menu size: **${takeout.menu_recipe_ids.length}** (min ${menuLimits.minRequired}, max ${menuLimits.maxAllowed})`);
+
+      const description = [
+        banner,
+        takeoutCatchup?.processedHours > 0
+          ? `${getIcon("time")} Catch-up processed **${takeoutCatchup.processedHours}h** and accrued **${takeoutCatchup.earned}c** while you were away.`
+          : null,
+        statusBits.join("\n"),
+        "\n**Counter Menu**",
+        menuLine,
+        "\n**Visible Order Counts**",
+        visibleCounts
+      ].filter(Boolean).join("\n");
+
+      const embed = buildMenuEmbed({
+        title: `${getIcon("orders")} Take Out Counter`,
+        description,
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.success
+      });
+
+      return { content: " ", embeds: [embed], ephemeral };
+    };
+
+    if (sub === "takeout_menu") {
+      const rawRecipes = String(opt.getString("recipes") || "").trim();
+      if (!rawRecipes) {
+        return finalize(renderStatus(`${getIcon("help")} Provide recipe ids via the recipes option (comma-separated).`, { ephemeral: true }));
+      }
+
+      const requestedIds = rawRecipes
+        .split(",")
+        .map((id) => resolveCanonicalRecipeId(id))
+        .filter(Boolean);
+
+      const menuResult = setTakeoutMenu(p, {
+        menuRecipeIds: requestedIds,
+        learnedRecipeIds: availableRecipeIds,
+        now
+      });
+
+      if (!menuResult.ok) {
+        if (menuResult.reason === "no_learned_recipes") {
+          return finalize(renderStatus(`${getIcon("warning")} You need at least one learned recipe before setting a takeout menu.`, { ephemeral: true }));
+        }
+        if (menuResult.reason === "menu_too_small") {
+          const needed = menuResult.limits?.minRequired ?? 0;
+          return finalize(renderStatus(`${getIcon("warning")} Menu too small. Select at least **${needed}** recipe${needed === 1 ? "" : "s"}.`, { ephemeral: true }));
+        }
+        return finalize(renderStatus(`${getIcon("warning")} Could not update menu. Check recipe ids and try again.`, { ephemeral: true }));
+      }
+
+      if (!isTakeoutShiftActive(p, nowTs())) {
+        takeout.shift.idle_order_board_snapshot = takeout.menu_recipe_ids.map((rid) => ({
+          recipe_id: rid,
+          visible_order_count: 0
+        }));
+      }
+
+      return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`));
+    }
+
+    if (sub === "takeout_open") {
+      if (takeout.menu_recipe_ids.length <= 0) {
+        return finalize(renderStatus(`${getIcon("warning")} Configure your counter menu first with /noodle takeout_menu.` , { ephemeral: true }));
+      }
+
+      const set = buildSettingsMap(settingsCatalog, s.settings);
+      s.season = computeActiveSeason(set);
+      ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, s.active_event_id ?? null);
+
+      const boardOrderTotal = Math.max(0, Math.floor(Number(p.orders_total_count || 0) || 0));
+      const unlimitedOrders = hasHouse247Perk(p);
+
+      const openResult = startTakeoutShiftWithCoverage(p, {
+        now,
+        boardOrderTotal,
+        unlimitedOrders,
+        recipes: content.recipes ?? {},
+        marketPrices: s.market_prices ?? {},
+        items: content.items ?? {}
+      });
+      if (!openResult.ok && openResult.reason === "shift_active") {
+        emitTelemetry("takeout_shift_start_blocked", {
+          userId,
+          serverId,
+          reason: "shift_active"
+        });
+        return finalize(renderStatus(`${getIcon("time")} Your current takeout shift is still active.`, { ephemeral: true }));
+      }
+      if (!openResult.ok && openResult.reason === "insufficient_coins") {
+        const needed = Math.max(0, Math.floor(Number(openResult.operatingCost || 0) || 0));
+        const has = Math.max(0, Math.floor(Number(p.coins || 0) || 0));
+        emitTelemetry("takeout_shift_start_blocked", {
+          userId,
+          serverId,
+          reason: "insufficient_coins",
+          neededCoins: needed,
+          hasCoins: has
+        });
+        return finalize(renderStatus(`${getIcon("warning")} You need **${needed}c** to open this 12h shift, but only have **${has}c**.`, { ephemeral: true }));
+      }
+      if (!openResult.ok) {
+        emitTelemetry("takeout_shift_start_blocked", {
+          userId,
+          serverId,
+          reason: String(openResult.reason || "unknown")
+        });
+        return finalize(renderStatus(`${getIcon("warning")} Could not open your takeout shift right now.`, { ephemeral: true }));
+      }
+
+      const coveredUnits = Object.values(openResult.requiredIngredients ?? {})
+        .reduce((sum, qty) => sum + Math.max(0, Math.floor(Number(qty || 0) || 0)), 0);
+      emitTelemetry("takeout_shift_started", {
+        userId,
+        serverId,
+        boardOrderTotal,
+        unlimitedOrders,
+        snapshotOrderTotal: openResult.snapshotOrderTotal,
+        operatingCost: openResult.operatingCost,
+        coveredUnits,
+        menuSize: takeout.menu_recipe_ids.length,
+        startsAt: openResult.startedAt,
+        endsAt: openResult.endsAt
+      });
+
+      return finalize(
+        renderStatus(
+          `${getIcon("status_complete")} Shift opened for **${TAKEOUT_SHIFT_DURATION_HOURS}h** with **${openResult.snapshotOrderTotal}** snapshot orders and a fixed operating cost of **${openResult.operatingCost}c**. ` +
+          `Idle ingredients are pre-covered and isolated from your pantry, and you can start another shift after this one ends.`
+        )
+      );
+    }
+
+    if (sub === "takeout_claim") {
+      const claimed = claimTakeoutEarnings(p, { now });
+      if (!claimed.ok) {
+        emitTelemetry("takeout_claim_attempt", {
+          userId,
+          serverId,
+          ok: false,
+          reason: String(claimed.reason || "unknown"),
+          unclaimedCoins: Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0))
+        });
+        return finalize(renderStatus(`${getIcon("help")} No idle earnings to claim yet.`, { ephemeral: true }));
+      }
+
+      emitTelemetry("takeout_claim_attempt", {
+        userId,
+        serverId,
+        ok: true,
+        amount: claimed.amount,
+        unclaimedCoinsAfter: Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0))
+      });
+
+      return finalize(renderStatus(`${getIcon("coins")} Claimed **${claimed.amount}c** from takeout idle earnings.`));
+    }
+
+    return finalize(renderStatus());
+  });
+
+  return commit(lockedPayload);
+}
+
+/* ---------------- RECIPES ---------------- */
 if (sub === "recipes") {
   const p = ensurePlayer(serverId, userId);
   const allRecipeIds = new Set(Object.keys(content.recipes ?? {}));
@@ -6138,6 +6535,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const effects = prepareCombinedEffects();
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
     activeEventEffects = getActiveEventEffects(eventsContent, s);
+
+    processTakeoutCatchup(p, {
+      now,
+      recipes: content.recipes ?? {},
+      marketPrices: s.market_prices ?? {},
+      items: content.items ?? {}
+    });
 
     // Apply time catch-up (spoilage, inactivity messages, cooldown checks)
     timeCatchup = applyTimeCatchup(p, s, set, content, lastActiveAt, now, effects);
@@ -7818,7 +8222,8 @@ ${lines.join("\n")}`;
     const pityPrice = getPityDiscount(p, itemId);
     const basePrice = pityPrice ?? (s.market_prices?.[itemId] ?? item.base_price);
     const price = applyMarketDiscount(basePrice, combinedEffects);
-    const stock = p.market_stock?.[itemId] ?? 0;
+    const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
+    const stock = unlimitedMarketStock ? Number.MAX_SAFE_INTEGER : (p.market_stock?.[itemId] ?? 0);
     const type = normalizeIngredientType(itemId);
     const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
     const remaining = (perTypeCap[type] ?? perTypeCap.topping ?? 0) - getIngredientCountForType(p, type);
@@ -7833,7 +8238,7 @@ ${lines.join("\n")}`;
     const qtyToBuy = Math.min(qty, remaining);
     const cost = price * qtyToBuy;
 
-    if (stock < qtyToBuy) {
+    if (!unlimitedMarketStock && stock < qtyToBuy) {
       const friendly = displayItemName(itemId);
       return commitState({ content: `Only ${stock} in stock today for **${friendly}**.`, ephemeral: true });
     }
@@ -7852,7 +8257,9 @@ ${lines.join("\n")}`;
 
     p.coins -= cost;
     p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qtyToBuy;
-    p.market_stock[itemId] = stock - qtyToBuy;
+    if (!unlimitedMarketStock) {
+      p.market_stock[itemId] = stock - qtyToBuy;
+    }
 
     applyQuestProgress(p, questsContent, userId, { type: "buy", amount: qtyToBuy }, now);
 
@@ -7864,9 +8271,12 @@ ${lines.join("\n")}`;
     });
 
     const capacityNote = qtyToBuy < qty ? `\n${getIcon("pantry")} Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
+    const subscriptionNote = unlimitedMarketStock
+      ? `\n${getIcon("sparkle")} 24/7 House active: unlimited stock.`
+      : "";
     const buyEmbed = buildMenuEmbed({
       title: `${getIcon("cart")} Purchase Complete`,
-      description: `${getIcon("cart")} Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${tutorialSuffix(p)}`,
+      description: `${getIcon("cart")} Bought **${qtyToBuy}× ${item.name}** for **${cost}c**.${capacityNote}${subscriptionNote}${tutorialSuffix(p)}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
@@ -8239,7 +8649,8 @@ ${lines.join("\n")}`;
     const remaining = availableCount;
     const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC(now2);
     const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
-    const hasMarketStock = Object.values(p.market_stock ?? {}).some((qty) => Number(qty) > 0);
+    const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
+    const hasMarketStock = unlimitedMarketStock || Object.values(p.market_stock ?? {}).some((qty) => Number(qty) > 0);
     const ordersDayKey = p.orders_day ?? dayKeyUTC(now2);
     const nextOrdersResetMs = parseYYYYMMDD(ordersDayKey) + (24 * 60 * 60 * 1000);
     const nextOrdersResetTs = Math.floor(nextOrdersResetMs / 1000);
@@ -8274,6 +8685,9 @@ ${lines.join("\n")}`;
 
     const tutSuffix = tutorialSuffix(p);
     if (tutSuffix) parts.push("", tutSuffix);
+    if (hasHouse247Perk(p)) {
+      parts.push("", `${getIcon("sparkle")} 24/7 House active: unlimited order capacity and market stock.`);
+    }
 
     const showCancel = acceptedEntries.length > 0;
     const highlightAccept = acceptedEntries.length === 0 && remaining > 0;
@@ -8322,7 +8736,7 @@ ${lines.join("\n")}`;
 
     if (!tokens.length) return commitState({ content: "Pick at least one order to accept.", ephemeral: true });
 
-    const cap = 5;
+    const cap = getOrderAcceptCap(p, nowTs());
     // Ensure orders is a valid object (handle case where it might be an array or null)
     if (!p.orders || typeof p.orders !== 'object' || Array.isArray(p.orders)) {
       p.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
@@ -8419,6 +8833,7 @@ ${lines.join("\n")}`;
 
       const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
       const stockRemaining = { ...(p.market_stock ?? {}) };
+      const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
       const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
       const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
       const countsByType = getIngredientCountsByType(p);
@@ -8498,7 +8913,7 @@ ${lines.join("\n")}`;
             }
 
             const stock = stockRemaining[itemId] ?? 0;
-            if (stock < missing) {
+            if (!unlimitedMarketStock && stock < missing) {
               blockedByStock = true;
               orderOk = false;
               break;
@@ -8531,7 +8946,9 @@ ${lines.join("\n")}`;
 
         for (const needItem of neededItems) {
           remainingByType[needItem.type] = Math.max(0, (remainingByType[needItem.type] ?? 0) - needItem.qty);
-          stockRemaining[needItem.itemId] = Math.max(0, (stockRemaining[needItem.itemId] ?? 0) - needItem.qty);
+          if (!unlimitedMarketStock) {
+            stockRemaining[needItem.itemId] = Math.max(0, (stockRemaining[needItem.itemId] ?? 0) - needItem.qty);
+          }
           purchasedByItem[needItem.itemId] = (purchasedByItem[needItem.itemId] ?? 0) + needItem.qty;
         }
 
@@ -8549,7 +8966,9 @@ ${lines.join("\n")}`;
         if (!p.market_stock) p.market_stock = {};
         for (const [id, qty] of Object.entries(purchasedByItem)) {
           p.inv_ingredients[id] = (p.inv_ingredients[id] ?? 0) + qty;
-          p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
+          if (!unlimitedMarketStock) {
+            p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
+          }
         }
         p.coins = coinsRemaining;
         results.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
@@ -10698,6 +11117,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
         let s = ensureServer(serverId);
         let p2 = ensurePlayer(serverId, userId);
         if (!p2.market_stock) p2.market_stock = {};
+        const unlimitedMarketStock = hasUnlimitedMarketStock(p2, nowTs());
 
         const combinedEffects = calculateCombinedEffects(p2, upgradesContent, staffContent, calculateStaffEffects);
         const perTypeCap = getIngredientCapacitiesByType(p2, combinedEffects);
@@ -10741,7 +11161,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
             continue;
           }
 
-          if (stock < qtyToBuy) {
+          if (!unlimitedMarketStock && stock < qtyToBuy) {
             const friendly = displayItemName(id3);
             return {
               content: `Only ${stock} in stock today for **${friendly}**.`,
@@ -10789,7 +11209,9 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
         p2.coins -= totalCost;
 
         for (const x of buyLines) {
-          p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
+          if (!unlimitedMarketStock) {
+            p2.market_stock[x.id] = (p2.market_stock[x.id] ?? 0) - x.qty;
+          }
         }
 
         const totalBought = buyLines.reduce((sum, entry) => sum + entry.qty, 0);
@@ -10809,7 +11231,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const buyEmbed = buildMenuEmbed({
           title: `${getIcon("cart")} Purchase Complete`,
-          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? `\n${getIcon("pantry")} Pantry capacity limited this purchase.` : ""}${tutorialSuffix(p2)}`,
+          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? `\n${getIcon("pantry")} Pantry capacity limited this purchase.` : ""}${unlimitedMarketStock ? `\n${getIcon("sparkle")} 24/7 House active: stock limit bypassed.` : ""}${tutorialSuffix(p2)}`,
           user: interaction.member ?? interaction.user
         });
         buyEmbed.setFooter({
@@ -11141,6 +11563,20 @@ const noodleCommandData = new SlashCommandBuilder()
   .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
   .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
   .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim bot-list vote rewards."))
+  .addSubcommand((sc) => sc.setName("takeout").setDescription("View your Take Out Counter status."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("takeout_menu")
+      .setDescription("Set your Take Out Counter menu (comma-separated recipe ids).")
+      .addStringOption((o) =>
+        o
+          .setName("recipes")
+          .setDescription("Comma-separated recipe ids (max 10).")
+          .setRequired(true)
+      )
+  )
+  .addSubcommand((sc) => sc.setName("takeout_open").setDescription("Open a 12-hour takeout shift."))
+  .addSubcommand((sc) => sc.setName("takeout_claim").setDescription("Claim idle takeout earnings."))
   .addSubcommand((sc) =>
     sc
       .setName("buy")
