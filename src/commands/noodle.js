@@ -4027,7 +4027,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     : "";
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
+    .setCustomId(`noodle:pick:takeout_cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
     .setPlaceholder("Select a recipe to cook")
     .setMinValues(1)
     .setMaxValues(1)
@@ -9484,8 +9484,9 @@ ${lines.join("\n")}`;
       ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: recipe tier risk.${salvageLine}`
       : null;
 
+    const counterCookFlow = Boolean(opt.getBoolean("counter_cook"));
     const cookEmbed = buildMenuEmbed({
-      title: `${getIcon("cook")} Cooked`,
+      title: counterCookFlow ? `${getIcon("cook")} Counter Cook` : `${getIcon("cook")} Cooked`,
       description: [
         `You cooked **${batchOutput}× ${r.name}**.`,
         qtyToCook < qty ? `${getIcon("basket")} Bowl storage limited this cook to **${qtyToCook}**.` : null,
@@ -9505,6 +9506,25 @@ ${lines.join("\n")}`;
       fallbackValue: false
     });
     const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
+
+    if (counterCookFlow) {
+      const takeout = ensureTakeoutState(p);
+      const canCounterServe = getTakeoutRecipeNeedRows(p, takeout)
+        .some((entry) => entry.need > 0 && entry.ready > 0);
+      const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
+      return commitState({
+        content: " ",
+        embeds: [cookEmbed],
+        components: [
+          noodleTakeoutActionRow(userId, {
+            activeShift: true,
+            disableClaim: !canClaim,
+            disableServe: !canCounterServe
+          }),
+          noodleMainMenuRowNoOrdersWithBack(userId)
+        ]
+      });
+    }
 
     return commitState({
       content: " ",
@@ -11599,6 +11619,48 @@ if (cid.startsWith("noodle:pick:takeout_serve_select:")) {
   });
 }
 
+if (cid.startsWith("noodle:pick:takeout_cook_select:")) {
+  const idParts = cid.split(":");
+  const owner = idParts[3];
+  const recipeId = interaction.values?.[0];
+
+  if (owner && owner !== interaction.user.id) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
+  }
+
+  const sourceMessageId = interaction.message?.id ?? "none";
+  const modal = new ModalBuilder()
+    .setCustomId(`noodle:pick:takeout_cook_qty:${userId}:${recipeId}:${sourceMessageId}`)
+    .setTitle("Counter cook bowls");
+
+  const input = new TextInputBuilder()
+    .setCustomId("qty")
+    .setLabel("Quantity")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("1");
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+
+  try {
+    return await interaction.showModal(modal);
+  } catch (e) {
+    console.log(`⚠️ showModal failed for takeout cook:`, e?.message);
+    const code = e?.code ?? e?.message;
+    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+      return;
+    }
+    return componentCommit(interaction, {
+      content: `${getIcon("warning")} Discord couldn't show the modal. Try using Counter Cook again.`,
+      ephemeral: true
+    });
+  }
+}
+
 // cook picker -> open qty modal
 if (cid.startsWith("noodle:pick:cook_select:")) {
   const recipeId = interaction.values?.[0];
@@ -11757,6 +11819,44 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     });
 
     return result;
+  }
+
+  /* ---------------- TAKEOUT COOK QTY MODAL ---------------- */
+  if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:pick:takeout_cook_qty:")) {
+    const parts2 = interaction.customId.split(":");
+    // noodle:pick:takeout_cook_qty:<ownerId>:<recipeId>:<messageId>
+    const owner = parts2[4];
+    const recipeId = parts2[5];
+    const messageId = parts2[6] && parts2[6] !== "none" ? parts2[6] : null;
+
+    if (owner && owner !== interaction.user.id) {
+      return componentCommit(interaction, { content: "That counter cook prompt isn’t for you.", ephemeral: true });
+    }
+
+    const rawQty = String(interaction.fields.getTextInputValue("qty") ?? "").trim();
+    const qty = Number(rawQty);
+
+    if (!Number.isInteger(qty) || qty < 1 || qty > 99) {
+      return componentCommit(interaction, { content: "Enter a whole number quantity (1–99).", ephemeral: true });
+    }
+
+    if (messageId) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return runNoodle(interaction, {
+      sub: "cook",
+      overrides: {
+        strings: { recipe: recipeId },
+        integers: { quantity: qty },
+        booleans: { counter_cook: true },
+        messageId
+      }
+    });
   }
 
   /* ---------------- FORAGE QTY MODAL ---------------- */
