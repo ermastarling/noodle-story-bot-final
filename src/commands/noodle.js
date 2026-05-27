@@ -3327,6 +3327,66 @@ if (idMatches.length === 1) return idMatches[0];
 return null;
 }
 
+function computeMarketShoppingShortages(player, serverState) {
+  const acceptedEntries = Object.entries(player.orders?.accepted ?? {});
+  const allNeeded = {};
+
+  const neededCountsByRecipe = {};
+  acceptedEntries.forEach(([, entry]) => {
+    const recipeId = entry?.order?.recipe_id;
+    if (!recipeId) return;
+    neededCountsByRecipe[recipeId] = (neededCountsByRecipe[recipeId] ?? 0) + 1;
+  });
+
+  for (const [recipeId, neededCount] of Object.entries(neededCountsByRecipe)) {
+    const recipe = content.recipes[recipeId];
+    if (!recipe?.ingredients) continue;
+
+    const ready = getTotalBowlsForRecipe(player, recipeId);
+    const remaining = Math.max(0, neededCount - ready);
+    if (remaining <= 0) continue;
+
+    getRelevantRecipeIngredients(player, recipe).forEach((ing) => {
+      allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (ing.qty * remaining);
+    });
+  }
+
+  const takeoutState = ensureTakeoutState(player);
+  const takeoutActive = isTakeoutShiftActive(player, nowTs());
+  if (takeoutActive) {
+    const takeoutNeedRows = getTakeoutRecipeNeedRows(player, takeoutState).filter((entry) => entry.short > 0);
+    for (const entry of takeoutNeedRows) {
+      const recipe = content.recipes?.[entry.recipeId];
+      if (!recipe?.ingredients) continue;
+      getRelevantRecipeIngredients(player, recipe).forEach((ing) => {
+        if (isIngredientOptionalForPlayer(player, ing)) return;
+        const qty = Math.max(0, Math.floor(Number(ing?.qty || 0) || 0));
+        if (qty <= 0) return;
+        allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (qty * entry.short);
+      });
+    }
+  }
+
+  const shortages = Object.entries(allNeeded)
+    .map(([id, needed]) => {
+      const have = player.inv_ingredients?.[id] ?? 0;
+      const short = Math.max(0, needed - have);
+      return { id, needed, have, short };
+    })
+    .filter((s) => s.short > 0);
+
+  const shoppingShortages = shortages.filter(
+    (s) => MARKET_ITEM_IDS.includes(s.id) && !FORAGE_ITEM_IDS.includes(s.id)
+  );
+
+  return {
+    acceptedEntries,
+    shortages,
+    shoppingShortages,
+    takeoutActive
+  };
+}
+
 function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSellButton = true }) {
   if (!s.market_prices) s.market_prices = {};
   if (!p.market_stock) p.market_stock = {};
@@ -3403,57 +3463,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
       )
     : null;
 
-  const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
-  const allNeeded = {};
-
-  // Account for cooked bowls so shopping list only shows truly missing ingredients
-  const neededCountsByRecipe = {};
-  acceptedEntries.forEach(([, entry]) => {
-    const recipeId = entry?.order?.recipe_id;
-    if (!recipeId) return;
-    neededCountsByRecipe[recipeId] = (neededCountsByRecipe[recipeId] ?? 0) + 1;
-  });
-
-  for (const [recipeId, neededCount] of Object.entries(neededCountsByRecipe)) {
-    const recipe = content.recipes[recipeId];
-    if (!recipe?.ingredients) continue;
-
-    const ready = getTotalBowlsForRecipe(p, recipeId);
-    const remaining = Math.max(0, neededCount - ready);
-    if (remaining <= 0) continue;
-
-    getRelevantRecipeIngredients(p, recipe).forEach((ing) => {
-      allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (ing.qty * remaining);
-    });
-  }
-
-  const takeoutState = ensureTakeoutState(p);
-  const takeoutActive = isTakeoutShiftActive(p, nowTs());
-  if (takeoutActive) {
-    const takeoutNeedRows = getTakeoutRecipeNeedRows(p, takeoutState).filter((entry) => entry.short > 0);
-    for (const entry of takeoutNeedRows) {
-      const recipe = content.recipes?.[entry.recipeId];
-      if (!recipe?.ingredients) continue;
-      getRelevantRecipeIngredients(p, recipe).forEach((ing) => {
-        if (isIngredientOptionalForPlayer(p, ing)) return;
-        const qty = Math.max(0, Math.floor(Number(ing?.qty || 0) || 0));
-        if (qty <= 0) return;
-        allNeeded[ing.item_id] = (allNeeded[ing.item_id] ?? 0) + (qty * entry.short);
-      });
-    }
-  }
-
-  const shortages = Object.entries(allNeeded)
-    .map(([id, needed]) => {
-      const have = p.inv_ingredients?.[id] ?? 0;
-      const short = Math.max(0, needed - have);
-      return { id, needed, have, short };
-    })
-    .filter((s) => s.short > 0);
-
-  const shoppingShortages = shortages.filter(
-    (s) => MARKET_ITEM_IDS.includes(s.id) && !FORAGE_ITEM_IDS.includes(s.id)
-  );
+  const { acceptedEntries, shortages, shoppingShortages, takeoutActive } = computeMarketShoppingShortages(p, s);
 
   const showShoppingList = acceptedEntries.length > 0 || takeoutActive;
   const maxShoppingLines = 8;
@@ -4330,7 +4340,6 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
     : "_No remaining active counter orders._";
   const hiddenOrderCount = Math.max(0, needRows.length - 12);
   const hiddenOrderSuffix = hiddenOrderCount > 0 ? `\n…and **${hiddenOrderCount}** more order lines` : "";
-  const ingredientPageSuffix = shortageRows.length > 0 ? `\n\nPage **${safePage + 1}/${totalPages}**` : "";
 
   const description = [
     "Ingredients needed for your remaining active counter orders (after counting ready bowls).",
@@ -4339,7 +4348,7 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
     `${remainingOrderLines}${hiddenOrderSuffix}`,
     "",
     `${getIcon("basket")} **Needed Ingredients**`,
-    `${neededIngredientLines}${ingredientPageSuffix}`
+    neededIngredientLines
   ].join("\n");
 
   const canCounterServe = needRows.some((entry) => entry.ready > 0);
@@ -4349,6 +4358,11 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
     user: ownerUser,
     color: theme.colors.success
   });
+  if (shortageRows.length > 0) {
+    const existingFooter = embed?.data?.footer?.text ?? embed?.footer?.text ?? "";
+    const pageLabel = `Page ${safePage + 1}/${totalPages}`;
+    embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
+  }
 
   return {
     content: " ",
@@ -4710,6 +4724,10 @@ new ButtonBuilder()
 
 if (!limitToBuy1) {
   btnRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:multibuy:buyneed:${userId}:${msgId}`)
+      .setLabel("Buy Needed")
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle:multibuy:buy5:${userId}:${msgId}`)
       .setLabel("Buy 5 each")
@@ -12123,11 +12141,11 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       return renderMultiBuyPicker({ interaction, userId, s: serverState, p });
     }
 
-    // Buy N each -> perform purchase
-    if (mode === "buy1" || mode === "buy5" || mode === "buy10") {
+    // Buy N each / needed -> perform purchase
+    if (mode === "buy1" || mode === "buy5" || mode === "buy10" || mode === "buyneed") {
       const qtyEach = mode === "buy10" ? 10 : mode === "buy5" ? 5 : 1;
       const sourceMessageId = interaction.message?.id;
-      const action = `multibuy_buy${qtyEach}`;
+      const action = mode === "buyneed" ? "multibuy_buyneed" : `multibuy_buy${qtyEach}`;
       const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
       const cached = db ? getIdempotentResult(db, idemKey) : null;
       if (cached) return componentCommit(interaction, cached);
@@ -12152,7 +12170,16 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
         };
 
         const want = {};
-        for (const id3 of selectedIds) want[id3] = qtyEach;
+        if (mode === "buyneed") {
+          const { shoppingShortages } = computeMarketShoppingShortages(p2, s);
+          const shortById = new Map(shoppingShortages.map((row) => [row.id, row.short]));
+          for (const id3 of selectedIds) {
+            const neededShort = Math.max(0, Math.floor(Number(shortById.get(id3) || 0) || 0));
+            want[id3] = neededShort;
+          }
+        } else {
+          for (const id3 of selectedIds) want[id3] = qtyEach;
+        }
 
         let totalCost = 0;
         const buyLines = [];
@@ -12199,7 +12226,9 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         if (!buyLines.length) {
           return {
-            content: `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
+            content: mode === "buyneed"
+              ? `${getIcon("help")} No purchasable shopping shortages found for the selected items right now.`
+              : `${getIcon("pantry")} Your pantry is full. Upgrade storage or use ingredients to make room.`,
             ephemeral: true
           };
         }
