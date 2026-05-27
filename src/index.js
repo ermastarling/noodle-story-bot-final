@@ -2108,11 +2108,20 @@ import { theme } from "./ui/theme.js";
     const includeCommandsFlag = includeCommands == null
       ? String(process.env.NOODLE_RANKTOP_SYNC_COMMANDS || "1") !== "0"
       : Boolean(includeCommands);
+    const postAuthorization = String(
+      process.env.NOODLE_RANKTOP_POST_AUTHORIZATION
+      || process.env.NOODLE_RANKTOP_WEBHOOK_AUTH
+      || ""
+    ).trim();
 
     const payload = {
       server_count: Number(serverCount) || 0,
       user_count: Number.isFinite(userCount) && userCount >= 0 ? Math.floor(userCount) : 0
     };
+
+    if (postAuthorization) {
+      payload.authorization = postAuthorization;
+    }
 
     if (includeCommandsFlag) {
       payload.commands = buildProviderCommandsPayload({
