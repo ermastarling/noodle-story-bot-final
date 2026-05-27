@@ -1788,13 +1788,14 @@ function noodleOrdersMenuActionRow(userId, {
   showCancel = false,
   highlightAccept = true,
   disableAccept = false,
+  disableCook = false,
   disableServe = false,
   showTakeout = false
 } = {}) {
 const acceptStyle = disableAccept ? ButtonStyle.Secondary : (highlightAccept ? ButtonStyle.Success : ButtonStyle.Secondary);
 const row = new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:pick:accept:${userId}`).setLabel("Accept").setEmoji(getButtonEmoji("status_complete")).setStyle(acceptStyle).setDisabled(disableAccept),
-new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(ButtonStyle.Primary),
+new ButtonBuilder().setCustomId(`noodle:pick:cook:${userId}`).setLabel("Cook").setEmoji(getButtonEmoji("cook")).setStyle(disableCook ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableCook),
 new ButtonBuilder().setCustomId(`noodle:pick:serve:${userId}`).setLabel("Serve").setEmoji(getButtonEmoji("serve")).setStyle(disableServe ? ButtonStyle.Secondary : ButtonStyle.Primary).setDisabled(disableServe)
 );
 
@@ -6186,7 +6187,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const description = [
         banner,
-        "Run a cozy 12-hour counter shift with your selected menu, pay ingredient costs up front, and claim idle coin earnings when ready.",
+        "Set your counter menu, start a cozy 12-hour shift, and collect idle earnings. While the shift is active, your main **Order Board** is idle and all service happens from **Take Out Counter**.",
         "",
         takeoutCatchup?.processedHours > 0
           ? `${getIcon("time")} Catch-up processed **${takeoutCatchup.processedHours}h** and accrued **${takeoutCatchup.earned}c** while you were away.`
@@ -8838,6 +8839,7 @@ ${lines.join("\n")}`;
   if (sub === "orders") {
     const now2 = nowTs();
     const sweep2 = sweepExpiredAcceptedOrders(p, s, content, now2);
+    const takeoutShiftActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now2) && isTakeoutShiftActive(p, now2);
 
     const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
 
@@ -8943,7 +8945,12 @@ ${lines.join("\n")}`;
     const nextOrdersResetMs = parseYYYYMMDD(ordersDayKey) + (24 * 60 * 60 * 1000);
     const nextOrdersResetTs = Math.floor(nextOrdersResetMs / 1000);
     const nextOrdersResetText = `<t:${nextOrdersResetTs}:f> (<t:${nextOrdersResetTs}:R>)`;
-    if (remaining > 0) {
+    if (takeoutShiftActive) {
+      parts.push(
+        "**Today’s Orders**",
+        `${getIcon("time")} Your shop is idle on the main **Order Board** while your Take Out Counter shift is active. Serve orders from **Take Out Counter** until the shift ends.`
+      );
+    } else if (remaining > 0) {
       parts.push(
         "**Today’s Orders**",
         hasHouse247Perk(p)
@@ -8977,8 +8984,10 @@ ${lines.join("\n")}`;
     if (tutSuffix) parts.push("", tutSuffix);
 
     const showCancel = acceptedEntries.length > 0;
-    const highlightAccept = acceptedEntries.length === 0 && remaining > 0;
-    const disableAccept = remaining <= 0;
+    const highlightAccept = !takeoutShiftActive && acceptedEntries.length === 0 && remaining > 0;
+    const disableAccept = takeoutShiftActive || remaining <= 0;
+    const disableCook = takeoutShiftActive;
+    const disableServe = takeoutShiftActive || acceptedEntries.length === 0;
     const showTakeout = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
     const menuEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Orders`,
@@ -9001,7 +9010,8 @@ ${lines.join("\n")}`;
               showCancel,
               highlightAccept,
               disableAccept,
-              disableServe: acceptedEntries.length === 0,
+              disableCook,
+              disableServe,
               showTakeout
             }),
             noodleMainMenuRowNoOrders(userId)
@@ -9011,6 +9021,15 @@ ${lines.join("\n")}`;
 
   /* ---------------- ACCEPT -------- */
   if (sub === "accept") {
+    const now2 = nowTs();
+    const takeoutShiftActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now2) && isTakeoutShiftActive(p, now2);
+    if (takeoutShiftActive) {
+      return commitState({
+        content: `${getIcon("time")} Your shop is idle on the main **Order Board** while Take Out Counter is active. Serve orders from **Take Out Counter** until the shift ends.`,
+        ephemeral: true
+      });
+    }
+
     const rawInput = String(opt.getString("order_id") ?? "").trim();
     if (!rawInput) {
       const payload = buildAcceptPickerPayload({
@@ -9413,6 +9432,15 @@ ${lines.join("\n")}`;
 
   /* ---------------- SERVE ---------------- */
   if (sub === "serve") {
+    const now2 = nowTs();
+    const takeoutShiftActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now2) && isTakeoutShiftActive(p, now2);
+    if (takeoutShiftActive) {
+      return commitState({
+        content: `${getIcon("time")} Your shop is idle on the main **Order Board** while Take Out Counter is active. Serve orders from **Take Out Counter** until the shift ends.`,
+        ephemeral: true
+      });
+    }
+
     const rawInput = String(opt.getString("order_id") ?? "").trim();
     const bowlKey = opt.getString("bowl_key") ?? null;
     const tokens = rawInput
