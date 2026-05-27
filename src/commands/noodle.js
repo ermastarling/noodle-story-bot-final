@@ -1817,17 +1817,17 @@ function noodleTakeoutActionRow(userId, { disableOpen = false, disableClaim = fa
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:takeout:${userId}`)
-      .setLabel("Status")
+      .setLabel("Counter")
       .setEmoji(getButtonEmoji("orders"))
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:takeout_menu:${userId}`)
-      .setLabel("Set Menu")
+      .setLabel("Menu")
       .setEmoji(getButtonEmoji("recipes"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:takeout_open:${userId}`)
-      .setLabel("Open")
+      .setLabel("Start Shift")
       .setEmoji(getButtonEmoji("status_complete"))
       .setStyle(disableOpen ? ButtonStyle.Secondary : ButtonStyle.Success)
       .setDisabled(disableOpen),
@@ -6244,7 +6244,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
 
       return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`, {
-        showMenuPicker: true,
+        showMenuPicker: false,
         menuPage: requestedMenuPage
       }));
     }
