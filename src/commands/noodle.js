@@ -1840,6 +1840,36 @@ function noodleTakeoutActionRow(userId, { disableOpen = false, disableClaim = fa
   );
 }
 
+function buildTakeoutMenuSelectRow(userId, {
+  availableRecipeIds = [],
+  selectedRecipeIds = [],
+  minRequired = 1,
+  maxAllowed = 1
+} = {}) {
+  const options = [...availableRecipeIds]
+    .sort((a, b) => displayRecipeName(a).localeCompare(displayRecipeName(b), undefined, { sensitivity: "base" }))
+    .slice(0, 25)
+    .map((recipeId) => ({
+      label: displayRecipeName(recipeId).slice(0, 100),
+      value: recipeId,
+      default: selectedRecipeIds.includes(recipeId)
+    }));
+
+  if (!options.length) return null;
+
+  const safeMax = Math.max(1, Math.min(maxAllowed, options.length));
+  const safeMin = Math.max(1, Math.min(minRequired, safeMax));
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`noodle:takeout:menu_select:${userId}`)
+    .setPlaceholder("Pick recipes for your takeout menu")
+    .setMinValues(safeMin)
+    .setMaxValues(safeMax)
+    .addOptions(options);
+
+  return new ActionRowBuilder().addComponents(menu);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Small helpers                                                      */
 /* ------------------------------------------------------------------ */
@@ -6040,7 +6070,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
     const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
 
-    const renderStatus = (banner = null, { ephemeral = false } = {}) => {
+    const renderStatus = (banner = null, { ephemeral = false, showMenuPicker = false } = {}) => {
       const active = isTakeoutShiftActive(p, nowTs());
       const shiftEndsAt = Number(takeout.shift?.ends_at || 0);
       const shiftStartedAt = Number(takeout.shift?.started_at || 0);
@@ -6119,11 +6149,20 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const canOpenShift = !active && takeout.menu_recipe_ids.length >= menuLimits.minRequired;
       const canClaim = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0)) > 0;
+      const menuPickerRow = showMenuPicker
+        ? buildTakeoutMenuSelectRow(userId, {
+            availableRecipeIds,
+            selectedRecipeIds: takeout.menu_recipe_ids,
+            minRequired: menuLimits.minRequired,
+            maxAllowed: menuLimits.maxAllowed
+          })
+        : null;
 
       return {
         content: " ",
         embeds: [embed],
         components: [
+          ...(menuPickerRow ? [menuPickerRow] : []),
           noodleTakeoutActionRow(userId, { disableOpen: !canOpenShift, disableClaim: !canClaim }),
           noodleMainMenuRowNoOrders(userId)
         ],
@@ -6134,7 +6173,10 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     if (sub === "takeout_menu") {
       const rawRecipes = String(opt.getString("recipes") || "").trim();
       if (!rawRecipes) {
-        return finalize(renderStatus(`${getIcon("help")} Provide recipe ids via the recipes option (comma-separated).`, { ephemeral: true }));
+        if (!availableRecipeIds.length) {
+          return finalize(renderStatus(`${getIcon("warning")} You need at least one learned recipe before setting a takeout menu.`, { ephemeral: true }));
+        }
+        return finalize(renderStatus(`${getIcon("recipes")} Pick recipes below to set your takeout menu.`, { showMenuPicker: true }));
       }
 
       const requestedIds = rawRecipes
@@ -6166,7 +6208,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         }));
       }
 
-      return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`));
+      return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`, { showMenuPicker: true }));
     }
 
     if (sub === "takeout_open") {
@@ -10707,6 +10749,26 @@ return componentCommit(interaction, { content: "Unknown picker action.", ephemer
 // Handle select menus for pickers:
 if (interaction.isSelectMenu?.()) {
 const cid = interaction.customId;
+
+if (cid.startsWith("noodle:takeout:menu_select:")) {
+  const owner = cid.split(":")[3];
+  if (owner && owner !== interaction.user.id) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+
+  const selectedRecipeIds = (interaction.values ?? []).filter(Boolean);
+  if (!selectedRecipeIds.length) {
+    return componentCommit(interaction, { content: `${getIcon("help")} Pick at least one recipe.`, ephemeral: true });
+  }
+
+  return runNoodle(interaction, {
+    sub: "takeout_menu",
+    overrides: {
+      strings: { recipes: selectedRecipeIds.join(",") },
+      messageId: interaction.message?.id ?? null
+    }
+  });
+}
 
 // accept picker
 if (cid.startsWith("noodle:pick:accept_select:")) {
