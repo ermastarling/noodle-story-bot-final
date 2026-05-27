@@ -11662,20 +11662,25 @@ const noodleCommandData = new SlashCommandBuilder()
   .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
   .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
   .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim bot-list vote rewards."))
-  .addSubcommand((sc) => sc.setName("takeout").setDescription("View your Take Out Counter status."))
-  .addSubcommand((sc) =>
-    sc
-      .setName("takeout_menu")
-      .setDescription("Set your Take Out Counter menu (comma-separated recipe ids).")
-      .addStringOption((o) =>
-        o
-          .setName("recipes")
-          .setDescription("Comma-separated recipe ids (max 10).")
-          .setRequired(true)
+  .addSubcommandGroup((sg) =>
+    sg
+      .setName("takeout")
+      .setDescription("Take Out Counter actions.")
+      .addSubcommand((sc) => sc.setName("status").setDescription("View your Take Out Counter status."))
+      .addSubcommand((sc) =>
+        sc
+          .setName("menu")
+          .setDescription("Set your Take Out Counter menu (comma-separated recipe ids).")
+          .addStringOption((o) =>
+            o
+              .setName("recipes")
+              .setDescription("Comma-separated recipe ids (max 10).")
+              .setRequired(true)
+          )
       )
+      .addSubcommand((sc) => sc.setName("open").setDescription("Open a 12-hour takeout shift."))
+      .addSubcommand((sc) => sc.setName("claim").setDescription("Claim idle takeout earnings."))
   )
-  .addSubcommand((sc) => sc.setName("takeout_open").setDescription("Open a 12-hour takeout shift."))
-  .addSubcommand((sc) => sc.setName("takeout_claim").setDescription("Claim idle takeout earnings."))
   .addSubcommand((sc) =>
     sc
       .setName("buy")
@@ -11736,8 +11741,19 @@ export const noodleCommand = {
   data: noodleCommandData,
 
   async execute(interaction) {
-    const sub = interaction.options.getSubcommand();
+    const rawSub = interaction.options.getSubcommand();
     const group = interaction.options.getSubcommandGroup(false);
+    const sub = group === "takeout"
+      ? (rawSub === "status"
+          ? "takeout"
+          : rawSub === "menu"
+            ? "takeout_menu"
+            : rawSub === "open"
+              ? "takeout_open"
+              : rawSub === "claim"
+                ? "takeout_claim"
+                : rawSub)
+      : rawSub;
     return runNoodle(interaction, { sub, group });
   },
 

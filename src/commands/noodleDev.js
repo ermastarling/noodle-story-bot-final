@@ -70,19 +70,6 @@ const noodleDevData = new SlashCommandBuilder()
     sc
       .setName("subscriptions_toggle")
       .setDescription("Dev only.")
-      .addUserOption((o) => o.setName("user").setDescription("User to update").setRequired(false))
-      .addStringOption((o) =>
-        o
-          .setName("user_id")
-          .setDescription("User ID (use if the user left the server)")
-          .setRequired(false)
-      )
-      .addStringOption((o) =>
-        o
-          .setName("server_id")
-          .setDescription("Override server ID (defaults to current guild)")
-          .setRequired(false)
-      )
       .addStringOption((o) =>
         o
           .setName("perk")
@@ -99,6 +86,19 @@ const noodleDevData = new SlashCommandBuilder()
           .setName("active")
           .setDescription("Set perk state (true=enable, false=disable)")
           .setRequired(true)
+      )
+      .addUserOption((o) => o.setName("user").setDescription("User to update").setRequired(false))
+      .addStringOption((o) =>
+        o
+          .setName("user_id")
+          .setDescription("User ID (use if the user left the server)")
+          .setRequired(false)
+      )
+      .addStringOption((o) =>
+        o
+          .setName("server_id")
+          .setDescription("Override server ID (defaults to current guild)")
+          .setRequired(false)
       )
       .addIntegerOption((o) =>
         o
