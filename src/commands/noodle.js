@@ -6134,14 +6134,37 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           .join("\n")
         : "_No counter orders to show yet._";
 
+      const previewNow = active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0
+        ? shiftEndsAt + 1000
+        : now;
+      const previewPlayer = JSON.parse(JSON.stringify(p));
+      const previewBoardOrderTotal = Math.max(0, Math.floor(Number(p.orders_total_count || 0) || 0));
+      const previewResult = startTakeoutShiftWithCoverage(previewPlayer, {
+        now: previewNow,
+        boardOrderTotal: previewBoardOrderTotal,
+        unlimitedOrders: hasHouse247Perk(p),
+        recipes: content.recipes ?? {},
+        marketPrices: s.market_prices ?? {},
+        items: content.items ?? {}
+      });
+
+      const projectedOperatingCost = Math.max(
+        0,
+        Math.floor(Number(previewResult?.operatingCost || 0) || 0)
+      );
+      const projectedOrders = Math.max(
+        0,
+        Math.floor(Number(previewResult?.snapshotOrderTotal || 0) || 0)
+      );
+
       const statusBits = [];
       if (active && Number.isFinite(shiftEndsAt) && shiftEndsAt > 0) {
         statusBits.push(`${getIcon("time")} **Shift Active** until <t:${Math.floor(shiftEndsAt / 1000)}:R> (<t:${Math.floor(shiftEndsAt / 1000)}:f>)`);
-        statusBits.push(`${getIcon("refresh")} Next eligible shift: <t:${Math.floor(shiftEndsAt / 1000)}:R>`);
       } else {
         statusBits.push(`${getIcon("status_pending")} **Shift Inactive**`);
-        statusBits.push(`${getIcon("refresh")} Next eligible shift: **Now**`);
       }
+      statusBits.push(`${getIcon("coins")} Next shift ingredient cost: **${projectedOperatingCost}c**`);
+      statusBits.push(`${getIcon("orders")} Next shift expected orders served: **${projectedOrders}**`);
       if (Number.isFinite(shiftStartedAt) && shiftStartedAt > 0) {
         statusBits.push(`${getIcon("calendar")} Last start: <t:${Math.floor(shiftStartedAt / 1000)}:f>`);
       }
@@ -6161,6 +6184,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const description = [
         banner,
+        "Run a 12-hour counter shift with your selected menu, pay ingredient costs up front, and claim idle coin earnings when ready.",
         takeoutCatchup?.processedHours > 0
           ? `${getIcon("time")} Catch-up processed **${takeoutCatchup.processedHours}h** and accrued **${takeoutCatchup.earned}c** while you were away.`
           : null,
