@@ -1548,13 +1548,25 @@ function noodleOrdersAcceptOnlyRow(userId, { highlightAccept = true, disableAcce
   );
 }
 
-function noodleMainMenuRowNoProfile(userId, { newsAvailable = false } = {}) {
-  return new ActionRowBuilder().addComponents(
+function noodleMainMenuRowNoProfile(userId, { newsAvailable = false, showTakeout = false } = {}) {
+  const buttons = [
     new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:nav:buy:${userId}`).setLabel("Buy").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry").setEmoji(getButtonEmoji("pantry")).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`noodle:nav:news:${userId}`).setLabel("News").setEmoji(getButtonEmoji("new")).setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
-  );
+  ];
+  if (showTakeout) {
+    buttons.splice(
+      1,
+      0,
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:takeout:${userId}`)
+        .setLabel("Takeout")
+        .setEmoji(getButtonEmoji("orders"))
+        .setStyle(ButtonStyle.Success)
+    );
+  }
+  return new ActionRowBuilder().addComponents(buttons);
 }
 
 function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false, active = null, allowLockedKitchenInfo = false } = {}) {
@@ -4717,17 +4729,19 @@ const selectedNames = formatSelectedItemNames(selectedIds);
 const msgId = sourceMessageId || "none";
 const btnRow = new ActionRowBuilder().addComponents(
 new ButtonBuilder()
-.setCustomId(`noodle:multibuy:buy1:${userId}:${msgId}`)
-.setLabel("Buy 1 each")
-.setStyle(ButtonStyle.Success)
+  .setCustomId(`noodle:multibuy:buy1:${userId}:${msgId}`)
+  .setLabel("Buy 1 each")
+  .setStyle(ButtonStyle.Success)
 );
 
 if (!limitToBuy1) {
-  btnRow.addComponents(
+  const baseBuyOneButton = btnRow.components[0];
+  btnRow.setComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:multibuy:buyneed:${userId}:${msgId}`)
       .setLabel("Buy Needed")
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Success),
+    baseBuyOneButton,
     new ButtonBuilder()
       .setCustomId(`noodle:multibuy:buy5:${userId}:${msgId}`)
       .setLabel("Buy 5 each")
@@ -5586,6 +5600,7 @@ if (sub === "profile") {
   const questsAvailable = hasDailyRewardAvailable(selfPlayer, nowTs()) || hasClaimableQuests(selfPlayer);
   const specializationsAvailable = getSpecializationAlert(selfPlayer);
   const newsAvailable = viewingSelf && hasUnreadNewsUpdate(selfPlayer, newsContent);
+  const showTakeoutProfileButton = viewingSelf && hasActivePerk(selfPlayer, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
   const party = getUserActiveParty(db, u.id);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
@@ -5602,7 +5617,7 @@ if (sub === "profile") {
     embed.setFooter({ text: footerText });
   }
   const profileComponents = viewingSelf
-    ? [noodleMainMenuRowNoProfile(userId, { newsAvailable }), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
+    ? [noodleMainMenuRowNoProfile(userId, { newsAvailable, showTakeout: showTakeoutProfileButton }), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
     : [];
   const embedsWithFooter = applyGreenButtonFooter([embed], profileComponents);
   
