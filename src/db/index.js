@@ -468,8 +468,9 @@ function prunePlayerBeforePersist(player) {
       }
     }
 
-    // Safety cap: keep the most recent accepted orders (should normally stay under 5).
-    const ACCEPTED_CAP = 10;
+    // Safety cap: keep the most recent accepted orders.
+    // 24/7 House expands active order capacity, so this must be comfortably higher than base mode.
+    const ACCEPTED_CAP = 500;
     const acceptedEntries = Object.entries(orders.accepted);
     if (acceptedEntries.length > ACCEPTED_CAP) {
       const sorted = acceptedEntries.sort((a, b) => {

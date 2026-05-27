@@ -61,6 +61,13 @@ import { theme } from "./ui/theme.js";
   const { getKitchenUnlockState, KITCHEN_BROTH_RECIPES } = await import("./game/kitchen.js");
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
+  const {
+    applySubscriptionEntitlementEvent,
+    applyMonthlySubscriptionCoinGrant,
+    hasActivePerk,
+    resolveSubscriptionBillingPeriodKey,
+    resolveSubscriptionPerkId
+  } = await import("./game/subscriptions.js");
   const { ensureSpecializationState, getSpecializationById } = await import("./game/specialization.js");
   const { getAvailableRecipes } = await import("./game/resilience.js");
   const {
@@ -1229,7 +1236,23 @@ import { theme } from "./ui/theme.js";
       skuId: data?.sku_id ?? data?.skuId ?? payload?.sku_id ?? payload?.skuId ?? null,
       userId: data?.user_id ?? data?.userId ?? payload?.user_id ?? payload?.userId ?? null,
       guildId: data?.guild_id ?? data?.guildId ?? payload?.guild_id ?? payload?.guildId ?? null,
-      entitlementId: data?.id ?? data?.entitlement_id ?? payload?.entitlement_id ?? payload?.id ?? null
+      entitlementId: data?.id ?? data?.entitlement_id ?? payload?.entitlement_id ?? payload?.id ?? null,
+      periodStartAt:
+        data?.starts_at
+        ?? data?.start_at
+        ?? data?.period_start
+        ?? data?.current_period_start
+        ?? payload?.starts_at
+        ?? payload?.period_start
+        ?? null,
+      periodEndAt:
+        data?.ends_at
+        ?? data?.end_at
+        ?? data?.period_end
+        ?? data?.current_period_end
+        ?? payload?.ends_at
+        ?? payload?.period_end
+        ?? null
     };
   }
 
@@ -2892,17 +2915,125 @@ import { theme } from "./ui/theme.js";
         return;
       }
 
-      const { eventType, skuId, userId, guildId, entitlementId } = extractEntitlementPayload(payload);
-      if (eventType !== "ENTITLEMENT_CREATE") {
-        res.writeHead(200, { "content-type": "text/plain" });
-        res.end("ignored");
+      const {
+        eventType,
+        skuId,
+        userId,
+        guildId,
+        entitlementId,
+        periodStartAt,
+        periodEndAt
+      } = extractEntitlementPayload(payload);
+      const specId = resolveStoreBundleSpecId(skuId);
+      const perkId = resolveSubscriptionPerkId(skuId);
+
+      if (!userId || (!specId && !perkId)) {
+        res.writeHead(202, { "content-type": "text/plain" });
+        res.end("missing sku or user");
         return;
       }
 
-      const specId = resolveStoreBundleSpecId(skuId);
-      if (!specId || !userId) {
-        res.writeHead(202, { "content-type": "text/plain" });
-        res.end("missing sku or user");
+      if (perkId) {
+        const billingPeriodKey = resolveSubscriptionBillingPeriodKey({
+          periodStartAt,
+          periodEndAt,
+          now: Date.now()
+        });
+        const subscriptionIdempotencyKey = entitlementId
+          ? `discord_subscription:${eventType}:${entitlementId}`
+          : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}`;
+
+        const cached = getIdempotentResult(db, subscriptionIdempotencyKey);
+        if (cached) {
+          res.writeHead(200, { "content-type": "text/plain" });
+          res.end("ok");
+          return;
+        }
+
+        const subscriptionServerId = guildId || getLatestServerIdForUser(db, userId);
+        if (!subscriptionServerId) {
+          webhookWarn("Discord: Missing server for subscription user", userId);
+          res.writeHead(202, { "content-type": "text/plain" });
+          res.end("missing server");
+          return;
+        }
+
+        let subscriptionPlayer = getPlayer(db, subscriptionServerId, userId);
+        if (!subscriptionPlayer) subscriptionPlayer = newPlayerProfile(userId);
+
+        const lifecycleResult = applySubscriptionEntitlementEvent(subscriptionPlayer, {
+          perkId,
+          eventType,
+          entitlementId,
+          periodStartAt,
+          periodEndAt,
+          now: Date.now()
+        });
+
+        let monthlyGrantResult = { ok: true, granted: false, amount: 0, billingPeriodKey: null };
+        if (lifecycleResult.ok && (eventType === "ENTITLEMENT_CREATE" || eventType === "ENTITLEMENT_UPDATE")) {
+          monthlyGrantResult = applyMonthlySubscriptionCoinGrant(subscriptionPlayer, {
+            perkId,
+            periodStartAt,
+            periodEndAt,
+            now: Date.now()
+          });
+        }
+
+        if (lifecycleResult.ok || monthlyGrantResult.granted) {
+          upsertPlayer(db, subscriptionServerId, userId, subscriptionPlayer, null, subscriptionPlayer.schema_version);
+        }
+
+        webhookInfo(
+          "Discord: Subscription entitlement result",
+          JSON.stringify({
+            ok: lifecycleResult.ok,
+            reason: lifecycleResult.reason ?? null,
+            eventType,
+            perkId,
+            userId,
+            serverId: subscriptionServerId,
+            active: hasActivePerk(subscriptionPlayer, perkId),
+            monthlyCoinsGranted: monthlyGrantResult.granted ? monthlyGrantResult.amount : 0,
+            billingPeriodKey: monthlyGrantResult.billingPeriodKey ?? null
+          })
+        );
+
+        emitTelemetry("subscription_state_change", {
+          userId,
+          serverId: subscriptionServerId,
+          perkId,
+          eventType,
+          active: hasActivePerk(subscriptionPlayer, perkId),
+          lifecycleOk: Boolean(lifecycleResult.ok),
+          lifecycleReason: lifecycleResult.reason ?? null,
+          monthlyCoinsGranted: monthlyGrantResult.granted ? monthlyGrantResult.amount : 0,
+          billingPeriodKey: monthlyGrantResult.billingPeriodKey ?? null
+        });
+
+        putIdempotentResult(db, {
+          key: subscriptionIdempotencyKey,
+          userId,
+          action: "discord_subscription_entitlement",
+          ttlSeconds: 60 * 60 * 24 * 30,
+          result: {
+            ok: Boolean(lifecycleResult.ok),
+            perkId,
+            eventType,
+            active: hasActivePerk(subscriptionPlayer, perkId),
+            monthlyCoinsGranted: monthlyGrantResult.granted ? monthlyGrantResult.amount : 0,
+            billingPeriodKey: monthlyGrantResult.billingPeriodKey ?? null
+          }
+        });
+
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end(lifecycleResult.ok ? "ok" : "ignored");
+        return;
+      }
+
+      if (eventType !== "ENTITLEMENT_CREATE") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("ignored");
         return;
       }
 

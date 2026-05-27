@@ -1,5 +1,7 @@
 import { STARTER_PROFILE, DATA_SCHEMA_VERSION, TUTORIAL_QUESTS } from "../constants.js";
 import { nowTs } from "../util/time.js";
+import { createDefaultSubscriptionState } from "./subscriptions.js";
+import { createDefaultTakeoutState } from "./takeout.js";
 
 export function newPlayerProfile(userId) {
   return {
@@ -82,6 +84,10 @@ export function newPlayerProfile(userId) {
       active_blessing: null,
       last_blessing_at: null
     },
+
+    subscriptions: createDefaultSubscriptionState(),
+
+    takeout: createDefaultTakeoutState(),
 
     notifications: {
       pending_pantry_messages: [],
