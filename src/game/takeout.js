@@ -337,11 +337,13 @@ export function processTakeoutCatchup(player, {
 
       const hourly = Array.isArray(row?.hourly_order_counts) ? row.hourly_order_counts : [];
       const orderCount = Math.max(0, Math.floor(Number(hourly[hour] || 0) || 0));
-      if (orderCount <= 0) continue;
+      const visibleRemaining = Math.max(0, Math.floor(Number(row?.visible_order_count || 0) || 0));
+      const orderCountToProcess = Math.min(orderCount, visibleRemaining);
+      if (orderCountToProcess <= 0) continue;
 
       const recipe = recipes?.[recipeId];
       const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
-      const served = consumeCoveredIngredients(coveredIngredients, ingredients, orderCount);
+      const served = consumeCoveredIngredients(coveredIngredients, ingredients, orderCountToProcess);
       if (served <= 0) continue;
 
       const perOrderCoins = resolveTakeoutOrderCoinValue(recipeId, { recipes, marketPrices, items });

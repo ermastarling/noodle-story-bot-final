@@ -481,3 +481,50 @@ test("Takeout: catch-up decrements visible snapshot demand for served orders", (
   assert.equal(player.takeout.shift.idle_order_board_snapshot[0].visible_order_count, 0);
   assert.equal(player.lifetime.orders_served, 4);
 });
+
+test("Takeout: catch-up respects manual serve reductions in visible order count", () => {
+  const player = {
+    takeout: {
+      menu_recipe_ids: ["r1"],
+      shift: {
+        status: "active",
+        started_at: 0,
+        ends_at: TAKEOUT_SHIFT_DURATION_MS,
+        last_processed_hour_index: 0,
+        last_tick_at: 0,
+        operating_cost_paid_marker: "takeout_shift:0",
+        operating_cost: 0,
+        required_ingredients: { i1: 4 },
+        covered_ingredients: { i1: 4 },
+        idle_order_board_snapshot: [
+          {
+            recipe_id: "r1",
+            visible_order_count: 1,
+            total_orders: 4,
+            hourly_order_counts: [2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }
+        ]
+      },
+      earned_unclaimed_coins: 0,
+      updated_at: 0
+    },
+    lifetime: {
+      bowls_served_total: 0,
+      orders_served: 0
+    }
+  };
+
+  const result = processTakeoutCatchup(player, {
+    now: 2 * 60 * 60 * 1000,
+    recipes: {
+      r1: { tier: "common", ingredients: [{ item_id: "i1", qty: 1 }] }
+    },
+    marketPrices: { i1: 1 },
+    items: { i1: { base_price: 1 } }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.processedHours, 2);
+  assert.equal(player.takeout.shift.idle_order_board_snapshot[0].visible_order_count, 0);
+  assert.equal(player.lifetime.orders_served, 1);
+});
