@@ -347,6 +347,10 @@ export function processTakeoutCatchup(player, {
       const perOrderCoins = resolveTakeoutOrderCoinValue(recipeId, { recipes, marketPrices, items });
       earned += perOrderCoins * served;
 
+      // Keep snapshot demand in sync with idle catch-up so served orders are not re-servable.
+      const remainingVisible = Math.max(0, Math.floor(Number(row?.visible_order_count || 0) || 0) - served);
+      row.visible_order_count = remainingVisible;
+
       if (!player.lifetime || typeof player.lifetime !== "object") player.lifetime = {};
       player.lifetime.bowls_served_total = (Number(player.lifetime.bowls_served_total) || 0) + served;
       player.lifetime.orders_served = (Number(player.lifetime.orders_served) || 0) + served;
@@ -482,6 +486,7 @@ export function startTakeoutShiftWithCoverage(player, {
     return {
       ok: false,
       reason: "insufficient_coins",
+      snapshotOrderTotal,
       operatingCost,
       requiredIngredients,
       snapshot

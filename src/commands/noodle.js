@@ -6662,6 +6662,19 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         marketPrices: s.market_prices ?? {},
         items: content.items ?? {}
       });
+      const previewSnapshot = Array.isArray(previewResult?.snapshot) ? previewResult.snapshot : [];
+      const previewSnapshotOrderTotal = Math.max(
+        0,
+        Math.floor(
+          Number(
+            previewResult?.snapshotOrderTotal
+            ?? previewSnapshot.reduce(
+              (sum, row) => sum + Math.max(0, Math.floor(Number(row?.total_orders ?? row?.visible_order_count ?? 0) || 0)),
+              0
+            )
+          ) || 0
+        )
+      );
 
       const quote = {
         created_at: nowMs,
@@ -6669,10 +6682,10 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         menu_key: currentMenuKey,
         board_order_total: boardOrderTotal,
         unlimited_orders: unlimitedOrders,
-        snapshot_order_total: Math.max(0, Math.floor(Number(previewResult?.snapshotOrderTotal || 0) || 0)),
+        snapshot_order_total: previewSnapshotOrderTotal,
         operating_cost: Math.max(0, Math.floor(Number(previewResult?.operatingCost || 0) || 0)),
         required_ingredients: previewResult?.requiredIngredients ?? {},
-        snapshot: Array.isArray(previewResult?.snapshot) ? previewResult.snapshot : []
+        snapshot: previewSnapshot
       };
 
       if (!quote.snapshot.length || quote.snapshot_order_total <= 0) {
@@ -12536,7 +12549,10 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
           const remaining = remainingByType[type] ?? 0;
           const capacity = checkIngredientCapacity(p2, id3, 0);
           const stackRemaining = Math.max(0, (capacity.maxCapacity ?? 0) - (capacity.currentQty ?? 0));
-          const qtyToBuy = Math.min(qty3, remaining, stackRemaining);
+          const requestedQty = Math.max(0, Math.floor(Number(qty3 || 0) || 0));
+          if (requestedQty <= 0) continue;
+
+          const qtyToBuy = Math.min(requestedQty, remaining, stackRemaining);
 
           if (qtyToBuy <= 0) {
             capacityReduced = true;
@@ -12551,7 +12567,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
             };
           }
 
-          if (qtyToBuy < qty3) capacityReduced = true;
+          if (qtyToBuy < requestedQty) capacityReduced = true;
 
           totalCost += price * qtyToBuy;
           buyLines.push({ id: id3, qty: qtyToBuy, name: it.name, price });
