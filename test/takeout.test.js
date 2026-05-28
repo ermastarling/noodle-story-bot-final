@@ -245,6 +245,21 @@ test("Takeout: snapshot distribution is deterministic and sums to board total", 
   assert.ok(Math.max(...hourlyTotals) - Math.min(...hourlyTotals) <= 1);
 });
 
+test("Takeout: snapshot honors custom hour count without sparse arrays", () => {
+  const snapshot = buildTakeoutShiftSnapshot(["r1", "r2"], { hours: 6, totalOrders: 60 });
+  assert.equal(snapshot.length, 2);
+
+  for (const row of snapshot) {
+    assert.equal(row.hourly_order_counts.length, 6);
+    assert.ok(row.hourly_order_counts.every((v) => Number.isFinite(v)));
+  }
+
+  const hourlyTotals = Array.from({ length: 6 }, (_, hour) =>
+    snapshot.reduce((sum, row) => sum + (row.hourly_order_counts[hour] ?? 0), 0)
+  );
+  assert.equal(hourlyTotals.reduce((sum, count) => sum + count, 0), 60);
+});
+
 test("Takeout: non-24/7 users snapshot board-total-at-open", () => {
   const player = { coins: 50_000, takeout: createDefaultTakeoutState() };
   player.takeout.menu_recipe_ids = ["r1", "r2"];

@@ -102,12 +102,13 @@ export function normalizeTakeoutMenuSelection({ selectedRecipeIds = [], learnedR
   return deduped;
 }
 
-function buildShiftSnapshot(menuRecipeIds = []) {
+function buildShiftSnapshot(menuRecipeIds = [], hours = TAKEOUT_SHIFT_DURATION_HOURS) {
+  const totalHours = Math.max(1, Math.floor(Number(hours) || TAKEOUT_SHIFT_DURATION_HOURS));
   return menuRecipeIds.map((recipeId) => ({
     recipe_id: recipeId,
     visible_order_count: 0,
     total_orders: 0,
-    hourly_order_counts: Array.from({ length: TAKEOUT_SHIFT_DURATION_HOURS }, () => 0)
+    hourly_order_counts: Array.from({ length: totalHours }, () => 0)
   }));
 }
 
@@ -133,10 +134,10 @@ export function buildTakeoutShiftSnapshot(menuRecipeIds = [], {
   hours = TAKEOUT_SHIFT_DURATION_HOURS,
   totalOrders = TAKEOUT_SNAPSHOT_MIN_ORDERS
 } = {}) {
-  const out = buildShiftSnapshot(menuRecipeIds);
+  const totalHours = Math.max(1, Math.floor(Number(hours) || TAKEOUT_SHIFT_DURATION_HOURS));
+  const out = buildShiftSnapshot(menuRecipeIds, totalHours);
   if (!out.length) return out;
 
-  const totalHours = Math.max(1, Math.floor(Number(hours) || TAKEOUT_SHIFT_DURATION_HOURS));
   const menuSize = out.length;
   const parsedTotalOrders = Number(totalOrders);
   const orderTotal = Number.isFinite(parsedTotalOrders) && parsedTotalOrders > 0
