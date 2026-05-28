@@ -4280,20 +4280,6 @@ function getTakeoutIngredientShortages(player, takeoutState) {
     .sort((a, b) => displayItemName(a.itemId).localeCompare(displayItemName(b.itemId), "en", { sensitivity: "base" }));
 }
 
-function buildTakeoutNeededIngredientsBlock(player, takeoutState, { maxLines = 10 } = {}) {
-  const shortageRows = getTakeoutIngredientShortages(player, takeoutState);
-  if (!shortageRows.length) {
-    return `${getIcon("basket")} **Needed Ingredients (Counter Orders)**\n_All ingredients currently ready for remaining counter orders._`;
-  }
-
-  const lines = shortageRows.slice(0, maxLines).map((row) => (
-    `• ${displayItemName(row.itemId)} — need **${row.needed}**, have **${row.have}** (short **${row.short}**)`
-  ));
-  const more = shortageRows.length > maxLines ? `\n…and **${shortageRows.length - maxLines}** more` : "";
-
-  return `${getIcon("basket")} **Needed Ingredients**\n${lines.join("\n")}${more}`;
-}
-
 function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0 }) {
   const menuRecipeIds = (takeout?.menu_recipe_ids ?? []).filter((rid) => content.recipes?.[rid]);
   if (!menuRecipeIds.length) {
@@ -6648,10 +6634,13 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     }
 
     const availableRecipeIds = getValidAvailableRecipeIds(p);
-    const availableRecipeSet = new Set(availableRecipeIds);
-    const existingMenu = (takeout.menu_recipe_ids || []).filter((recipeId) => availableRecipeSet.has(recipeId));
-    if (existingMenu.length !== (takeout.menu_recipe_ids || []).length) {
-      takeout.menu_recipe_ids = existingMenu;
+    const shiftActiveForMenu = isTakeoutShiftActive(p, now);
+    if (!shiftActiveForMenu) {
+      const availableRecipeSet = new Set(availableRecipeIds);
+      const existingMenu = (takeout.menu_recipe_ids || []).filter((recipeId) => availableRecipeSet.has(recipeId));
+      if (existingMenu.length !== (takeout.menu_recipe_ids || []).length) {
+        takeout.menu_recipe_ids = existingMenu;
+      }
     }
 
     const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
@@ -12497,6 +12486,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (mode === "qty") {
       const sourceId = cacheEntry.sourceMessageId || interaction.message?.id || "none";
       const p = ensurePlayer(serverId, userId);
+      const serverState = ensureServer(serverId);
       const limitMultiBuyToBuy1 = resolveTutorialGateValue({
         player: p,
         gate: "limitMultiBuyToBuy1",
