@@ -7088,6 +7088,9 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       let seasonalServedCoins = 0;
       let leveledUp = false;
       const discoveryMessages = [];
+      const recipe = content.recipes?.[selectedRecipeId] ?? null;
+      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+      const activeEventEffects = getActiveEventEffects(eventsContent, s);
 
       for (let i = 0; i < servingsToProcess; i += 1) {
         const bowlEntry = getBestBowlEntry(p, selectedRecipeId);
@@ -7095,9 +7098,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         if (!bowl || (bowl.qty ?? 0) <= 0) break;
 
         const servedAt = nowTs();
-        const recipe = content.recipes?.[selectedRecipeId] ?? null;
-        const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-        const activeEventEffects = getActiveEventEffects(eventsContent, s);
         const rewards = computeServeRewards({
           serverId,
           tier: recipe?.tier ?? "common",

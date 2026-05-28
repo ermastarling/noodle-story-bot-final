@@ -96,7 +96,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_STRIPE_WEBHOOK_PATH` - Stripe webhook path (default `/store/stripe`)
 - `NOODLE_STRIPE_WEBHOOK_SECRET` - Stripe signing secret for webhook validation
 - `NOODLE_STRIPE_PRECHECK_PATH` and `NOODLE_STRIPE_PRECHECK_SECRET` - optional store precheck endpoint
-- `NOODLE_SUBSCRIPTION_SKU_MAP` - maps Discord store SKU IDs to subscription perks for entitlement lifecycle handling. Accepts JSON (`{"<sku_id>":"house_247","<sku_id>":"takeout_counter"}`) or comma-separated pairs (`<sku_id>:house_247,<sku_id>:takeout_counter`).
+- `NOODLE_SUBSCRIPTION_SKU_MAP` - maps Discord store SKU IDs to subscription perks for entitlement lifecycle handling. Accepts JSON (`{"<house_247_sku_id>":"house_247","<takeout_counter_sku_id>":"takeout_counter"}`) or comma-separated pairs (`<sku_id>:house_247,<sku_id>:takeout_counter`).
 
 ## PebbleHost .env Template
 
