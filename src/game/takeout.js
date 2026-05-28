@@ -187,6 +187,16 @@ function resolveSnapshotOrderTotal({
   return Math.max(TAKEOUT_SNAPSHOT_MIN_ORDERS, Math.min(TAKEOUT_SNAPSHOT_MAX_ORDERS, boardTotal));
 }
 
+function getRequiredTakeoutIngredients(recipe) {
+  const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+  return ingredients.filter((ing) => {
+    if (ing?.optional) return false;
+    const itemId = String(ing?.item_id || "").trim();
+    const qty = Math.max(0, Math.floor(Number(ing?.qty || 0) || 0));
+    return Boolean(itemId) && qty > 0;
+  });
+}
+
 export function computeTakeoutRequiredIngredients(snapshot = [], recipes = {}) {
   const totals = {};
 
@@ -194,7 +204,7 @@ export function computeTakeoutRequiredIngredients(snapshot = [], recipes = {}) {
     const recipeId = String(row?.recipe_id || "").trim();
     if (!recipeId) continue;
     const recipe = recipes?.[recipeId];
-    const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+    const ingredients = getRequiredTakeoutIngredients(recipe);
     const orderCount = Math.max(
       0,
       Math.floor(Number(row?.total_orders ?? row?.visible_order_count ?? 0) || 0)
@@ -241,7 +251,7 @@ function resolveTakeoutOrderCoinValue(recipeId, {
   items = {}
 } = {}) {
   const recipe = recipes?.[recipeId];
-  const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+  const ingredients = getRequiredTakeoutIngredients(recipe);
   let ingredientCost = 0;
   for (const ing of ingredients) {
     const itemId = String(ing?.item_id || "").trim();
@@ -262,6 +272,7 @@ function consumeCoveredIngredients(coveredIngredients, recipeIngredients, orderC
 
   const required = [];
   for (const ing of recipeIngredients || []) {
+    if (ing?.optional) continue;
     const itemId = String(ing?.item_id || "").trim();
     const qtyPerOrder = Math.max(0, Math.floor(Number(ing?.qty || 0) || 0));
     if (!itemId || qtyPerOrder <= 0) continue;

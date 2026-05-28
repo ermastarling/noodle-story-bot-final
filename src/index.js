@@ -2943,11 +2943,22 @@ import { theme } from "./ui/theme.js";
           periodEndAt,
           now: Date.now()
         });
+        const rawPeriodStart = Number.isFinite(Number(periodStartAt)) && Number(periodStartAt) > 0
+          ? Math.floor(Number(periodStartAt))
+          : "-";
+        const rawPeriodEnd = Number.isFinite(Number(periodEndAt)) && Number(periodEndAt) > 0
+          ? Math.floor(Number(periodEndAt))
+          : "-";
+        const payloadFingerprint = crypto
+          .createHash("sha256")
+          .update(rawBody || "")
+          .digest("hex")
+          .slice(0, 16);
         const subscriptionIdempotencyKey = (() => {
-          // Discord can reuse entitlement IDs across renewals; always scope by billing period.
+          // Deduplicate exact retries, while allowing distinct updates in the same billing period.
           return entitlementId
-            ? `discord_subscription:${eventType}:${entitlementId}:${billingPeriodKey}`
-            : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}`;
+            ? `discord_subscription:${eventType}:${entitlementId}:${rawPeriodStart}:${rawPeriodEnd}:${payloadFingerprint}`
+            : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}:${payloadFingerprint}`;
         })();
 
         const cached = getIdempotentResult(db, subscriptionIdempotencyKey);
