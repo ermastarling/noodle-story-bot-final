@@ -6941,6 +6941,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         return finalize(renderStatus(`${getIcon("warning")} Configure your counter menu first with /noodle takeout_menu.` , { ephemeral: true }));
       }
 
+      sweepExpiredAcceptedOrders(p, s, content, now);
       const acceptedOrderCount = Object.keys(p.orders?.accepted ?? {}).length;
       if (acceptedOrderCount > 0) {
         return finalize(renderStatus(
