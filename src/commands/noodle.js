@@ -2024,12 +2024,11 @@ function buildTakeoutMenuPickerRows(userId, {
     }));
 
   const safeMax = Math.max(1, Math.min(maxAllowed, options.length));
-  const safeMin = Math.max(1, Math.min(minRequired, safeMax));
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:takeout:menu_select:${userId}:${safePage}`)
     .setPlaceholder("Pick recipes for your takeout menu")
-    .setMinValues(safeMin)
+    .setMinValues(0)
     .setMaxValues(safeMax)
     .addOptions(options);
 
@@ -6945,7 +6944,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const acceptedOrderCount = Object.keys(p.orders?.accepted ?? {}).length;
       if (acceptedOrderCount > 0) {
         return finalize(renderStatus(
-          `${getIcon("warning")} You still have **${acceptedOrderCount}** accepted Shop order${acceptedOrderCount === 1 ? "" : "s"}. Serve or cancel them before opening a takeout shift.`,
+          `${getIcon("warning")} You still have **${acceptedOrderCount}** accepted order${acceptedOrderCount === 1 ? "" : "s"}. Serve or cancel them before opening a takeout shift.`,
           { ephemeral: true }
         ));
       }
@@ -7174,6 +7173,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         rewards.coins = Math.floor(rewards.coins * qualityMult);
         rewards.rep = Math.floor(rewards.rep * qualityMult);
         rewards.sxp = Math.floor(rewards.sxp * qualityMult);
+
+        consumeFailStreakRelief(p);
 
         bowl.qty -= 1;
         if (bowl.qty <= 0) delete p.inv_bowls[bowlEntry?.key ?? selectedRecipeId];
@@ -11841,9 +11842,6 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
   }
 
   const pageSelectedRecipeIds = (interaction.values ?? []).filter(Boolean);
-  if (!pageSelectedRecipeIds.length) {
-    return componentCommit(interaction, { content: `${getIcon("help")} Pick at least one recipe.`, ephemeral: true });
-  }
 
   const p = ensurePlayer(serverId, interaction.user.id);
   const availableRecipeIds = getValidAvailableRecipeIds(p);
