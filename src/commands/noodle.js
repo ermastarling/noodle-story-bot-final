@@ -822,15 +822,24 @@ function hasHouse247Perk(player) {
 }
 
 function applyHouse247OrderBoardOverride(player) {
+  if (!hasHouse247Perk(player)) return;
+
   const orderCap = Math.max(0, Math.floor(Number(getOrderAcceptCap(player, nowTs()) || 0) || 0));
   const currentTotal = Math.max(0, Math.floor(Number(player?.orders_total_count || 0) || 0));
-  if (orderCap <= currentTotal) return;
-
-  player.orders_total_count = orderCap;
   const consumedCount = Array.isArray(player?.orders_consumed_indices)
     ? player.orders_consumed_indices.length
     : 0;
-  if (consumedCount < orderCap) {
+
+  // Keep a rolling board chunk available while preserving stable order IDs within a day.
+  // This makes 24/7 House effectively unlimited without allocating a giant board upfront.
+  const boardChunk = Math.max(1, orderCap || 500);
+  const minimumTotal = Math.max(currentTotal, boardChunk);
+  const consumedChunks = Math.floor(consumedCount / boardChunk);
+  const desiredTotal = Math.max(minimumTotal, (consumedChunks + 1) * boardChunk);
+  if (desiredTotal <= currentTotal) return;
+
+  player.orders_total_count = desiredTotal;
+  if (consumedCount < desiredTotal) {
     player.orders_depleted_day = null;
   }
 }
