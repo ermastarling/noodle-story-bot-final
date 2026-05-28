@@ -6656,7 +6656,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         statusBits.push(`${getIcon("time")} Completed hours: **${processedHours}/${TAKEOUT_SHIFT_DURATION_HOURS}**`);
         statusBits.push(`${getIcon("time")} Remaining hours: **${remainingHours}**`);
       }
-      statusBits.push(`${getIcon("help")} Menu size: **${takeout.menu_recipe_ids.length}** (min ${menuLimits.minRequired}, max ${menuLimits.maxAllowed})`);
 
       const description = [
         banner,
@@ -6668,6 +6667,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         "\u200b",
         statusBits.join("\n"),
         "\n**Counter Menu**",
+        `${getIcon("help")} Menu size: **${takeout.menu_recipe_ids.length}** (min ${menuLimits.minRequired}, max ${menuLimits.maxAllowed})`,
         counterMenuLines
       ].filter(Boolean).join("\n");
 
@@ -6955,6 +6955,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       let totalRep = 0;
       let totalSxp = 0;
       let servedCount = 0;
+      let seasonalServedCount = 0;
+      let seasonalServedCoins = 0;
       let leveledUp = false;
       const discoveryMessages = [];
 
@@ -7018,6 +7020,14 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         totalSxp += rewards.sxp;
         servedCount += 1;
 
+        const recipeTierForQuest = recipe?.tier ?? "common";
+        const recipeSeasonForQuest = recipe?.season ?? null;
+        const isSeasonalRecipeServe = recipeTierForQuest === "seasonal" && (!recipeSeasonForQuest || recipeSeasonForQuest === s.season);
+        if (isSeasonalRecipeServe) {
+          seasonalServedCount += 1;
+          seasonalServedCoins += rewards.coins;
+        }
+
         if (bowlQuality !== "salvage") {
           const dayKey = dayKeyUTC(servedAt);
           const discoveryRng = makeStreamRng({
@@ -7055,6 +7065,29 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
       if (discoveryMessages.length > 0) {
         serveSummary.push(discoveryMessages.slice(0, 4).join("\n"));
+      }
+
+      if (servedCount > 0) {
+        applyQuestProgress(
+          p,
+          questsContent,
+          userId,
+          {
+            type: "serve",
+            amount: servedCount,
+            tierAmounts: { seasonal: seasonalServedCount }
+          },
+          now
+        );
+        if (totalCoins > 0) {
+          applyQuestProgress(
+            p,
+            questsContent,
+            userId,
+            { type: "earn_coins", amount: totalCoins, tierAmounts: { seasonal: seasonalServedCoins } },
+            now
+          );
+        }
       }
 
       const confirmationEmbed = buildMenuEmbed({

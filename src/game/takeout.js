@@ -339,6 +339,10 @@ export function processTakeoutCatchup(player, {
 
       const perOrderCoins = resolveTakeoutOrderCoinValue(recipeId, { recipes, marketPrices, items });
       earned += perOrderCoins * served;
+
+      if (!player.lifetime || typeof player.lifetime !== "object") player.lifetime = {};
+      player.lifetime.bowls_served_total = (Number(player.lifetime.bowls_served_total) || 0) + served;
+      player.lifetime.orders_served = (Number(player.lifetime.orders_served) || 0) + served;
     }
   }
 
