@@ -5499,7 +5499,7 @@ if (inDevPath && sub === "subscriptions_toggle") {
     });
   }
 
-  const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
+  const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
     const existingPlayer = getPlayer(db, targetServerId, targetUserId);
     const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
@@ -6691,7 +6691,12 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       const boardOrderTotal = Math.max(0, Math.floor(Number(p.orders_total_count || 0) || 0));
       const unlimitedOrders = hasHouse247Perk(p);
-      const previewPlayer = JSON.parse(JSON.stringify(p));
+      const previewPlayer = {
+        coins: Math.max(0, Math.floor(Number(p.coins || 0) || 0)),
+        takeout: {
+          menu_recipe_ids: Array.isArray(takeout?.menu_recipe_ids) ? [...takeout.menu_recipe_ids] : []
+        }
+      };
       const previewResult = startTakeoutShiftWithCoverage(previewPlayer, {
         now: nowMs,
         boardOrderTotal,

@@ -1243,7 +1243,9 @@ import { theme } from "./ui/theme.js";
         ?? data?.period_start
         ?? data?.current_period_start
         ?? payload?.starts_at
+        ?? payload?.start_at
         ?? payload?.period_start
+        ?? payload?.current_period_start
         ?? null,
       periodEndAt:
         data?.ends_at
@@ -1251,7 +1253,9 @@ import { theme } from "./ui/theme.js";
         ?? data?.period_end
         ?? data?.current_period_end
         ?? payload?.ends_at
+        ?? payload?.end_at
         ?? payload?.period_end
+        ?? payload?.current_period_end
         ?? null
     };
   }
