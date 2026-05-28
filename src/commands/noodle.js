@@ -6945,7 +6945,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const acceptedOrderCount = Object.keys(p.orders?.accepted ?? {}).length;
       if (acceptedOrderCount > 0) {
         return finalize(renderStatus(
-          `${getIcon("warning")} You still have **${acceptedOrderCount}** accepted main-board order${acceptedOrderCount === 1 ? "" : "s"}. Serve or cancel them before opening a takeout shift.`,
+          `${getIcon("warning")} You still have **${acceptedOrderCount}** accepted Shop order${acceptedOrderCount === 1 ? "" : "s"}. Serve or cancel them before opening a takeout shift.`,
           { ephemeral: true }
         ));
       }
