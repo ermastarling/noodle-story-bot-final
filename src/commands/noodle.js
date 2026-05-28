@@ -1659,7 +1659,7 @@ function noodleMainMenuRowNoProfile(userId, { newsAvailable = false, showTakeout
         .setStyle(ButtonStyle.Success)
     );
   }
-  return new ActionRowBuilder().addComponents(buttons);
+  return new ActionRowBuilder().addComponents(...buttons);
 }
 
 function noodleRecipesMenuRow(userId, { kitchenUnlocked = false, kitchenJustUnlocked = false, active = null, allowLockedKitchenInfo = false } = {}) {
