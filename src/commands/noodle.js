@@ -369,6 +369,13 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
     String(state?.last_coin_grant_period ?? "-")
   ].join("|");
 
+  const getNoticeCoinGrantPeriod = (noticeKey) => {
+    const key = String(noticeKey ?? "");
+    if (!key) return "-";
+    const parts = key.split("|");
+    return String(parts[3] ?? "-");
+  };
+
   const subscriptions = ensureSubscriptionState(player);
   const existingNoticeKeys = (player?.notifications?.subscription_perk_notice_keys
     && typeof player.notifications.subscription_perk_notice_keys === "object"
@@ -392,7 +399,9 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
     const meta = subscriptionPerkMeta[perkId] ?? { name: perkId, tryLine: "" };
     grantedPerkLines.push(`• **${meta.name}** unlocked. ${meta.tryLine}`);
 
-    if (state?.last_coin_grant_period) {
+    const currentCoinGrantPeriod = String(state?.last_coin_grant_period ?? "-");
+    const previousCoinGrantPeriod = getNoticeCoinGrantPeriod(seenNoticeKey);
+    if (currentCoinGrantPeriod !== "-" && currentCoinGrantPeriod !== previousCoinGrantPeriod) {
       totalCoinReward += SUBSCRIPTION_MONTHLY_COIN_GRANT;
       sawCoinGrant = true;
     }
@@ -3470,7 +3479,7 @@ if (idMatches.length === 1) return idMatches[0];
 return null;
 }
 
-function computeMarketShoppingShortages(player, serverState) {
+function computeMarketShoppingShortages(player, _serverState) {
   const acceptedEntries = Object.entries(player.orders?.accepted ?? {});
   const allNeeded = {};
   let hasTakeoutOrders = false;
