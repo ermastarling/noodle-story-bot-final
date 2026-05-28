@@ -90,6 +90,7 @@ import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_
 import {
   applySubscriptionEntitlementEvent,
   applyMonthlySubscriptionCoinGrant,
+  SUBSCRIPTION_MONTHLY_COIN_GRANT,
   SUBSCRIPTION_PERKS,
   ensureSubscriptionState,
   getOrderAcceptCap,
@@ -276,7 +277,7 @@ function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = 
   return `${truncatedVisible}${suffix}`;
 }
 
-function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false } = {}) {
+function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false, consumeSubscriptionNotice = false } = {}) {
   if (!player) return payload;
 
   const garden = getGardenUnlockState(player);
@@ -347,6 +348,88 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
       }
       player.notifications.seating_unlock_notice_seen = true;
     }
+  }
+
+  const subscriptionPerkMeta = {
+    [SUBSCRIPTION_PERKS.HOUSE_247]: {
+      name: "24/7 House",
+      tryLine: "Try it in **/noodle orders** and **/noodle market**."
+    },
+    [SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]: {
+      name: "Take Out Counter",
+      tryLine: "Try it in **/noodle takeout** from your orders menu."
+    }
+  };
+
+  const toNoticeKey = (state = {}) => [
+    String(state?.entitlement_id ?? "-"),
+    String(state?.period_start_at ?? "-"),
+    String(state?.period_end_at ?? "-"),
+    String(state?.last_coin_grant_period ?? "-")
+  ].join("|");
+
+  const subscriptions = ensureSubscriptionState(player);
+  const existingNoticeKeys = (player?.notifications?.subscription_perk_notice_keys
+    && typeof player.notifications.subscription_perk_notice_keys === "object"
+    && !Array.isArray(player.notifications.subscription_perk_notice_keys))
+    ? player.notifications.subscription_perk_notice_keys
+    : {};
+
+  const grantedPerkLines = [];
+  let totalCoinReward = 0;
+  let sawCoinGrant = false;
+  const perkIds = [SUBSCRIPTION_PERKS.HOUSE_247, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER];
+  for (const perkId of perkIds) {
+    const state = subscriptions?.perks?.[perkId] ?? {};
+    const activeNow = hasActivePerk(player, perkId, nowTs());
+    if (!activeNow) continue;
+
+    const noticeKey = toNoticeKey(state);
+    const seenNoticeKey = String(existingNoticeKeys?.[perkId] ?? "");
+    if (!noticeKey || noticeKey === seenNoticeKey) continue;
+
+    const meta = subscriptionPerkMeta[perkId] ?? { name: perkId, tryLine: "" };
+    grantedPerkLines.push(`• **${meta.name}** unlocked. ${meta.tryLine}`);
+
+    if (state?.last_coin_grant_period) {
+      totalCoinReward += SUBSCRIPTION_MONTHLY_COIN_GRANT;
+      sawCoinGrant = true;
+    }
+
+    if (consumeSubscriptionNotice) {
+      if (!player.notifications) {
+        player.notifications = {
+          pending_pantry_messages: [],
+          dm_reminders_opt_out: false,
+          last_daily_reminder_day: null,
+          last_noodle_channel_id: null,
+          last_noodle_guild_id: null
+        };
+      }
+      if (!player.notifications.subscription_perk_notice_keys
+        || typeof player.notifications.subscription_perk_notice_keys !== "object"
+        || Array.isArray(player.notifications.subscription_perk_notice_keys)) {
+        player.notifications.subscription_perk_notice_keys = {};
+      }
+      player.notifications.subscription_perk_notice_keys[perkId] = noticeKey;
+    }
+  }
+
+  if (grantedPerkLines.length > 0) {
+    const coinLine = sawCoinGrant
+      ? `${getIcon("coins")} Subscription coin reward credited: **${totalCoinReward}c**`
+      : `${getIcon("coins")} Subscription coin reward credited this cycle: **0c**`;
+    notices.push(
+      buildMenuEmbed({
+        title: `${getIcon("sparkle")} Subscription Perks Unlocked`,
+        description: [
+          ...grantedPerkLines,
+          "",
+          coinLine
+        ].join("\n"),
+        user
+      })
+    );
   }
 
   if (!notices.length) return payload;
@@ -4868,7 +4951,8 @@ const commit = async (payload) => {
   const unlockApplied = payload?.__unlockNoticeApplied;
   if (!unlockApplied) {
     payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user, {
-      consumeSeatingNotice: false
+      consumeSeatingNotice: false,
+      consumeSubscriptionNotice: false
     });
   }
   payload = withSeasonNotice(payload);
@@ -6657,6 +6741,21 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         statusBits.push(`${getIcon("time")} Remaining hours: **${remainingHours}**`);
       }
 
+      const hasStartedFirstTakeoutShift = Number.isFinite(Number(takeout.first_shift_started_at || 0))
+        && Number(takeout.first_shift_started_at || 0) > 0;
+      const minMenuRequired = Math.max(0, Math.floor(Number(menuLimits.minRequired || 0) || 0));
+      const firstCounterSetupGuide = !hasStartedFirstTakeoutShift
+        ? [
+            minMenuRequired > 0
+              ? `• Set your counter **Menu** with at least **${minMenuRequired}** recipe${minMenuRequired === 1 ? "" : "s"}.`
+              : "• Set your counter **Menu** once you have learned recipes.",
+            "• Tap **Counter** again to load your next shift ingredient cost + expected orders.",
+            "• Tap **Start Shift** to begin your first 12h run.",
+            "",
+            `${getIcon("orders")} Open **/noodle takeout** any time to manage your Takeout Counter shift.`
+          ].join("\n")
+        : null;
+
       const description = [
         banner,
         "Set your counter menu, start a cozy 12-hour shift, and collect idle earnings. While the shift is active, your main **Order Board** is idle and all service happens from the **Take Out Counter**.",
@@ -6666,8 +6765,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           : null,
         "\u200b",
         statusBits.join("\n"),
-        "\n**Counter Menu**",
-        `${getIcon("help")} Menu size: **${takeout.menu_recipe_ids.length}** (min ${menuLimits.minRequired}, max ${menuLimits.maxAllowed})`,
+        `\n${getIcon("recipes")} **Counter Menu**`,
+        `*Menu size: **${takeout.menu_recipe_ids.length}** (min ${menuLimits.minRequired}, max ${menuLimits.maxAllowed})*`,
         counterMenuLines
       ].filter(Boolean).join("\n");
 
@@ -6677,6 +6776,13 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
+      const firstCounterSetupEmbed = firstCounterSetupGuide
+        ? buildMenuEmbed({
+            title: `${getIcon("sparkle")} Take Out Counter Setup`,
+            description: firstCounterSetupGuide,
+            user: interaction.member ?? interaction.user
+          })
+        : null;
 
       const canOpenShift = !active && takeout.menu_recipe_ids.length >= menuLimits.minRequired;
       const canClaim = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0)) > 0;
@@ -6697,7 +6803,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       return {
         content: " ",
-        embeds: [embed],
+        embeds: firstCounterSetupEmbed ? [embed, firstCounterSetupEmbed] : [embed],
         components: [
           ...(menuPicker?.rows ?? []),
           noodleTakeoutActionRow(userId, {
@@ -7678,7 +7784,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
   const commitState = async (replyObj) => {
 
     const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user, {
-      consumeSeatingNotice: true
+      consumeSeatingNotice: true,
+      consumeSubscriptionNotice: true
     });
     if (replyWithUnlock && typeof replyWithUnlock === "object") {
       Object.defineProperty(replyWithUnlock, "__unlockNoticeApplied", { value: true, enumerable: false });

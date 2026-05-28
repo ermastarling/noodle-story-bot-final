@@ -39,6 +39,7 @@ export function createDefaultTakeoutState() {
     menu_recipe_ids: [],
     shift: defaultShiftState(),
     earned_unclaimed_coins: 0,
+    first_shift_started_at: null,
     updated_at: null
   };
 }
@@ -55,6 +56,12 @@ export function ensureTakeoutState(player) {
   if (!Array.isArray(takeout.menu_recipe_ids)) takeout.menu_recipe_ids = [];
   if (!Number.isFinite(Number(takeout.earned_unclaimed_coins))) takeout.earned_unclaimed_coins = 0;
   takeout.earned_unclaimed_coins = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins) || 0));
+  {
+    const firstShiftStartedAt = Number(takeout.first_shift_started_at || 0);
+    takeout.first_shift_started_at = Number.isFinite(firstShiftStartedAt) && firstShiftStartedAt > 0
+      ? firstShiftStartedAt
+      : null;
+  }
 
   if (!takeout.shift || typeof takeout.shift !== "object" || Array.isArray(takeout.shift)) {
     takeout.shift = defaultShiftState();
@@ -433,6 +440,9 @@ export function openTakeoutShift(player, {
     covered_ingredients: normalizedCoveredIngredients,
     idle_order_board_snapshot: normalizedSnapshot
   };
+  if (!Number.isFinite(Number(takeout.first_shift_started_at || 0)) || Number(takeout.first_shift_started_at || 0) <= 0) {
+    takeout.first_shift_started_at = startedAt;
+  }
   takeout.updated_at = now;
 
   return {
