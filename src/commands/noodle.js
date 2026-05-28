@@ -99,6 +99,7 @@ import {
 } from "../game/subscriptions.js";
 import {
   TAKEOUT_SHIFT_DURATION_HOURS,
+  TAKEOUT_MENU_MAX_RECIPES,
   ensureTakeoutState,
   getTakeoutMenuLimits,
   setTakeoutMenu,
@@ -2044,6 +2045,44 @@ function buildTakeoutMenuPickerRows(userId, {
   }
 
   return { rows, safePage, totalPages };
+}
+
+function mergeTakeoutMenuPageSelection({
+  availableRecipeIds = [],
+  currentSelectedRecipeIds = [],
+  pageSelectedRecipeIds = [],
+  page = 0,
+  maxAllowed = TAKEOUT_MENU_MAX_RECIPES
+} = {}) {
+  const pageSize = 25;
+  const normalizedAvailable = [...availableRecipeIds]
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => displayRecipeName(a).localeCompare(displayRecipeName(b), undefined, { sensitivity: "base" }));
+  const availableSet = new Set(normalizedAvailable);
+
+  const totalPages = Math.max(1, Math.ceil(normalizedAvailable.length / pageSize));
+  const safePage = Math.max(0, Math.min(Number.isFinite(page) ? page : 0, totalPages - 1));
+  const pageRecipeIds = new Set(normalizedAvailable.slice(safePage * pageSize, (safePage + 1) * pageSize));
+
+  const dedupeOrdered = (ids = []) => {
+    const out = [];
+    const seen = new Set();
+    for (const rawId of ids) {
+      const id = String(rawId || "").trim();
+      if (!id || seen.has(id) || !availableSet.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    return out;
+  };
+
+  const current = dedupeOrdered(currentSelectedRecipeIds);
+  const pageSelected = dedupeOrdered(pageSelectedRecipeIds).filter((id) => pageRecipeIds.has(id));
+  const keepFromOtherPages = current.filter((id) => !pageRecipeIds.has(id));
+
+  const merged = [...keepFromOtherPages, ...pageSelected].slice(0, Math.max(1, Math.floor(Number(maxAllowed) || TAKEOUT_MENU_MAX_RECIPES)));
+  return merged;
 }
 
 /* ------------------------------------------------------------------ */
@@ -11784,10 +11823,21 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
     return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
   }
 
-  const selectedRecipeIds = (interaction.values ?? []).filter(Boolean);
-  if (!selectedRecipeIds.length) {
+  const pageSelectedRecipeIds = (interaction.values ?? []).filter(Boolean);
+  if (!pageSelectedRecipeIds.length) {
     return componentCommit(interaction, { content: `${getIcon("help")} Pick at least one recipe.`, ephemeral: true });
   }
+
+  const p = ensurePlayer(serverId, interaction.user.id);
+  const availableRecipeIds = getValidAvailableRecipeIds(p);
+  const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
+  const selectedRecipeIds = mergeTakeoutMenuPageSelection({
+    availableRecipeIds,
+    currentSelectedRecipeIds: p?.takeout?.menu_recipe_ids ?? [],
+    pageSelectedRecipeIds,
+    page,
+    maxAllowed: menuLimits.maxAllowed
+  });
 
   return runNoodle(interaction, {
     sub: "takeout_menu",
