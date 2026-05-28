@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { nowTs } from "../util/time.js";
+import { ORDER_ACCEPT_CAP_HOUSE_247 } from "../game/subscriptions.js";
 import { recordDbRead, recordDbWrite } from "../infra/perfMetrics.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -470,7 +471,7 @@ function prunePlayerBeforePersist(player) {
 
     // Safety cap: keep the most recent accepted orders.
     // 24/7 House expands active order capacity, so this must be comfortably higher than base mode.
-    const ACCEPTED_CAP = 500;
+    const ACCEPTED_CAP = ORDER_ACCEPT_CAP_HOUSE_247;
     const acceptedEntries = Object.entries(orders.accepted);
     if (acceptedEntries.length > ACCEPTED_CAP) {
       const sorted = acceptedEntries.sort((a, b) => {

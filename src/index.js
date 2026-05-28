@@ -2931,9 +2931,15 @@ import { theme } from "./ui/theme.js";
       const specId = resolveStoreBundleSpecId(skuId);
       const perkId = resolveSubscriptionPerkId(skuId);
 
-      if (!userId || (!specId && !perkId)) {
+      if (!userId) {
         res.writeHead(202, { "content-type": "text/plain" });
-        res.end("missing sku or user");
+        res.end("missing user");
+        return;
+      }
+
+      if (!specId && !perkId) {
+        res.writeHead(202, { "content-type": "text/plain" });
+        res.end("unsupported sku");
         return;
       }
 
