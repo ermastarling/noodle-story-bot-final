@@ -4114,7 +4114,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     : "";
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:takeout_cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
+    .setCustomId(`noodle:pick:cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
     .setPlaceholder("Select a recipe to cook")
     .setMinValues(1)
     .setMaxValues(1)
@@ -4301,7 +4301,7 @@ function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0
     : "";
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
+    .setCustomId(`noodle:pick:takeout_cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
     .setPlaceholder("Select a recipe to cook")
     .setMinValues(1)
     .setMaxValues(1)
@@ -7785,7 +7785,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user, {
       consumeSeatingNotice: true,
-      consumeSubscriptionNotice: true
+      consumeSubscriptionNotice: sub === "orders"
     });
     if (replyWithUnlock && typeof replyWithUnlock === "object") {
       Object.defineProperty(replyWithUnlock, "__unlockNoticeApplied", { value: true, enumerable: false });

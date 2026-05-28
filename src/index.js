@@ -3372,6 +3372,7 @@ import { theme } from "./ui/theme.js";
       if (isNoodle || isNoodleDev || isNoodleSocial || isNoodleStaff || isNoodleUpgrades) {
         // Check if this button/select will show a modal
           const willShowModal = cid?.includes("pick:cook_select:") ||
+              cid?.includes("pick:takeout_cook_select:") ||
               cid?.includes("pick:forage_item_select:") ||
               cid?.includes("pick:fishing_item_select:") ||
               cid?.includes("action:party_create") ||
