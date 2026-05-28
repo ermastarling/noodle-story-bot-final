@@ -6883,6 +6883,13 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     };
 
     if (sub === "takeout_menu") {
+      if (isTakeoutShiftActive(p, now)) {
+        return finalize(renderStatus(
+          `${getIcon("time")} Your takeout shift is active. Update your counter menu after the current shift ends.`,
+          { ephemeral: true }
+        ));
+      }
+
       const rawRecipes = String(opt.getString("recipes") || "").trim();
       if (!rawRecipes) {
         if (!availableRecipeIds.length) {
@@ -6933,6 +6940,14 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     if (sub === "takeout_open") {
       if (takeout.menu_recipe_ids.length <= 0) {
         return finalize(renderStatus(`${getIcon("warning")} Configure your counter menu first with /noodle takeout_menu.` , { ephemeral: true }));
+      }
+
+      const acceptedOrderCount = Object.keys(p.orders?.accepted ?? {}).length;
+      if (acceptedOrderCount > 0) {
+        return finalize(renderStatus(
+          `${getIcon("warning")} You still have **${acceptedOrderCount}** accepted main-board order${acceptedOrderCount === 1 ? "" : "s"}. Serve or cancel them before opening a takeout shift.`,
+          { ephemeral: true }
+        ));
       }
 
       const set = buildSettingsMap(settingsCatalog, s.settings);
