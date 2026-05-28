@@ -3342,6 +3342,7 @@ return null;
 function computeMarketShoppingShortages(player, serverState) {
   const acceptedEntries = Object.entries(player.orders?.accepted ?? {});
   const allNeeded = {};
+  let hasTakeoutOrders = false;
 
   const neededCountsByRecipe = {};
   acceptedEntries.forEach(([, entry]) => {
@@ -3366,7 +3367,9 @@ function computeMarketShoppingShortages(player, serverState) {
   const takeoutState = ensureTakeoutState(player);
   const takeoutActive = isTakeoutShiftActive(player, nowTs());
   if (takeoutActive) {
-    const takeoutNeedRows = getTakeoutRecipeNeedRows(player, takeoutState).filter((entry) => entry.short > 0);
+    const takeoutAllNeedRows = getTakeoutRecipeNeedRows(player, takeoutState);
+    hasTakeoutOrders = takeoutAllNeedRows.some((entry) => entry.need > 0);
+    const takeoutNeedRows = takeoutAllNeedRows.filter((entry) => entry.short > 0);
     for (const entry of takeoutNeedRows) {
       const recipe = content.recipes?.[entry.recipeId];
       if (!recipe?.ingredients) continue;
@@ -3395,7 +3398,8 @@ function computeMarketShoppingShortages(player, serverState) {
     acceptedEntries,
     shortages,
     shoppingShortages,
-    takeoutActive
+    takeoutActive,
+    hasActiveOrders: acceptedEntries.length > 0 || hasTakeoutOrders
   };
 }
 
@@ -4724,7 +4728,7 @@ async function renderMultiBuyPicker({ interaction, userId, s, p }) {
   return componentCommit(interaction, payload);
 }
 
-function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId, { limitToBuy1 = false } = {}) {
+function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId, { limitToBuy1 = false, showBuyNeeded = true } = {}) {
 const selectedNames = formatSelectedItemNames(selectedIds);
 const msgId = sourceMessageId || "none";
 const btnRow = new ActionRowBuilder().addComponents(
@@ -4736,11 +4740,16 @@ new ButtonBuilder()
 
 if (!limitToBuy1) {
   const baseBuyOneButton = btnRow.components[0];
-  btnRow.setComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:multibuy:buyneed:${userId}:${msgId}`)
-      .setLabel("Buy Needed")
-      .setStyle(ButtonStyle.Success),
+  const components = [];
+  if (showBuyNeeded) {
+    components.push(
+      new ButtonBuilder()
+        .setCustomId(`noodle:multibuy:buyneed:${userId}:${msgId}`)
+        .setLabel("Buy Needed")
+        .setStyle(ButtonStyle.Success)
+    );
+  }
+  components.push(
     baseBuyOneButton,
     new ButtonBuilder()
       .setCustomId(`noodle:multibuy:buy5:${userId}:${msgId}`)
@@ -4755,6 +4764,7 @@ if (!limitToBuy1) {
       .setLabel("Clear")
       .setStyle(ButtonStyle.Danger)
   );
+  btnRow.setComponents(...components);
 }
 
 return { selectedNames, btnRow };
@@ -7091,7 +7101,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         unclaimedCoinsAfter: Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0))
       });
 
-      return finalize(renderStatus(`${getIcon("coins")} Claimed **${claimed.amount}c** from the takeout idle earnings.`));
+      return finalize(renderStatus(`${getIcon("coins")} Claimed **${claimed.amount}c** from your shop's idle earnings.`));
     }
 
     return finalize(renderStatus());
@@ -12119,7 +12129,12 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       gate: "multiBuySelectionShowSellButton",
       fallbackValue: true
     });
-    const { selectedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId, { limitToBuy1: limitMultiBuyToBuy1 });
+    const serverState = ensureServer(serverId);
+    const { hasActiveOrders } = computeMarketShoppingShortages(p, serverState);
+    const { selectedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, picked, sourceMessageId, {
+      limitToBuy1: limitMultiBuyToBuy1,
+      showBuyNeeded: hasActiveOrders
+    });
 
     const sellButton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -12266,7 +12281,11 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
         gate: "multiBuySelectionShowSellButton",
         fallbackValue: true
       });
-      const { selectedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceId, { limitToBuy1: limitMultiBuyToBuy1 });
+      const { hasActiveOrders } = computeMarketShoppingShortages(p, serverState);
+      const { selectedNames, btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceId, {
+        limitToBuy1: limitMultiBuyToBuy1,
+        showBuyNeeded: hasActiveOrders
+      });
       const sellButton = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
@@ -12467,7 +12486,11 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
             ? [noodleTutorialForageRow(userId)]
             : [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })];
         } else {
-          const { btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceMessageId, { limitToBuy1: false });
+          const { hasActiveOrders } = computeMarketShoppingShortages(p2, s);
+          const { btnRow } = buildMultiBuyButtonsRow(interaction.user.id, selectedIds, sourceMessageId, {
+            limitToBuy1: false,
+            showBuyNeeded: hasActiveOrders
+          });
           const sellRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`noodle:nav:sell:${interaction.user.id}`)
