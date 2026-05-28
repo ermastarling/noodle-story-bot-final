@@ -7061,7 +7061,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         `${getIcon("orders")} Remaining counter orders for this recipe: **${remainingForRecipe}**`
       ];
       if (leveledUp) {
-        serveSummary.push(`${getIcon("status_complete")} Level up! You are now **Lv.${Math.max(1, Number(p.sxp_level || 1))}**.`);
+        serveSummary.push(`${getIcon("status_complete")} Level up! You are now **Lv.${Math.max(1, Number(p.shop_level || 1))}**.`);
       }
       if (discoveryMessages.length > 0) {
         serveSummary.push(discoveryMessages.slice(0, 4).join("\n"));
