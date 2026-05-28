@@ -4862,15 +4862,14 @@ async function renderMultiBuyPicker({ interaction, userId, s, p }) {
 function buildMultiBuyButtonsRow(userId, selectedIds, sourceMessageId, { limitToBuy1 = false, showBuyNeeded = true } = {}) {
 const selectedNames = formatSelectedItemNames(selectedIds);
 const msgId = sourceMessageId || "none";
-const btnRow = new ActionRowBuilder().addComponents(
-new ButtonBuilder()
+const buyOneButton = new ButtonBuilder()
   .setCustomId(`noodle:multibuy:buy1:${userId}:${msgId}`)
   .setLabel("Buy 1 each")
-  .setStyle(ButtonStyle.Success)
-);
+  .setStyle(ButtonStyle.Success);
+
+let btnRow = new ActionRowBuilder().addComponents(buyOneButton);
 
 if (!limitToBuy1) {
-  const baseBuyOneButton = btnRow.components[0];
   const components = [];
   if (showBuyNeeded) {
     components.push(
@@ -4881,7 +4880,7 @@ if (!limitToBuy1) {
     );
   }
   components.push(
-    baseBuyOneButton,
+    buyOneButton,
     new ButtonBuilder()
       .setCustomId(`noodle:multibuy:buy5:${userId}:${msgId}`)
       .setLabel("Buy 5 each")
@@ -4895,7 +4894,7 @@ if (!limitToBuy1) {
       .setLabel("Clear")
       .setStyle(ButtonStyle.Danger)
   );
-  btnRow.setComponents(...components);
+  btnRow = new ActionRowBuilder().addComponents(...components);
 }
 
 return { selectedNames, btnRow };
@@ -5273,7 +5272,7 @@ if (inDevPath && sub === "wipe_user") {
     });
   }
 
-  const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
+  const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
     const storageServerId = getPlayerStorageServerId(targetServerId);
     const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(storageServerId, targetUserId);
@@ -5387,7 +5386,7 @@ if (inDevPath && sub === "subscriptions") {
     });
   }
 
-  const lockKey = `lock:user:${targetServerId}:${targetUserId}`;
+  const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
     const targetPlayer = getPlayer(db, targetServerId, targetUserId);
     if (!targetPlayer) {

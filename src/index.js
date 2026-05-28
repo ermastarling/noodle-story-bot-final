@@ -2940,14 +2940,9 @@ import { theme } from "./ui/theme.js";
           now: Date.now()
         });
         const subscriptionIdempotencyKey = (() => {
-          // Discord can reuse entitlement IDs across renewals; include billing period on updates.
-          if (eventType === "ENTITLEMENT_UPDATE") {
-            return entitlementId
-              ? `discord_subscription:${eventType}:${entitlementId}:${billingPeriodKey}`
-              : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}`;
-          }
+          // Discord can reuse entitlement IDs across renewals; always scope by billing period.
           return entitlementId
-            ? `discord_subscription:${eventType}:${entitlementId}`
+            ? `discord_subscription:${eventType}:${entitlementId}:${billingPeriodKey}`
             : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}`;
         })();
 
