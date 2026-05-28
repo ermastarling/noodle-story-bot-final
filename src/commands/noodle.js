@@ -6753,7 +6753,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const hasStartedFirstTakeoutShift = Number.isFinite(Number(takeout.first_shift_started_at || 0))
         && Number(takeout.first_shift_started_at || 0) > 0;
       const minMenuRequired = Math.max(0, Math.floor(Number(menuLimits.minRequired || 0) || 0));
-      const firstCounterSetupGuide = !hasStartedFirstTakeoutShift
+      const showFirstCounterSetupGuide = !active && !hasStartedFirstTakeoutShift;
+      const firstCounterSetupGuide = showFirstCounterSetupGuide
         ? [
             minMenuRequired > 0
               ? `• Set your counter **Menu** with at least **${minMenuRequired}** recipe${minMenuRequired === 1 ? "" : "s"}.`
@@ -6821,7 +6822,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
             disableClaim: !canClaim,
             disableServe: !canCounterServe
           }),
-          active ? noodleMainMenuRowNoOrdersWithBack(userId) : noodleMainMenuRowNoOrders(userId)
+          noodleMainMenuRowNoOrdersWithBack(userId)
         ],
         ephemeral
       };
