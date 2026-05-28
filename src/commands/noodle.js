@@ -7053,11 +7053,20 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      const statusPayload = renderStatus();
+      const canCounterServe = getTakeoutRecipeNeedRows(p, takeout)
+        .some((entry) => entry.need > 0 && entry.ready > 0);
+      const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
       return finalize({
-        ...statusPayload,
         content: " ",
-        embeds: [confirmationEmbed, ...(statusPayload.embeds ?? [])]
+        embeds: [confirmationEmbed],
+        components: [
+          noodleTakeoutActionRow(userId, {
+            activeShift: true,
+            disableClaim: !canClaim,
+            disableServe: !canCounterServe
+          }),
+          noodleMainMenuRowNoOrdersWithBack(userId)
+        ]
       });
     }
 
@@ -11697,6 +11706,10 @@ if (cid.startsWith("noodle:pick:takeout_cook_select:")) {
 // cook picker -> open qty modal
 if (cid.startsWith("noodle:pick:cook_select:")) {
   const recipeId = interaction.values?.[0];
+  const title = interaction.message?.embeds?.[0]?.data?.title
+    ?? interaction.message?.embeds?.[0]?.title
+    ?? "";
+  const fromCounterCook = String(title).includes("Counter Cook");
 
   if (interaction.deferred || interaction.replied) {
     return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
@@ -11704,8 +11717,10 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
 
   const sourceMessageId = interaction.message?.id ?? "none";
   const modal = new ModalBuilder()
-    .setCustomId(`noodle:pick:cook_qty:${userId}:${recipeId}:${sourceMessageId}`)
-    .setTitle("Cook bowls");
+    .setCustomId(fromCounterCook
+      ? `noodle:pick:takeout_cook_qty:${userId}:${recipeId}:${sourceMessageId}`
+      : `noodle:pick:cook_qty:${userId}:${recipeId}:${sourceMessageId}`)
+    .setTitle(fromCounterCook ? "Counter cook bowls" : "Cook bowls");
 
   const input = new TextInputBuilder()
     .setCustomId("qty")
@@ -11858,9 +11873,9 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
   if (interaction.isModalSubmit?.() && interaction.customId.startsWith("noodle:pick:takeout_cook_qty:")) {
     const parts2 = interaction.customId.split(":");
     // noodle:pick:takeout_cook_qty:<ownerId>:<recipeId>:<messageId>
-    const owner = parts2[4];
-    const recipeId = parts2[5];
-    const messageId = parts2[6] && parts2[6] !== "none" ? parts2[6] : null;
+    const owner = parts2[3];
+    const recipeId = parts2[4];
+    const messageId = parts2[5] && parts2[5] !== "none" ? parts2[5] : null;
 
     if (owner && owner !== interaction.user.id) {
       return componentCommit(interaction, { content: "That counter cook prompt isn’t for you.", ephemeral: true });
