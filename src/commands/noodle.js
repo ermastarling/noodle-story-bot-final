@@ -1692,8 +1692,16 @@ function ensureSeasonEventNoticeState(player) {
   return player.seasons.notice;
 }
 
+function getSeasonEventNoticeStateReadOnly(player) {
+  const notice = player?.seasons?.notice;
+  if (!notice || typeof notice !== "object") {
+    return { seen_season_id: null, seen_event_id: null };
+  }
+  return notice;
+}
+
 function getSeasonEventNavHighlights(player, serverState) {
-  const notice = ensureSeasonEventNoticeState(player);
+  const notice = getSeasonEventNoticeStateReadOnly(player);
   const activeSeasonId = String(serverState?.season ?? "").trim();
   const activeEventId = String(serverState?.active_event_id ?? "").trim();
   return {
