@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import {
   canForage,
+  rollForageDrops,
+  applyForagePityCounter,
   applyDropsToInventory,
   setForageCooldown,
   RARE_FORAGE_ITEM_IDS
@@ -17,15 +19,6 @@ import {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
-}
-
-function applyForagePityCounter(player, drops, allowedRare) {
-  const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
-  if (hasRareDrop) {
-    player.forage_pity_rare_count = 0;
-  } else {
-    player.forage_pity_rare_count = (player.forage_pity_rare_count || 0) + 1;
-  }
 }
 
 function applyFishingPityCounter(player, drops, allowedRare) {
@@ -74,7 +67,7 @@ test("Forage success updates cooldown once and pity resets only on rare drops", 
 
   const beforeCooldown = player.cooldowns.forage_last_ms;
   const invResult = applyDropsToInventory(player, commonOnlyDrops);
-  applyForagePityCounter(player, commonOnlyDrops, allowedRare);
+  applyForagePityCounter(player, commonOnlyDrops, { allowedRare });
   setForageCooldown(player, now);
 
   assert.equal(invResult.success, true);
@@ -83,8 +76,101 @@ test("Forage success updates cooldown once and pity resets only on rare drops", 
   assert.notEqual(beforeCooldown, player.cooldowns.forage_last_ms);
   assert.equal(player.cooldowns.forage_last_ms, now);
 
-  applyForagePityCounter(player, withRareDrops, allowedRare);
+  // Helper should not reset until a rare is actually accepted post-filtering.
+  applyForagePityCounter(player, withRareDrops, { allowedRare });
+  assert.equal(player.forage_pity_rare_count, 6);
+  const accepted = withRareDrops;
+  if (Object.keys(accepted).some((id) => allowedRare.includes(id))) {
+    player.forage_pity_rare_count = 0;
+  }
   assert.equal(player.forage_pity_rare_count, 0);
+});
+
+test("Specific forage target roll returns only requested item", () => {
+  const targetItem = "scallions";
+
+  const drops = rollForageDrops({
+    serverId: "srv-test",
+    userId: "user-test",
+    itemId: targetItem,
+    quantity: 1,
+    allowedItemIds: [targetItem, ...RARE_FORAGE_ITEM_IDS]
+  });
+
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
+
+  // Targeted foraging should only return the requested ingredient.
+  assert.deepEqual(Object.keys(drops), [targetItem]);
+  assert.equal(hasRareDrop, false);
+  assert.equal(drops[targetItem], 1);
+});
+
+test("Targeted forage skips pity counter and does not inject rare drops", () => {
+  const targetItem = "scallions";
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const player = { forage_pity_rare_count: 9 };
+  const drops = { [targetItem]: 1 };
+
+  const appliedRare = applyForagePityCounter(player, drops, {
+    allowedRare,
+    itemId: targetItem,
+    serverId: "srv-test",
+    userId: "user-test",
+    dayKey: "2099-01-01"
+  });
+
+  assert.equal(appliedRare, false);
+  assert.equal(player.forage_pity_rare_count, 9);
+  assert.deepEqual(Object.keys(drops), [targetItem]);
+  assert.equal(drops[targetItem], 1);
+});
+
+test("Pity injection keeps counter primed until injected rare is accepted", () => {
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const player = { forage_pity_rare_count: 9 };
+  const drops = { carrots: 1 };
+
+  const injectedPityItemId = applyForagePityCounter(player, drops, {
+    allowedRare,
+    serverId: "srv-test",
+    userId: "user-test",
+    dayKey: "2099-01-01"
+  });
+
+  assert.ok(injectedPityItemId);
+  assert.equal(player.forage_pity_rare_count, 10);
+  assert.equal(Number(drops[injectedPityItemId] || 0) >= 1, true);
+
+  // Simulate command-level capacity filtering rejecting the injected pity item.
+  const accepted = {};
+  if (injectedPityItemId && Number(accepted[injectedPityItemId] || 0) > 0) {
+    player.forage_pity_rare_count = 0;
+  }
+  assert.equal(player.forage_pity_rare_count, 10);
+
+  // Simulate a later run where the injected pity item survives filtering.
+  accepted[injectedPityItemId] = 1;
+  if (injectedPityItemId && Number(accepted[injectedPityItemId] || 0) > 0) {
+    player.forage_pity_rare_count = 0;
+  }
+  assert.equal(player.forage_pity_rare_count, 0);
+});
+
+test("Rare in raw drops does not reset pity when capacity filtering rejects it", () => {
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const rareDropId = allowedRare[0];
+  const player = { forage_pity_rare_count: 4 };
+  const drops = { [rareDropId]: 1 };
+
+  applyForagePityCounter(player, drops, { allowedRare });
+  assert.equal(player.forage_pity_rare_count, 4);
+
+  const accepted = {};
+  if (Object.keys(accepted).some((id) => allowedRare.includes(id))) {
+    player.forage_pity_rare_count = 0;
+  }
+  assert.equal(player.forage_pity_rare_count, 4);
 });
 
 test("Fishing cooldown block does not mutate reward state", () => {

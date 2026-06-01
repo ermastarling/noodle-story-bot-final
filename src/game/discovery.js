@@ -21,6 +21,12 @@ import { getIcon } from "../ui/icons.js";
 
 const LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT = 0.25;
 
+function isRecipeActiveForEvent(recipe, activeEventId) {
+  if (!recipe?.event_id) return true;
+  if (!activeEventId) return false;
+  return String(recipe.event_id) === String(activeEventId);
+}
+
 /**
  * Check if player can discover recipes of a given tier
  */
@@ -59,7 +65,7 @@ export function getDiscoverableRecipes(player, content, { excludeCompletedClues 
       if (clueCount >= CLUES_TO_UNLOCK_RECIPE) return false;
     }
     
-    if (recipe.event_id && (!activeEventId || recipe.event_id !== activeEventId)) {
+    if (!isRecipeActiveForEvent(recipe, activeEventId)) {
       return false;
     }
 
@@ -98,7 +104,7 @@ function pickDuplicateEligibleRecipe(player, content, rng, { mode = "clue", acti
   const candidates = allRecipes.filter((recipe) => {
     if (!recipe || recipe.recipe_id === FALLBACK_RECIPE_ID) return false;
     if (!ownedRecipeIds.has(recipe.recipe_id)) return false;
-    if (recipe.event_id && (!activeEventId || recipe.event_id !== activeEventId)) return false;
+    if (!isRecipeActiveForEvent(recipe, activeEventId)) return false;
     if (recipe.tier === "seasonal" && (!activeSeason || recipe.season !== activeSeason)) return false;
     if (!canDiscoverTier(player, recipe.tier)) return false;
     return true;
