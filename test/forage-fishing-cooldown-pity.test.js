@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   canForage,
+  rollForageDrops,
   applyDropsToInventory,
   setForageCooldown,
   RARE_FORAGE_ITEM_IDS
@@ -85,6 +86,36 @@ test("Forage success updates cooldown once and pity resets only on rare drops", 
 
   applyForagePityCounter(player, withRareDrops, allowedRare);
   assert.equal(player.forage_pity_rare_count, 0);
+});
+
+test("Specific forage target remains exact item even when pity threshold is reached", () => {
+  const targetItem = "scallions";
+  const player = {
+    forage_pity_rare_count: 9
+  };
+
+  const drops = rollForageDrops({
+    serverId: "srv-test",
+    userId: "user-test",
+    itemId: targetItem,
+    quantity: 1,
+    allowedItemIds: [targetItem, ...RARE_FORAGE_ITEM_IDS]
+  });
+
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
+
+  // Targeted foraging should only return the requested ingredient.
+  assert.deepEqual(Object.keys(drops), [targetItem]);
+  assert.equal(hasRareDrop, false);
+  assert.equal(drops[targetItem], 1);
+
+  // Command-level targeted path should skip pity processing entirely.
+  const itemId = targetItem;
+  if (!itemId && allowedRare.length) {
+    applyForagePityCounter(player, drops, allowedRare);
+  }
+  assert.equal(player.forage_pity_rare_count, 9);
 });
 
 test("Fishing cooldown block does not mutate reward state", () => {

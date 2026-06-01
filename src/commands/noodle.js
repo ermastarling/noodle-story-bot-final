@@ -1657,7 +1657,7 @@ new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back")
 );
 }
 
-function noodleAboutNewsNavRow(userId, { active = "news" } = {}) {
+function noodleAboutNewsNavRow(userId, { active = "news", seasonNew = false, eventNew = false } = {}) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:news:${userId}`)
@@ -1673,13 +1673,49 @@ function noodleAboutNewsNavRow(userId, { active = "news" } = {}) {
       .setCustomId(`noodle:nav:season:${userId}`)
       .setLabel("Season")
       .setEmoji(getButtonEmoji("season"))
-      .setStyle(active === "season" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      .setStyle(active === "season" ? ButtonStyle.Primary : (seasonNew ? ButtonStyle.Success : ButtonStyle.Secondary)),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:event:${userId}`)
       .setLabel("Event")
       .setEmoji(getButtonEmoji("event"))
-      .setStyle(active === "event" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setStyle(active === "event" ? ButtonStyle.Primary : (eventNew ? ButtonStyle.Success : ButtonStyle.Secondary))
   );
+}
+
+function ensureSeasonEventNoticeState(player) {
+  if (!player.seasons || typeof player.seasons !== "object") {
+    player.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
+  }
+  if (!player.seasons.notice || typeof player.seasons.notice !== "object") {
+    player.seasons.notice = { seen_season_id: null, seen_event_id: null };
+  }
+  return player.seasons.notice;
+}
+
+function getSeasonEventNavHighlights(player, serverState) {
+  const notice = ensureSeasonEventNoticeState(player);
+  const activeSeasonId = String(serverState?.season ?? "").trim();
+  const activeEventId = String(serverState?.active_event_id ?? "").trim();
+  return {
+    seasonNew: Boolean(activeSeasonId) && notice.seen_season_id !== activeSeasonId,
+    eventNew: Boolean(activeEventId) && notice.seen_event_id !== activeEventId
+  };
+}
+
+function markSeasonNoticeSeen(player, serverState) {
+  const notice = ensureSeasonEventNoticeState(player);
+  const activeSeasonId = String(serverState?.season ?? "").trim();
+  if (!activeSeasonId || notice.seen_season_id === activeSeasonId) return false;
+  notice.seen_season_id = activeSeasonId;
+  return true;
+}
+
+function markEventNoticeSeen(player, serverState) {
+  const notice = ensureSeasonEventNoticeState(player);
+  const activeEventId = String(serverState?.active_event_id ?? "").trim();
+  if (!activeEventId || notice.seen_event_id === activeEventId) return false;
+  notice.seen_event_id = activeEventId;
+  return true;
 }
 
 function noodleAboutNewsBackRow(userId) {
@@ -4886,6 +4922,8 @@ if (sub === "profile") {
 
 /* ---------------- ABOUT ---------------- */
 if (sub === "about") {
+  const viewerPlayer = ensurePlayer(serverId, userId);
+  const seasonEventHighlights = getSeasonEventNavHighlights(viewerPlayer, server);
   const liveServerCount = Number(interaction.client?.guilds?.cache?.size ?? 0);
   let liveShopCount = null;
   if (db) {
@@ -4940,13 +4978,14 @@ if (sub === "about") {
   return commit({
     content: " ",
     embeds: [aboutEmbed],
-    components: [noodleAboutNewsNavRow(userId, { active: "about" }), aboutSupportRow]
+    components: [noodleAboutNewsNavRow(userId, { active: "about", ...seasonEventHighlights }), aboutSupportRow]
   });
 }
 
 /* ---------------- NEWS ---------------- */
 if (sub === "news") {
   const viewerPlayer = ensurePlayer(serverId, userId);
+  const seasonEventHighlights = getSeasonEventNavHighlights(viewerPlayer, server);
   if (db && markNewsAsSeen(viewerPlayer, newsContent)) {
     upsertPlayer(db, serverId, userId, viewerPlayer, null, viewerPlayer.schema_version);
   }
@@ -5105,7 +5144,7 @@ if (sub === "news") {
   return commit({
     content: " ",
     embeds: [newsEmbed],
-    components: [noodleAboutNewsNavRow(userId, { active: "news" }), noodleAboutNewsBackRow(userId)]
+    components: [noodleAboutNewsNavRow(userId, { active: "news", ...seasonEventHighlights }), noodleAboutNewsBackRow(userId)]
   });
 }
 
@@ -5901,6 +5940,11 @@ if (sub === "regulars") {
 /* ---------------- SEASON ---------------- */
 if (sub === "season") {
   const p = ensurePlayer(serverId, userId);
+  const seasonSeenChanged = markSeasonNoticeSeen(p, server);
+  if (seasonSeenChanged && db) {
+    upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+  }
+  const seasonEventHighlights = getSeasonEventNavHighlights(p, server);
   const availableRecipes = getAvailableRecipes(p);
   const seasonalRecipes = Object.values(content.recipes ?? {})
     .filter((recipe) => recipe?.tier === "seasonal" && recipe?.season === server.season);
@@ -5984,7 +6028,7 @@ if (sub === "season") {
   return commit({
     content: " ",
     embeds: [seasonEmbed],
-    components: [noodleAboutNewsNavRow(userId, { active: "season" }), backRow]
+    components: [noodleAboutNewsNavRow(userId, { active: "season", ...seasonEventHighlights }), backRow]
   });
 }
 
@@ -5998,10 +6042,17 @@ if (sub === "status") {
     });
   }
   const statusEmbed = buildDevStatusEmbed();
+  const refreshRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-dev:status:refresh:${userId}`)
+      .setEmoji(getButtonEmoji("refresh"))
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   return commit({
     content: " ",
     embeds: [statusEmbed],
+    components: [refreshRow],
     ephemeral: false
   });
 }
@@ -6009,6 +6060,11 @@ if (sub === "status") {
 /* ---------------- EVENT ---------------- */
 if (sub === "event") {
   const player = ensurePlayer(serverId, userId);
+  const eventSeenChanged = markEventNoticeSeen(player, server);
+  if (eventSeenChanged && db) {
+    upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+  }
+  const seasonEventHighlights = getSeasonEventNavHighlights(player, server);
   const knownRecipeIds = new Set(getAvailableRecipes(player));
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
@@ -6089,7 +6145,7 @@ if (sub === "event") {
   return commit({
     content: " ",
     embeds: [eventEmbed],
-    components: [noodleAboutNewsNavRow(userId, { active: "event" }), backRow]
+    components: [noodleAboutNewsNavRow(userId, { active: "event", ...seasonEventHighlights }), backRow]
   });
 }
 
@@ -6981,7 +7037,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     // Pity: guarantee a rare forage after 10 forages without any rare drop
     const allowedRare = RARE_FORAGE_ITEM_IDS.filter((id) => allowedForage.has(id));
-    if (allowedRare.length) {
+    if (!itemId && allowedRare.length) {
       const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
       if (hasRareDrop) {
         p.forage_pity_rare_count = 0;
@@ -9081,8 +9137,8 @@ ${lines.join("\n")}`;
         state.unlocked_spec_ids.push(spec.spec_id);
       }
       const unlockLines = newlyUnlockedSpecs.map((spec) => {
-        const icon = resolveIcon(spec.icon, getIcon("sparkle"));
-        return `${icon} **Specialization unlocked:** ${spec.name}`;
+        const bowlsRequired = Number(spec?.requirements?.bowls_served_total ?? 0);
+        return `**HIDDEN Specialization Unlocked for serving ${bowlsRequired.toLocaleString("en-US")} bowls: ${spec.name}**`;
       });
       results.push(...unlockLines);
     }
@@ -11140,7 +11196,7 @@ const noodleCommandData = new SlashCommandBuilder()
   .addSubcommand((sc) => sc.setName("quests").setDescription("View active quests."))
   .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
   .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
-  .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim bot-list vote rewards."))
+  .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim all bot list vote rewards."))
   .addSubcommand((sc) =>
     sc
       .setName("buy")

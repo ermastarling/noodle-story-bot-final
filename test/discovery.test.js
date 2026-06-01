@@ -122,6 +122,70 @@ test("Discovery: getDiscoverableRecipes - respects tier gating", () => {
   assert.ok(!recipeIds.includes("seasonal_ramen"), "Should not include seasonal recipe");
 });
 
+test("Discovery: getDiscoverableRecipes includes active event recipes alongside regular recipes", () => {
+  const content = {
+    recipes: {
+      regular_recipe: {
+        recipe_id: "regular_recipe",
+        name: "Regular Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      active_event_recipe: {
+        recipe_id: "active_event_recipe",
+        name: "Active Event Recipe",
+        tier: "common",
+        event_id: "spring_blossoms",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      inactive_event_recipe: {
+        recipe_id: "inactive_event_recipe",
+        name: "Inactive Event Recipe",
+        tier: "common",
+        event_id: "summer_solstice",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    }
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: []
+  };
+
+  const discoverable = getDiscoverableRecipes(player, content, { activeEventId: "spring_blossoms" });
+  const recipeIds = discoverable.map((recipe) => recipe.recipe_id);
+
+  assert.ok(recipeIds.includes("regular_recipe"));
+  assert.ok(recipeIds.includes("active_event_recipe"));
+  assert.ok(!recipeIds.includes("inactive_event_recipe"));
+});
+
+test("Discovery: getDiscoverableRecipes matches active event id across string and numeric forms", () => {
+  const content = {
+    recipes: {
+      event_recipe: {
+        recipe_id: "event_recipe",
+        name: "Typed Event Recipe",
+        tier: "common",
+        event_id: 101,
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    }
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: []
+  };
+
+  const discoverable = getDiscoverableRecipes(player, content, { activeEventId: "101" });
+  assert.equal(discoverable.length, 1);
+  assert.equal(discoverable[0].recipe_id, "event_recipe");
+});
+
 test("Discovery: applyDiscovery - new clue is added", () => {
   const player = {
     clues_owned: {},
@@ -572,4 +636,52 @@ test("Discovery: serve scroll roll can produce duplicate even when undiscovered 
   const result = applyDiscovery(player, discoveries[0], content, () => 0.9);
   assert.equal(result.isDuplicate, true);
   assert.equal(result.reward, `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)`);
+});
+
+test("Discovery: active event recipe can drop as duplicate while regular discoveries still exist", () => {
+  const content = {
+    recipes: {
+      regular_unknown_recipe: {
+        recipe_id: "regular_unknown_recipe",
+        name: "Regular Unknown Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      active_event_known_recipe: {
+        recipe_id: "active_event_known_recipe",
+        name: "Active Event Known Recipe",
+        tier: "common",
+        event_id: 7,
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: ["active_event_known_recipe"],
+    clues_owned: {},
+    scrolls_owned: {},
+    coins: 100
+  };
+
+  const rng = () => 0;
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content,
+    npcArchetype: null,
+    tier: "common",
+    rng,
+    activeEventId: "7"
+  });
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "clue");
+  assert.equal(discoveries[0].recipeId, "active_event_known_recipe");
+
+  const result = applyDiscovery(player, discoveries[0], content, () => 0.9);
+  assert.equal(result.isDuplicate, true);
+  assert.equal(result.reward, `+${CLUE_DUPLICATE_COINS}c (duplicate clue)`);
 });

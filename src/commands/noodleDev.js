@@ -59,6 +59,17 @@ export const noodleDevCommand = {
   async handleComponent(interaction) {
     const customId = String(interaction.customId || "");
     const parts = customId.split(":");
+    if (parts[0] === "noodle-dev" && parts[1] === "status" && parts[2] === "refresh") {
+      const ownerUserId = parts[3] ?? "";
+      if (ownerUserId && ownerUserId !== interaction.user.id) {
+        return {
+          content: "That status panel isn’t for you.",
+          ephemeral: true
+        };
+      }
+      return runNoodle(interaction, { sub: "status", group: "dev" });
+    }
+
     // Legacy: noodle-dev:dashboard:page:<ownerUserId>:<tabPage>
     // New:    noodle-dev:dashboard:nav:<ownerUserId>:<tabPage>:<serverPage>
     if (parts[0] !== "noodle-dev" || parts[1] !== "dashboard") return null;
