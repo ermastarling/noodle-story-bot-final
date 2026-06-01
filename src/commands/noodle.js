@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import {
   canForage,
   rollForageDrops,
+  applyForagePityCounter,
   applyDropsToInventory,
   setForageCooldown,
   FORAGE_ITEM_IDS,
@@ -7050,28 +7051,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     // Pity: guarantee a rare forage after 10 forages without any rare drop
     const allowedRare = RARE_FORAGE_ITEM_IDS.filter((id) => allowedForage.has(id));
-    if (!itemId && allowedRare.length) {
-      const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
-      if (hasRareDrop) {
-        p.forage_pity_rare_count = 0;
-      } else {
-        p.forage_pity_rare_count = (p.forage_pity_rare_count || 0) + 1;
-        if (p.forage_pity_rare_count >= 10) {
-          const pityRng = makeStreamRng({
-            mode: "seeded",
-            seed: 98765,
-            streamName: "forage_pity",
-            serverId,
-            dayKey: dayKeyUTC(),
-            userId: interaction.user.id
-          });
-          const pickIdx = Math.floor(pityRng() * allowedRare.length);
-          const pityItem = allowedRare[Math.max(0, Math.min(allowedRare.length - 1, pickIdx))];
-          drops[pityItem] = (drops[pityItem] ?? 0) + 1;
-          p.forage_pity_rare_count = 0;
-        }
-      }
-    }
+    applyForagePityCounter(p, drops, {
+      allowedRare,
+      itemId,
+      serverId,
+      userId: interaction.user.id,
+      dayKey: dayKeyUTC()
+    });
     const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects, { allowDisplacingInventory: true });
     const { accepted, rejected, evicted } = capacityResult;
 

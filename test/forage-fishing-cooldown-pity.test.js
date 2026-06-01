@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   canForage,
   rollForageDrops,
+  applyForagePityCounter,
   applyDropsToInventory,
   setForageCooldown,
   RARE_FORAGE_ITEM_IDS
@@ -18,15 +19,6 @@ import {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
-}
-
-function applyForagePityCounter(player, drops, allowedRare) {
-  const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
-  if (hasRareDrop) {
-    player.forage_pity_rare_count = 0;
-  } else {
-    player.forage_pity_rare_count = (player.forage_pity_rare_count || 0) + 1;
-  }
 }
 
 function applyFishingPityCounter(player, drops, allowedRare) {
@@ -75,7 +67,7 @@ test("Forage success updates cooldown once and pity resets only on rare drops", 
 
   const beforeCooldown = player.cooldowns.forage_last_ms;
   const invResult = applyDropsToInventory(player, commonOnlyDrops);
-  applyForagePityCounter(player, commonOnlyDrops, allowedRare);
+  applyForagePityCounter(player, commonOnlyDrops, { allowedRare });
   setForageCooldown(player, now);
 
   assert.equal(invResult.success, true);
@@ -84,15 +76,12 @@ test("Forage success updates cooldown once and pity resets only on rare drops", 
   assert.notEqual(beforeCooldown, player.cooldowns.forage_last_ms);
   assert.equal(player.cooldowns.forage_last_ms, now);
 
-  applyForagePityCounter(player, withRareDrops, allowedRare);
+  applyForagePityCounter(player, withRareDrops, { allowedRare });
   assert.equal(player.forage_pity_rare_count, 0);
 });
 
-test("Specific forage target remains exact item even when pity threshold is reached", () => {
+test("Specific forage target roll returns only requested item", () => {
   const targetItem = "scallions";
-  const player = {
-    forage_pity_rare_count: 9
-  };
 
   const drops = rollForageDrops({
     serverId: "srv-test",
@@ -109,13 +98,26 @@ test("Specific forage target remains exact item even when pity threshold is reac
   assert.deepEqual(Object.keys(drops), [targetItem]);
   assert.equal(hasRareDrop, false);
   assert.equal(drops[targetItem], 1);
+});
 
-  // Command-level targeted path should skip pity processing entirely.
-  const itemId = targetItem;
-  if (!itemId && allowedRare.length) {
-    applyForagePityCounter(player, drops, allowedRare);
-  }
+test("Targeted forage skips pity counter and does not inject rare drops", () => {
+  const targetItem = "scallions";
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const player = { forage_pity_rare_count: 9 };
+  const drops = { [targetItem]: 1 };
+
+  const appliedRare = applyForagePityCounter(player, drops, {
+    allowedRare,
+    itemId: targetItem,
+    serverId: "srv-test",
+    userId: "user-test",
+    dayKey: "2099-01-01"
+  });
+
+  assert.equal(appliedRare, false);
   assert.equal(player.forage_pity_rare_count, 9);
+  assert.deepEqual(Object.keys(drops), [targetItem]);
+  assert.equal(drops[targetItem], 1);
 });
 
 test("Fishing cooldown block does not mutate reward state", () => {

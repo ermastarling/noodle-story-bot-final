@@ -136,6 +136,43 @@ export function applyDropsToInventory(player, drops) {
   return result;
 }
 
+export function applyForagePityCounter(player, drops, {
+  allowedRare = [],
+  itemId = null,
+  serverId = "",
+  userId = "",
+  dayKey = dayKeyUTC()
+} = {}) {
+  if (itemId || !Array.isArray(allowedRare) || allowedRare.length === 0) {
+    return false;
+  }
+
+  const hasRareDrop = Object.keys(drops || {}).some((id) => allowedRare.includes(id));
+  if (hasRareDrop) {
+    player.forage_pity_rare_count = 0;
+    return false;
+  }
+
+  player.forage_pity_rare_count = (player.forage_pity_rare_count || 0) + 1;
+  if (player.forage_pity_rare_count < 10) {
+    return false;
+  }
+
+  const pityRng = makeStreamRng({
+    mode: "seeded",
+    seed: 98765,
+    streamName: "forage_pity",
+    serverId,
+    dayKey,
+    userId
+  });
+  const pickIdx = Math.floor(pityRng() * allowedRare.length);
+  const pityItem = allowedRare[Math.max(0, Math.min(allowedRare.length - 1, pickIdx))];
+  drops[pityItem] = (drops[pityItem] ?? 0) + 1;
+  player.forage_pity_rare_count = 0;
+  return true;
+}
+
 export function setForageCooldown(player, nowMs) {
   if (!player.cooldowns) player.cooldowns = {};
   player.cooldowns.forage_last_ms = nowMs;
