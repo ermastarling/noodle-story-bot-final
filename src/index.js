@@ -1887,7 +1887,7 @@ import { theme } from "./ui/theme.js";
         const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
         const officialMemberCount = Math.max(
           0,
-          Number(officialGuild?.memberCount || officialGuild?.approximateMemberCount || 0)
+          Number(officialGuild?.memberCount ?? officialGuild?.approximateMemberCount ?? 0)
         );
 
         if (
