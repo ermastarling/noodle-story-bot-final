@@ -1875,8 +1875,8 @@ import { theme } from "./ui/theme.js";
       }
 
       try {
-        const officialGuild = client.guilds.cache.get(officialGuildId)
-          || await client.guilds.fetch(officialGuildId, { force: true }).catch(() => null);
+        const officialGuild = await client.guilds.fetch(officialGuildId, { force: true }).catch(() => null)
+          || client.guilds.cache.get(officialGuildId);
         if (!officialGuild) return false;
 
         const counts = precomputedCounts && typeof precomputedCounts === "object"
