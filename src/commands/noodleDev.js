@@ -61,7 +61,7 @@ export const noodleDevCommand = {
     const parts = customId.split(":");
     if (parts[0] === "noodle-dev" && parts[1] === "status" && parts[2] === "refresh") {
       const ownerUserId = parts[3] ?? "";
-      if (ownerUserId && ownerUserId !== interaction.user.id) {
+      if (!ownerUserId || ownerUserId !== interaction.user.id) {
         return {
           content: "That status panel isn’t for you.",
           ephemeral: true

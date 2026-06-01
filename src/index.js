@@ -1875,9 +1875,8 @@ import { theme } from "./ui/theme.js";
       }
 
       try {
-        const officialGuild = await client.guilds.fetch(officialGuildId, { force: true, withCounts: true }).catch(() => null)
-          || client.guilds.cache.get(officialGuildId)
-          || await client.guilds.fetch(officialGuildId).catch(() => null);
+        const officialGuild = client.guilds.cache.get(officialGuildId)
+          || await client.guilds.fetch(officialGuildId, { force: true }).catch(() => null);
         if (!officialGuild) return false;
 
         const counts = precomputedCounts && typeof precomputedCounts === "object"
@@ -1887,7 +1886,7 @@ import { theme } from "./ui/theme.js";
         const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
         const officialMemberCount = Math.max(
           0,
-          Number(officialGuild?.memberCount ?? officialGuild?.approximateMemberCount ?? 0)
+          Number(officialGuild?.memberCount ?? 0)
         );
 
         if (
