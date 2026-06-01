@@ -4936,7 +4936,7 @@ if (sub === "profile") {
 
 /* ---------------- ABOUT ---------------- */
 if (sub === "about") {
-  const viewerPlayer = getPlayerForReadOnlyNavState(serverId, userId);
+  const viewerPlayer = player ?? getPlayerForReadOnlyNavState(serverId, userId);
   const seasonEventHighlights = getSeasonEventNavHighlights(viewerPlayer, server);
   const liveServerCount = Number(interaction.client?.guilds?.cache?.size ?? 0);
   let liveShopCount = null;
