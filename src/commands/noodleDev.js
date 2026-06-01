@@ -57,15 +57,21 @@ export const noodleDevCommand = {
   },
 
   async handleComponent(interaction) {
+    const denyOwnerMismatch = async (message) => {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: message, ephemeral: true });
+      } else {
+        await interaction.reply({ content: message, ephemeral: true });
+      }
+      return null;
+    };
+
     const customId = String(interaction.customId || "");
     const parts = customId.split(":");
     if (parts[0] === "noodle-dev" && parts[1] === "status" && parts[2] === "refresh") {
       const ownerUserId = parts[3] ?? "";
       if (!ownerUserId || ownerUserId !== interaction.user.id) {
-        return {
-          content: "That status panel isn’t for you.",
-          ephemeral: true
-        };
+        return denyOwnerMismatch("That status panel isn’t for you.");
       }
       return runNoodle(interaction, { sub: "status", group: "dev" });
     }
@@ -81,10 +87,7 @@ export const noodleDevCommand = {
     const page = Number(parts[4] ?? 0);
     const serverPage = mode === "nav" ? Number(parts[5] ?? 0) : 0;
     if (ownerUserId && ownerUserId !== interaction.user.id) {
-      return {
-        content: "That dashboard isn’t for you.",
-        ephemeral: true
-      };
+      return denyOwnerMismatch("That dashboard isn’t for you.");
     }
 
     return runNoodle(interaction, {

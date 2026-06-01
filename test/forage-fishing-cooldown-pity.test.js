@@ -120,6 +120,37 @@ test("Targeted forage skips pity counter and does not inject rare drops", () => 
   assert.equal(drops[targetItem], 1);
 });
 
+test("Pity injection keeps counter primed until injected rare is accepted", () => {
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const player = { forage_pity_rare_count: 9 };
+  const drops = { carrots: 1 };
+
+  const injectedPityItemId = applyForagePityCounter(player, drops, {
+    allowedRare,
+    serverId: "srv-test",
+    userId: "user-test",
+    dayKey: "2099-01-01"
+  });
+
+  assert.ok(injectedPityItemId);
+  assert.equal(player.forage_pity_rare_count, 10);
+  assert.equal(Number(drops[injectedPityItemId] || 0) >= 1, true);
+
+  // Simulate command-level capacity filtering rejecting the injected pity item.
+  const accepted = {};
+  if (injectedPityItemId && Number(accepted[injectedPityItemId] || 0) > 0) {
+    player.forage_pity_rare_count = 0;
+  }
+  assert.equal(player.forage_pity_rare_count, 10);
+
+  // Simulate a later run where the injected pity item survives filtering.
+  accepted[injectedPityItemId] = 1;
+  if (injectedPityItemId && Number(accepted[injectedPityItemId] || 0) > 0) {
+    player.forage_pity_rare_count = 0;
+  }
+  assert.equal(player.forage_pity_rare_count, 0);
+});
+
 test("Fishing cooldown block does not mutate reward state", () => {
   const now = 3_000_000;
   const player = {

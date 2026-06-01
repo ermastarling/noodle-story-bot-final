@@ -157,7 +157,8 @@ export function applyForagePityCounter(player, drops, {
     return false;
   }
 
-  player.forage_pity_rare_count = (player.forage_pity_rare_count || 0) + 1;
+  const currentPityCount = Math.max(0, Number(player.forage_pity_rare_count || 0));
+  player.forage_pity_rare_count = Math.min(10, currentPityCount + 1);
   if (player.forage_pity_rare_count < 10) {
     return false;
   }
@@ -173,8 +174,7 @@ export function applyForagePityCounter(player, drops, {
   const pickIdx = Math.floor(pityRng() * allowedRare.length);
   const pityItem = allowedRare[Math.max(0, Math.min(allowedRare.length - 1, pickIdx))];
   drops[pityItem] = (drops[pityItem] ?? 0) + 1;
-  player.forage_pity_rare_count = 0;
-  return true;
+  return pityItem;
 }
 
 export function setForageCooldown(player, nowMs) {
