@@ -7051,7 +7051,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     // Pity: guarantee a rare forage after 10 forages without any rare drop
     const allowedRare = RARE_FORAGE_ITEM_IDS.filter((id) => allowedForage.has(id));
-    const injectedPityItemId = applyForagePityCounter(p, drops, {
+    applyForagePityCounter(p, drops, {
       allowedRare,
       itemId,
       serverId,
@@ -7081,7 +7081,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
     }
 
-    if (injectedPityItemId && Number(accepted[injectedPityItemId] || 0) > 0) {
+    const hasAcceptedRare = Object.keys(accepted).some((id) => allowedRare.includes(id));
+    if (hasAcceptedRare) {
       p.forage_pity_rare_count = 0;
     }
 

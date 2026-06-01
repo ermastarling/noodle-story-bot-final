@@ -153,7 +153,6 @@ export function applyForagePityCounter(player, drops, {
 
   const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
   if (hasRareDrop) {
-    player.forage_pity_rare_count = 0;
     return false;
   }
 

@@ -76,7 +76,13 @@ test("Forage success updates cooldown once and pity resets only on rare drops", 
   assert.notEqual(beforeCooldown, player.cooldowns.forage_last_ms);
   assert.equal(player.cooldowns.forage_last_ms, now);
 
+  // Helper should not reset until a rare is actually accepted post-filtering.
   applyForagePityCounter(player, withRareDrops, { allowedRare });
+  assert.equal(player.forage_pity_rare_count, 6);
+  const accepted = withRareDrops;
+  if (Object.keys(accepted).some((id) => allowedRare.includes(id))) {
+    player.forage_pity_rare_count = 0;
+  }
   assert.equal(player.forage_pity_rare_count, 0);
 });
 
@@ -149,6 +155,22 @@ test("Pity injection keeps counter primed until injected rare is accepted", () =
     player.forage_pity_rare_count = 0;
   }
   assert.equal(player.forage_pity_rare_count, 0);
+});
+
+test("Rare in raw drops does not reset pity when capacity filtering rejects it", () => {
+  const allowedRare = [...RARE_FORAGE_ITEM_IDS];
+  const rareDropId = allowedRare[0];
+  const player = { forage_pity_rare_count: 4 };
+  const drops = { [rareDropId]: 1 };
+
+  applyForagePityCounter(player, drops, { allowedRare });
+  assert.equal(player.forage_pity_rare_count, 4);
+
+  const accepted = {};
+  if (Object.keys(accepted).some((id) => allowedRare.includes(id))) {
+    player.forage_pity_rare_count = 0;
+  }
+  assert.equal(player.forage_pity_rare_count, 4);
 });
 
 test("Fishing cooldown block does not mutate reward state", () => {
