@@ -60,6 +60,10 @@ export const noodleDevCommand = {
     const denyOwnerMismatch = async (message) => {
       if (interaction.deferred || interaction.replied) {
         await interaction.followUp({ content: message, ephemeral: true });
+        if (interaction.deferred) {
+          // Clear the deferred "thinking" state without changing visible content.
+          await interaction.editReply({ components: interaction.message?.components ?? [] }).catch(() => null);
+        }
       } else {
         await interaction.reply({ content: message, ephemeral: true });
       }
