@@ -7049,7 +7049,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       drops[itemId] = (drops[itemId] ?? 0) + bonusItems;
     }
 
-    // Pity: guarantee a rare forage after 10 forages without any rare drop
+    // Pity: inject a rare at threshold, but only reset pity later if a rare survives
+    // capacity filtering and is actually accepted into rewards.
     const allowedRare = RARE_FORAGE_ITEM_IDS.filter((id) => allowedForage.has(id));
     applyForagePityCounter(p, drops, {
       allowedRare,
