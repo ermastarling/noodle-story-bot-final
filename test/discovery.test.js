@@ -10,6 +10,7 @@ import {
 } from "../src/game/discovery.js";
 import {
   CLUE_DUPLICATE_COINS,
+  DISCOVERY_PITY_NO_DROP_SERVES,
   DISCOVERY_TIER_UNLOCK_LEVEL,
   DISCOVERY_TIER_UNLOCK_REP,
   SCROLL_DUPLICATE_COINS
@@ -120,6 +121,86 @@ test("Discovery: getDiscoverableRecipes - respects tier gating", () => {
   assert.ok(recipeIds.includes("fancy_ramen"), "Should include rare recipe");
   assert.ok(!recipeIds.includes("epic_ramen"), "Should not include epic recipe");
   assert.ok(!recipeIds.includes("seasonal_ramen"), "Should not include seasonal recipe");
+});
+
+test("Discovery: getDiscoverableRecipes includes normal + current event recipes", () => {
+  const contentWithEvents = {
+    recipes: {
+      normal_recipe: {
+        recipe_id: "normal_recipe",
+        name: "Normal Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      current_event_recipe: {
+        recipe_id: "current_event_recipe",
+        name: "Current Event Recipe",
+        tier: "common",
+        event_id: "event_summer",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      other_event_recipe: {
+        recipe_id: "other_event_recipe",
+        name: "Other Event Recipe",
+        tier: "common",
+        event_id: "event_winter",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: [],
+    clues_owned: {},
+    scrolls_owned: {}
+  };
+
+  const discoverable = getDiscoverableRecipes(player, contentWithEvents, {
+    activeEventId: "event_summer"
+  }).map((r) => r.recipe_id);
+
+  assert.ok(discoverable.includes("normal_recipe"), "Expected normal recipe to remain discoverable");
+  assert.ok(discoverable.includes("current_event_recipe"), "Expected current event recipe to be discoverable");
+  assert.ok(!discoverable.includes("other_event_recipe"), "Expected non-active event recipe to be excluded");
+});
+
+test("Discovery: getDiscoverableRecipes excludes event recipes without active event", () => {
+  const contentWithEvent = {
+    recipes: {
+      normal_recipe: {
+        recipe_id: "normal_recipe",
+        name: "Normal Recipe",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      event_recipe: {
+        recipe_id: "event_recipe",
+        name: "Event Recipe",
+        tier: "common",
+        event_id: "event_summer",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: [],
+    clues_owned: {},
+    scrolls_owned: {}
+  };
+
+  const discoverable = getDiscoverableRecipes(player, contentWithEvent, {
+    activeEventId: null
+  }).map((r) => r.recipe_id);
+
+  assert.ok(discoverable.includes("normal_recipe"));
+  assert.ok(!discoverable.includes("event_recipe"));
 });
 
 test("Discovery: applyDiscovery - new clue is added", () => {
@@ -572,4 +653,142 @@ test("Discovery: serve scroll roll can produce duplicate even when undiscovered 
   const result = applyDiscovery(player, discoveries[0], content, () => 0.9);
   assert.equal(result.isDuplicate, true);
   assert.equal(result.reward, `+${SCROLL_DUPLICATE_COINS}c (duplicate scroll)`);
+});
+
+test("Discovery: rollRecipeDiscovery can drop clue for current event recipe", () => {
+  const contentWithCurrentEventOnly = {
+    recipes: {
+      known_normal: {
+        recipe_id: "known_normal",
+        name: "Known Normal",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      event_recipe: {
+        recipe_id: "event_recipe",
+        name: "Event Recipe",
+        tier: "common",
+        event_id: "event_summer",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: ["known_normal"],
+    clues_owned: {},
+    scrolls_owned: {}
+  };
+
+  const seq = [0, 0, 0.5, 0, 0.999];
+  const rng = () => (seq.length ? seq.shift() : 0);
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content: contentWithCurrentEventOnly,
+    npcArchetype: null,
+    tier: "common",
+    rng,
+    activeEventId: "event_summer"
+  });
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "clue");
+  assert.equal(discoveries[0].recipeId, "event_recipe");
+});
+
+test("Discovery: rollRecipeDiscovery can drop scroll for current event recipe", () => {
+  const contentWithCurrentEventOnly = {
+    recipes: {
+      known_normal: {
+        recipe_id: "known_normal",
+        name: "Known Normal",
+        tier: "common",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      },
+      event_recipe: {
+        recipe_id: "event_recipe",
+        name: "Event Recipe",
+        tier: "common",
+        event_id: "event_summer",
+        ingredients: [{ item_id: "soy_broth", qty: 1 }]
+      }
+    },
+    items: mockContent.items
+  };
+
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: ["known_normal"],
+    clues_owned: {},
+    scrolls_owned: {}
+  };
+
+  const seq = [0, 0.999, 0, 0];
+  const rng = () => (seq.length ? seq.shift() : 0);
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content: contentWithCurrentEventOnly,
+    npcArchetype: null,
+    tier: "common",
+    rng,
+    activeEventId: "event_summer"
+  });
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "scroll");
+  assert.equal(discoveries[0].recipeId, "event_recipe");
+});
+
+test("Discovery: pity clue grants after long no-drop streak", () => {
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: [],
+    clues_owned: {},
+    scrolls_owned: {}
+  };
+
+  let discoveries = [];
+  for (let i = 0; i < DISCOVERY_PITY_NO_DROP_SERVES; i++) {
+    discoveries = rollRecipeDiscovery({
+      player,
+      content: mockContent,
+      npcArchetype: null,
+      tier: "common",
+      rng: () => 0.999
+    });
+  }
+
+  assert.equal(discoveries.length, 1);
+  assert.equal(discoveries[0].type, "clue");
+  assert.equal(Boolean(discoveries[0].pityGranted), true);
+  assert.equal(player.discovery?.no_drop_serve_streak ?? 0, 0);
+});
+
+test("Discovery: no-drop streak increments before pity threshold", () => {
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: [],
+    clues_owned: {},
+    scrolls_owned: {}
+  };
+
+  const attempts = Math.max(1, DISCOVERY_PITY_NO_DROP_SERVES - 1);
+  for (let i = 0; i < attempts; i++) {
+    const discoveries = rollRecipeDiscovery({
+      player,
+      content: mockContent,
+      npcArchetype: null,
+      tier: "common",
+      rng: () => 0.999
+    });
+    assert.equal(discoveries.length, 0);
+  }
+
+  assert.equal(player.discovery?.no_drop_serve_streak ?? 0, attempts);
 });

@@ -2,6 +2,7 @@ import {
   DISCOVERY_HOOKS, 
   DISCOVERY_CHANCE_BASE, 
   DISCOVERY_SCROLL_CHANCE_BASE,
+  DISCOVERY_PITY_NO_DROP_SERVES,
   CLUES_TO_UNLOCK_RECIPE,
   CLUE_DUPLICATE_COINS,
   CLUE_DUPLICATE_WHILE_UNDISCOVERED_CHANCE,
@@ -124,6 +125,8 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
   if (!DISCOVERY_HOOKS.on_serve) return [];
 
   const discoveries = [];
+  const pityThreshold = Math.max(1, Math.floor(Number(DISCOVERY_PITY_NO_DROP_SERVES) || 40));
+  const currentNoDropStreak = Math.max(0, Math.floor(Number(player?.discovery?.no_drop_serve_streak || 0) || 0));
   let clueChance = DISCOVERY_CHANCE_BASE.serve;
   let scrollChance = DISCOVERY_SCROLL_CHANCE_BASE.serve;
   const dropRateMult = 1;
@@ -161,10 +164,8 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
     }
   }
 
-  if (discoveries.length > 0) return discoveries;
-
   // Moonlit Spirit: extra independent 1% scroll chance on Epic tier
-  if (npcArchetype === "moonlit_spirit" && tier === "epic") {
+  if (!discoveries.length && npcArchetype === "moonlit_spirit" && tier === "epic") {
     const roll = rng();
     if (roll < 0.01) {
       const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
@@ -172,22 +173,50 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
     }
   }
 
-  if (discoveries.length > 0) return discoveries;
-
   // Base roll: only one drop (clue OR scroll)
-  const totalChance = clueChance + scrollChance;
-  const dropRoll = rng();
-  if (dropRoll < totalChance) {
-    const pick = rng();
-    if (pick < (clueChance / totalChance)) {
-      const clue = rollClue(player, content, rng, activeSeason, activeEventId);
-      if (clue) {
-        discoveries.push(clue);
+  if (!discoveries.length) {
+    const totalChance = clueChance + scrollChance;
+    const dropRoll = rng();
+    if (dropRoll < totalChance) {
+      const pick = rng();
+      if (pick < (clueChance / totalChance)) {
+        const clue = rollClue(player, content, rng, activeSeason, activeEventId);
+        if (clue) {
+          discoveries.push(clue);
+        }
+      } else {
+        const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
+        if (scroll) {
+          discoveries.push(scroll);
+        }
+      }
+    }
+  }
+
+  // Pity safety net: force a clue after a long no-drop streak.
+  if (!discoveries.length) {
+    const nextNoDropStreak = currentNoDropStreak + 1;
+    if (nextNoDropStreak >= pityThreshold) {
+      const pityClue = rollClue(player, content, rng, activeSeason, activeEventId);
+      if (pityClue) {
+        pityClue.pityGranted = true;
+        discoveries.push(pityClue);
+      } else {
+        player.discovery = player.discovery || {};
+        player.discovery.no_drop_serve_streak = nextNoDropStreak;
       }
     } else {
-      const scroll = rollScroll(player, content, rng, activeSeason, activeEventId);
-      if (scroll) {
-        discoveries.push(scroll);
+      player.discovery = player.discovery || {};
+      player.discovery.no_drop_serve_streak = nextNoDropStreak;
+    }
+  }
+
+  if (discoveries.length > 0) {
+    player.discovery = player.discovery || {};
+    player.discovery.no_drop_serve_streak = 0;
+    for (const d of discoveries) {
+      if (d?.pityGranted) {
+        d.pityNoDropStreak = currentNoDropStreak + 1;
       }
     }
   }
@@ -368,7 +397,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
         unlockedRecipeId: discovery.recipeId,
         unlockedRecipeName: discovery.recipeName,
         reward: null,
-        message: `${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}${badgeLine ? `\n${badgeLine}` : ""}`
+        message: `${discovery.pityGranted ? `${getIcon("rescue")} Pity clue granted!\n` : ""}${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}${badgeLine ? `\n${badgeLine}` : ""}`
       };
     }
     
@@ -378,7 +407,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
       isDuplicate: false,
       recipeUnlocked: false,
       reward: null,
-      message: `${getIcon("search")} Clue ${clueCount}/${CLUES_TO_UNLOCK_RECIPE} for **${discovery.recipeName}** (${remaining} more)${ingredientMsg}`
+      message: `${discovery.pityGranted ? `${getIcon("rescue")} Pity clue granted! ` : ""}${getIcon("search")} Clue ${clueCount}/${CLUES_TO_UNLOCK_RECIPE} for **${discovery.recipeName}** (${remaining} more)${ingredientMsg}`
     };
   }
   

@@ -305,6 +305,98 @@ export function getParty(db, partyId) {
 }
 
 /**
+ * Repair party integrity for a party id (or id prefix) in a server.
+ * Fixes:
+ * 1) Leader is not an active member.
+ * 2) Party status and active-member rows are inconsistent.
+ */
+export function repairPartyRecord(db, partyIdPrefix, serverId = null) {
+  const normalizedPrefix = String(partyIdPrefix ?? "").trim();
+  if (!normalizedPrefix) {
+    throw new Error("Party ID is required");
+  }
+
+  const lookupSql = serverId
+    ? "SELECT * FROM guild_parties WHERE party_id LIKE ? AND server_id = ? ORDER BY created_at DESC"
+    : "SELECT * FROM guild_parties WHERE party_id LIKE ? ORDER BY created_at DESC";
+  const matches = serverId
+    ? db.prepare(lookupSql).all(`${normalizedPrefix}%`, serverId)
+    : db.prepare(lookupSql).all(`${normalizedPrefix}%`);
+
+  if (!matches.length) {
+    throw new Error("Party not found");
+  }
+  if (matches.length > 1) {
+    throw new Error("Party ID prefix is ambiguous");
+  }
+
+  const now = nowTs();
+  const initial = matches[0];
+
+  const repairResult = db.transaction(() => {
+    let party = db.prepare("SELECT * FROM guild_parties WHERE party_id = ?").get(initial.party_id);
+    const members = db.prepare(
+      "SELECT user_id, joined_at FROM party_members WHERE party_id = ? AND left_at IS NULL ORDER BY joined_at, user_id"
+    ).all(initial.party_id);
+
+    const updates = [];
+    const activeMemberIds = new Set(members.map((m) => m.user_id));
+
+    const statusBefore = party.status;
+    const leaderBefore = party.leader_user_id;
+
+    // Keep status aligned with whether active member rows exist.
+    if (party.status === "active" && members.length === 0) {
+      db.prepare("UPDATE guild_parties SET status = 'disbanded', disbanded_at = COALESCE(disbanded_at, ?) WHERE party_id = ?")
+        .run(now, party.party_id);
+      updates.push("status:active_to_disbanded");
+      party = { ...party, status: "disbanded", disbanded_at: party.disbanded_at ?? now };
+    } else if (party.status !== "active" && members.length > 0) {
+      db.prepare("UPDATE guild_parties SET status = 'active', disbanded_at = NULL WHERE party_id = ?")
+        .run(party.party_id);
+      updates.push("status:non_active_to_active");
+      party = { ...party, status: "active", disbanded_at: null };
+    }
+
+    // Clean disbanded_at for active parties and ensure it exists for inactive ones.
+    if (party.status === "active" && party.disbanded_at != null) {
+      db.prepare("UPDATE guild_parties SET disbanded_at = NULL WHERE party_id = ?")
+        .run(party.party_id);
+      updates.push("disbanded_at:cleared_for_active");
+      party = { ...party, disbanded_at: null };
+    } else if (party.status !== "active" && party.disbanded_at == null) {
+      db.prepare("UPDATE guild_parties SET disbanded_at = ? WHERE party_id = ?")
+        .run(now, party.party_id);
+      updates.push("disbanded_at:set_for_inactive");
+      party = { ...party, disbanded_at: now };
+    }
+
+    // For active parties, leader must be an active member.
+    if (party.status === "active" && members.length > 0 && !activeMemberIds.has(party.leader_user_id)) {
+      const newLeaderId = members[0].user_id;
+      db.prepare("UPDATE guild_parties SET leader_user_id = ? WHERE party_id = ?")
+        .run(newLeaderId, party.party_id);
+      updates.push("leader:reassigned_to_active_member");
+      party = { ...party, leader_user_id: newLeaderId };
+    }
+
+    return {
+      partyId: party.party_id,
+      serverId: party.server_id,
+      repaired: updates.length > 0,
+      changes: updates,
+      statusBefore,
+      statusAfter: party.status,
+      leaderBefore,
+      leaderAfter: party.leader_user_id,
+      activeMemberCount: members.length
+    };
+  })();
+
+  return repairResult;
+}
+
+/**
  * Get user's active party
  */
 export function getUserActiveParty(db, userId, serverId = null) {

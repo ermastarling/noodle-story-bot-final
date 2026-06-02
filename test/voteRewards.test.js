@@ -9,6 +9,7 @@ import {
   registerVoteFromSource,
   VOTE_SOURCES
 } from "../src/game/voteRewards.js";
+import { HOUSE_247_VOTE_DURATION_MS } from "../src/game/subscriptions.js";
 
 function mockPlayer() {
   return {
@@ -216,5 +217,33 @@ test("Vote rewards: status lines follow display ordering and limit", () => {
   const limitedLines = getVotePlatformStatusLines(player, { limit: 1 });
   assert.equal(limitedLines.length, 1);
   assert.match(limitedLines[0], /Rank\.top/i);
+});
+
+test("Vote rewards: each vote adds 12h of 24/7 House and stacks from current expiry", () => {
+  const now = 4_000_000;
+  const player = mockPlayer();
+
+  const first = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now);
+  assert.equal(first.duplicate, false);
+  assert.equal(first.house247ExpiresAt, now + HOUSE_247_VOTE_DURATION_MS);
+
+  const second = registerVoteFromSource(player, VOTE_SOURCES.DISCORDBOTLIST, now + 1_000);
+  assert.equal(second.duplicate, false);
+  assert.equal(second.house247ExpiresAt, now + HOUSE_247_VOTE_DURATION_MS * 2);
+
+  const status = getVoteRewardStatus(player);
+  assert.equal(status.house247ExpiresAt, now + HOUSE_247_VOTE_DURATION_MS * 2);
+});
+
+test("Vote rewards: duplicate retries do not extend 24/7 House timer", () => {
+  const now = 5_000_000;
+  const player = mockPlayer();
+
+  const first = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now);
+  const duplicate = registerVoteFromSource(player, VOTE_SOURCES.TOPGG, now + 60_000);
+
+  assert.equal(first.duplicate, false);
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(duplicate.house247ExpiresAt, first.house247ExpiresAt);
 });
 

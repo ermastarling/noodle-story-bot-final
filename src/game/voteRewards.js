@@ -1,5 +1,10 @@
 import { nowTs } from "../util/time.js";
 import { applySxpLevelUp } from "./serve.js";
+import {
+  grantHouse247VoteAccess,
+  getHouse247VoteExpiry,
+  HOUSE_247_VOTE_DURATION_MS
+} from "./subscriptions.js";
 
 export const TOPGG_BOT_URL = "https://top.gg/bot/1460058511802105976/vote";
 
@@ -61,11 +66,10 @@ export const VOTE_PLATFORM_PAGES = [
   {
     source: VOTE_SOURCES.BOTLIST_ME,
     label: "BotList.me",
-    voteUrl: null,
-    isVoteLive: false,
+    voteUrl: "https://botlist.me/bots/1460058511802105976/vote",
+    isVoteLive: true,
     supportsVoteRewards: true,
     supportsServerCount: true,
-    notes: "*Bot page pending*"
   },
   {
     source: VOTE_SOURCES.DISCORDBOTSGG,
@@ -198,7 +202,8 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
       duplicate: true,
       lifetimeLimited: false,
       shouldPersistDuplicate,
-      pendingClaims: state.pending_claims
+      pendingClaims: state.pending_claims,
+      house247ExpiresAt: getHouse247VoteExpiry(player)
     };
   }
 
@@ -209,6 +214,10 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
   sourceState.last_vote_at = now;
   sourceState.last_webhook_at = now;
   sourceState.votes_total = Math.max(0, Number(sourceState.votes_total || 0)) + 1;
+  const house247ExpiresAt = grantHouse247VoteAccess(player, {
+    now,
+    durationMs: HOUSE_247_VOTE_DURATION_MS
+  });
 
   return {
     ok: true,
@@ -216,7 +225,8 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
     duplicate: false,
     lifetimeLimited: false,
     shouldPersistDuplicate: true,
-    pendingClaims: state.pending_claims
+    pendingClaims: state.pending_claims,
+    house247ExpiresAt
   };
 }
 
@@ -280,6 +290,7 @@ export function getVoteRewardStatus(player) {
     pendingClaims: Math.max(0, Number(state.pending_claims || 0)),
     lastVoteAt: state.last_vote_at,
     lastClaimAt: state.last_claim_at,
+    house247ExpiresAt: getHouse247VoteExpiry(player),
     reward: { ...DEFAULT_VOTE_REWARD }
   };
 }

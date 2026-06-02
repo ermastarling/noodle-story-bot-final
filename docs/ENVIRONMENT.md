@@ -96,7 +96,9 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_STRIPE_WEBHOOK_PATH` - Stripe webhook path (default `/store/stripe`)
 - `NOODLE_STRIPE_WEBHOOK_SECRET` - Stripe signing secret for webhook validation
 - `NOODLE_STRIPE_PRECHECK_PATH` and `NOODLE_STRIPE_PRECHECK_SECRET` - optional store precheck endpoint
-- `NOODLE_SUBSCRIPTION_SKU_MAP` - maps Discord store SKU IDs to subscription perks for entitlement lifecycle handling. Accepts JSON (`{"<house_247_sku_id>":"house_247","<takeout_counter_sku_id>":"takeout_counter"}`) or comma-separated pairs (`<sku_id>:house_247,<sku_id>:takeout_counter`).
+- `NOODLE_SUBSCRIPTION_SKU_MAP` - maps Discord store SKU IDs to paid subscription perks for entitlement lifecycle handling. Only `takeout_counter` is accepted. Accepts JSON (`{"<takeout_counter_sku_id>":"takeout_counter"}`) or comma-separated pairs (`<sku_id>:takeout_counter`).
+- `NOODLE_COIN_PACK_SKU_MAP` - maps Discord store SKU IDs to coin packs. Supported pack IDs: `coin_pack_099` (10,000c), `coin_pack_199` (25,000c), `coin_pack_499` (100,000c). When unset, built-in defaults are used: `1511191985644507336 -> coin_pack_099`, `1511192707119321109 -> coin_pack_199`, `1511192852288376884 -> coin_pack_499`.
+- `NOODLE_COIN_PACK_PRODUCT_MAP` - maps Stripe metadata product IDs (or `spec_id`) to coin pack IDs using the same values as `NOODLE_COIN_PACK_SKU_MAP`.
 
 ## PebbleHost .env Template
 

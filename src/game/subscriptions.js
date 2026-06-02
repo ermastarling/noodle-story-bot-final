@@ -3,11 +3,13 @@ export const SUBSCRIPTION_PERKS = Object.freeze({
   TAKEOUT_COUNTER: "takeout_counter"
 });
 
-export const SUBSCRIPTION_MONTHLY_COIN_GRANT = 25_000;
+export const SUBSCRIPTION_MONTHLY_COIN_GRANT = 50_000;
 export const ORDER_ACCEPT_CAP_BASE = 5;
 export const ORDER_ACCEPT_CAP_HOUSE_247 = 500;
+export const HOUSE_247_VOTE_DURATION_MS = 12 * 60 * 60 * 1000;
 
 const KNOWN_PERKS = new Set(Object.values(SUBSCRIPTION_PERKS));
+const PAID_SUBSCRIPTION_PERKS = new Set([SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]);
 
 function defaultPerkState() {
   return {
@@ -42,7 +44,7 @@ function parseSkuMap(rawValue) {
     return Object.fromEntries(
       Object.entries(parsed)
         .map(([sku, perk]) => [String(sku), String(perk).trim().toLowerCase()])
-        .filter(([, perk]) => KNOWN_PERKS.has(perk))
+        .filter(([, perk]) => PAID_SUBSCRIPTION_PERKS.has(perk))
     );
   } catch {
     const pairs = raw.split(",").map((entry) => entry.trim()).filter(Boolean);
@@ -51,7 +53,7 @@ function parseSkuMap(rawValue) {
       const [sku, perk] = pair.split(":").map((part) => String(part || "").trim());
       if (!sku || !perk) continue;
       const perkId = perk.toLowerCase();
-      if (!KNOWN_PERKS.has(perkId)) continue;
+      if (!PAID_SUBSCRIPTION_PERKS.has(perkId)) continue;
       mapped[sku] = perkId;
     }
     return mapped;
@@ -63,6 +65,50 @@ const ENV_SKU_MAP = parseSkuMap(process.env.NOODLE_SUBSCRIPTION_SKU_MAP);
 export function resolveSubscriptionPerkId(skuId) {
   if (!skuId) return null;
   return ENV_SKU_MAP[String(skuId)] ?? null;
+}
+
+function ensureVoteRewardState(player) {
+  if (!player || typeof player !== "object") return null;
+  if (!player.vote_rewards || typeof player.vote_rewards !== "object" || Array.isArray(player.vote_rewards)) {
+    player.vote_rewards = {
+      pending_claims: 0,
+      last_vote_at: null,
+      last_claim_at: null,
+      last_webhook_at: null,
+      sources: {},
+      house_247_expires_at: null
+    };
+  }
+  return player.vote_rewards;
+}
+
+export function getHouse247VoteExpiry(player) {
+  const voteRewards = ensureVoteRewardState(player);
+  const expiresAt = Number(voteRewards?.house_247_expires_at || 0);
+  return Number.isFinite(expiresAt) && expiresAt > 0 ? Math.floor(expiresAt) : null;
+}
+
+export function hasHouse247VoteAccess(player, now = Date.now()) {
+  const expiresAt = getHouse247VoteExpiry(player);
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return false;
+  return Number(now) < expiresAt;
+}
+
+export function grantHouse247VoteAccess(player, {
+  now = Date.now(),
+  durationMs = HOUSE_247_VOTE_DURATION_MS
+} = {}) {
+  const voteRewards = ensureVoteRewardState(player);
+  const duration = Math.max(0, Math.floor(Number(durationMs) || 0));
+  if (duration <= 0) return getHouse247VoteExpiry(player);
+
+  const currentExpiry = Number(voteRewards?.house_247_expires_at || 0);
+  const startAt = Number.isFinite(currentExpiry) && currentExpiry > Number(now)
+    ? currentExpiry
+    : Number(now);
+  const nextExpiry = Math.floor(startAt + duration);
+  voteRewards.house_247_expires_at = nextExpiry;
+  return nextExpiry;
 }
 
 function normalizeTimestamp(value) {
@@ -142,11 +188,11 @@ export function hasActivePerk(player, perkId, now = Date.now()) {
 }
 
 export function hasUnlimitedMarketStock(player, now = Date.now()) {
-  return hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, now);
+  return hasHouse247VoteAccess(player, now);
 }
 
 export function getOrderAcceptCap(player, now = Date.now()) {
-  return hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, now)
+  return hasHouse247VoteAccess(player, now)
     ? ORDER_ACCEPT_CAP_HOUSE_247
     : ORDER_ACCEPT_CAP_BASE;
 }

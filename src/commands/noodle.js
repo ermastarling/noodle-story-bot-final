@@ -86,7 +86,7 @@ import {
   normalizeNewsClassification,
 } from "../util/news.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
-import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
+import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS, repairPartyRecord } from "../game/social.js";
 import {
   applySubscriptionEntitlementEvent,
   applyMonthlySubscriptionCoinGrant,
@@ -97,6 +97,7 @@ import {
   hasActivePerk,
   hasUnlimitedMarketStock
 } from "../game/subscriptions.js";
+import { grantStoreCoinPack, getStoreCoinPack, STORE_COIN_PACKS } from "../game/storeCoinPacks.js";
 import {
   TAKEOUT_SHIFT_DURATION_HOURS,
   TAKEOUT_MENU_MAX_RECIPES,
@@ -278,6 +279,14 @@ function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = 
   return `${truncatedVisible}${suffix}`;
 }
 
+function getHouse247Label() {
+  return `${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House`;
+}
+
+function getTakeoutCounterLabel() {
+  return `${getIcon("perk_takeout_counter", getIcon("orders"))} Take Out Counter`;
+}
+
 function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false, consumeSubscriptionNotice = false } = {}) {
   if (!player) return payload;
 
@@ -353,11 +362,11 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
 
   const subscriptionPerkMeta = {
     [SUBSCRIPTION_PERKS.HOUSE_247]: {
-      name: "24/7 House",
+      name: getHouse247Label(),
       tryLine: "Try it in **/noodle orders** and **/noodle market**."
     },
     [SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]: {
-      name: "Take Out Counter",
+      name: getTakeoutCounterLabel(),
       tryLine: "Try it in **/noodle takeout** from your orders menu."
     }
   };
@@ -828,7 +837,7 @@ function isDevAdmin(userId) {
 }
 
 function hasHouse247Perk(player) {
-  return hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, nowTs());
+  return hasUnlimitedMarketStock(player, nowTs());
 }
 
 function applyHouse247OrderBoardOverride(player) {
@@ -2996,8 +3005,17 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
     )
     : getIconUrl("decor_set_placeholder");
 
+  const activePerkTitleIcons = [];
+  if (hasUnlimitedMarketStock(player, nowTs())) {
+    activePerkTitleIcons.push(getIcon("perk_house_247", getIcon("sparkle")));
+  }
+  if (hasActivePerk(player, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs())) {
+    activePerkTitleIcons.push(getIcon("perk_takeout_counter", getIcon("sparkle")));
+  }
+  const titlePrefix = activePerkTitleIcons.length ? `${activePerkTitleIcons.join(" ")} ` : "";
+
   const embed = new EmbedBuilder()
-    .setTitle(`${getIcon("profile")} ${player.profile.shop_name}`)
+    .setTitle(`${titlePrefix}${getIcon("profile")} ${player.profile.shop_name}`)
     .setDescription(description)
     .setColor(theme.colors.primary)
     .addFields(
@@ -3639,7 +3657,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
   const descriptionLines = [
     "Select up to **5** items",
     "When you’re done selecting, if on Desktop, press **Esc** to continue",
-    unlimitedMarketStock ? `${getIcon("sparkle")} 24/7 House active: market stock is **unlimited**.` : null,
+    unlimitedMarketStock ? `${getHouse247Label()} active: market stock is **unlimited**.` : null,
     shoppingList ? "" : null,
     shoppingList,
     "",
@@ -5071,7 +5089,7 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "subscriptions" || sub === "subscriptions_toggle" || sub === "dashboard";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "repair_party" || sub === "subscriptions" || sub === "giveaway_winner" || sub === "dashboard";
 const inDevPath = group === "dev" || isDevSubcommand;
 
 const buildDevStatusEmbed = () => {
@@ -5360,6 +5378,73 @@ if (inDevPath && sub === "repair_profile") {
   });
 }
 
+if (inDevPath && sub === "repair_party") {
+  const partyIdInput = opt.getString("party_id")?.trim();
+  const serverOverride = opt.getString("server_id")?.trim() || "";
+  const targetServerId = serverOverride || serverId;
+  const scopedServerId = serverOverride || null;
+
+  if (!partyIdInput) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Provide a party ID or prefix to repair.", isError: true })],
+      ephemeral: true
+    });
+  }
+  if (!db) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ephemeral: true
+    });
+  }
+
+  const lockScope = scopedServerId || "global";
+  const lockKey = `lock:party:${lockScope}:${partyIdInput}`;
+  return await withLock(db, lockKey, owner, 8000, async () => {
+    try {
+      const result = repairPartyRecord(db, partyIdInput, scopedServerId);
+      const summary = [
+        `Party: ${result.partyId} (server ${result.serverId})`,
+        `Status: ${result.statusBefore} -> ${result.statusAfter}`,
+        `Leader: <@${result.leaderBefore}> -> <@${result.leaderAfter}>`,
+        `Active members: ${result.activeMemberCount}`
+      ];
+
+      if (!scopedServerId && result.serverId !== serverId) {
+        summary.push(`Note: repaired party was found in a different server (${result.serverId}).`);
+      }
+
+      if (result.repaired) {
+        summary.push(`Applied fixes: ${result.changes.join(", ")}`);
+        return commit({
+          content: " ",
+          embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+          ephemeral: true
+        });
+      }
+
+      summary.push("No repair needed.");
+      return commit({
+        content: " ",
+        embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+        ephemeral: true
+      });
+    } catch (err) {
+      return commit({
+        content: " ",
+        embeds: [
+          buildDevMessageEmbed({
+            message: `${getIcon("error")} Party repair failed: ${err?.message || "unknown error"}`,
+            isError: true
+          })
+        ],
+        ephemeral: true
+      });
+    }
+  });
+}
+
 if (inDevPath && sub === "subscriptions") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
@@ -5409,7 +5494,7 @@ if (inDevPath && sub === "subscriptions") {
     const perkLines = Object.values(SUBSCRIPTION_PERKS).map((perkId) => {
       const state = perks[perkId] ?? {};
       const activeNow = hasActivePerk(targetPlayer, perkId, now);
-      const name = perkId === SUBSCRIPTION_PERKS.HOUSE_247 ? "24/7 House" : "Take Out Counter";
+      const name = perkId === SUBSCRIPTION_PERKS.HOUSE_247 ? getHouse247Label() : getTakeoutCounterLabel();
       const status = activeNow ? "ACTIVE" : "inactive";
       return [
         `**${name}** (${perkId})`,
@@ -5446,12 +5531,17 @@ if (inDevPath && sub === "subscriptions") {
   });
 }
 
-if (inDevPath && sub === "subscriptions_toggle") {
+if (inDevPath && sub === "giveaway_winner") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
   const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const rewardType = String(opt.getString("reward_type") || "").trim().toLowerCase();
   const perkSelection = String(opt.getString("perk") || "").trim().toLowerCase();
-  const active = opt.getBoolean("active");
+  const coinPackId = String(opt.getString("coin_pack") || "").trim().toLowerCase();
+  const coinAmountRaw = Number(opt.getInteger("coins"));
+  const coinAmount = Number.isFinite(coinAmountRaw) && coinAmountRaw > 0
+    ? Math.floor(coinAmountRaw)
+    : 0;
   const durationDaysRaw = Number(opt.getInteger("duration_days"));
   const durationDays = Number.isFinite(durationDaysRaw) && durationDaysRaw > 0
     ? Math.floor(durationDaysRaw)
@@ -5465,13 +5555,6 @@ if (inDevPath && sub === "subscriptions_toggle") {
       ephemeral: true
     });
   }
-  if (active == null) {
-    return commit({
-      content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide active=true or active=false.", isError: true })],
-      ephemeral: true
-    });
-  }
   if (!db) {
     return commit({
       content: " ",
@@ -5480,15 +5563,10 @@ if (inDevPath && sub === "subscriptions_toggle") {
     });
   }
 
-  let selectedPerkIds;
-  if (perkSelection === "both") {
-    selectedPerkIds = [SUBSCRIPTION_PERKS.HOUSE_247, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER];
-  } else if (perkSelection === SUBSCRIPTION_PERKS.HOUSE_247 || perkSelection === SUBSCRIPTION_PERKS.TAKEOUT_COUNTER) {
-    selectedPerkIds = [perkSelection];
-  } else {
+  if (rewardType !== "perk" && rewardType !== "coin_pack" && rewardType !== "coins") {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Invalid perk selection. Use house_247, takeout_counter, or both.", isError: true })],
+      embeds: [buildDevMessageEmbed({ message: "Invalid reward type. Use perk, coin_pack, or coins.", isError: true })],
       ephemeral: true
     });
   }
@@ -5498,23 +5576,40 @@ if (inDevPath && sub === "subscriptions_toggle") {
     const existingPlayer = getPlayer(db, targetServerId, targetUserId);
     const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
     const now = nowTs();
-    const periodEndAt = active ? (now + (durationDays * 24 * 60 * 60 * 1000)) : now;
-    const eventType = active ? "ENTITLEMENT_UPDATE" : "ENTITLEMENT_DELETE";
+    const rewardSummaryLines = [];
+    let publicWinnerLine = "";
 
-    const beforeStates = {};
-    const afterStates = {};
-    let totalGrant = 0;
-    for (const perkId of selectedPerkIds) {
-      beforeStates[perkId] = hasActivePerk(targetPlayer, perkId, now);
-      applySubscriptionEntitlementEvent(targetPlayer, {
-        perkId,
-        eventType,
-        entitlementId: `dev_manual:${perkId}:${targetUserId}`,
-        periodStartAt: active ? now : null,
-        periodEndAt,
-        now
-      });
-      if (active) {
+    if (rewardType === "perk") {
+      let selectedPerkIds;
+      if (perkSelection === "both") {
+        selectedPerkIds = [SUBSCRIPTION_PERKS.HOUSE_247, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER];
+      } else if (perkSelection === SUBSCRIPTION_PERKS.HOUSE_247 || perkSelection === SUBSCRIPTION_PERKS.TAKEOUT_COUNTER) {
+        selectedPerkIds = [perkSelection];
+      } else {
+        return commit({
+          content: " ",
+          embeds: [buildDevMessageEmbed({ message: "For perk rewards, choose house_247, takeout_counter, or both.", isError: true })],
+          ephemeral: true
+        });
+      }
+
+      const periodEndAt = now + (durationDays * 24 * 60 * 60 * 1000);
+      let totalGrant = 0;
+      const perkNames = {
+        [SUBSCRIPTION_PERKS.HOUSE_247]: getHouse247Label(),
+        [SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]: getTakeoutCounterLabel()
+      };
+
+      for (const perkId of selectedPerkIds) {
+        applySubscriptionEntitlementEvent(targetPlayer, {
+          perkId,
+          eventType: "ENTITLEMENT_UPDATE",
+          entitlementId: `dev_manual:giveaway:${perkId}:${targetUserId}`,
+          periodStartAt: now,
+          periodEndAt,
+          now
+        });
+
         const grantResult = applyMonthlySubscriptionCoinGrant(targetPlayer, {
           perkId,
           periodStartAt: now,
@@ -5524,35 +5619,69 @@ if (inDevPath && sub === "subscriptions_toggle") {
         if (grantResult?.granted) {
           totalGrant += Math.max(0, Math.floor(Number(grantResult.amount || 0) || 0));
         }
+
+        rewardSummaryLines.push(`• Granted perk: ${perkNames[perkId]} (${perkId}) for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
       }
-      afterStates[perkId] = hasActivePerk(targetPlayer, perkId, now);
+
+      rewardSummaryLines.push(`• Monthly subscription coins credited now: **${totalGrant}c**.`);
+      const perkRewardIcon = selectedPerkIds.length === 1
+        ? (selectedPerkIds[0] === SUBSCRIPTION_PERKS.HOUSE_247 ? getIcon("perk_house_247", getIcon("sparkle")) : getIcon("perk_takeout_counter", getIcon("orders")))
+        : `${getIcon("perk_house_247", getIcon("sparkle"))} ${getIcon("perk_takeout_counter", getIcon("orders"))}`;
+      publicWinnerLine = `${perkRewardIcon} Giveaway winner reward sent to <@${targetUserId}>: **${selectedPerkIds.length > 1 ? "Perks" : "Perk"}** (${durationDays} day${durationDays === 1 ? "" : "s"}).`;
+    } else if (rewardType === "coin_pack") {
+      const pack = getStoreCoinPack(coinPackId);
+      if (!pack) {
+        return commit({
+          content: " ",
+          embeds: [buildDevMessageEmbed({ message: "For coin pack rewards, choose a valid coin_pack option.", isError: true })],
+          ephemeral: true
+        });
+      }
+
+      const grantResult = grantStoreCoinPack({ player: targetPlayer, coinPackId });
+      if (!grantResult?.ok) {
+        return commit({
+          content: " ",
+          embeds: [buildDevMessageEmbed({ message: `Failed to grant coin pack: ${grantResult?.reason || "unknown error"}.`, isError: true })],
+          ephemeral: true
+        });
+      }
+
+      rewardSummaryLines.push(`• Granted coin pack: ${pack.priceLabel} (${pack.coins.toLocaleString()}c) [${coinPackId}].`);
+      publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${pack.coins.toLocaleString()}c** (${pack.priceLabel} pack).`;
+    } else {
+      if (coinAmount <= 0) {
+        return commit({
+          content: " ",
+          embeds: [buildDevMessageEmbed({ message: "For coin rewards, provide a coins value greater than 0.", isError: true })],
+          ephemeral: true
+        });
+      }
+
+      targetPlayer.coins = (Number(targetPlayer.coins) || 0) + coinAmount;
+      if (!targetPlayer.lifetime || typeof targetPlayer.lifetime !== "object") {
+        targetPlayer.lifetime = {};
+      }
+      targetPlayer.lifetime.coins_earned = (Number(targetPlayer.lifetime.coins_earned) || 0) + coinAmount;
+
+      rewardSummaryLines.push(`• Granted direct coins: **${coinAmount.toLocaleString()}c**.`);
+      publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${coinAmount.toLocaleString()}c**.`;
     }
 
     upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
 
-    const perkNames = {
-      [SUBSCRIPTION_PERKS.HOUSE_247]: "24/7 House",
-      [SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]: "Take Out Counter"
-    };
-    const stateLines = selectedPerkIds.map((perkId) => {
-      const before = beforeStates[perkId] ? "ACTIVE" : "inactive";
-      const after = afterStates[perkId] ? "ACTIVE" : "inactive";
-      return `• ${perkNames[perkId]} (${perkId}): ${before} -> ${after}`;
-    });
-
     const messageLines = [
-      `${getIcon("status_complete")} Updated subscriptions for <@${targetUserId}> (${targetUserId}) on server ${targetServerId}.`,
-      `Mode: ${active ? `enable (${durationDays} day${durationDays === 1 ? "" : "s"})` : "disable"}`,
-      ...stateLines,
-      active ? `Subscription coin grant awarded now: **${totalGrant}c**` : null,
+      `${getIcon("status_complete")} Giveaway reward delivered to <@${targetUserId}> (${targetUserId}) on server ${targetServerId}.`,
+      `Reward type: ${rewardType}`,
+      ...rewardSummaryLines,
       reason ? `Reason: ${reason}` : null,
       !existingPlayer ? "Note: Created a new player profile for this target." : null
     ].filter(Boolean);
 
     return commit({
-      content: " ",
+      content: publicWinnerLine,
       embeds: [buildDevMessageEmbed({ message: messageLines.join("\n") })],
-      ephemeral: true
+      ephemeral: false
     });
   });
 }
@@ -5993,7 +6122,16 @@ if (sub === "profile_edit") {
   const specializationsAvailable = getSpecializationAlert(p);
   const embed = buildMenuEmbed({
     title: `${getIcon("customize")} Customize Profile`,
-    description: "• Change your shop name & give it a tagline here.\n\n• You will unlock specializations based on your shop level, when you change your active specialization, it will update your shop's decor!\n\n• Purchase a **premium shop specialization that includes 10,000c** for your shop, head to the **store** now!",
+    description: [
+      "• Change your shop name & give it a tagline here.",
+      "",
+      "• You unlock specializations as your shop levels up. Changing your active specialization updates your shop decor.",
+      "",
+      "• Check out the **Store** to browse all premium options:",
+      "  - Premium Shop Specializations",
+      "  - Coin Packs",
+      `  - ${getTakeoutCounterLabel()} Subscription Perk`
+    ].join("\n"),
     user: interaction.member ?? interaction.user
   });
   return commit({
@@ -6008,6 +6146,7 @@ if (sub === "store") {
   const specializationsAvailable = getSpecializationAlert(p);
   const specState = ensureSpecializationState(p);
   const unlockedSpecIds = new Set(specState?.unlocked_spec_ids ?? []);
+  const takeoutActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
   const purchasableSpecs = (specializationsContent?.specializations ?? [])
     .filter((spec) => spec?.requirements?.purchase_required)
     .sort((a, b) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")));
@@ -6019,22 +6158,45 @@ if (sub === "store") {
       : `${specIcon} ${spec.name}`;
   });
 
+  const coinPackLines = Object.values(STORE_COIN_PACKS)
+    .sort((a, b) => Number(a?.priceUsd || 0) - Number(b?.priceUsd || 0))
+    .map((pack) => `${getIcon("coins")} ${pack.priceLabel} — **${Number(pack.coins || 0).toLocaleString()}c**`);
+
+  const takeoutPerkLines = [
+    `${takeoutActive ? getIcon("status_complete") : getIcon("status_pending")} ${getTakeoutCounterLabel()} — ${takeoutActive ? "Active" : "Not active"}`,
+    `${getIcon("coins")} Includes **${SUBSCRIPTION_MONTHLY_COIN_GRANT.toLocaleString()}c** per month while subscription is active.`,
+    `${getIcon("perk_takeout_counter")} Start 12-hour counter shifts where your main shop goes idle and you serve from your Take Out Counter menu, bank **massive extra coins** while you're away with this perk.`
+  ];
+
   const storeEmbed = buildMenuEmbed({
-    title: `${getIcon("cart")} Shop Specialization Store`,
+    title: `${getIcon("cart")} Noodle Story Store`,
     description:
-      `Visit the store to purchase **premium shop specializations** that include **10,000c** for your shop.\n` +
+      "Browse premium content for your shop\n" +
+      `• Premium Shop Specializations include **10,000c** each\n` +
+      `• Coin Packs\n` +
+      `• ${getTakeoutCounterLabel()} Subscription Perk\n\n` +
       `**[Open Store](${DISCORD_STORE_URL})**`,
     user: interaction.member ?? interaction.user
   });
   storeEmbed.setURL(DISCORD_STORE_URL);
-  storeEmbed.setFields(
-    chunkLinesIntoEmbedFields(purchasableLines, {
-      firstFieldName: `${getIcon("sparkle")} Available Specializations`,
-      continuationFieldName: `${getIcon("sparkle")} Available Specializations (cont.)`,
+  storeEmbed.setFields([
+    ...chunkLinesIntoEmbedFields(purchasableLines, {
+      firstFieldName: `${getIcon("sparkle")} Premium Specializations`,
+      continuationFieldName: `${getIcon("sparkle")} Premium Specializations (cont.)`,
       maxFieldLength: 1000,
-      maxFields: 10
-    })
-  );
+      maxFields: 8
+    }),
+    {
+      name: `${getIcon("coins")} Coin Packs`,
+      value: coinPackLines.join("\n") || "_No coin packs configured._",
+      inline: false
+    },
+    {
+      name: `${getIcon("perk_takeout_counter", getIcon("orders"))} Subscription Perk`,
+      value: takeoutPerkLines.join("\n"),
+      inline: false
+    }
+  ]);
 
   const storeLinkRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -6578,7 +6740,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub === "takeout_claim" || sub === "takeout_cook" || sub === "takeout_serve" || sub === "takeout_needs") {
   if (!db) {
     const unavailableEmbed = buildMenuEmbed({
-      title: `${getIcon("orders")} Take Out Counter`,
+      title: getTakeoutCounterLabel(),
       description: `${getIcon("error")} Database unavailable in this environment.`,
       user: interaction.member ?? interaction.user,
       color: theme.colors.warning
@@ -6602,8 +6764,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
     if (!takeoutEnabled) {
       const lockedEmbed = buildMenuEmbed({
-        title: `${getIcon("orders")} Take Out Counter`,
-        description: `${getIcon("lock")} Take Out Counter requires an active subscription entitlement.`,
+        title: getTakeoutCounterLabel(),
+        description: `${getIcon("lock")} ${getTakeoutCounterLabel()} requires an active subscription.`,
         user: interaction.member ?? interaction.user,
         color: theme.colors.warning
       });
@@ -6815,13 +6977,13 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
             "• Tap **Counter** again to load your next shift ingredient cost + expected orders.",
             "• Tap **Start Shift** to begin your first 12h run.",
             "",
-            `${getIcon("orders")} Open **/noodle takeout** any time to manage your Takeout Counter shift.`
+            `${getTakeoutCounterLabel()} Open **/noodle takeout** any time to manage your Take Out Counter shift.`
           ].join("\n")
         : null;
 
       const description = [
         banner,
-        "Set your counter menu, start a cozy 12-hour shift, and collect idle earnings. While the shift is active, your main **Order Board** is idle and all service happens from the **Take Out Counter**.",
+        `Set your counter menu, start a cozy 12-hour shift, and collect idle earnings. While the shift is active, your main **Order Board** is idle and all service happens from **${getTakeoutCounterLabel()}**.`,
         "",
         takeoutCatchup?.processedHours > 0
           ? `${getIcon("time")} **${takeoutCatchup.processedHours}h** & earned **${takeoutCatchup.earned}c** while you were away.`
@@ -6834,14 +6996,14 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       ].filter(Boolean).join("\n");
 
       const embed = buildMenuEmbed({
-        title: `${getIcon("orders")} Take Out Counter`,
+        title: getTakeoutCounterLabel(),
         description,
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
       const firstCounterSetupEmbed = firstCounterSetupGuide
         ? buildMenuEmbed({
-            title: `${getIcon("sparkle")} Take Out Counter Setup`,
+            title: `${getTakeoutCounterLabel()} Setup`,
             description: firstCounterSetupGuide,
             user: interaction.member ?? interaction.user
           })
@@ -8109,6 +8271,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const status = getVoteRewardStatus(latestPlayer);
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
+    const house247Line = status.house247ExpiresAt
+      ? `<t:${Math.floor(status.house247ExpiresAt / 1000)}:R>`
+      : "Not active";
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
     const maxButtonsPerRow = 5;
     const maxLinkRows = 3;
@@ -8165,6 +8330,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         voteLinks,
         "",
         `Per vote reward: ${rewardLine}`,
+        `Per vote bonus: ${getHouse247Label()} **+12h** (unlimited orders + market stock)`,
+        `${getHouse247Label()} remaining: **${house247Line}**`,
         `Ready to claim: **${status.pendingClaims}**`,
         `Last vote: **${lastVoteLine}**`,
         "_After voting, press **Vote Rewards** button to refresh._"
@@ -9514,7 +9681,7 @@ ${lines.join("\n")}`;
 
     const capacityNote = qtyToBuy < qty ? `\n${getIcon("pantry")} Pantry capacity limited your purchase to **${qtyToBuy}**.` : "";
     const subscriptionNote = unlimitedMarketStock
-      ? `\n${getIcon("sparkle")} 24/7 House active: unlimited stock.`
+      ? `\n${getHouse247Label()} active: unlimited stock.`
       : "";
     const buyEmbed = buildMenuEmbed({
       title: `${getIcon("cart")} Purchase Complete`,
@@ -9921,13 +10088,13 @@ ${lines.join("\n")}`;
     if (takeoutShiftActive) {
       parts.push(
         "**Today’s Orders**",
-        `${getIcon("time")} Your shop is idle on the main **Order Board** while your Take Out Counter shift is active. Serve orders from **Take Out Counter** until the shift ends.`
+        `${getTakeoutCounterLabel()} Your shop is idle on the main **Order Board** while your Take Out Counter shift is active. Serve orders from **${getTakeoutCounterLabel()}** until the shift ends.`
       );
     } else if (remaining > 0) {
       parts.push(
         "**Today’s Orders**",
         hasHouse247Perk(p)
-          ? `${getIcon("sparkle")} **24/7 House active: unlimited orders.** Tap **Accept** below to start serving customers.`
+          ? `**${getHouse247Label()} active: unlimited orders.** Tap **Accept** below to start serving customers.`
           : `There are **${remaining}** orders available. Tap **Accept** below to start serving customers.`
       );
     } else if (acceptedLines.length) {
@@ -9936,7 +10103,10 @@ ${lines.join("\n")}`;
         `No new orders left today. Finish your accepted ones and come back ${nextOrdersResetText}.`
       );
     } else {
-      parts.push(`${getIcon("confetti")} You’ve completed all of today’s orders! New orders arrive ${nextOrdersResetText}.`);
+      parts.push(
+        `${getIcon("confetti")} You’ve completed all of today’s orders! New orders arrive ${nextOrdersResetText}.`,
+        `${getIcon("vote")} Want unlimited orders before reset? Vote in **/noodle quests_vote** to activate **${getHouse247Label()}** for **12 hours per vote**.`
+      );
     }
 
 
@@ -9998,7 +10168,7 @@ ${lines.join("\n")}`;
     const takeoutShiftActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now2) && isTakeoutShiftActive(p, now2);
     if (takeoutShiftActive) {
       return commitState({
-        content: `${getIcon("time")} Your shop is idle on the main **Order Board** while Take Out Counter is active. Serve orders from **Take Out Counter** until the shift ends.`,
+        content: `${getTakeoutCounterLabel()} Your shop is idle on the main **Order Board** while Take Out Counter is active. Serve orders from **${getTakeoutCounterLabel()}** until the shift ends.`,
         ephemeral: true
       });
     }
@@ -10409,7 +10579,7 @@ ${lines.join("\n")}`;
     const takeoutShiftActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now2) && isTakeoutShiftActive(p, now2);
     if (takeoutShiftActive) {
       return commitState({
-        content: `${getIcon("time")} Your shop is idle on the main **Order Board** while Take Out Counter is active. Serve orders from **Take Out Counter** until the shift ends.`,
+        content: `${getTakeoutCounterLabel()} Your shop is idle on the main **Order Board** while Take Out Counter is active. Serve orders from **${getTakeoutCounterLabel()}** until the shift ends.`,
         ephemeral: true
       });
     }
@@ -12698,7 +12868,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const buyEmbed = buildMenuEmbed({
           title: `${getIcon("cart")} Purchase Complete`,
-          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? `\n${getIcon("pantry")} Pantry capacity limited this purchase.` : ""}${unlimitedMarketStock ? `\n${getIcon("sparkle")} 24/7 House active: stock limit bypassed.` : ""}${tutorialSuffix(p2)}`,
+          description: `Bought:\n${pretty}\n\nTotal: **${totalCost}c**.${capacityReduced ? `\n${getIcon("pantry")} Pantry capacity limited this purchase.` : ""}${unlimitedMarketStock ? `\n${getHouse247Label()} active: stock limit bypassed.` : ""}${tutorialSuffix(p2)}`,
           user: interaction.member ?? interaction.user
         });
         buyEmbed.setFooter({

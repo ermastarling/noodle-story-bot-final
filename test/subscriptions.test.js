@@ -6,10 +6,12 @@ import {
   ORDER_ACCEPT_CAP_HOUSE_247,
   SUBSCRIPTION_PERKS,
   SUBSCRIPTION_MONTHLY_COIN_GRANT,
+  HOUSE_247_VOTE_DURATION_MS,
   applySubscriptionEntitlementEvent,
   applyMonthlySubscriptionCoinGrant,
   createDefaultSubscriptionState,
   ensureSubscriptionState,
+  grantHouse247VoteAccess,
   getOrderAcceptCap,
   hasUnlimitedMarketStock,
   hasActivePerk
@@ -106,7 +108,7 @@ test("Subscriptions: monthly coin grant is idempotent per billing period", () =>
   const periodEnd = periodStart + (30 * 24 * 60 * 60 * 1000);
 
   const first = applyMonthlySubscriptionCoinGrant(player, {
-    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
     periodStartAt: periodStart,
     periodEndAt: periodEnd,
     now: periodStart + 1000
@@ -118,7 +120,7 @@ test("Subscriptions: monthly coin grant is idempotent per billing period", () =>
   assert.equal(player.lifetime.coins_earned, 50 + SUBSCRIPTION_MONTHLY_COIN_GRANT);
 
   const second = applyMonthlySubscriptionCoinGrant(player, {
-    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
     periodStartAt: periodStart,
     periodEndAt: periodEnd,
     now: periodStart + 2000
@@ -150,35 +152,41 @@ test("Subscriptions: both perks grant monthly coins independently", () => {
   assert.equal(player.lifetime.coins_earned, SUBSCRIPTION_MONTHLY_COIN_GRANT * 2);
 });
 
-test("Subscriptions: 24/7 House increases active order cap", () => {
+test("Subscriptions: vote-granted 24/7 House increases active order cap", () => {
   const player = {};
   const now = 1_700_000_000_000;
 
   assert.equal(getOrderAcceptCap(player, now), ORDER_ACCEPT_CAP_BASE);
 
-  applySubscriptionEntitlementEvent(player, {
-    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
-    eventType: "ENTITLEMENT_CREATE",
-    periodEndAt: now + 1000,
-    now
-  });
+  grantHouse247VoteAccess(player, { now });
 
   assert.equal(getOrderAcceptCap(player, now + 1), ORDER_ACCEPT_CAP_HOUSE_247);
+  assert.equal(getOrderAcceptCap(player, now + HOUSE_247_VOTE_DURATION_MS + 1), ORDER_ACCEPT_CAP_BASE);
 });
 
-test("Subscriptions: 24/7 House grants unlimited market stock behavior", () => {
+test("Subscriptions: vote-granted 24/7 House grants unlimited market stock behavior", () => {
   const player = {};
   const now = 1_700_000_000_000;
 
   assert.equal(hasUnlimitedMarketStock(player, now), false);
 
+  grantHouse247VoteAccess(player, { now });
+
+  assert.equal(hasUnlimitedMarketStock(player, now + 1), true);
+  assert.equal(hasUnlimitedMarketStock(player, now + HOUSE_247_VOTE_DURATION_MS + 1), false);
+});
+
+test("Subscriptions: entitlement-only 24/7 perk no longer unlocks market stock", () => {
+  const player = {};
+  const now = 1_700_000_000_000;
+
   applySubscriptionEntitlementEvent(player, {
     perkId: SUBSCRIPTION_PERKS.HOUSE_247,
     eventType: "ENTITLEMENT_CREATE",
-    periodEndAt: now + 1000,
+    periodEndAt: now + HOUSE_247_VOTE_DURATION_MS,
     now
   });
 
-  assert.equal(hasUnlimitedMarketStock(player, now + 1), true);
-  assert.equal(hasUnlimitedMarketStock(player, now + 1001), false);
+  assert.equal(hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, now + 1), true);
+  assert.equal(hasUnlimitedMarketStock(player, now + 1), false);
 });

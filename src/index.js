@@ -62,8 +62,15 @@ import { theme } from "./ui/theme.js";
   const { getCustomEmojiEntries } = await import("./ui/icons.js");
   const { grantStoreBundle, resolveStoreBundleSpecId } = await import("./game/storeBundles.js");
   const {
+    grantStoreCoinPack,
+    getStoreCoinPack,
+    resolveStoreCoinPackIdFromMetadata,
+    resolveStoreCoinPackIdFromSku
+  } = await import("./game/storeCoinPacks.js");
+  const {
     applySubscriptionEntitlementEvent,
     applyMonthlySubscriptionCoinGrant,
+    SUBSCRIPTION_PERKS,
     hasActivePerk,
     resolveSubscriptionBillingPeriodKey,
     resolveSubscriptionPerkId
@@ -2684,15 +2691,16 @@ import { theme } from "./ui/theme.js";
         const metadata = session?.metadata ?? {};
         const discordId = metadata?.discord_id || session?.client_reference_id || null;
         const specId = metadata?.spec_id || null;
+        const coinPackId = resolveStoreCoinPackIdFromMetadata(metadata);
 
         webhookInfo(
           "Stripe: Checkout completed",
-          JSON.stringify({ sessionId, discordId, specId })
+          JSON.stringify({ sessionId, discordId, specId, coinPackId })
         );
 
-        if (!discordId || !specId) {
+        if (!discordId || (!specId && !coinPackId)) {
           res.writeHead(202, { "content-type": "text/plain" });
-          res.end("missing discord id or spec id");
+          res.end("missing discord id or purchasable id");
           return;
         }
 
@@ -2717,16 +2725,20 @@ import { theme } from "./ui/theme.js";
         let player = getPlayer(db, serverId, discordId);
         if (!player) player = newPlayerProfile(discordId);
 
-        const result = grantStoreBundle({
-          player,
-          specId,
-          specializationsContent,
-          decorSetsContent,
-          coins: 10000
-        });
+        const purchaseId = coinPackId || specId;
+        const purchaseKind = coinPackId ? "coin_pack" : "specialization";
+        const result = coinPackId
+          ? grantStoreCoinPack({ player, coinPackId })
+          : grantStoreBundle({
+              player,
+              specId,
+              specializationsContent,
+              decorSetsContent,
+              coins: 10000
+            });
         webhookInfo(
           "Stripe: Grant result",
-          JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, discordId })
+          JSON.stringify({ ok: result.ok, reason: result.reason, purchaseKind, purchaseId, serverId, discordId })
         );
 
         if (result.ok) {
@@ -2737,12 +2749,18 @@ import { theme } from "./ui/theme.js";
               userId: discordId,
               action: "stripe_checkout",
               ttlSeconds: 60 * 60 * 24 * 30,
-              result: { ok: true, specId }
+              result: { ok: true, purchaseKind, purchaseId }
             });
           }
 
-          const spec = getSpecializationById(specializationsContent, specId);
-          const specName = spec?.name ?? specId;
+          const purchaseName = (() => {
+            if (coinPackId) {
+              const pack = getStoreCoinPack(coinPackId);
+              return pack ? `${pack.priceLabel} Coin Pack` : coinPackId;
+            }
+            const spec = getSpecializationById(specializationsContent, specId);
+            return spec?.name ?? specId;
+          })();
           const stripeExternalEventId = sessionId
             ? `stripe:${sessionId}`
             : `stripe:raw:${crypto.createHash("sha256").update(rawBody).digest("hex")}`;
@@ -2751,19 +2769,19 @@ import { theme } from "./ui/theme.js";
             externalEventId: stripeExternalEventId,
             userId: discordId,
             serverId,
-            specId,
+            specId: purchaseId,
             status: "granted",
             purchasedAt: Date.now()
           });
-          const purchaseCount = getAllTimeSpecializationPurchaseCount(db, specId);
+          const purchaseCount = getAllTimeSpecializationPurchaseCount(db, purchaseId);
           await sendDevAlert({
             title: "Stripe Store Purchase Alert!",
             description:
               `User: <@${discordId}> (${discordId})\n` +
-              `Specialization: ${specName} (${specId})\n` +
+              `Purchase: ${purchaseName} (${purchaseId})\n` +
               `Server: ${serverId}\n` +
               `Session: ${sessionId ?? "unknown"}`,
-            footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`,
+            footerText: `Purchase Count: ${purchaseCount.toLocaleString()}`,
             color: theme.colors.success
           });
         }
@@ -2930,6 +2948,7 @@ import { theme } from "./ui/theme.js";
       } = extractEntitlementPayload(payload);
       const specId = resolveStoreBundleSpecId(skuId);
       const perkId = resolveSubscriptionPerkId(skuId);
+      const coinPackId = resolveStoreCoinPackIdFromSku(skuId);
 
       if (!userId) {
         res.writeHead(202, { "content-type": "text/plain" });
@@ -2937,17 +2956,18 @@ import { theme } from "./ui/theme.js";
         return;
       }
 
-      if (!specId && !perkId) {
+      if (!specId && !perkId && !coinPackId) {
         res.writeHead(202, { "content-type": "text/plain" });
         res.end("unsupported sku");
         return;
       }
 
       if (perkId) {
+        const nowMs = Date.now();
         const billingPeriodKey = resolveSubscriptionBillingPeriodKey({
           periodStartAt,
           periodEndAt,
-          now: Date.now()
+          now: nowMs
         });
         const rawPeriodStart = Number.isFinite(Number(periodStartAt)) && Number(periodStartAt) > 0
           ? Math.floor(Number(periodStartAt))
@@ -2984,6 +3004,7 @@ import { theme } from "./ui/theme.js";
 
         let subscriptionPlayer = getPlayer(db, subscriptionServerId, userId);
         if (!subscriptionPlayer) subscriptionPlayer = newPlayerProfile(userId);
+        const wasActiveBefore = hasActivePerk(subscriptionPlayer, perkId, nowMs);
 
         const lifecycleResult = applySubscriptionEntitlementEvent(subscriptionPlayer, {
           perkId,
@@ -2991,7 +3012,7 @@ import { theme } from "./ui/theme.js";
           entitlementId,
           periodStartAt,
           periodEndAt,
-          now: Date.now()
+          now: nowMs
         });
 
         let monthlyGrantResult = { ok: true, granted: false, amount: 0, billingPeriodKey: null };
@@ -3000,9 +3021,19 @@ import { theme } from "./ui/theme.js";
             perkId,
             periodStartAt,
             periodEndAt,
-            now: Date.now()
+            now: nowMs
           });
         }
+
+        const isActiveAfter = hasActivePerk(subscriptionPlayer, perkId, nowMs);
+        const takeoutStarted = perkId === SUBSCRIPTION_PERKS.TAKEOUT_COUNTER
+          && lifecycleResult.ok
+          && !wasActiveBefore
+          && isActiveAfter;
+        const takeoutEnded = perkId === SUBSCRIPTION_PERKS.TAKEOUT_COUNTER
+          && lifecycleResult.ok
+          && wasActiveBefore
+          && !isActiveAfter;
 
         if (lifecycleResult.ok || monthlyGrantResult.granted) {
           upsertPlayer(db, subscriptionServerId, userId, subscriptionPlayer, null, subscriptionPlayer.schema_version);
@@ -3028,12 +3059,40 @@ import { theme } from "./ui/theme.js";
           serverId: subscriptionServerId,
           perkId,
           eventType,
-          active: hasActivePerk(subscriptionPlayer, perkId),
+          active: isActiveAfter,
           lifecycleOk: Boolean(lifecycleResult.ok),
           lifecycleReason: lifecycleResult.reason ?? null,
           monthlyCoinsGranted: monthlyGrantResult.granted ? monthlyGrantResult.amount : 0,
           billingPeriodKey: monthlyGrantResult.billingPeriodKey ?? null
         });
+
+        if (takeoutStarted) {
+          await sendDevAlert({
+            title: "Take Out Subscription Started",
+            description:
+              `User: <@${userId}> (${userId})\n`
+              + `Perk: Take Out Counter (${perkId})\n`
+              + `Event: ${eventType}\n`
+              + `Server: ${subscriptionServerId}\n`
+              + `Monthly Coins Granted: ${monthlyGrantResult.granted ? monthlyGrantResult.amount : 0}c`,
+            footerText: `Entitlement: ${entitlementId || "unknown"}`,
+            color: theme.colors.success
+          });
+        }
+
+        if (takeoutEnded) {
+          await sendDevAlert({
+            title: "Take Out Subscription Ended",
+            description:
+              `User: <@${userId}> (${userId})\n`
+              + `Perk: Take Out Counter (${perkId})\n`
+              + `Event: ${eventType}\n`
+              + `Server: ${subscriptionServerId}\n`
+              + `Monthly Coins Granted: ${monthlyGrantResult.granted ? monthlyGrantResult.amount : 0}c`,
+            footerText: `Entitlement: ${entitlementId || "unknown"}`,
+            color: theme.colors.warning
+          });
+        }
 
         putIdempotentResult(db, {
           key: subscriptionIdempotencyKey,
@@ -3084,16 +3143,20 @@ import { theme } from "./ui/theme.js";
       let player = getPlayer(db, serverId, userId);
       if (!player) player = newPlayerProfile(userId);
 
-      const result = grantStoreBundle({
-        player,
-        specId,
-        specializationsContent,
-        decorSetsContent,
-        coins: 10000
-      });
+      const purchaseId = coinPackId || specId;
+      const purchaseKind = coinPackId ? "coin_pack" : "specialization";
+      const result = coinPackId
+        ? grantStoreCoinPack({ player, coinPackId })
+        : grantStoreBundle({
+            player,
+            specId,
+            specializationsContent,
+            decorSetsContent,
+            coins: 10000
+          });
       webhookInfo(
         "Discord: Grant result",
-        JSON.stringify({ ok: result.ok, reason: result.reason, specId, serverId, userId })
+        JSON.stringify({ ok: result.ok, reason: result.reason, purchaseKind, purchaseId, serverId, userId })
       );
 
       if (result.ok) {
@@ -3104,12 +3167,18 @@ import { theme } from "./ui/theme.js";
             userId,
             action: "discord_entitlement",
             ttlSeconds: 60 * 60 * 24 * 30,
-            result: { ok: true, specId }
+            result: { ok: true, purchaseKind, purchaseId }
           });
         }
 
-        const spec = getSpecializationById(specializationsContent, specId);
-        const specName = spec?.name ?? specId;
+        const purchaseName = (() => {
+          if (coinPackId) {
+            const pack = getStoreCoinPack(coinPackId);
+            return pack ? `${pack.priceLabel} Coin Pack` : coinPackId;
+          }
+          const spec = getSpecializationById(specializationsContent, specId);
+          return spec?.name ?? specId;
+        })();
         const discordExternalEventId = entitlementId
           ? `discord:${entitlementId}`
           : `discord:raw:${crypto.createHash("sha256").update(rawBody).digest("hex")}`;
@@ -3118,18 +3187,18 @@ import { theme } from "./ui/theme.js";
           externalEventId: discordExternalEventId,
           userId,
           serverId,
-          specId,
+          specId: purchaseId,
           status: "granted",
           purchasedAt: Date.now()
         });
-        const purchaseCount = getAllTimeSpecializationPurchaseCount(db, specId);
+        const purchaseCount = getAllTimeSpecializationPurchaseCount(db, purchaseId);
         await sendDevAlert({
           title: "Discord Store Purchase Alert!",
           description:
             `User: <@${userId}> (${userId})\n` +
-            `Specialization: ${specName} (${specId})\n` +
+            `Purchase: ${purchaseName} (${purchaseId})\n` +
             `Server: ${serverId}`,
-          footerText: `Specialization Purchases: ${purchaseCount.toLocaleString()}`,
+          footerText: `Purchase Count: ${purchaseCount.toLocaleString()}`,
           color: theme.colors.success
         });
       }

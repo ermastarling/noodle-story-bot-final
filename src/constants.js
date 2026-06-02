@@ -41,6 +41,9 @@ export const DISCOVERY_SCROLL_CHANCE_BASE = {
   quest_complete: 0.01
 };
 
+// Safety net for long dry streaks: force a clue after this many no-drop serves.
+export const DISCOVERY_PITY_NO_DROP_SERVES = 40;
+
 export const CLUES_TO_UNLOCK_RECIPE = 3;
 export const CLUE_DUPLICATE_COINS = 25;
 export const CLUE_DUPLICATE_WHILE_UNDISCOVERED_CHANCE = 0.10;

@@ -50,6 +50,23 @@ const noodleDevData = new SlashCommandBuilder()
   )
   .addSubcommand((sc) =>
     sc
+      .setName("repair_party")
+      .setDescription("Dev only.")
+      .addStringOption((o) =>
+        o
+          .setName("party_id")
+          .setDescription("Party ID or prefix (e.g. first 8 chars)")
+          .setRequired(true)
+      )
+      .addStringOption((o) =>
+        o
+          .setName("server_id")
+          .setDescription("Override server ID (defaults to current guild)")
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sc) =>
+    sc
       .setName("subscriptions")
       .setDescription("Dev only.")
       .addUserOption((o) => o.setName("user").setDescription("User to inspect").setRequired(false))
@@ -68,24 +85,48 @@ const noodleDevData = new SlashCommandBuilder()
   )
   .addSubcommand((sc) =>
     sc
-      .setName("subscriptions_toggle")
+      .setName("giveaway_winner")
       .setDescription("Dev only.")
       .addStringOption((o) =>
         o
-          .setName("perk")
-          .setDescription("Perk to toggle")
+          .setName("reward_type")
+          .setDescription("Type of reward to grant")
           .setRequired(true)
+          .addChoices(
+            { name: "Perk", value: "perk" },
+            { name: "Coin Pack", value: "coin_pack" },
+            { name: "Coins", value: "coins" }
+          )
+      )
+      .addStringOption((o) =>
+        o
+          .setName("perk")
+          .setDescription("Perk to grant (required when reward_type=perk)")
+          .setRequired(false)
           .addChoices(
             { name: "24/7 House", value: "house_247" },
             { name: "Take Out Counter", value: "takeout_counter" },
             { name: "Both Perks", value: "both" }
           )
       )
-      .addBooleanOption((o) =>
+      .addStringOption((o) =>
         o
-          .setName("active")
-          .setDescription("Set perk state (true=enable, false=disable)")
-          .setRequired(true)
+          .setName("coin_pack")
+          .setDescription("Coin pack to grant (required when reward_type=coin_pack)")
+          .setRequired(false)
+          .addChoices(
+            { name: "Chef's Coin Crate (10,000c)", value: "coin_pack_099" },
+            { name: "Brothkeeper's Savings (25,000c)", value: "coin_pack_199" },
+            { name: "Greedy Noodle Goblin Hoard (100,000c)", value: "coin_pack_499" }
+          )
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName("coins")
+          .setDescription("Coins to grant (required when reward_type=coins)")
+          .setRequired(false)
+          .setMinValue(1)
+          .setMaxValue(1000000000)
       )
       .addUserOption((o) => o.setName("user").setDescription("User to update").setRequired(false))
       .addStringOption((o) =>
@@ -103,7 +144,7 @@ const noodleDevData = new SlashCommandBuilder()
       .addIntegerOption((o) =>
         o
           .setName("duration_days")
-          .setDescription("When enabling, perk duration in days (default 30)")
+          .setDescription("When rewarding a perk, duration in days (default 30)")
           .setRequired(false)
           .setMinValue(1)
           .setMaxValue(365)
