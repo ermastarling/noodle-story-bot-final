@@ -87,7 +87,7 @@ import {
   normalizeNewsClassification,
 } from "../util/news.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
-import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS } from "../game/social.js";
+import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS, repairPartyRecord } from "../game/social.js";
 import {
   applyResilienceMechanics,
   getAvailableRecipes,
@@ -4441,7 +4441,7 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "dashboard";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "repair_party" || sub === "dashboard";
 const inDevPath = group === "dev" || isDevSubcommand;
 
 const buildDevStatusEmbed = () => {
@@ -4727,6 +4727,66 @@ if (inDevPath && sub === "repair_profile") {
       ],
       ephemeral: true
     });
+  });
+}
+
+if (inDevPath && sub === "repair_party") {
+  const partyIdInput = opt.getString("party_id")?.trim();
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+
+  if (!partyIdInput) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Provide a party ID or prefix to repair.", isError: true })],
+      ephemeral: true
+    });
+  }
+  if (!db) {
+    return commit({
+      content: " ",
+      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ephemeral: true
+    });
+  }
+
+  const lockKey = `lock:party:${targetServerId}:${partyIdInput}`;
+  return await withLock(db, lockKey, owner, 8000, async () => {
+    try {
+      const result = repairPartyRecord(db, partyIdInput, targetServerId);
+      const summary = [
+        `Party: ${result.partyId} (server ${result.serverId})`,
+        `Status: ${result.statusBefore} -> ${result.statusAfter}`,
+        `Leader: <@${result.leaderBefore}> -> <@${result.leaderAfter}>`,
+        `Active members: ${result.activeMemberCount}`
+      ];
+
+      if (result.repaired) {
+        summary.push(`Applied fixes: ${result.changes.join(", ")}`);
+        return commit({
+          content: " ",
+          embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+          ephemeral: true
+        });
+      }
+
+      summary.push("No repair needed.");
+      return commit({
+        content: " ",
+        embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+        ephemeral: true
+      });
+    } catch (err) {
+      return commit({
+        content: " ",
+        embeds: [
+          buildDevMessageEmbed({
+            message: `${getIcon("error")} Party repair failed: ${err?.message || "unknown error"}`,
+            isError: true
+          })
+        ],
+        ephemeral: true
+      });
+    }
   });
 }
 

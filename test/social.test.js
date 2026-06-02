@@ -27,6 +27,7 @@ import {
   inviteUserToParty,
   leaveParty,
   getParty,
+  repairPartyRecord,
   getUserActiveParty,
   transferTip,
   getUserTipStats,
@@ -235,6 +236,54 @@ test("Party: getUserActiveParty can be scoped by server", dbTestOpts, () => {
 
   const invited = inviteUserToParty(db, "server2", server2Party.partyId, "user2");
   assert.equal(invited.partyId, server2Party.partyId);
+
+  db.close();
+});
+
+test("Party: repair reassigns leader when leader is not active member", dbTestOpts, () => {
+  const db = setupTestDb();
+  const { partyId } = createParty(db, "server1", "leader1", "Test Party");
+  joinParty(db, "server1", partyId, "user2");
+
+  // Create an inconsistent party: active party but inactive leader membership row.
+  db.prepare("UPDATE party_members SET left_at = ? WHERE party_id = ? AND user_id = ?")
+    .run(nowTs(), partyId, "leader1");
+
+  const repaired = repairPartyRecord(db, partyId, "server1");
+  const party = getParty(db, partyId);
+
+  assert.equal(repaired.repaired, true);
+  assert.ok(repaired.changes.includes("leader:reassigned_to_active_member"));
+  assert.equal(party.leader_user_id, "user2");
+  assert.equal(party.status, "active");
+
+  db.close();
+});
+
+test("Party: repair aligns party status with member rows", dbTestOpts, () => {
+  const db = setupTestDb();
+
+  // Active party with no active members should become disbanded.
+  const p1 = createParty(db, "server1", "leaderA", "Active No Members");
+  db.prepare("UPDATE party_members SET left_at = ? WHERE party_id = ?")
+    .run(nowTs(), p1.partyId);
+  const repaired1 = repairPartyRecord(db, p1.partyId, "server1");
+  const party1 = getParty(db, p1.partyId);
+
+  assert.equal(repaired1.repaired, true);
+  assert.equal(party1.status, "disbanded");
+  assert.ok(party1.disbanded_at);
+
+  // Disbanded party with active members should become active.
+  const p2 = createParty(db, "server1", "leaderB", "Disbanded With Members");
+  db.prepare("UPDATE guild_parties SET status = 'disbanded', disbanded_at = ? WHERE party_id = ?")
+    .run(nowTs(), p2.partyId);
+  const repaired2 = repairPartyRecord(db, p2.partyId, "server1");
+  const party2 = getParty(db, p2.partyId);
+
+  assert.equal(repaired2.repaired, true);
+  assert.equal(party2.status, "active");
+  assert.equal(party2.disbanded_at, null);
 
   db.close();
 });
