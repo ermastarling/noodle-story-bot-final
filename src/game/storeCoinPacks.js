@@ -87,11 +87,18 @@ export function resolveStoreCoinPackIdFromMetadata(metadata = {}) {
     if (pack) return pack.id;
   }
 
+  const skuCandidates = [
+    metadata?.sku_id,
+    metadata?.sku
+  ];
+  for (const candidate of skuCandidates) {
+    const mapped = resolveStoreCoinPackIdFromSku(candidate);
+    if (mapped) return mapped;
+  }
+
   const mappedCandidates = [
     metadata?.product_id,
     metadata?.spec_id,
-    metadata?.sku_id,
-    metadata?.sku,
     metadata?.item_id
   ];
   for (const candidate of mappedCandidates) {

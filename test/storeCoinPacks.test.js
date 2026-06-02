@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   getStoreCoinPack,
   resolveStoreCoinPackIdFromSku,
+  resolveStoreCoinPackIdFromMetadata,
   grantStoreCoinPack
 } from "../src/game/storeCoinPacks.js";
 
@@ -39,4 +40,15 @@ test("Store coin packs: default Discord SKU mapping resolves all configured pack
   assert.equal(resolveStoreCoinPackIdFromSku("1511191985644507336"), "coin_pack_099");
   assert.equal(resolveStoreCoinPackIdFromSku("1511192707119321109"), "coin_pack_199");
   assert.equal(resolveStoreCoinPackIdFromSku("1511192852288376884"), "coin_pack_499");
+});
+
+test("Store coin packs: metadata sku_id resolves through SKU mapping", () => {
+  assert.equal(
+    resolveStoreCoinPackIdFromMetadata({ sku_id: "1511191985644507336" }),
+    "coin_pack_099"
+  );
+  assert.equal(
+    resolveStoreCoinPackIdFromMetadata({ sku: "1511192707119321109" }),
+    "coin_pack_199"
+  );
 });

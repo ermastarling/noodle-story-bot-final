@@ -2099,7 +2099,10 @@ function mergeTakeoutMenuPageSelection({
   const pageSelected = dedupeOrdered(pageSelectedRecipeIds).filter((id) => pageRecipeIds.has(id));
   const keepFromOtherPages = current.filter((id) => !pageRecipeIds.has(id));
 
-  const merged = [...keepFromOtherPages, ...pageSelected].slice(0, Math.max(1, Math.floor(Number(maxAllowed) || TAKEOUT_MENU_MAX_RECIPES)));
+  const resolvedMax = Number.isFinite(Number(maxAllowed))
+    ? Math.max(0, Math.floor(Number(maxAllowed)))
+    : TAKEOUT_MENU_MAX_RECIPES;
+  const merged = [...keepFromOtherPages, ...pageSelected].slice(0, resolvedMax);
   return merged;
 }
 
