@@ -52,3 +52,10 @@ test("Store coin packs: metadata sku_id resolves through SKU mapping", () => {
     "coin_pack_199"
   );
 });
+
+test("Store coin packs: metadata spec_id supports direct coin pack ids", () => {
+  assert.equal(
+    resolveStoreCoinPackIdFromMetadata({ spec_id: "coin_pack_199" }),
+    "coin_pack_199"
+  );
+});

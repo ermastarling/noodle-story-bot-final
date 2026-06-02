@@ -80,7 +80,10 @@ export function resolveStoreCoinPackIdFromMetadata(metadata = {}) {
     metadata?.coin_pack_id,
     metadata?.coin_pack,
     metadata?.coin_pack_key,
-    metadata?.pack_id
+    metadata?.pack_id,
+    metadata?.product_id,
+    metadata?.spec_id,
+    metadata?.item_id
   ];
   for (const candidate of directCandidates) {
     const pack = getStoreCoinPack(candidate);

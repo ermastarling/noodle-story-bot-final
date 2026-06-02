@@ -14,7 +14,6 @@
     "classification": {
       "allowed": ["player_update", "internal_update"],
       "player_update_criteria": [
-        "Gameplay, progression, economy, or reward behavior changed.",
         "Menus, UX flows, or social systems players directly use changed.",
         "New or updated content/events/decor/recipes visible in game."
       ],
@@ -26,12 +25,28 @@
   },
   "pinned": {
     "label": "Latest Update",
-    "version": "0.3.0",
-    "date": "2026-05-17",
+    "version": "0.4.0",
+    "date": "2026-06-02",
     "classification": "player_update",
-    "summary": "Expanded Bot List Vote Rewards with a cleaner vote menu, direct vote-site buttons, and clearer claim flow so players can stack high rewards faster."
+    "summary": "Released premium perks and coin packs with webhook-backed grants, plus giveaway winner rewards and discovery/takeout reliability fixes."
   },
   "sections": [
+    {
+      "title": "June 2026",
+      "entries": [
+        {
+          "version": "0.4.0",
+          "date": "2026-06-02",
+          "classification": "player_update",
+          "changes": [
+            "Launched premium perks: **24/7 House** (expanded order capacity + unlimited market stock behavior) and **Take Out Counter** (idle shift earnings).",
+            "Added coin-pack support across Discord SKU purchases and Stripe checkout metadata so rewards grant coins automatically.",
+            "Upgraded giveaway winner dev rewards to grant **Perks**, **Coin Packs**, or any direct **Coins** amount.",
+            "Improved reliability in takeout menu selection limits and coin-pack metadata resolution, with added regression coverage."
+          ]
+        }
+      ]
+    },
     {
       "title": "May 2026",
       "entries": [
@@ -71,8 +86,8 @@
       "title": "Upcoming Updates",
       "items": [
         "**Support Server Giveaways** are coming with NEW *clueboxes* that contain recipe clues!",
-        "**Monthly Subscriptions** are planned: **24/7 House** & **Take Out Counter** perks, allowing players to unlock either an unlimited order board and/or allow their noodle shop to become idle as they serve from a new location. *Estimated to release by the end of the month.*",
-        "**Noodle A Day** is on the way: a cozy daily noodle image posted in your channel of choice."
+        "**The ab",
+        "**Noodle A Day** is on the way: a cozy daily noodle image posted in your admin's channel of choice."
       ]
     }
   ]
