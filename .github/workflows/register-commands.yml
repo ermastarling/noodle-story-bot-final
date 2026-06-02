@@ -3,6 +3,14 @@ name: Register Slash Commands
 on:
   workflow_dispatch:
     inputs:
+      bot:
+        description: "Bot profile"
+        required: true
+        default: "main"
+        type: choice
+        options:
+          - main
+          - tester
       mode:
         description: "Registration mode"
         required: true
@@ -19,6 +27,7 @@ on:
 jobs:
   register:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.bot == 'tester' && 'staging' || 'production' }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -34,10 +43,21 @@ jobs:
             echo "guild input is required when mode=guild"
             exit 1
           fi
+      - name: Validate bot credentials
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+        run: |
+          if [ -z "$DISCORD_TOKEN" ] || [ -z "$DISCORD_CLIENT_ID" ]; then
+            echo "Missing DISCORD_TOKEN or DISCORD_CLIENT_ID for selected bot profile '${{ github.event.inputs.bot }}'."
+              echo "Expected environment secrets in: ${{ github.event.inputs.bot == 'tester' && 'staging' || 'production' }}"
+            echo "Create/update environment-scoped secrets named DISCORD_TOKEN and DISCORD_CLIENT_ID."
+            exit 1
+          fi
       - name: Register
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
           DISCORD_GUILD_ID: ${{ github.event.inputs.mode == 'guild' && github.event.inputs.guild || '' }}
-          NODE_ENV: ${{ secrets.NODE_ENV || 'development' }}
+          NODE_ENV: ${{ secrets.NODE_ENV || (github.event.inputs.bot == 'main' && 'production' || 'development') }}
         run: node src/register-commands.js
