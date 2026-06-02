@@ -14,6 +14,7 @@
     "classification": {
       "allowed": ["player_update", "internal_update"],
       "player_update_criteria": [
+        "Gameplay, progression, economy, or reward behavior changed.",
         "Menus, UX flows, or social systems players directly use changed.",
         "New or updated content/events/decor/recipes visible in game."
       ],
@@ -28,7 +29,7 @@
     "version": "0.4.0",
     "date": "2026-06-02",
     "classification": "player_update",
-    "summary": "Released premium perks and coin packs with webhook-backed grants, plus giveaway winner rewards and discovery/takeout reliability fixes."
+    "summary": "Released premium perks and coin packs, plus official server giveaways and discovery/takeout reliability fixes."
   },
   "sections": [
     {
@@ -86,8 +87,7 @@
       "title": "Upcoming Updates",
       "items": [
         "**Support Server Giveaways** are coming with NEW *clueboxes* that contain recipe clues!",
-        "**The ab",
-        "**Noodle A Day** is on the way: a cozy daily noodle image posted in your admin's channel of choice."
+        "**Noodle A Day** is on the way: a cozy daily noodle image posted in your channel of choice."
       ]
     }
   ]
