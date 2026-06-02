@@ -165,6 +165,13 @@ export const noodleDevCommand = {
   },
 
   async handleComponent(interaction) {
+    const denyOwnerMismatch = async (message) => {
+      if (interaction.deferred || interaction.replied) {
+        return interaction.followUp({ content: message, ephemeral: true });
+      }
+      return interaction.reply({ content: message, ephemeral: true });
+    };
+
     const customId = String(interaction.customId || "");
     const parts = customId.split(":");
     // Legacy: noodle-dev:dashboard:page:<ownerUserId>:<tabPage>
@@ -178,10 +185,7 @@ export const noodleDevCommand = {
     const page = Number(parts[4] ?? 0);
     const serverPage = mode === "nav" ? Number(parts[5] ?? 0) : 0;
     if (ownerUserId && ownerUserId !== interaction.user.id) {
-      return {
-        content: "That dashboard isn’t for you.",
-        ephemeral: true
-      };
+      return denyOwnerMismatch("That dashboard isn’t for you.");
     }
 
     return runNoodle(interaction, {

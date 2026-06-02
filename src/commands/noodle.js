@@ -5,6 +5,7 @@ import {
   canForage,
   rollForageDrops,
   applyDropsToInventory,
+  applyForagePityCounter,
   setForageCooldown,
   FORAGE_ITEM_IDS,
   RARE_FORAGE_ITEM_IDS
@@ -8791,32 +8792,25 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       drops[itemId] = (drops[itemId] ?? 0) + bonusItems;
     }
 
-    // Pity: guarantee a rare forage after 10 forages without any rare drop
+    // Pity: guarantee a rare forage after 10 forages without any rare drop.
+    // Keep pity progress until a rare actually survives capacity filtering.
     const allowedRare = RARE_FORAGE_ITEM_IDS.filter((id) => allowedForage.has(id));
-    if (allowedRare.length) {
-      const hasRareDrop = Object.keys(drops).some((id) => allowedRare.includes(id));
-      if (hasRareDrop) {
-        p.forage_pity_rare_count = 0;
-      } else {
-        p.forage_pity_rare_count = (p.forage_pity_rare_count || 0) + 1;
-        if (p.forage_pity_rare_count >= 10) {
-          const pityRng = makeStreamRng({
-            mode: "seeded",
-            seed: 98765,
-            streamName: "forage_pity",
-            serverId,
-            dayKey: dayKeyUTC(),
-            userId: interaction.user.id
-          });
-          const pickIdx = Math.floor(pityRng() * allowedRare.length);
-          const pityItem = allowedRare[Math.max(0, Math.min(allowedRare.length - 1, pickIdx))];
-          drops[pityItem] = (drops[pityItem] ?? 0) + 1;
-          p.forage_pity_rare_count = 0;
-        }
-      }
-    }
+    const injectedPityItemId = applyForagePityCounter(p, drops, {
+      allowedRare,
+      itemId,
+      serverId,
+      userId: interaction.user.id,
+      dayKey: dayKeyUTC()
+    });
     const capacityResult = applyIngredientCapacityToDrops(drops, p, combinedEffects, { allowDisplacingInventory: true });
     const { accepted, rejected, evicted } = capacityResult;
+
+    if (allowedRare.length) {
+      const acceptedHasRare = Object.keys(accepted).some((id) => allowedRare.includes(id));
+      if (acceptedHasRare || (injectedPityItemId && Number(accepted[injectedPityItemId] || 0) > 0)) {
+        p.forage_pity_rare_count = 0;
+      }
+    }
 
     if (evicted && Object.keys(evicted).length) {
       removeIngredientsFromInventory(p, evicted);
