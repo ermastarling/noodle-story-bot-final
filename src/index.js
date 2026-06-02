@@ -1909,8 +1909,8 @@ import { theme } from "./ui/theme.js";
       }
 
       try {
-        const officialGuild = client.guilds.cache.get(officialGuildId)
-          || await client.guilds.fetch(officialGuildId).catch(() => null);
+        const officialGuild = await client.guilds.fetch(officialGuildId, { force: true }).catch(() => null)
+          || client.guilds.cache.get(officialGuildId);
         if (!officialGuild) return false;
 
         const counts = precomputedCounts && typeof precomputedCounts === "object"
@@ -1918,7 +1918,10 @@ import { theme } from "./ui/theme.js";
           : getCurrentBotListCounts();
         const serverCount = Math.max(0, Number(counts?.serverCount) || 0);
         const shopsCount = Math.max(0, Number(counts?.userCount) || 0);
-        const officialMemberCount = Math.max(0, Number(officialGuild?.memberCount || 0));
+        const officialMemberCount = Math.max(
+          0,
+          Number(officialGuild?.memberCount ?? 0)
+        );
 
         if (
           isIntervalReason

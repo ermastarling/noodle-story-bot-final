@@ -345,7 +345,6 @@ export function repairPartyRecord(db, partyIdPrefix, serverId = null) {
     const statusBefore = party.status;
     const leaderBefore = party.leader_user_id;
 
-    // Keep status aligned with whether active member rows exist.
     if (party.status === "active" && members.length === 0) {
       db.prepare("UPDATE guild_parties SET status = 'disbanded', disbanded_at = COALESCE(disbanded_at, ?) WHERE party_id = ?")
         .run(now, party.party_id);
@@ -358,7 +357,6 @@ export function repairPartyRecord(db, partyIdPrefix, serverId = null) {
       party = { ...party, status: "active", disbanded_at: null };
     }
 
-    // Clean disbanded_at for active parties and ensure it exists for inactive ones.
     if (party.status === "active" && party.disbanded_at != null) {
       db.prepare("UPDATE guild_parties SET disbanded_at = NULL WHERE party_id = ?")
         .run(party.party_id);
@@ -371,7 +369,6 @@ export function repairPartyRecord(db, partyIdPrefix, serverId = null) {
       party = { ...party, disbanded_at: now };
     }
 
-    // For active parties, leader must be an active member.
     if (party.status === "active" && members.length > 0 && !activeMemberIds.has(party.leader_user_id)) {
       const newLeaderId = members[0].user_id;
       db.prepare("UPDATE guild_parties SET leader_user_id = ? WHERE party_id = ?")

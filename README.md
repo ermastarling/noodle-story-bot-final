@@ -102,6 +102,8 @@ For a brand-new branch publish (no PR yet), the first push is allowed and the ho
 
 Only `DISCORD_TOKEN` is required for booting the bot.
 
+Set `NOODLE_OFFICIAL_GUILD_ID` to lock official-server-only flows (dev commands, social bridge checks, and related guards) to a single guild ID.
+
 All environment variables, webhook templates, and alert behavior have moved to [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
 
 Runtime logs default to `noodle-logs/` (`command-errors.log`, `boot-ok.log`, `webhooks.log`, `telemetry.log`, and `user-error-logs/`).
