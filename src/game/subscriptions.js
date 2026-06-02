@@ -188,11 +188,12 @@ export function hasActivePerk(player, perkId, now = Date.now()) {
 }
 
 export function hasUnlimitedMarketStock(player, now = Date.now()) {
-  return hasHouse247VoteAccess(player, now);
+  return hasHouse247VoteAccess(player, now)
+    || hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, now);
 }
 
 export function getOrderAcceptCap(player, now = Date.now()) {
-  return hasHouse247VoteAccess(player, now)
+  return hasUnlimitedMarketStock(player, now)
     ? ORDER_ACCEPT_CAP_HOUSE_247
     : ORDER_ACCEPT_CAP_BASE;
 }

@@ -176,7 +176,7 @@ test("Subscriptions: vote-granted 24/7 House grants unlimited market stock behav
   assert.equal(hasUnlimitedMarketStock(player, now + HOUSE_247_VOTE_DURATION_MS + 1), false);
 });
 
-test("Subscriptions: entitlement-only 24/7 perk no longer unlocks market stock", () => {
+test("Subscriptions: entitlement 24/7 perk unlocks market stock and order cap", () => {
   const player = {};
   const now = 1_700_000_000_000;
 
@@ -188,5 +188,6 @@ test("Subscriptions: entitlement-only 24/7 perk no longer unlocks market stock",
   });
 
   assert.equal(hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, now + 1), true);
-  assert.equal(hasUnlimitedMarketStock(player, now + 1), false);
+  assert.equal(hasUnlimitedMarketStock(player, now + 1), true);
+  assert.equal(getOrderAcceptCap(player, now + 1), ORDER_ACCEPT_CAP_HOUSE_247);
 });
