@@ -47,6 +47,23 @@ const noodleDevData = new SlashCommandBuilder()
           .setDescription("Force repair even if global profile score is not lower")
           .setRequired(false)
       )
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("repair_party")
+      .setDescription("Dev only.")
+      .addStringOption((o) =>
+        o
+          .setName("party_id")
+          .setDescription("Party ID or prefix (e.g. first 8 chars)")
+          .setRequired(true)
+      )
+      .addStringOption((o) =>
+        o
+          .setName("server_id")
+          .setDescription("Override server ID (defaults to current guild)")
+          .setRequired(false)
+      )
   );
 
 export const noodleDevCommand = {
