@@ -106,6 +106,7 @@ const SHARED_ORDER_MODAL_TTL_MS = 5 * 60 * 1000;
 const sharedOrderModalState = new Map();
 const RECENT_SOCIAL_PICKER_LIMIT = 25;
 const RECENT_SOCIAL_PICKER_MAX_RESULTS = 250;
+const OFFICIAL_PARTY_BRIDGE_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 
 const LEADERBOARD_TYPES = [
   {
@@ -1113,6 +1114,33 @@ function formatPartyId(partyId) {
   return partyId.substring(0, 8);
 }
 
+function isOfficialPartyBridgeServer(serverId) {
+  return Boolean(OFFICIAL_PARTY_BRIDGE_GUILD_ID) && String(serverId || "") === String(OFFICIAL_PARTY_BRIDGE_GUILD_ID);
+}
+
+function getUserActivePartyBridge(serverId, userId) {
+  const scopedParty = getUserActiveParty(db, userId, serverId);
+  if (scopedParty) return scopedParty;
+  if (!isOfficialPartyBridgeServer(serverId)) return null;
+  return getUserActiveParty(db, userId);
+}
+
+function resolveJoinPartyServerId(serverId, partyIdPrefix) {
+  if (!isOfficialPartyBridgeServer(serverId)) return serverId;
+  const normalizedPrefix = String(partyIdPrefix ?? "").trim();
+  if (!normalizedPrefix) return serverId;
+
+  const matches = db.prepare(
+    "SELECT party_id, server_id FROM guild_parties WHERE party_id LIKE ? AND status = 'active' ORDER BY created_at DESC"
+  ).all(`${normalizedPrefix}%`);
+
+  if (!matches.length) return serverId;
+  if (matches.length > 1) {
+    throw new Error("Party ID is ambiguous. Provide more characters or include the server_id.");
+  }
+  return matches[0].server_id;
+}
+
 function ensureServer(serverId) {
   if (!db) return newServerState(serverId);
   let s = getServer(db, serverId);
@@ -1216,7 +1244,7 @@ async function handleParty(interaction) {
       }
 
       // Check if already in a party
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (currentParty) {
         return { ok: false, error: `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to create a new one.` };
       }
@@ -1249,7 +1277,8 @@ async function handleParty(interaction) {
       }
 
       try {
-        const result = joinParty(db, partyId, userId);
+        const joinServerId = resolveJoinPartyServerId(serverId, partyId);
+        const result = joinParty(db, joinServerId, partyId, userId);
         
         const embed = new EmbedBuilder()
           .setTitle(`${getIcon("party")} Joined Party!`)
@@ -1271,7 +1300,7 @@ async function handleParty(interaction) {
     }
 
     if (action === "leave") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (!currentParty) {
         return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
@@ -1302,7 +1331,7 @@ async function handleParty(interaction) {
     }
 
     if (action === "info") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (!currentParty) {
         return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
@@ -1335,7 +1364,7 @@ async function handleParty(interaction) {
     }
 
     if (action === "rename") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (!currentParty) {
         return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
@@ -1364,7 +1393,7 @@ async function handleParty(interaction) {
     }
 
     if (action === "transfer_leader") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (!currentParty) {
         return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
@@ -1430,7 +1459,7 @@ async function handleParty(interaction) {
     }
 
     if (action === "kick") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (!currentParty) {
         return { ok: false, error: `${getIcon("error")} You're not in any party.` };
       }
@@ -1792,7 +1821,7 @@ async function handleStats(interaction) {
     const player = ensurePlayer(serverId, userId);
     touchLastKitchen(player, serverId, channelId, userId);
     const tipStats = getUserTipStats(db, serverId, userId);
-    const party = getUserActiveParty(db, userId, serverId);
+    const party = getUserActivePartyBridge(serverId, userId);
     const blessing = getActiveBlessing(player);
 
     const embed = new EmbedBuilder()
@@ -1967,7 +1996,8 @@ async function handleComponent(interaction) {
       }
       const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
-          const result = joinParty(db, serverId, partyId, userId);
+          const joinServerId = resolveJoinPartyServerId(serverId, partyId);
+          const result = joinParty(db, joinServerId, partyId, userId);
           
           const embed = new EmbedBuilder()
             .setTitle(`${getIcon("confetti")} Joined Party!`)
@@ -2027,12 +2057,12 @@ async function handleComponent(interaction) {
         }
         const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
           try {
-            const currentParty = getUserActiveParty(db, userId, serverId);
+            const currentParty = getUserActivePartyBridge(serverId, userId);
             if (!currentParty) {
               return { ok: false, error: `${getIcon("error")} You're not in a party anymore.` };
             }
 
-            const inviteResult = inviteUserToParty(db, serverId, currentParty.party_id, targetId);
+            const inviteResult = inviteUserToParty(db, currentParty.server_id, currentParty.party_id, targetId);
             noteRecentSocialUser(serverId, targetId);
             
             const embed = new EmbedBuilder()
@@ -2115,7 +2145,7 @@ async function handleComponent(interaction) {
             }
             noteRecentSocialUser(serverId, targetId);
 
-            const party = getUserActiveParty(db, userId, serverId);
+            const party = getUserActivePartyBridge(serverId, userId);
             const isLeader = party?.leader_user_id === userId;
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
@@ -2195,7 +2225,7 @@ async function handleComponent(interaction) {
             }
             noteRecentSocialUser(serverId, targetId);
 
-            const party = getUserActiveParty(db, userId, serverId);
+            const party = getUserActivePartyBridge(serverId, userId);
             const isLeader = party?.leader_user_id === userId;
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
@@ -2287,7 +2317,7 @@ async function handleComponent(interaction) {
             };
             const blessingName = blessingNames[blessingType] || blessingType;
 
-            const party = getUserActiveParty(db, userId, serverId);
+            const party = getUserActivePartyBridge(serverId, userId);
             const isLeader = party?.leader_user_id === userId;
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
@@ -2379,7 +2409,7 @@ async function handleComponent(interaction) {
       }
       const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
-          const party = getUserActiveParty(db, userId, serverId);
+          const party = getUserActivePartyBridge(serverId, userId);
           if (!party) {
             return { ok: false, payload: { content: `${getIcon("error")} You're not in a party.`, ephemeral: true } };
           }
@@ -2560,7 +2590,7 @@ async function handleComponent(interaction) {
         const ownerLock = `discord:${interaction.id}`;
         const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
           try {
-            const currentParty = getUserActiveParty(db, userId, serverId);
+            const currentParty = getUserActivePartyBridge(serverId, userId);
             if (!currentParty) {
               return { ok: false, payload: { content: `${getIcon("error")} You're not in a party anymore.`, ephemeral: true } };
             }
@@ -2568,7 +2598,7 @@ async function handleComponent(interaction) {
               return { ok: false, payload: { content: `${getIcon("error")} Only the party leader can invite members.`, ephemeral: true } };
             }
 
-            const inviteResult = inviteUserToParty(db, serverId, currentParty.party_id, targetId);
+            const inviteResult = inviteUserToParty(db, currentParty.server_id, currentParty.party_id, targetId);
             noteRecentSocialUser(serverId, targetId);
 
             const embed = new EmbedBuilder()
@@ -2628,7 +2658,7 @@ async function handleComponent(interaction) {
               };
               const blessingName = blessingNames[blessingType] || blessingType;
 
-              const party = getUserActiveParty(db, userId, serverId);
+              const party = getUserActivePartyBridge(serverId, userId);
               const isLeader = party?.leader_user_id === userId;
               const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
               const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
@@ -2672,7 +2702,7 @@ async function handleComponent(interaction) {
         const ownerLock = `discord:${interaction.id}`;
         const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
           try {
-            const currentParty = getUserActiveParty(db, userId, serverId);
+            const currentParty = getUserActivePartyBridge(serverId, userId);
             if (!currentParty) {
               return { ok: false, payload: { content: `${getIcon("error")} You're not in any party.`, ephemeral: true } };
             }
@@ -2724,7 +2754,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_recipe") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -2806,7 +2836,7 @@ async function handleComponent(interaction) {
 
       const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
         try {
-          const party = getUserActiveParty(db, userId, serverId);
+          const party = getUserActivePartyBridge(serverId, userId);
           if (!party) {
             return { ok: false, payload: { content: `${getIcon("error")} You're not in a party.`, ephemeral: true } };
           }
@@ -2888,7 +2918,7 @@ async function handleComponent(interaction) {
         return componentCommit(interaction, { content: `${getIcon("error")} Invalid selection.`, ephemeral: true });
       }
 
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, { content: `${getIcon("error")} You're not in a party.`, ephemeral: true });
       }
@@ -2971,7 +3001,7 @@ async function handleComponent(interaction) {
       if (!db) {
         return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
       }
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         const embed = new EmbedBuilder()
           .setTitle(`${getIcon("party")} Party`)
@@ -3032,7 +3062,7 @@ async function handleComponent(interaction) {
       const player = ensurePlayer(serverId, userId);
       const newsAvailable = hasUnreadNewsUpdate(player, newsContent);
       const tipStats = getUserTipStats(db, serverId, userId);
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       const blessing = getActiveBlessing(player);
 
       const embed = new EmbedBuilder()
@@ -3150,7 +3180,7 @@ async function handleComponent(interaction) {
     if (action === "profile") {
       const player = ensurePlayer(serverId, userId);
       const server = ensureServer(serverId);
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       const questsAvailable = hasDailyRewardAvailable(player, nowTs())
         || Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
       const specializationsAvailable = hasNewShopLevelSpecialization(player, specializationsContent);
@@ -3245,7 +3275,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3328,7 +3358,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_refresh") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3407,7 +3437,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_create") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3475,7 +3505,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "party_info") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in any party.`,
@@ -3505,7 +3535,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "party_leave") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (!currentParty) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in any party.`,
@@ -3529,7 +3559,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "party_invite") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (!currentParty) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in any party.`,
@@ -3559,7 +3589,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_contribute") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3651,7 +3681,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_complete") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3733,7 +3763,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_cancel") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3797,7 +3827,7 @@ async function handleComponent(interaction) {
       }
 
       const targetMessageId = interaction.message?.id ?? null;
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3946,7 +3976,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_cancel_complete") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -3977,7 +4007,7 @@ async function handleComponent(interaction) {
       if (!db) {
         return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
       }
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -4049,7 +4079,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "shared_order_abort_cancel") {
-      const party = getUserActiveParty(db, userId, serverId);
+      const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in a party.`,
@@ -4087,7 +4117,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "party_create") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (currentParty) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to create a new one.`,
@@ -4130,7 +4160,7 @@ async function handleComponent(interaction) {
     }
 
     if (action === "party_join") {
-      const currentParty = getUserActiveParty(db, userId, serverId);
+      const currentParty = getUserActivePartyBridge(serverId, userId);
       if (currentParty) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're already in party **${currentParty.party_name}**. Leave it first to join another.`,
