@@ -4732,7 +4732,9 @@ if (inDevPath && sub === "repair_profile") {
 
 if (inDevPath && sub === "repair_party") {
   const partyIdInput = opt.getString("party_id")?.trim();
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const serverOverride = opt.getString("server_id")?.trim() || "";
+  const targetServerId = serverOverride || serverId;
+  const scopedServerId = serverOverride || null;
 
   if (!partyIdInput) {
     return commit({
@@ -4749,16 +4751,21 @@ if (inDevPath && sub === "repair_party") {
     });
   }
 
-  const lockKey = `lock:party:${targetServerId}:${partyIdInput}`;
+  const lockScope = scopedServerId || "global";
+  const lockKey = `lock:party:${lockScope}:${partyIdInput}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
     try {
-      const result = repairPartyRecord(db, partyIdInput, targetServerId);
+      const result = repairPartyRecord(db, partyIdInput, scopedServerId);
       const summary = [
         `Party: ${result.partyId} (server ${result.serverId})`,
         `Status: ${result.statusBefore} -> ${result.statusAfter}`,
         `Leader: <@${result.leaderBefore}> -> <@${result.leaderAfter}>`,
         `Active members: ${result.activeMemberCount}`
       ];
+
+      if (!scopedServerId && result.serverId !== serverId) {
+        summary.push(`Note: repaired party was found in a different server (${result.serverId}).`);
+      }
 
       if (result.repaired) {
         summary.push(`Applied fixes: ${result.changes.join(", ")}`);
