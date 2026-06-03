@@ -1,6 +1,7 @@
 import { nowTs } from "../util/time.js";
 import { applySxpLevelUp } from "./serve.js";
 import {
+  ensureSubscriptionState,
   grantHouse247VoteAccess,
   getHouse247VoteExpiry,
   HOUSE_247_VOTE_DURATION_MS,
@@ -289,9 +290,19 @@ export function getVotePlatformStatusLines(player, { limit } = {}) {
 export function getVoteRewardStatus(player, now = nowTs()) {
   const state = ensureVoteState(player);
   const nowMs = Number.isFinite(Number(now)) ? Number(now) : nowTs();
-  const house247ExpiresAt = getHouse247VoteExpiry(player);
-  const house247VoteActive = Number.isFinite(house247ExpiresAt) && house247ExpiresAt > nowMs;
+  const house247VoteExpiresAt = getHouse247VoteExpiry(player);
+  const house247VoteActive = Number.isFinite(house247VoteExpiresAt) && house247VoteExpiresAt > nowMs;
+
+  const subscriptions = ensureSubscriptionState(player);
+  const house247PerkState = subscriptions?.perks?.[SUBSCRIPTION_PERKS.HOUSE_247] ?? null;
+  const house247SubscriptionEndRaw = Number(house247PerkState?.period_end_at || 0);
+  const house247SubscriptionExpiresAt = Number.isFinite(house247SubscriptionEndRaw) && house247SubscriptionEndRaw > 0
+    ? Math.floor(house247SubscriptionEndRaw)
+    : null;
   const house247SubscriptionActive = hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, nowMs);
+  const house247ExpiresAt = house247SubscriptionActive
+    ? house247SubscriptionExpiresAt
+    : house247VoteExpiresAt;
   return {
     pendingClaims: Math.max(0, Number(state.pending_claims || 0)),
     lastVoteAt: state.last_vote_at,
