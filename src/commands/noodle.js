@@ -7516,7 +7516,9 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
             tier: recipe?.tier ?? "common",
             rng: discoveryRng,
             activeSeason: s.season,
-            activeEventId: s.active_event_id ?? null
+            activeEventId: s.active_event_id ?? null,
+            allowPity: false,
+            trackPityStreak: false
           });
           for (const discovery of discoveries ?? []) {
             const result = applyDiscovery(p, discovery, content, discoveryRng, { badgesContent });
@@ -9984,7 +9986,8 @@ ${lines.join("\n")}`;
 
     const blessing = getActiveBlessing(p);
     const tutorialStep = getCurrentTutorialStep(p);
-    const disableFailures = tutorialStep?.id === "intro_cook";
+    const counterCookFlow = Boolean(opt.getBoolean("counter_cook"));
+    const disableFailures = counterCookFlow || tutorialStep?.id === "intro_cook";
     const outcome = rollCookBatchOutcome({
       quantity: batchOutput,
       tier: r.tier,
@@ -10045,7 +10048,6 @@ ${lines.join("\n")}`;
       ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: recipe tier risk.${salvageLine}`
       : null;
 
-    const counterCookFlow = Boolean(opt.getBoolean("counter_cook"));
     const cookEmbed = buildMenuEmbed({
       title: counterCookFlow ? `${getIcon("cook")} Counter Cook` : `${getIcon("cook")} Cooked`,
       description: [
