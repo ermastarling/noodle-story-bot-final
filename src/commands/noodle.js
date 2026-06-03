@@ -7141,10 +7141,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         .filter(Boolean);
 
       if (isDraftSelection) {
-        const normalizedDraft = normalizeTakeoutMenuSelection({
-          selectedRecipeIds: requestedIds,
-          learnedRecipeIds: availableRecipeIds
-        });
+        const normalizedDraft = normalizeTakeoutDraftSelection(requestedIds, availableRecipeIds);
         writeTakeoutMenuDraftSelection({
           serverId,
           userId,
