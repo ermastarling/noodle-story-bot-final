@@ -8285,6 +8285,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         ? `<t:${Math.floor(status.house247ExpiresAt / 1000)}:R>`
         : "Active")
       : "Not active";
+    const house247Label = status.house247ExpiresAt
+      ? `${getHouse247Label()} remaining: expires **${house247Line}**`
+      : `${getHouse247Label()} remaining: **${house247Line}**`;
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
     const maxButtonsPerRow = 5;
     const maxLinkRows = 3;
@@ -8343,7 +8346,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         `Per vote reward: ${rewardLine}`,
         `Per vote bonus: ${getHouse247Label()} **+12h** (unlimited orders + market stock)`,
         "",
-        `${getHouse247Label()} remaining: expires **${house247Line}**`,
+        house247Label,
         `Ready to claim: **${status.pendingClaims}**`,
         `Last vote: **${lastVoteLine}**`,
         "_After voting, press **Vote Rewards** button to refresh._"
