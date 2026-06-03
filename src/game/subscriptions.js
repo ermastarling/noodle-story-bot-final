@@ -183,9 +183,13 @@ export function hasActivePerk(player, perkId, now = Date.now()) {
   const perkState = subscriptions.perks[perkKey];
   if (!perkState?.active) return false;
 
+  const nowTs = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+  const periodStartAt = normalizeTimestamp(perkState.period_start_at);
+  if (Number.isFinite(periodStartAt) && nowTs < periodStartAt) return false;
+
   const periodEndAt = normalizeTimestamp(perkState.period_end_at);
   if (!Number.isFinite(periodEndAt)) return true;
-  return now < periodEndAt;
+  return nowTs < periodEndAt;
 }
 
 export function hasUnlimitedMarketStock(player, now = Date.now()) {
@@ -283,9 +287,20 @@ export function applyMonthlySubscriptionCoinGrant(player, {
     return { ok: false, reason: "invalid_grant_amount", granted: false, amount: 0 };
   }
 
+  const billingPeriodKey = resolveSubscriptionBillingPeriodKey({ periodStartAt, periodEndAt, now });
+
+  if (!hasActivePerk(player, perkKey, now)) {
+    return {
+      ok: true,
+      granted: false,
+      amount: 0,
+      perkId: perkKey,
+      billingPeriodKey
+    };
+  }
+
   const subscriptions = ensureSubscriptionState(player);
   const perkState = subscriptions.perks[perkKey];
-  const billingPeriodKey = resolveSubscriptionBillingPeriodKey({ periodStartAt, periodEndAt, now });
 
   if (String(perkState.last_coin_grant_period || "") === billingPeriodKey) {
     return {

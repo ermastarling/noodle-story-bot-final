@@ -51,6 +51,28 @@ test("Subscriptions: entitlement create activates perk and respects period end",
   assert.equal(hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, later + 1), false);
 });
 
+test("Subscriptions: entitlement with future period start is not active until start", () => {
+  const player = {};
+  const now = 1_700_000_000_000;
+  const startsAt = now + 60_000;
+  const endsAt = now + 120_000;
+
+  const result = applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    eventType: "ENTITLEMENT_CREATE",
+    entitlementId: "ent_future",
+    periodStartAt: startsAt,
+    periodEndAt: endsAt,
+    now
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.active, false);
+  assert.equal(hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, now + 1_000), false);
+  assert.equal(hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, startsAt + 1), true);
+  assert.equal(hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, endsAt + 1), false);
+});
+
 test("Subscriptions: entitlement update refreshes period timestamps", () => {
   const player = {};
   const now = 1_700_000_000_000;
@@ -107,6 +129,15 @@ test("Subscriptions: monthly coin grant is idempotent per billing period", () =>
   const periodStart = 1_700_000_000_000;
   const periodEnd = periodStart + (30 * 24 * 60 * 60 * 1000);
 
+  applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
+    eventType: "ENTITLEMENT_CREATE",
+    entitlementId: "ent_takeout_idempotent",
+    periodStartAt: periodStart,
+    periodEndAt: periodEnd,
+    now: periodStart
+  });
+
   const first = applyMonthlySubscriptionCoinGrant(player, {
     perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
     periodStartAt: periodStart,
@@ -151,10 +182,21 @@ test("Subscriptions: 24/7 House does not grant monthly coins", () => {
 test("Subscriptions: Take Out Counter still grants monthly coins", () => {
   const player = { coins: 0, lifetime: { coins_earned: 0 } };
   const periodStart = 1_700_000_000_000;
+  const periodEnd = periodStart + (30 * 24 * 60 * 60 * 1000);
+
+  applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
+    eventType: "ENTITLEMENT_CREATE",
+    entitlementId: "ent_takeout_grant",
+    periodStartAt: periodStart,
+    periodEndAt: periodEnd,
+    now: periodStart
+  });
 
   const takeoutGrant = applyMonthlySubscriptionCoinGrant(player, {
     perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
     periodStartAt: periodStart,
+    periodEndAt: periodEnd,
     now: periodStart + 1000
   });
 
@@ -163,6 +205,64 @@ test("Subscriptions: Take Out Counter still grants monthly coins", () => {
   assert.equal(takeoutGrant.amount, SUBSCRIPTION_MONTHLY_COIN_GRANT);
   assert.equal(player.coins, SUBSCRIPTION_MONTHLY_COIN_GRANT);
   assert.equal(player.lifetime.coins_earned, SUBSCRIPTION_MONTHLY_COIN_GRANT);
+});
+
+test("Subscriptions: monthly grant is skipped before period start", () => {
+  const player = { coins: 0, lifetime: { coins_earned: 0 } };
+  const now = 1_700_000_000_000;
+  const startsAt = now + 60_000;
+  const endsAt = now + (30 * 24 * 60 * 60 * 1000);
+
+  applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
+    eventType: "ENTITLEMENT_CREATE",
+    entitlementId: "ent_takeout_future",
+    periodStartAt: startsAt,
+    periodEndAt: endsAt,
+    now
+  });
+
+  const grant = applyMonthlySubscriptionCoinGrant(player, {
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
+    periodStartAt: startsAt,
+    periodEndAt: endsAt,
+    now: now + 1_000
+  });
+
+  assert.equal(grant.ok, true);
+  assert.equal(grant.granted, false);
+  assert.equal(grant.amount, 0);
+  assert.equal(player.coins, 0);
+  assert.equal(player.lifetime.coins_earned, 0);
+});
+
+test("Subscriptions: monthly grant is skipped after period end", () => {
+  const player = { coins: 0, lifetime: { coins_earned: 0 } };
+  const now = 1_700_000_000_000;
+  const startsAt = now - (30 * 24 * 60 * 60 * 1000);
+  const endsAt = now - 1_000;
+
+  applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
+    eventType: "ENTITLEMENT_CREATE",
+    entitlementId: "ent_takeout_expired",
+    periodStartAt: startsAt,
+    periodEndAt: endsAt,
+    now
+  });
+
+  const grant = applyMonthlySubscriptionCoinGrant(player, {
+    perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
+    periodStartAt: startsAt,
+    periodEndAt: endsAt,
+    now
+  });
+
+  assert.equal(grant.ok, true);
+  assert.equal(grant.granted, false);
+  assert.equal(grant.amount, 0);
+  assert.equal(player.coins, 0);
+  assert.equal(player.lifetime.coins_earned, 0);
 });
 
 test("Subscriptions: vote-granted 24/7 House increases active order cap", () => {

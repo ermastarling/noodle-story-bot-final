@@ -1315,7 +1315,7 @@ async function handleParty(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = {
-          content: " ",
+          content: null,
           embeds: [embed],
           components: [partyCreationRow(userId), socialMainMenuRow(userId)]
         };
@@ -2888,7 +2888,7 @@ async function handleComponent(interaction) {
             )
             .addFields({
               name: `${getIcon("idea")} How It Works`,
-              value: "Party members tap **Contribute** to add ingredients. When complete, everyone who helped gets rewarded!",
+              value: "All party members must already know the selected recipe. Party members tap **Contribute** to add ingredients. When complete, everyone who helped gets rewarded!",
               inline: false
             })
             .setColor(theme.colors.success);
