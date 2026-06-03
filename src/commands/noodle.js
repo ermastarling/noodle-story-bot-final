@@ -8331,7 +8331,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         "",
         `Per vote reward: ${rewardLine}`,
         `Per vote bonus: ${getHouse247Label()} **+12h** (unlimited orders + market stock)`,
-        `${getHouse247Label()} remaining: **${house247Line}**`,
+        "",
+        `${getHouse247Label()} remaining: expires **${house247Line}**`,
         `Ready to claim: **${status.pendingClaims}**`,
         `Last vote: **${lastVoteLine}**`,
         "_After voting, press **Vote Rewards** button to refresh._"
