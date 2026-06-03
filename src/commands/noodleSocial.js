@@ -1315,7 +1315,6 @@ async function handleParty(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = {
-          content: null,
           embeds: [embed],
           components: [partyCreationRow(userId), socialMainMenuRow(userId)]
         };
@@ -3554,7 +3553,6 @@ async function handleComponent(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         return componentCommit(interaction, {
-          content: null,
           embeds: [embed],
           components: [socialMainMenuRow(userId)]
         });
