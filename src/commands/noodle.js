@@ -896,7 +896,8 @@ function buildHelpPage({ page, userId, user }) {
             "• `/noodle accept` — Accept an order.",
             "• `/noodle cook` — Cook a recipe.",
             "• `/noodle serve` — Serve accepted orders.",
-            "• `/noodle cancel` — Cancel an accepted order."
+            "• `/noodle cancel` — Cancel an accepted order.",
+            `• \`/noodle takeout\` — Run your takeout counter. ${getIcon("lock")} Unlocks with the **${getTakeoutCounterLabel()}** perk.`
           ].join("\n"),
           inline: true
         },
