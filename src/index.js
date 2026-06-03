@@ -48,7 +48,7 @@ import { theme } from "./ui/theme.js";
     getLatestServerIdForUser,
     recordRecentSocialInteraction,
     recordStorePurchaseEvent,
-    getAllTimeSpecializationPurchaseCount
+    getAllTimeStorePurchaseCount
   } = await import("./db/index.js");
   const { checkRateLimit } = await import("./infra/rateLimit.js");
   const { emitTelemetry } = await import("./infra/telemetry.js");
@@ -833,11 +833,11 @@ import { theme } from "./ui/theme.js";
     if (!db) return;
 
     const baselineRows = [
-      { source: "bootstrap", externalEventId: "baseline-astral-caravan-1", userId: "legacy-seed", serverId: null, specId: "astral_caravan" },
-      { source: "bootstrap", externalEventId: "baseline-astral-caravan-2", userId: "legacy-seed", serverId: null, specId: "astral_caravan" },
-      { source: "bootstrap", externalEventId: "baseline-sakura-sweetheart-1", userId: "legacy-seed", serverId: null, specId: "sakura_sweetheart_noodle_atelier" },
-      { source: "bootstrap", externalEventId: "baseline-bloomwarden-garden-1", userId: "legacy-seed", serverId: null, specId: "bloomwarden_garden_hall" },
-      { source: "bootstrap", externalEventId: "baseline-elderwood-hearth-1", userId: "legacy-seed", serverId: null, specId: "elderwood_hearth" }
+      { source: "bootstrap", externalEventId: "baseline-astral-caravan-1", userId: "legacy-seed", serverId: null, purchaseId: "astral_caravan" },
+      { source: "bootstrap", externalEventId: "baseline-astral-caravan-2", userId: "legacy-seed", serverId: null, purchaseId: "astral_caravan" },
+      { source: "bootstrap", externalEventId: "baseline-sakura-sweetheart-1", userId: "legacy-seed", serverId: null, purchaseId: "sakura_sweetheart_noodle_atelier" },
+      { source: "bootstrap", externalEventId: "baseline-bloomwarden-garden-1", userId: "legacy-seed", serverId: null, purchaseId: "bloomwarden_garden_hall" },
+      { source: "bootstrap", externalEventId: "baseline-elderwood-hearth-1", userId: "legacy-seed", serverId: null, purchaseId: "elderwood_hearth" }
     ];
 
     let inserted = 0;
@@ -2772,11 +2772,11 @@ import { theme } from "./ui/theme.js";
             externalEventId: stripeExternalEventId,
             userId: discordId,
             serverId,
-            specId: purchaseId,
+            purchaseId,
             status: "granted",
             purchasedAt: Date.now()
           });
-          const purchaseCount = getAllTimeSpecializationPurchaseCount(db, purchaseId);
+          const purchaseCount = getAllTimeStorePurchaseCount(db, purchaseId);
           await sendDevAlert({
             title: "Stripe Store Purchase Alert!",
             description:
@@ -3190,11 +3190,11 @@ import { theme } from "./ui/theme.js";
           externalEventId: discordExternalEventId,
           userId,
           serverId,
-          specId: purchaseId,
+          purchaseId,
           status: "granted",
           purchasedAt: Date.now()
         });
-        const purchaseCount = getAllTimeSpecializationPurchaseCount(db, purchaseId);
+        const purchaseCount = getAllTimeStorePurchaseCount(db, purchaseId);
         await sendDevAlert({
           title: "Discord Store Purchase Alert!",
           description:

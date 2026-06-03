@@ -585,35 +585,39 @@ export function recordStorePurchaseEvent(
     externalEventId,
     userId,
     serverId = null,
-    specId,
+    purchaseId,
     status = "granted",
     purchasedAt = nowTs()
   }
 ) {
-  if (!db || !source || !externalEventId || !userId || !specId) return false;
+  if (!db || !source || !externalEventId || !userId || !purchaseId) return false;
   const res = measureDbWrite(() => prepareCached(
     db,
+    // Legacy column name `spec_id` stores generic store purchase ids (specializations + coin packs).
     "INSERT OR IGNORE INTO store_purchase_events(source, external_event_id, user_id, server_id, spec_id, status, purchased_at) VALUES (?,?,?,?,?,?,?)"
   ).run(
     String(source),
     String(externalEventId),
     String(userId),
     serverId ? String(serverId) : null,
-    String(specId),
+    String(purchaseId),
     String(status || "granted"),
     Number.isFinite(Number(purchasedAt)) ? Number(purchasedAt) : nowTs()
   ));
   return Number(res?.changes ?? 0) > 0;
 }
 
-export function getAllTimeSpecializationPurchaseCount(db, specId) {
-  if (!db || !specId) return 0;
+export function getAllTimeStorePurchaseCount(db, purchaseId) {
+  if (!db || !purchaseId) return 0;
   const row = measureDbRead(() => prepareCached(
     db,
     "SELECT COUNT(*) AS cnt FROM store_purchase_events WHERE spec_id=? AND status='granted'"
-  ).get(String(specId)));
+  ).get(String(purchaseId)));
   return Number(row?.cnt ?? 0);
 }
+
+// Backwards-compatible aliases for older call sites.
+export const getAllTimeSpecializationPurchaseCount = getAllTimeStorePurchaseCount;
 
 export function recordRecentSocialInteraction(db, serverId, userId, seenAt = nowTs()) {
   if (!db || !serverId || !userId) return false;
