@@ -2800,6 +2800,20 @@ function getValidAvailableRecipeIds(player) {
   return valid;
 }
 
+function filterRecipeIdsByActiveSeasonEvent(recipeIds, server) {
+  const activeSeason = server?.season ?? null;
+  const activeEventId = server?.active_event_id ?? null;
+  return (recipeIds ?? []).filter((rid) => {
+    const recipe = content.recipes?.[rid];
+    if (!recipe) return false;
+    if (recipe.is_event_recipe) {
+      return !!activeEventId && recipe.event_id === activeEventId;
+    }
+    if (recipe.tier !== "seasonal") return true;
+    return !!activeSeason && recipe.season === activeSeason;
+  });
+}
+
 function migrateLegacyRecipeIds(player) {
   if (!player || typeof player !== "object") return false;
   let changed = false;
@@ -4097,17 +4111,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const disableAccept = remainingOrders === 0;
   const highlightAccept = !hasAcceptedOrders && !disableAccept;
   const available = getValidAvailableRecipeIds(p);
-  const activeSeason = s?.season ?? null;
-  const activeEventId = s?.active_event_id ?? null;
-  const seasonFiltered = available.filter((rid) => {
-    const r = content.recipes?.[rid];
-    if (!r) return false;
-    if (r.is_event_recipe) {
-      return !!activeEventId && r.event_id === activeEventId;
-    }
-    if (r.tier !== "seasonal") return true;
-    return !!activeSeason && r.season === activeSeason;
-  });
+  const seasonFiltered = filterRecipeIdsByActiveSeasonEvent(available, s);
 
   const sortKey = (rid) => {
     const r = content.recipes?.[rid];
@@ -6809,7 +6813,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       });
     }
 
-    const availableRecipeIds = getValidAvailableRecipeIds(p);
+    const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
     const shiftActiveForMenu = isTakeoutShiftActive(p, now);
     if (!shiftActiveForMenu) {
       const availableRecipeSet = new Set(availableRecipeIds);
@@ -12014,7 +12018,10 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
   const pageSelectedRecipeIds = (interaction.values ?? []).filter(Boolean);
 
   const p = ensurePlayer(serverId, interaction.user.id);
-  const availableRecipeIds = getValidAvailableRecipeIds(p);
+  const s = ensureServer(serverId);
+  const settings = buildSettingsMap(settingsCatalog, s.settings);
+  s.season = computeActiveSeason(settings);
+  const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
   const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
   const selectedRecipeIds = mergeTakeoutMenuPageSelection({
     availableRecipeIds,
