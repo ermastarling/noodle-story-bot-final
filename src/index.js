@@ -2972,12 +2972,6 @@ import { theme } from "./ui/theme.js";
           periodEndAt,
           now: nowMs
         });
-        const rawPeriodStart = Number.isFinite(Number(periodStartAt)) && Number(periodStartAt) > 0
-          ? Math.floor(Number(periodStartAt))
-          : "-";
-        const rawPeriodEnd = Number.isFinite(Number(periodEndAt)) && Number(periodEndAt) > 0
-          ? Math.floor(Number(periodEndAt))
-          : "-";
         const payloadFingerprint = crypto
           .createHash("sha256")
           .update(rawBody || "")
@@ -2986,7 +2980,7 @@ import { theme } from "./ui/theme.js";
         const subscriptionIdempotencyKey = (() => {
           // Deduplicate exact retries, while allowing distinct updates in the same billing period.
           return entitlementId
-            ? `discord_subscription:${eventType}:${entitlementId}:${rawPeriodStart}:${rawPeriodEnd}:${payloadFingerprint}`
+            ? `discord_subscription:${eventType}:${entitlementId}:${billingPeriodKey}:${payloadFingerprint}`
             : `discord_subscription:${eventType}:${userId}:${perkId}:${skuId}:${billingPeriodKey}:${payloadFingerprint}`;
         })();
 
