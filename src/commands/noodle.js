@@ -6207,9 +6207,9 @@ if (sub === "profile_edit") {
       "• You unlock specializations as your shop levels up. Changing your active specialization updates your shop decor.",
       "",
       "• Check out the **Store** to browse all premium options:",
-      "  - Premium Shop Specializations",
-      "  - Coin Packs",
-      `  - ${getTakeoutCounterLabel()} Subscription Perk`
+      "• Premium Shop Specializations",
+      "• Coin Packs",
+      `• ${getTakeoutCounterLabel()} Subscription Perk`
     ].join("\n"),
     user: interaction.member ?? interaction.user
   });
@@ -7513,16 +7513,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         p.lifetime.coins_earned = (p.lifetime.coins_earned ?? 0) + rewards.coins;
         leveledUp = applySxpLevelUp(p) || leveledUp;
 
-        const levelBeforeCollection = Number(p.shop_level || 1);
-        applyCollectionProgressOnServe(p, collectionsContent, content, {
-          npcArchetype: null,
-          recipeId: selectedRecipeId,
-          quality: bowlQuality
-        });
-        if (Number(p.shop_level || 1) > levelBeforeCollection) {
-          leveledUp = true;
-        }
-
         totalCoins += rewards.coins;
         totalRep += rewards.rep;
         totalSxp += rewards.sxp;
@@ -7573,6 +7563,16 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       ];
 
       if (servedCount > 0) {
+        const levelBeforeCollection = Number(p.shop_level || 1);
+        applyCollectionProgressOnServe(p, collectionsContent, content, {
+          npcArchetype: null,
+          recipeId: selectedRecipeId,
+          quality: null
+        });
+        if (Number(p.shop_level || 1) > levelBeforeCollection) {
+          leveledUp = true;
+        }
+
         applyQuestProgress(
           p,
           questsContent,
@@ -11004,18 +11004,18 @@ ${lines.join("\n")}`;
 
       const consumedOrderIndex = resolveConsumedOrderIndex(fullOrderId, accepted.order, order);
       const consumedBeforeMark = Array.isArray(p.orders_consumed_indices)
-        ? new Set(p.orders_consumed_indices)
-        : new Set();
+        ? p.orders_consumed_indices
+        : [];
       const consumedAlreadyContainedBefore = Number.isFinite(Number(consumedOrderIndex))
-        ? consumedBeforeMark.has(Number(consumedOrderIndex))
+        ? consumedBeforeMark.includes(Number(consumedOrderIndex))
         : false;
       delete acceptedMap[fullOrderId];
       markOrderConsumed(p, consumedOrderIndex);
       const consumedAfterMark = Array.isArray(p.orders_consumed_indices)
-        ? new Set(p.orders_consumed_indices)
-        : new Set();
+        ? p.orders_consumed_indices
+        : [];
       const consumedContainsAfter = Number.isFinite(Number(consumedOrderIndex))
-        ? consumedAfterMark.has(Number(consumedOrderIndex))
+        ? consumedAfterMark.includes(Number(consumedOrderIndex))
         : false;
       serveCommitResults.push({
         fullOrderId,
