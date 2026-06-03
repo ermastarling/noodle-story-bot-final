@@ -67,7 +67,7 @@ export const VOTE_PLATFORM_PAGES = [
     source: VOTE_SOURCES.BOTLIST_ME,
     label: "BotList.me",
     voteUrl: "https://botlist.me/bots/1460058511802105976/vote",
-    isVoteLive: true,
+    isVoteLive: false,
     supportsVoteRewards: true,
     supportsServerCount: true,
   },
