@@ -2010,7 +2010,7 @@ function noodleTakeoutActionRow(userId, { activeShift = false, disableOpen = fal
 function buildTakeoutMenuPickerRows(userId, {
   availableRecipeIds = [],
   selectedRecipeIds = [],
-  minRequired = 1,
+  minRequired: _minRequired = 1,
   maxAllowed = 1,
   page = 0
 } = {}) {

@@ -167,6 +167,16 @@ export const noodleDevCommand = {
   async handleComponent(interaction) {
     const denyOwnerMismatch = async (message) => {
       if (interaction.deferred || interaction.replied) {
+        try {
+          // Complete deferred component interaction first so the original response does not hang.
+          await interaction.editReply({
+            content: interaction.message?.content ?? " ",
+            embeds: interaction.message?.embeds ?? [],
+            components: interaction.message?.components ?? []
+          });
+        } catch {
+          // Best-effort: if edit fails, still attempt to notify the user.
+        }
         return interaction.followUp({ content: message, ephemeral: true });
       }
       return interaction.reply({ content: message, ephemeral: true });
