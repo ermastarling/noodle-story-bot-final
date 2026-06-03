@@ -19,6 +19,15 @@ const TIER_PAYOUT_MULTIPLIERS = Object.freeze({
   seasonal: 1.6
 });
 
+const TAKEOUT_TIER_ORDER_WEIGHTS = Object.freeze({
+  common: 1.3,
+  uncommon: 1.1,
+  rare: 0.85,
+  epic: 0.65,
+  legendary: 0.45,
+  seasonal: 0.95
+});
+
 function defaultShiftState() {
   return {
     status: "inactive",
@@ -130,9 +139,51 @@ function deriveShiftSeed(parts = []) {
   return hash >>> 0;
 }
 
+function hashStringToInt(value) {
+  const input = String(value || "");
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+    hash >>>= 0;
+  }
+  return hash >>> 0;
+}
+
+function seededRandomFactory(seed) {
+  let state = (Number(seed) >>> 0) || 1;
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickWeightedIndex(weights, random01) {
+  const totalWeight = weights.reduce((sum, weight) => sum + Math.max(0.0001, Number(weight) || 0), 0);
+  if (!Number.isFinite(totalWeight) || totalWeight <= 0) {
+    return 0;
+  }
+
+  let threshold = random01() * totalWeight;
+  for (let i = 0; i < weights.length; i += 1) {
+    threshold -= Math.max(0.0001, Number(weights[i]) || 0);
+    if (threshold <= 0) return i;
+  }
+  return Math.max(0, weights.length - 1);
+}
+
+function resolveTakeoutRecipeOrderWeight(recipe) {
+  const tierKey = String(recipe?.tier || recipe?.rarity || "common").trim().toLowerCase();
+  return Math.max(0.0001, Number(TAKEOUT_TIER_ORDER_WEIGHTS[tierKey] ?? 1));
+}
+
 export function buildTakeoutShiftSnapshot(menuRecipeIds = [], {
   hours = TAKEOUT_SHIFT_DURATION_HOURS,
-  totalOrders = TAKEOUT_SNAPSHOT_MIN_ORDERS
+  totalOrders = TAKEOUT_SNAPSHOT_MIN_ORDERS,
+  recipes = {}
 } = {}) {
   const totalHours = Math.max(1, Math.floor(Number(hours) || TAKEOUT_SHIFT_DURATION_HOURS));
   const out = buildShiftSnapshot(menuRecipeIds, totalHours);
@@ -145,6 +196,15 @@ export function buildTakeoutShiftSnapshot(menuRecipeIds = [], {
     : TAKEOUT_SNAPSHOT_MIN_ORDERS;
   if (orderTotal <= 0) return out;
 
+  const orderWeights = out.map((row) => resolveTakeoutRecipeOrderWeight(recipes?.[row.recipe_id]));
+  const seed = deriveShiftSeed([
+    orderTotal,
+    totalHours,
+    menuSize,
+    ...menuRecipeIds.map((recipeId) => hashStringToInt(recipeId))
+  ]);
+  const random01 = seededRandomFactory(seed);
+
   const hourlyCounts = Array.from({ length: totalHours }, () => Math.floor(orderTotal / totalHours));
   let remainder = orderTotal % totalHours;
   for (let hour = 0; hour < totalHours && remainder > 0; hour += 1) {
@@ -152,17 +212,15 @@ export function buildTakeoutShiftSnapshot(menuRecipeIds = [], {
     remainder -= 1;
   }
 
-  let rotation = 0;
   for (let hour = 0; hour < totalHours; hour += 1) {
     const ordersThisHour = hourlyCounts[hour] ?? 0;
     for (let j = 0; j < ordersThisHour; j += 1) {
-      const idx = (rotation + j) % menuSize;
+      const idx = pickWeightedIndex(orderWeights, random01);
       const row = out[idx];
       row.hourly_order_counts[hour] = (row.hourly_order_counts[hour] ?? 0) + 1;
       row.total_orders += 1;
       row.visible_order_count = row.total_orders;
     }
-    rotation = (rotation + ordersThisHour) % menuSize;
   }
 
   return out;
@@ -420,6 +478,7 @@ export function openTakeoutShift(player, {
   now = nowTs(),
   snapshot = null,
   snapshotOrderTotal = null,
+  recipes = {},
   requiredIngredients = null,
   coveredIngredients = null,
   operatingCost = null,
@@ -438,7 +497,7 @@ export function openTakeoutShift(player, {
   const endsAt = startedAt + TAKEOUT_SHIFT_DURATION_MS;
   const normalizedSnapshot = Array.isArray(snapshot)
     ? snapshot
-    : buildTakeoutShiftSnapshot(takeout.menu_recipe_ids, { totalOrders: snapshotOrderTotal });
+    : buildTakeoutShiftSnapshot(takeout.menu_recipe_ids, { totalOrders: snapshotOrderTotal, recipes });
   const normalizedRequiredIngredients = requiredIngredients && typeof requiredIngredients === "object"
     ? { ...requiredIngredients }
     : {};
@@ -491,7 +550,7 @@ export function startTakeoutShiftWithCoverage(player, {
     shiftSeed: now,
     menuRecipeCount: menuRecipeIds.length
   });
-  const snapshot = buildTakeoutShiftSnapshot(menuRecipeIds, { totalOrders: snapshotOrderTotal });
+  const snapshot = buildTakeoutShiftSnapshot(menuRecipeIds, { totalOrders: snapshotOrderTotal, recipes });
   const requiredIngredients = computeTakeoutRequiredIngredients(snapshot, recipes);
   const operatingCost = computeTakeoutOperatingCost(requiredIngredients, { marketPrices, items });
   const playerCoins = Math.max(0, Math.floor(Number(player?.coins || 0) || 0));

@@ -249,8 +249,11 @@ const multibuyCacheV2 = new Map();
 const sellSelectionCacheV2 = new Map();
 // Temporary cache for compost selections keyed by message id
 const compostSelectionCache = new Map();
+// Temporary cache for takeout menu draft selections across paginated picker pages
+const takeoutMenuSelectionCache = new Map();
 
 const SELECTION_CACHE_TTL_MS = 5 * 60 * 1000;
+const TAKEOUT_MENU_SELECTION_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function makeSelectionToken() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -261,6 +264,45 @@ function purgeExpiredSelectionCache(cache) {
   for (const [key, entry] of cache.entries()) {
     if ((entry?.expiresAt ?? 0) < now) cache.delete(key);
   }
+}
+
+function getTakeoutMenuSelectionCacheKey(serverId, userId) {
+  return `${String(serverId || "")}:${String(userId || "")}`;
+}
+
+function normalizeTakeoutDraftSelection(ids = [], availableRecipeIds = []) {
+  const availableSet = new Set((availableRecipeIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const out = [];
+  const seen = new Set();
+  for (const rawId of ids || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id) || !availableSet.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function readTakeoutMenuDraftSelection({ serverId, userId, availableRecipeIds = [], fallbackRecipeIds = [] } = {}) {
+  purgeExpiredSelectionCache(takeoutMenuSelectionCache);
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+  const cached = takeoutMenuSelectionCache.get(key);
+  const cachedIds = Array.isArray(cached?.selectedRecipeIds) ? cached.selectedRecipeIds : [];
+  const source = cachedIds.length ? cachedIds : (Array.isArray(fallbackRecipeIds) ? fallbackRecipeIds : []);
+  return normalizeTakeoutDraftSelection(source, availableRecipeIds);
+}
+
+function writeTakeoutMenuDraftSelection({ serverId, userId, selectedRecipeIds = [] } = {}) {
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+  takeoutMenuSelectionCache.set(key, {
+    selectedRecipeIds: [...selectedRecipeIds],
+    expiresAt: Date.now() + TAKEOUT_MENU_SELECTION_CACHE_TTL_MS
+  });
+}
+
+function clearTakeoutMenuDraftSelection({ serverId, userId } = {}) {
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+  takeoutMenuSelectionCache.delete(key);
 }
 
 function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = {}) {
@@ -7038,12 +7080,23 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const menuPicker = showMenuPicker
         ? buildTakeoutMenuPickerRows(userId, {
             availableRecipeIds,
-            selectedRecipeIds: takeout.menu_recipe_ids,
+            selectedRecipeIds: readTakeoutMenuDraftSelection({
+              serverId,
+              userId,
+              availableRecipeIds,
+              fallbackRecipeIds: takeout.menu_recipe_ids
+            }),
             minRequired: menuLimits.minRequired,
             maxAllowed: menuLimits.maxAllowed,
             page: menuPage
           })
         : null;
+
+      const footerBase = `Coins: ${p.coins || 0}c`;
+      const footerOwner = ownerFooterText(interaction.member ?? interaction.user);
+      const pageLabel = menuPicker?.totalPages > 1 ? `Page ${menuPicker.safePage + 1}/${menuPicker.totalPages}` : null;
+      const footerParts = [footerBase, pageLabel].filter(Boolean).join(" • ");
+      embed.setFooter({ text: `${footerParts}\n${footerOwner}` });
 
       return {
         content: " ",
@@ -7071,6 +7124,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
 
       const rawRecipes = String(opt.getString("recipes") || "").trim();
+      const isDraftSelection = opt.getBoolean("menu_draft") === true;
       if (!rawRecipes) {
         if (!availableRecipeIds.length) {
           return finalize(renderStatus(`${getIcon("warning")} You need at least one learned recipe before setting a takeout menu.`, { ephemeral: true }));
@@ -7085,6 +7139,66 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         .split(",")
         .map((id) => resolveCanonicalRecipeId(id))
         .filter(Boolean);
+
+      if (isDraftSelection) {
+        const normalizedDraft = normalizeTakeoutMenuSelection({
+          selectedRecipeIds: requestedIds,
+          learnedRecipeIds: availableRecipeIds
+        });
+        writeTakeoutMenuDraftSelection({
+          serverId,
+          userId,
+          selectedRecipeIds: normalizedDraft
+        });
+
+        if (normalizedDraft.length < menuLimits.minRequired) {
+          return finalize(renderStatus(
+            `${getIcon("recipes")} Menu draft saved: **${normalizedDraft.length}/${menuLimits.minRequired}** selected. Add at least **${menuLimits.minRequired - normalizedDraft.length}** more recipe${menuLimits.minRequired - normalizedDraft.length === 1 ? "" : "s"}.`,
+            {
+              ephemeral: true,
+              showMenuPicker: true,
+              menuPage: requestedMenuPage
+            }
+          ));
+        }
+
+        const menuResult = setTakeoutMenu(p, {
+          menuRecipeIds: normalizedDraft,
+          learnedRecipeIds: availableRecipeIds,
+          now
+        });
+
+        if (!menuResult.ok) {
+          if (menuResult.reason === "menu_too_small") {
+            const needed = menuResult.limits?.minRequired ?? 0;
+            return finalize(renderStatus(`${getIcon("warning")} Menu too small. Select at least **${needed}** recipe${needed === 1 ? "" : "s"}.`, {
+              ephemeral: true,
+              showMenuPicker: true,
+              menuPage: requestedMenuPage
+            }));
+          }
+          return finalize(renderStatus(`${getIcon("warning")} Could not update menu. Check recipe ids and try again.`, {
+            ephemeral: true,
+            showMenuPicker: true,
+            menuPage: requestedMenuPage
+          }));
+        }
+
+        clearTakeoutMenuDraftSelection({ serverId, userId });
+
+        if (!isTakeoutShiftActive(p, nowTs())) {
+          takeout.shift.idle_order_board_snapshot = takeout.menu_recipe_ids.map((rid) => ({
+            recipe_id: rid,
+            visible_order_count: 0
+          }));
+          clearTakeoutQuote();
+        }
+
+        return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`, {
+          showMenuPicker: true,
+          menuPage: requestedMenuPage
+        }));
+      }
 
       const menuResult = setTakeoutMenu(p, {
         menuRecipeIds: requestedIds,
@@ -7102,6 +7216,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         }
         return finalize(renderStatus(`${getIcon("warning")} Could not update menu. Check recipe ids and try again.`, { ephemeral: true }));
       }
+
+      clearTakeoutMenuDraftSelection({ serverId, userId });
 
       if (!isTakeoutShiftActive(p, nowTs())) {
         takeout.shift.idle_order_board_snapshot = takeout.menu_recipe_ids.map((rid) => ({
@@ -12028,9 +12144,15 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
   s.season = computeActiveSeason(settings);
   const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
   const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
+  const currentDraftSelection = readTakeoutMenuDraftSelection({
+    serverId,
+    userId: interaction.user.id,
+    availableRecipeIds,
+    fallbackRecipeIds: p?.takeout?.menu_recipe_ids ?? []
+  });
   const selectedRecipeIds = mergeTakeoutMenuPageSelection({
     availableRecipeIds,
-    currentSelectedRecipeIds: p?.takeout?.menu_recipe_ids ?? [],
+    currentSelectedRecipeIds: currentDraftSelection,
     pageSelectedRecipeIds,
     page,
     maxAllowed: menuLimits.maxAllowed
@@ -12040,6 +12162,7 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
     sub: "takeout_menu",
     overrides: {
       strings: { recipes: selectedRecipeIds.join(",") },
+      booleans: { menu_draft: true },
       integers: { page },
       messageId: interaction.message?.id ?? null
     }
