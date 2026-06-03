@@ -9,14 +9,14 @@
 
 /**
  * Base capacity for ingredient stacks (per item type)
- * Modified by u_pantry upgrade: ING_STACK_CAP = 40 + 5 * u_pantry
+ * Modified by u_pantry upgrade: ING_STACK_CAP = 50 + 12 * u_pantry
  */
-export const ING_STACK_CAP_BASE = 40;
+export const ING_STACK_CAP_BASE = 50;
 
 /**
  * Capacity increase per pantry upgrade level
  */
-export const ING_STACK_CAP_PER_UPGRADE = 5;
+export const ING_STACK_CAP_PER_UPGRADE = 12;
 
 /**
  * Base capacity for bowl stacks (per bowl type)
