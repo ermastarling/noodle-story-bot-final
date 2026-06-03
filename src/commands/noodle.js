@@ -8280,8 +8280,10 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const status = getVoteRewardStatus(latestPlayer);
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
-    const house247Line = status.house247ExpiresAt
-      ? `<t:${Math.floor(status.house247ExpiresAt / 1000)}:R>`
+    const house247Line = status.house247Active
+      ? (status.house247ExpiresAt
+        ? `<t:${Math.floor(status.house247ExpiresAt / 1000)}:R>`
+        : "Active")
       : "Not active";
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
     const maxButtonsPerRow = 5;

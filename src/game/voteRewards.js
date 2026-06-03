@@ -3,7 +3,9 @@ import { applySxpLevelUp } from "./serve.js";
 import {
   grantHouse247VoteAccess,
   getHouse247VoteExpiry,
-  HOUSE_247_VOTE_DURATION_MS
+  HOUSE_247_VOTE_DURATION_MS,
+  hasActivePerk,
+  SUBSCRIPTION_PERKS
 } from "./subscriptions.js";
 
 export const TOPGG_BOT_URL = "https://top.gg/bot/1460058511802105976/vote";
@@ -284,13 +286,18 @@ export function getVotePlatformStatusLines(player, { limit } = {}) {
     });
 }
 
-export function getVoteRewardStatus(player) {
+export function getVoteRewardStatus(player, now = nowTs()) {
   const state = ensureVoteState(player);
+  const nowMs = Number.isFinite(Number(now)) ? Number(now) : nowTs();
+  const house247ExpiresAt = getHouse247VoteExpiry(player);
+  const house247VoteActive = Number.isFinite(house247ExpiresAt) && house247ExpiresAt > nowMs;
+  const house247SubscriptionActive = hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, nowMs);
   return {
     pendingClaims: Math.max(0, Number(state.pending_claims || 0)),
     lastVoteAt: state.last_vote_at,
     lastClaimAt: state.last_claim_at,
-    house247ExpiresAt: getHouse247VoteExpiry(player),
+    house247ExpiresAt,
+    house247Active: house247VoteActive || house247SubscriptionActive,
     reward: { ...DEFAULT_VOTE_REWARD }
   };
 }
