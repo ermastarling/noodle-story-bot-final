@@ -3,6 +3,7 @@ import discordPkg from "discord.js";
 import { openDb, getPlayer, getLatestServerIdForUser, upsertPlayer } from "../db/index.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
+import { hasUnlimitedMarketStock } from "../game/subscriptions.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
 
@@ -53,11 +54,14 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function buildReminderEmbed({ guildName, channelLine, claimLine, user }) {
+function buildReminderEmbed({ guildName, channelLine, claimLine, user, hasHouse247Active = false }) {
+  const openerLine = hasHouse247Active
+    ? `Your ${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House is active. Vote again in **/noodle quests_vote** to extend it.`
+    : `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`;
   return new EmbedBuilder()
     .setTitle(`Daily Noodle Mail ${getIcon("mail")}`)
     .setDescription([
-      `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`,
+      openerLine,
       `\nYour daily reward is also ready!`,
       channelLine ? `${channelLine}` : null,
       claimLine,
@@ -139,7 +143,8 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
         : null;
       const channelLine = channelId ? `<#${channelId}>` : null;
       const claimLine = `Use /noodle quests_daily to claim your daily reward.`;
-      const embed = buildReminderEmbed({ guildName, channelLine, claimLine, user });
+      const hasHouse247Active = hasUnlimitedMarketStock(player, now);
+      const embed = buildReminderEmbed({ guildName, channelLine, claimLine, user, hasHouse247Active });
       const components = buildDmReminderComponents({
         userId,
         serverId: lastGuildId || preferredServerId,
