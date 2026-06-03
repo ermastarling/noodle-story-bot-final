@@ -2161,6 +2161,24 @@ const s = String(orderId)
 return s.slice(-6).toUpperCase();
 }
 
+function extractOrderIndexFromId(orderId) {
+  if (!orderId) return null;
+  const match = String(orderId).match(/-o(\d+)-/i);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function resolveConsumedOrderIndex(fullOrderId, acceptedOrder, resolvedOrder) {
+  const acceptedIndex = Number(acceptedOrder?.order_index);
+  if (Number.isFinite(acceptedIndex) && acceptedIndex >= 0) return acceptedIndex;
+
+  const resolvedIndex = Number(resolvedOrder?.order_index);
+  if (Number.isFinite(resolvedIndex) && resolvedIndex >= 0) return resolvedIndex;
+
+  return extractOrderIndexFromId(fullOrderId);
+}
+
 function formatBonusValue(key, value) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") {
@@ -5834,7 +5852,12 @@ if (inDevPath && sub === "dashboard") {
       .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${nextServerPage}`)
       .setLabel("Next")
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page !== 0 || totalServerPages <= 1)
+      .setDisabled(page !== 0 || totalServerPages <= 1),
+    new ButtonBuilder()
+      .setCustomId(`noodle-dev:dashboard:refresh:${userId}:${page}:${clampedServerPage}`)
+      .setLabel("Refresh")
+      .setEmoji(getButtonEmoji("refresh"))
+      .setStyle(ButtonStyle.Secondary)
   );
 
   return commit({
@@ -7440,6 +7463,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       let seasonalServedCoins = 0;
       let leveledUp = false;
       const discoveryMessages = [];
+      const bowlLedgerCompletedBefore = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
+      const completedCollectionsBefore = new Set(p?.collections?.completed ?? []);
       const recipe = content.recipes?.[selectedRecipeId] ?? null;
       const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
       const activeEventEffects = getActiveEventEffects(eventsContent, s);
@@ -7487,6 +7512,16 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         p.lifetime.bowls_served_total = (p.lifetime.bowls_served_total ?? 0) + 1;
         p.lifetime.coins_earned = (p.lifetime.coins_earned ?? 0) + rewards.coins;
         leveledUp = applySxpLevelUp(p) || leveledUp;
+
+        const levelBeforeCollection = Number(p.shop_level || 1);
+        applyCollectionProgressOnServe(p, collectionsContent, content, {
+          npcArchetype: null,
+          recipeId: selectedRecipeId,
+          quality: bowlQuality
+        });
+        if (Number(p.shop_level || 1) > levelBeforeCollection) {
+          leveledUp = true;
+        }
 
         totalCoins += rewards.coins;
         totalRep += rewards.rep;
@@ -7536,12 +7571,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         `${getIcon("coins")} +${totalCoins}c · ${getIcon("rep")} +${totalRep} rep · ${getIcon("sxp")} +${totalSxp} sxp`,
         `${getIcon("orders")} Remaining counter orders for this recipe: **${remainingForRecipe}**`
       ];
-      if (leveledUp) {
-        serveSummary.push(`${getIcon("status_complete")} Level up! You are now **Lv.${Math.max(1, Number(p.shop_level || 1))}**.`);
-      }
-      if (discoveryMessages.length > 0) {
-        serveSummary.push(discoveryMessages.slice(0, 4).join("\n"));
-      }
 
       if (servedCount > 0) {
         applyQuestProgress(
@@ -7564,11 +7593,62 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
             now
           );
         }
+
+        const newlyUnlockedBadgeIds = unlockBadges(p, badgesContent);
+        for (const badgeId of newlyUnlockedBadgeIds) {
+          const badge = getBadgeById(badgesContent, badgeId);
+          const icon = resolveIcon(badge?.icon, getIcon("badges"));
+          const badgeName = badge?.name ?? badgeId;
+          serveSummary.push(`${icon} **Badge unlocked:** ${badgeName}`);
+        }
+
+        const bowlLedgerCompletedAfter = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
+        const newlyCompletedBowls = [...bowlLedgerCompletedAfter]
+          .filter((entry) => !bowlLedgerCompletedBefore.has(entry))
+          .map((entry) => Number(entry))
+          .filter((value) => Number.isFinite(value))
+          .sort((a, b) => a - b);
+        for (const threshold of newlyCompletedBowls) {
+          serveSummary.push(`${getIcon("serve")} **Bowl milestone reached:** ${threshold.toLocaleString()} bowls served.`);
+        }
+
+        const collectionNameById = new Map((collectionsContent?.collections ?? [])
+          .filter((entry) => entry?.collection_id)
+          .map((entry) => [entry.collection_id, entry.name ?? entry.collection_id]));
+        const newlyCompletedCollectionIds = (p?.collections?.completed ?? [])
+          .filter((collectionId) => !completedCollectionsBefore.has(collectionId));
+        for (const collectionId of newlyCompletedCollectionIds) {
+          const collectionName = collectionNameById.get(collectionId) ?? collectionId;
+          serveSummary.push(`${getIcon("collections")} **Collection completed:** ${collectionName}`);
+        }
+
+        const specState = ensureSpecializationState(p);
+        const bowlsServedAfter = p.lifetime.bowls_served_total;
+        const newlyUnlockedSpecs = (specializationsContent?.specializations ?? []).filter((spec) => {
+          if (!spec?.spec_id) return false;
+          const req = spec?.requirements?.bowls_served_total;
+          if (!req || bowlsServedAfter < req) return false;
+          return !specState.unlocked_spec_ids.includes(spec.spec_id);
+        });
+        if (newlyUnlockedSpecs.length) {
+          for (const spec of newlyUnlockedSpecs) {
+            specState.unlocked_spec_ids.push(spec.spec_id);
+            const icon = resolveIcon(spec.icon, getIcon("sparkle"));
+            serveSummary.push(`${icon} **Specialization unlocked:** ${spec.name}`);
+          }
+        }
+      }
+
+      if (leveledUp) {
+        serveSummary.push(`${getIcon("level_up")} Level up! You're now **Level ${Math.max(1, Number(p.shop_level || 1))}**.`);
+      }
+      if (discoveryMessages.length > 0) {
+        serveSummary.push(discoveryMessages.slice(0, 4).join("\n"));
       }
 
       const confirmationEmbed = buildMenuEmbed({
         title: `${getIcon("serve")} Counter Serve`,
-        description: serveSummary.join("\n\n"),
+        description: serveSummary.join("\n"),
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -7921,10 +8001,18 @@ if (sub === "status") {
     });
   }
   const statusEmbed = buildDevStatusEmbed();
+  const refreshRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle-dev:status:refresh:${userId}`)
+      .setLabel("Refresh")
+      .setEmoji(getButtonEmoji("refresh"))
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   return commit({
     content: " ",
     embeds: [statusEmbed],
+    components: [refreshRow],
     ephemeral: false
   });
 }
@@ -10335,6 +10423,7 @@ ${lines.join("\n")}`;
     const results = [];
     const unlockedRecipeNames = [];
     const readyBowlsByRecipe = new Map();
+    const acceptedCommitted = [];
     const acceptedOrdersNow = [];
     let acceptedNow = 0;
 
@@ -10388,6 +10477,10 @@ ${lines.join("\n")}`;
           base_speed_window_seconds: baseSpeedWindowSeconds
         }
       };
+      acceptedCommitted.push({
+        orderId: order.order_id,
+        orderIndex: Number.isFinite(Number(order.order_index)) ? Number(order.order_index) : null
+      });
 
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const timeNote = expiresAt
@@ -10633,6 +10726,17 @@ ${lines.join("\n")}`;
       user: interaction.member ?? interaction.user
     });
     const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
+    emitTelemetry("order_accept_commit", {
+      requestId: interaction.id,
+      serverId,
+      userId,
+      ordersDay: p.orders_day ?? dayKeyUTC(),
+      house247Active: hasHouse247Perk(p),
+      orderAcceptCap: cap,
+      acceptedCountBefore: acceptedCount,
+      acceptedCountAfter: hasAcceptedOrders ? Object.keys(p.orders?.accepted ?? {}).length : 0,
+      accepted: acceptedCommitted
+    });
     const showTutorialBuyRowAfterAccept = resolveTutorialGateValue({
       player: p,
       gate: "showTutorialBuyRowAfterAccept",
@@ -10729,6 +10833,53 @@ ${lines.join("\n")}`;
     }
 
     const acceptedMap = p.orders?.accepted ?? {};
+    const consumedBeforeServe = Array.isArray(p.orders_consumed_indices)
+      ? p.orders_consumed_indices.length
+      : 0;
+    const serveAttemptResolved = [];
+
+    for (const tok of tokens) {
+      const matchedEntry = Object.entries(acceptedMap).find(([fullId]) => {
+        const full = String(fullId).toUpperCase();
+        const short = shortOrderId(fullId);
+        return full === tok || short === tok;
+      });
+      if (!matchedEntry) continue;
+
+      const [fullOrderId, acceptedEntry] = matchedEntry;
+      const resolvedOrder = acceptedEntry?.order ?? findOrderByToken({
+        playerState: p,
+        settings: set,
+        content,
+        activeSeason: s.season,
+        serverId,
+        userId,
+        activeEventId,
+        token: fullOrderId
+      });
+      const acceptedSnapshotIndex = Number(acceptedEntry?.order?.order_index);
+      const resolvedOrderIndex = Number(resolvedOrder?.order_index);
+      serveAttemptResolved.push({
+        token: tok,
+        fullOrderId,
+        acceptedSnapshotHasIndex: Number.isFinite(acceptedSnapshotIndex) && acceptedSnapshotIndex >= 0,
+        acceptedSnapshotIndex: Number.isFinite(acceptedSnapshotIndex) && acceptedSnapshotIndex >= 0 ? acceptedSnapshotIndex : null,
+        resolvedOrderIndex: Number.isFinite(resolvedOrderIndex) && resolvedOrderIndex >= 0 ? resolvedOrderIndex : null,
+        fallbackIndexFromOrderId: extractOrderIndexFromId(fullOrderId)
+      });
+    }
+
+    emitTelemetry("order_serve_attempt", {
+      requestId: interaction.id,
+      serverId,
+      userId,
+      ordersDay: p.orders_day ?? dayKeyUTC(),
+      house247Active: hasHouse247Perk(p),
+      tokens,
+      resolved: serveAttemptResolved,
+      consumedCountBefore: consumedBeforeServe
+    });
+
     // Ensure core stats and lifetime tracking exist
     p.coins = Number.isFinite(p.coins) ? p.coins : 0;
     p.rep = Number.isFinite(p.rep) ? p.rep : 0;
@@ -10759,6 +10910,9 @@ ${lines.join("\n")}`;
     let leveledUp = false;
     let recipeUnlocked = false;
     const unlockedRecipeNames = [];
+    const bowlLedgerCompletedBefore = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
+    const completedCollectionsBefore = new Set(p?.collections?.completed ?? []);
+    const serveCommitResults = [];
 
     for (const tok of tokens) {
       const matchEntry = Object.entries(acceptedMap).find(([fullId]) => {
@@ -10848,8 +11002,29 @@ ${lines.join("\n")}`;
       bowl.qty -= 1;
       if (bowl.qty <= 0) delete p.inv_bowls[selectedEntry?.key ?? order.recipe_id];
 
+      const consumedOrderIndex = resolveConsumedOrderIndex(fullOrderId, accepted.order, order);
+      const consumedBeforeMark = Array.isArray(p.orders_consumed_indices)
+        ? new Set(p.orders_consumed_indices)
+        : new Set();
+      const consumedAlreadyContainedBefore = Number.isFinite(Number(consumedOrderIndex))
+        ? consumedBeforeMark.has(Number(consumedOrderIndex))
+        : false;
       delete acceptedMap[fullOrderId];
-      markOrderConsumed(p, order.order_index);
+      markOrderConsumed(p, consumedOrderIndex);
+      const consumedAfterMark = Array.isArray(p.orders_consumed_indices)
+        ? new Set(p.orders_consumed_indices)
+        : new Set();
+      const consumedContainsAfter = Number.isFinite(Number(consumedOrderIndex))
+        ? consumedAfterMark.has(Number(consumedOrderIndex))
+        : false;
+      serveCommitResults.push({
+        fullOrderId,
+        served: true,
+        consumedIndexUsed: Number.isFinite(Number(consumedOrderIndex)) ? Number(consumedOrderIndex) : null,
+        markOrderConsumedCalled: true,
+        consumedAlreadyContainedBefore,
+        consumedContainsAfter
+      });
 
       p.coins += rewards.coins;
       p.rep += rewards.rep;
@@ -11075,13 +11250,53 @@ ${lines.join("\n")}`;
           now
         );
       }
-      unlockBadges(p, badgesContent);
+
+      const newlyUnlockedBadgeIds = unlockBadges(p, badgesContent);
+      for (const badgeId of newlyUnlockedBadgeIds) {
+        const badge = getBadgeById(badgesContent, badgeId);
+        const icon = resolveIcon(badge?.icon, getIcon("badges"));
+        const badgeName = badge?.name ?? badgeId;
+        results.push(`${icon} **Badge unlocked:** ${badgeName}`);
+      }
+
+      const bowlLedgerCompletedAfter = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
+      const newlyCompletedBowls = [...bowlLedgerCompletedAfter]
+        .filter((entry) => !bowlLedgerCompletedBefore.has(entry))
+        .map((entry) => Number(entry))
+        .filter((value) => Number.isFinite(value))
+        .sort((a, b) => a - b);
+      for (const threshold of newlyCompletedBowls) {
+        results.push(`${getIcon("serve")} **Bowl milestone reached:** ${threshold.toLocaleString()} bowls served.`);
+      }
+
+      const collectionNameById = new Map((collectionsContent?.collections ?? [])
+        .filter((entry) => entry?.collection_id)
+        .map((entry) => [entry.collection_id, entry.name ?? entry.collection_id]));
+      const newlyCompletedCollectionIds = (p?.collections?.completed ?? [])
+        .filter((collectionId) => !completedCollectionsBefore.has(collectionId));
+      for (const collectionId of newlyCompletedCollectionIds) {
+        const collectionName = collectionNameById.get(collectionId) ?? collectionId;
+        results.push(`${getIcon("collections")} **Collection completed:** ${collectionName}`);
+      }
     }
+
+    emitTelemetry("order_serve_commit", {
+      requestId: interaction.id,
+      serverId,
+      userId,
+      ordersDay: p.orders_day ?? dayKeyUTC(),
+      house247Active: hasHouse247Perk(p),
+      results: serveCommitResults,
+      consumedCountBefore: consumedBeforeServe,
+      consumedCountAfter: Array.isArray(p.orders_consumed_indices)
+        ? p.orders_consumed_indices.length
+        : 0
+    });
 
     const state = ensureSpecializationState(p);
     const bowlsServedAfter = p.lifetime.bowls_served_total;
     const newlyUnlockedSpecs = (specializationsContent?.specializations ?? []).filter((spec) => {
-      if (!spec?.hidden_until_unlocked) return false;
+      if (!spec?.spec_id) return false;
       const req = spec?.requirements?.bowls_served_total;
       if (!req || bowlsServedAfter < req) return false;
       return !state.unlocked_spec_ids.includes(spec.spec_id);
