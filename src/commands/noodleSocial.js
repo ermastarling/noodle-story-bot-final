@@ -3545,9 +3545,17 @@ async function handleComponent(interaction) {
 
       try {
         leaveParty(db, currentParty.party_id, userId);
+
+        const embed = new EmbedBuilder()
+          .setTitle(`${getIcon("party")} Party`)
+          .setDescription(`${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`)
+          .setColor(theme.colors.info);
+
+        applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
         return componentCommit(interaction, {
-          content: `${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`,
-          embeds: [],
+          content: null,
+          embeds: [embed],
           components: [socialMainMenuRow(userId)]
         });
       } catch (err) {
