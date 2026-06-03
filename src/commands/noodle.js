@@ -6757,6 +6757,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
     const s = ensureServer(serverId);
     unlockNoticePlayer = p;
     const now = nowTs();
+    const takeout = ensureTakeoutState(p);
     const takeoutEnabled = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now);
 
     const finalize = (payload) => {
@@ -6766,21 +6767,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       return payload;
     };
 
-    if (!takeoutEnabled) {
-      const lockedEmbed = buildMenuEmbed({
-        title: getTakeoutCounterLabel(),
-        description: `${getIcon("lock")} ${getTakeoutCounterLabel()} requires an active subscription.`,
-        user: interaction.member ?? interaction.user,
-        color: theme.colors.warning
-      });
-      return finalize({
-        content: " ",
-        embeds: [lockedEmbed],
-        ephemeral: true
-      });
-    }
-
-    const takeout = ensureTakeoutState(p);
     const takeoutCatchup = processTakeoutCatchup(p, {
       now,
       recipes: content.recipes ?? {},
@@ -6795,6 +6781,25 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         earnedCoins: takeoutCatchup.earned,
         totalProcessedHours: takeoutCatchup.totalProcessedHours,
         completed: Boolean(takeoutCatchup.completed)
+      });
+    }
+
+    const hasUnclaimedTakeoutCoins = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
+    const hasActiveTakeoutShift = isTakeoutShiftActive(p, now);
+    const isTakeoutStatusOrClaimRoute = sub === "takeout" || sub === "takeout_claim";
+    const allowTakeoutGraceAccess = isTakeoutStatusOrClaimRoute && (hasActiveTakeoutShift || hasUnclaimedTakeoutCoins);
+
+    if (!takeoutEnabled && !allowTakeoutGraceAccess) {
+      const lockedEmbed = buildMenuEmbed({
+        title: getTakeoutCounterLabel(),
+        description: `${getIcon("lock")} ${getTakeoutCounterLabel()} requires an active subscription.`,
+        user: interaction.member ?? interaction.user,
+        color: theme.colors.warning
+      });
+      return finalize({
+        content: " ",
+        embeds: [lockedEmbed],
+        ephemeral: true
       });
     }
 
@@ -7013,9 +7018,9 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           })
         : null;
 
-      const canOpenShift = !active && takeout.menu_recipe_ids.length >= menuLimits.minRequired;
+      const canOpenShift = takeoutEnabled && !active && takeout.menu_recipe_ids.length >= menuLimits.minRequired;
       const canClaim = Math.max(0, Math.floor(Number(takeout.earned_unclaimed_coins || 0) || 0)) > 0;
-      const canCounterServe = active && takeout.menu_recipe_ids.some((rid) => {
+      const canCounterServe = takeoutEnabled && active && takeout.menu_recipe_ids.some((rid) => {
         const remaining = Math.max(0, Math.floor(Number(countByRecipe.get(rid) || 0) || 0));
         if (remaining <= 0) return false;
         return getTotalBowlsForRecipe(p, rid) > 0;
