@@ -3063,34 +3063,6 @@ import { theme } from "./ui/theme.js";
           billingPeriodKey: monthlyGrantResult.billingPeriodKey ?? null
         });
 
-        if (takeoutStarted) {
-          await sendDevAlert({
-            title: "Take Out Subscription Started",
-            description:
-              `User: <@${userId}> (${userId})\n`
-              + `Perk: Take Out Counter (${perkId})\n`
-              + `Event: ${eventType}\n`
-              + `Server: ${subscriptionServerId}\n`
-              + `Monthly Coins Granted: ${monthlyGrantResult.granted ? monthlyGrantResult.amount : 0}c`,
-            footerText: `Entitlement: ${entitlementId || "unknown"}`,
-            color: theme.colors.success
-          });
-        }
-
-        if (takeoutEnded) {
-          await sendDevAlert({
-            title: "Take Out Subscription Ended",
-            description:
-              `User: <@${userId}> (${userId})\n`
-              + `Perk: Take Out Counter (${perkId})\n`
-              + `Event: ${eventType}\n`
-              + `Server: ${subscriptionServerId}\n`
-              + `Monthly Coins Granted: ${monthlyGrantResult.granted ? monthlyGrantResult.amount : 0}c`,
-            footerText: `Entitlement: ${entitlementId || "unknown"}`,
-            color: theme.colors.warning
-          });
-        }
-
         putIdempotentResult(db, {
           key: subscriptionIdempotencyKey,
           userId,
@@ -3105,6 +3077,38 @@ import { theme } from "./ui/theme.js";
             billingPeriodKey: monthlyGrantResult.billingPeriodKey ?? null
           }
         });
+
+        if (takeoutStarted) {
+          await sendDevAlert({
+            title: "Take Out Subscription Started",
+            description:
+              `User: <@${userId}> (${userId})\n`
+              + `Perk: Take Out Counter (${perkId})\n`
+              + `Event: ${eventType}\n`
+              + `Server: ${subscriptionServerId}\n`
+              + `Monthly Coins Granted: ${monthlyGrantResult.granted ? monthlyGrantResult.amount : 0}c`,
+            footerText: `Entitlement: ${entitlementId || "unknown"}`,
+            color: theme.colors.success
+          }).catch((error) => {
+            webhookWarn("Discord: subscription start alert failed", error?.stack ?? String(error));
+          });
+        }
+
+        if (takeoutEnded) {
+          await sendDevAlert({
+            title: "Take Out Subscription Ended",
+            description:
+              `User: <@${userId}> (${userId})\n`
+              + `Perk: Take Out Counter (${perkId})\n`
+              + `Event: ${eventType}\n`
+              + `Server: ${subscriptionServerId}\n`
+              + `Monthly Coins Granted: ${monthlyGrantResult.granted ? monthlyGrantResult.amount : 0}c`,
+            footerText: `Entitlement: ${entitlementId || "unknown"}`,
+            color: theme.colors.warning
+          }).catch((error) => {
+            webhookWarn("Discord: subscription end alert failed", error?.stack ?? String(error));
+          });
+        }
 
         res.writeHead(200, { "content-type": "text/plain" });
         res.end(lifecycleResult.ok ? "ok" : "ignored");
