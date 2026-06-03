@@ -131,7 +131,7 @@ test("Subscriptions: monthly coin grant is idempotent per billing period", () =>
   assert.equal(player.coins, 100 + SUBSCRIPTION_MONTHLY_COIN_GRANT);
 });
 
-test("Subscriptions: both perks grant monthly coins independently", () => {
+test("Subscriptions: 24/7 House does not grant monthly coins", () => {
   const player = { coins: 0, lifetime: { coins_earned: 0 } };
   const periodStart = 1_700_000_000_000;
 
@@ -140,16 +140,29 @@ test("Subscriptions: both perks grant monthly coins independently", () => {
     periodStartAt: periodStart,
     now: periodStart + 1000
   });
+
+  assert.equal(houseGrant.ok, true);
+  assert.equal(houseGrant.granted, false);
+  assert.equal(houseGrant.amount, 0);
+  assert.equal(player.coins, 0);
+  assert.equal(player.lifetime.coins_earned, 0);
+});
+
+test("Subscriptions: Take Out Counter still grants monthly coins", () => {
+  const player = { coins: 0, lifetime: { coins_earned: 0 } };
+  const periodStart = 1_700_000_000_000;
+
   const takeoutGrant = applyMonthlySubscriptionCoinGrant(player, {
     perkId: SUBSCRIPTION_PERKS.TAKEOUT_COUNTER,
     periodStartAt: periodStart,
     now: periodStart + 1000
   });
 
-  assert.equal(houseGrant.granted, true);
+  assert.equal(takeoutGrant.ok, true);
   assert.equal(takeoutGrant.granted, true);
-  assert.equal(player.coins, SUBSCRIPTION_MONTHLY_COIN_GRANT * 2);
-  assert.equal(player.lifetime.coins_earned, SUBSCRIPTION_MONTHLY_COIN_GRANT * 2);
+  assert.equal(takeoutGrant.amount, SUBSCRIPTION_MONTHLY_COIN_GRANT);
+  assert.equal(player.coins, SUBSCRIPTION_MONTHLY_COIN_GRANT);
+  assert.equal(player.lifetime.coins_earned, SUBSCRIPTION_MONTHLY_COIN_GRANT);
 });
 
 test("Subscriptions: vote-granted 24/7 House increases active order cap", () => {

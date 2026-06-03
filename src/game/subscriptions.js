@@ -10,6 +10,7 @@ export const HOUSE_247_VOTE_DURATION_MS = 12 * 60 * 60 * 1000;
 
 const KNOWN_PERKS = new Set(Object.values(SUBSCRIPTION_PERKS));
 const PAID_SUBSCRIPTION_PERKS = new Set([SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]);
+const MONTHLY_COIN_GRANT_PERKS = new Set([SUBSCRIPTION_PERKS.TAKEOUT_COUNTER]);
 
 function defaultPerkState() {
   return {
@@ -265,6 +266,16 @@ export function applyMonthlySubscriptionCoinGrant(player, {
   const perkKey = String(perkId || "").trim().toLowerCase();
   if (!KNOWN_PERKS.has(perkKey)) {
     return { ok: false, reason: "unknown_perk", granted: false, amount: 0 };
+  }
+
+  if (!MONTHLY_COIN_GRANT_PERKS.has(perkKey)) {
+    return {
+      ok: true,
+      granted: false,
+      amount: 0,
+      perkId: perkKey,
+      billingPeriodKey: resolveSubscriptionBillingPeriodKey({ periodStartAt, periodEndAt, now })
+    };
   }
 
   const grantAmount = Math.max(0, Math.floor(Number(coins) || 0));
