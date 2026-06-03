@@ -5582,6 +5582,9 @@ if (inDevPath && sub === "giveaway_winner") {
     const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
     const now = nowTs();
     const rewardSummaryLines = [];
+    const rewardTypeLabel = rewardType === "coin_pack"
+      ? "Coin Pack"
+      : (rewardType === "coins" ? "Coins" : "Perk");
     let publicWinnerLine = "";
 
     if (rewardType === "perk") {
@@ -5625,7 +5628,7 @@ if (inDevPath && sub === "giveaway_winner") {
           totalGrant += Math.max(0, Math.floor(Number(grantResult.amount || 0) || 0));
         }
 
-        rewardSummaryLines.push(`• Granted perk: ${perkNames[perkId]} (${perkId}) for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
+        rewardSummaryLines.push(`• Granted perk: ${perkNames[perkId]} for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
       }
 
       rewardSummaryLines.push(`• Monthly subscription coins credited now: **${totalGrant}c**.`);
@@ -5652,7 +5655,7 @@ if (inDevPath && sub === "giveaway_winner") {
         });
       }
 
-      rewardSummaryLines.push(`• Granted coin pack: ${pack.priceLabel} (${pack.coins.toLocaleString()}c) [${coinPackId}].`);
+      rewardSummaryLines.push(`• Granted coin pack: ${pack.priceLabel} (${pack.coins.toLocaleString()}c).`);
       publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${pack.coins.toLocaleString()}c** (${pack.priceLabel} pack).`;
     } else {
       if (coinAmount <= 0) {
@@ -5676,8 +5679,10 @@ if (inDevPath && sub === "giveaway_winner") {
     upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
 
     const messageLines = [
-      `${getIcon("status_complete")} Giveaway reward delivered to <@${targetUserId}> (${targetUserId}) on server ${targetServerId}.`,
-      `Reward type: ${rewardType}`,
+      `${getIcon("status_complete")} Giveaway reward delivered to <@${targetUserId}>.`,
+      `Reward type: ${rewardTypeLabel}`,
+      " ",
+      "Granted rewards:",
       ...rewardSummaryLines,
       reason ? `Reason: ${reason}` : null,
       !existingPlayer ? "Note: Created a new player profile for this target." : null
