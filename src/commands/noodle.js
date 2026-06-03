@@ -2169,12 +2169,25 @@ function extractOrderIndexFromId(orderId) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function resolveConsumedOrderIndex(fullOrderId, acceptedOrder, resolvedOrder) {
-  const acceptedIndex = Number(acceptedOrder?.order_index);
-  if (Number.isFinite(acceptedIndex) && acceptedIndex >= 0) return acceptedIndex;
+function parseNonNegativeOrderIndex(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+  return null;
+}
 
-  const resolvedIndex = Number(resolvedOrder?.order_index);
-  if (Number.isFinite(resolvedIndex) && resolvedIndex >= 0) return resolvedIndex;
+function resolveConsumedOrderIndex(fullOrderId, acceptedOrder, resolvedOrder) {
+  const acceptedIndex = parseNonNegativeOrderIndex(acceptedOrder?.order_index);
+  if (acceptedIndex !== null) return acceptedIndex;
+
+  const resolvedIndex = parseNonNegativeOrderIndex(resolvedOrder?.order_index);
+  if (resolvedIndex !== null) return resolvedIndex;
 
   return extractOrderIndexFromId(fullOrderId);
 }
@@ -11006,21 +11019,21 @@ ${lines.join("\n")}`;
       const consumedBeforeMark = Array.isArray(p.orders_consumed_indices)
         ? p.orders_consumed_indices
         : [];
-      const consumedAlreadyContainedBefore = Number.isFinite(Number(consumedOrderIndex))
-        ? consumedBeforeMark.includes(Number(consumedOrderIndex))
+      const consumedAlreadyContainedBefore = Number.isFinite(consumedOrderIndex)
+        ? consumedBeforeMark.includes(consumedOrderIndex)
         : false;
       delete acceptedMap[fullOrderId];
       markOrderConsumed(p, consumedOrderIndex);
       const consumedAfterMark = Array.isArray(p.orders_consumed_indices)
         ? p.orders_consumed_indices
         : [];
-      const consumedContainsAfter = Number.isFinite(Number(consumedOrderIndex))
-        ? consumedAfterMark.includes(Number(consumedOrderIndex))
+      const consumedContainsAfter = Number.isFinite(consumedOrderIndex)
+        ? consumedAfterMark.includes(consumedOrderIndex)
         : false;
       serveCommitResults.push({
         fullOrderId,
         served: true,
-        consumedIndexUsed: Number.isFinite(Number(consumedOrderIndex)) ? Number(consumedOrderIndex) : null,
+        consumedIndexUsed: Number.isFinite(consumedOrderIndex) ? consumedOrderIndex : null,
         markOrderConsumedCalled: true,
         consumedAlreadyContainedBefore,
         consumedContainsAfter

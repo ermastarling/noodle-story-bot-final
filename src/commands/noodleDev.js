@@ -194,6 +194,7 @@ export const noodleDevCommand = {
 
     // Legacy: noodle-dev:dashboard:page:<ownerUserId>:<tabPage>
     // New:    noodle-dev:dashboard:nav:<ownerUserId>:<tabPage>:<serverPage>
+    // Also:   noodle-dev:dashboard:refresh:<ownerUserId>:<tabPage>:<serverPage>
     if (parts[0] !== "noodle-dev" || parts[1] !== "dashboard") return null;
 
     const mode = parts[2] ?? "";
