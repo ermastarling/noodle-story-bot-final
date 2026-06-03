@@ -62,3 +62,16 @@ test("Cook select handlers exist for both normal and takeout routes", () => {
     "Missing takeout cook select handler"
   );
 });
+
+test("Takeout serve does not consume main order board slots", () => {
+  const body = sliceBetween(
+    noodleSource,
+    "if (sub === \"takeout_serve\") {",
+    "if (sub === \"takeout_claim\") {"
+  );
+  assert.doesNotMatch(
+    body,
+    /markOrderConsumed\(/,
+    "Takeout serve should not mark main order board slots as consumed"
+  );
+});

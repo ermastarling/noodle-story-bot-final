@@ -7353,16 +7353,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
         snapshotRow.visible_order_count = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0) - 1);
 
-        if (!hasHouse247Perk(p)) {
-          const { totalCount, consumedSet } = getOrdersMeta(p);
-          for (let idx = 0; idx < totalCount; idx += 1) {
-            if (!consumedSet.has(idx)) {
-              markOrderConsumed(p, idx);
-              break;
-            }
-          }
-        }
-
         p.coins = (Number.isFinite(p.coins) ? p.coins : 0) + rewards.coins;
         p.rep = (Number.isFinite(p.rep) ? p.rep : 0) + rewards.rep;
         p.sxp_total = (Number.isFinite(p.sxp_total) ? p.sxp_total : 0) + rewards.sxp;
