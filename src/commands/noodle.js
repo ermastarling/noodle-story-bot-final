@@ -123,7 +123,7 @@ import {
 import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { applySeasonRolloverReward } from "../game/seasonRollover.js";
 import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
-import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
+import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff, getTakeoutDiscoveryAttemptLimit } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
@@ -7429,6 +7429,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       if (servingsToProcess <= 0) {
         return finalize(renderStatus(`${getIcon("help")} No remaining counter orders for **${displayRecipeName(selectedRecipeId)}**.`, { ephemeral: true }));
       }
+      const discoveryAttemptLimit = getTakeoutDiscoveryAttemptLimit(servingsToProcess);
+      let discoveryAttemptsUsed = 0;
 
       let totalCoins = 0;
       let totalRep = 0;
@@ -7499,7 +7501,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           seasonalServedCoins += rewards.coins;
         }
 
-        if (bowlQuality !== "salvage") {
+        if (bowlQuality !== "salvage" && discoveryAttemptsUsed < discoveryAttemptLimit) {
+          discoveryAttemptsUsed += 1;
           const dayKey = dayKeyUTC(servedAt);
           const discoveryRng = makeStreamRng({
             mode: "seeded",

@@ -4,6 +4,7 @@ import {
   canDiscoverTier,
   getDiscoverableRecipes,
   getDiscoveryRecipeWeight,
+  getTakeoutDiscoveryAttemptLimit,
   rollRecipeDiscovery,
   applyDiscovery,
   applyNpcDiscoveryBuff
@@ -201,6 +202,15 @@ test("Discovery: getDiscoverableRecipes excludes event recipes without active ev
 
   assert.ok(discoverable.includes("normal_recipe"));
   assert.ok(!discoverable.includes("event_recipe"));
+});
+
+test("Discovery: takeout discovery attempt limit uses diminishing returns", () => {
+  assert.equal(getTakeoutDiscoveryAttemptLimit(0), 0);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(1), 1);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(4), 2);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(9), 3);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(25), 5);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(100), 10);
 });
 
 test("Discovery: applyDiscovery - new clue is added", () => {
