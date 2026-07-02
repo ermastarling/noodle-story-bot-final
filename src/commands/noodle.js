@@ -3519,11 +3519,13 @@ function buildInteractionFailureContext(interaction, messageId = null) {
 }
 
 async function componentCommit(interaction, payload) {
-const { ephemeral, targetMessageId, ...rest } = payload ?? {};
+const { ephemeral, targetMessageId, ...rawRest } = payload ?? {};
+let rest = normalizePayloadContent(rawRest);
 
 if (rest.embeds) {
   rest.embeds = sanitizeEmbedsForDiscord(rest.embeds);
 }
+rest = normalizePayloadContent(rest);
 
 // Force ephemeral responses for modal submits when requested
 if (interaction.isModalSubmit?.() && ephemeral === true) {
@@ -3581,20 +3583,21 @@ if (targetMessageId && !ephemeral) {
 // If payload has components (select menus, etc), don't make it ephemeral unless explicitly requested
 const hasComponents = Array.isArray(rest.components) ? rest.components.length > 0 : Boolean(rest.components);
 const shouldBeEphemeral = ephemeral === true && !hasComponents;
-const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...rest };
+let options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...rest };
 if (options.embeds) {
   options.embeds = sanitizeEmbedsForDiscord(options.embeds);
 }
 if (options.components) {
   options.components = normalizeComponents(options.components);
 }
+options = normalizePayloadContent(options);
 
 if (shouldBeEphemeral) {
   try {
     if (interaction.deferred || interaction.replied) {
-      return interaction.followUp({ ...rest, ephemeral: true });
+      return interaction.followUp(normalizePayloadContent({ ...rest, ephemeral: true }));
     }
-    return interaction.reply({ ...rest, ephemeral: true });
+    return interaction.reply(normalizePayloadContent({ ...rest, ephemeral: true }));
   } catch (e) {
     if (e?.code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
       console.log(`⏭️  Skipping ephemeral reply - interaction invalid or already handled`);
@@ -3610,14 +3613,14 @@ if (interaction.isModalSubmit?.()) {
   if (shouldBeEphemeral) {
     if (interaction.deferred || interaction.replied) {
       try {
-        return await interaction.followUp({ ...rest, ephemeral: true });
+        return await interaction.followUp(normalizePayloadContent({ ...rest, ephemeral: true }));
       } catch (e) {
         console.log(`⚠️ Modal followUp failed:`, e?.message);
         return;
       }
     }
     try {
-      return await interaction.reply({ ...rest, ephemeral: true });
+      return await interaction.reply(normalizePayloadContent({ ...rest, ephemeral: true }));
     } catch (e) {
       console.log(`⚠️ Modal reply failed:`, e?.message);
       return;
@@ -3631,7 +3634,7 @@ if (interaction.isModalSubmit?.()) {
       console.log(`⚠️ Modal editReply failed:`, e?.message);
       // If edit fails, try followUp as last resort
       try {
-        return await interaction.followUp({ ...rest, ephemeral: true });
+        return await interaction.followUp(normalizePayloadContent({ ...rest, ephemeral: true }));
       } catch (e2) {
         console.log(`⚠️ Modal followUp also failed:`, e2?.message);
         return;
@@ -3683,6 +3686,7 @@ if (finalOptions.embeds) {
 if (finalOptions.embeds) {
   finalOptions.embeds = finalOptions.embeds.map(embed => embed.toJSON?.() ?? embed);
 }
+finalOptions = normalizePayloadContent(finalOptions);
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
@@ -3696,7 +3700,7 @@ if (interaction.deferred || interaction.replied) {
     });
     // Try followUp as fallback
     try {
-      return await interaction.followUp({ ...finalOptions, ephemeral: true });
+      return await interaction.followUp(normalizePayloadContent({ ...finalOptions, ephemeral: true }));
     } catch (e2) {
       console.error("Component followUp fallback also failed", {
         ...buildInteractionFailureContext(interaction),
