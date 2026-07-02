@@ -3530,6 +3530,17 @@ function normalizePayloadContent(payload = {}) {
   return { ...payload, content: "\u200b" };
 }
 
+function normalizeComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  const isV2Payload = (Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  if (!isV2Payload) return payload;
+  if (!payload.embeds) return payload;
+
+  // Discord rejects embeds when MessageFlags.IS_COMPONENTS_V2 is set.
+  const { embeds, ...rest } = payload;
+  return rest;
+}
+
 function buildInteractionFailureContext(interaction, messageId = null) {
   return {
     guildId: interaction?.guildId ?? null,
@@ -3594,11 +3605,13 @@ async function rawWebhookFollowUp(interaction, payload) {
 async function componentCommit(interaction, payload) {
 const { ephemeral, targetMessageId, ...rawRest } = payload ?? {};
 let rest = normalizePayloadContent(rawRest);
+rest = normalizeComponentsV2Payload(rest);
 
 if (rest.embeds) {
   rest.embeds = sanitizeEmbedsForDiscord(rest.embeds);
 }
 rest = normalizePayloadContent(rest);
+rest = normalizeComponentsV2Payload(rest);
 
 // Force ephemeral responses for modal submits when requested
 if (interaction.isModalSubmit?.() && ephemeral === true) {
@@ -3632,6 +3645,7 @@ if (targetMessageId && !ephemeral) {
         editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
       }
       editPayload = normalizePayloadContent(editPayload);
+      editPayload = normalizeComponentsV2Payload(editPayload);
       // Dismiss the modal response only for modal submits
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
@@ -3664,6 +3678,7 @@ if (options.components) {
   options.components = normalizeComponents(options.components, options.flags);
 }
 options = normalizePayloadContent(options);
+options = normalizeComponentsV2Payload(options);
 
 if (shouldBeEphemeral) {
   try {
@@ -3753,13 +3768,17 @@ if (!finalOptions.embeds && rest.embeds) {
   finalOptions.embeds = rest.embeds;
 }
 if (finalOptions.embeds) {
-  finalOptions.embeds = applyGreenButtonFooter(finalOptions.embeds, finalOptions.components);
+  const isComponentsV2 = (Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  if (!isComponentsV2) {
+    finalOptions.embeds = applyGreenButtonFooter(finalOptions.embeds, finalOptions.components);
+  }
 }
 // Convert EmbedBuilder objects to JSON
 if (finalOptions.embeds) {
   finalOptions.embeds = finalOptions.embeds.map(embed => embed.toJSON?.() ?? embed);
 }
 finalOptions = normalizePayloadContent(finalOptions);
+finalOptions = normalizeComponentsV2Payload(finalOptions);
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
@@ -12021,21 +12040,52 @@ if (v2Parsed.isV2) {
         });
       }
 
-      const confirmState = putSceneState({
+      const orderTokenByShortId = state.orderTokenByShortId ?? {};
+      const fullOrderId = String(orderTokenByShortId?.[selectedShortId] ?? "").trim();
+      if (!fullOrderId) {
+        return componentCommit(interaction, {
+          content: "That order is no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const p = ensurePlayer(serverId, userId);
+      const beforeAcceptedOrderIds = Object.keys(p.orders?.accepted ?? {});
+      const cap = getOrderAcceptCap(p, nowTs());
+
+      await runNoodle(interaction, {
+        sub: "accept",
+        overrides: { strings: { order_id: fullOrderId } }
+      });
+
+      const afterPlayer = ensurePlayer(serverId, userId);
+      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+      const outcome = deriveAcceptOutcome({
+        targetOrderId: fullOrderId,
+        cap,
+        beforeAcceptedOrderIds,
+        afterAcceptedOrderIds
+      });
+
+      const resultState = putSceneState({
         sceneKey: "orders.accept_result",
         ownerId: userId,
         state: {
           entries,
-          orderTokenByShortId: state.orderTokenByShortId ?? {},
+          orderTokenByShortId,
           selectedShortId
         }
       });
 
-      return componentCommit(interaction, buildAcceptConfirmV2Message({
+      const detailLine = outcome.code === "accepted"
+        ? `${getIcon("status_complete")} Accepted \`${shortOrderId(fullOrderId)}\`.`
+        : `${getIcon("warning")} ${outcome.message}`;
+
+      return componentCommit(interaction, buildAcceptResultV2Message({
         userId,
-        token: confirmState.token,
-        selectedShortId,
-        selectedLine: selected.line
+        token: resultState.token,
+        outcomeCode: outcome.code,
+        detailLine
       }));
     }
   }

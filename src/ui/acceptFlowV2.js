@@ -48,7 +48,7 @@ export function buildAcceptPickerV2Message({ userId, token, entries = [] } = {})
 
   const components = [
     text("## Accept Orders"),
-    text("Pick an order, then confirm.")
+    text("Pick an order to accept immediately.")
   ];
 
   if ((entries || []).length === 0) {
@@ -129,8 +129,7 @@ export function buildAcceptResultV2Message({ userId, token, outcomeCode, detailL
           type: 1,
           components: [
             button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
-            button({ sceneKey, actionKey: "ck", userId: safeUserId, token: safeToken, label: "Cook", style: 3 }),
-            button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Accept More", style: 2 })
+            button({ sceneKey, actionKey: "ck", userId: safeUserId, token: safeToken, label: "Cook", style: 3 })
           ]
         }
       ]
