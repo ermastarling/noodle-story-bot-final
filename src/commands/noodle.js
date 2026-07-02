@@ -3532,7 +3532,20 @@ function normalizePayloadContent(payload = {}) {
 
 function normalizeComponentsV2Payload(payload = {}) {
   if (!payload || typeof payload !== "object") return payload;
-  const isV2Payload = (Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  let isV2Payload = (Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  if (!isV2Payload) {
+    const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node || typeof node !== "object") continue;
+      const type = Number(node.type);
+      if (type === 9 || type === 10 || type === 17) {
+        isV2Payload = true;
+        break;
+      }
+      if (Array.isArray(node.components)) stack.push(...node.components);
+    }
+  }
   if (!isV2Payload) return payload;
   if (!payload.embeds) return payload;
 
@@ -5771,6 +5784,7 @@ if (overrides?.messageId && !payload?.ephemeral) {
         editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
       }
       editPayload = normalizePayloadContent(editPayload);
+      editPayload = normalizeComponentsV2Payload(editPayload);
       const result = await target.edit(editPayload);
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
