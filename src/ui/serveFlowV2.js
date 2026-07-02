@@ -1,4 +1,4 @@
-import { MESSAGE_FLAG_IS_COMPONENTS_V2 } from "./componentsV2.js";
+import { buildComponentsV2MenuPayload } from "./componentsV2.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
@@ -58,11 +58,10 @@ export function buildServePickerV2Message({ userId, token, entries = [], selecte
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
   const sceneKey = "serve.order_picker";
-  const selected = String(selectedShortId || "").trim();
 
   const components = [
     text("## Serve Orders"),
-    text("Pick an accepted order, then tap Serve.")
+    text("Tap Serve on an order to serve it immediately.")
   ];
 
   if ((entries || []).length === 0) {
@@ -71,44 +70,31 @@ export function buildServePickerV2Message({ userId, token, entries = [], selecte
     for (const entry of entries) {
       const shortId = String(entry?.shortId || "").trim();
       if (!shortId) continue;
-      const isSelected = selected === shortId;
       components.push({
         type: 9,
         components: [text(String(entry?.line || shortId))],
         accessory: button({
           sceneKey,
-          actionKey: "sel",
+          actionKey: "serve",
           userId: safeUserId,
           token: safeToken,
           arg: shortId,
-          label: isSelected ? "Selected" : "Select",
-          style: isSelected ? 3 : 1
+          label: "Serve",
+          style: 3,
+          disabled: false
         })
       });
     }
   }
 
-  const hasSelected = Boolean(selected);
   components.push({
     type: 1,
     components: [
-      button({
-        sceneKey,
-        actionKey: "serve",
-        userId: safeUserId,
-        token: safeToken,
-        label: hasSelected ? "Serve Selected" : "Select Order First",
-        style: 3,
-        disabled: !hasSelected
-      }),
       button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
     ]
   });
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{ type: 17, components }]
-  };
+  return buildComponentsV2MenuPayload({ components });
 }
 
 export function buildServeResultV2Message({ userId, token, outcomeCode, detailLine } = {}) {
@@ -118,22 +104,18 @@ export function buildServeResultV2Message({ userId, token, outcomeCode, detailLi
 
   const title = outcomeCode === "served" ? "## Order Served" : "## Serve Result";
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{
-      type: 17,
-      components: [
-        text(title),
-        text(String(detailLine || "Result unavailable.")),
-        {
-          type: 1,
-          components: [
-            button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
-            button({ sceneKey, actionKey: "cook", userId: safeUserId, token: safeToken, label: "Cook", style: 3 }),
-            button({ sceneKey, actionKey: "again", userId: safeUserId, token: safeToken, label: "Serve More", style: 2 })
-          ]
-        }
-      ]
-    }]
-  };
+  return buildComponentsV2MenuPayload({
+    components: [
+      text(title),
+      text(String(detailLine || "Result unavailable.")),
+      {
+        type: 1,
+        components: [
+          button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
+          button({ sceneKey, actionKey: "cook", userId: safeUserId, token: safeToken, label: "Cook", style: 3 }),
+          button({ sceneKey, actionKey: "again", userId: safeUserId, token: safeToken, label: "Serve More", style: 2 })
+        ]
+      }
+    ]
+  });
 }

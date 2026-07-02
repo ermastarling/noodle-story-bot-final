@@ -1,4 +1,4 @@
-import { MESSAGE_FLAG_IS_COMPONENTS_V2 } from "./componentsV2.js";
+import { buildComponentsV2MenuPayload } from "./componentsV2.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
@@ -32,6 +32,14 @@ function clampScore(score, totalTurns) {
 
 function toPct(value) {
   return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
+function progressBar(current, total, width = 12) {
+  const safeTotal = Math.max(1, Math.floor(Number(total) || 1));
+  const safeCurrent = Math.max(0, Math.min(safeTotal, Math.floor(Number(current) || 0)));
+  const safeWidth = Math.max(6, Math.floor(Number(width) || 12));
+  const filled = Math.round((safeCurrent / safeTotal) * safeWidth);
+  return `${"█".repeat(Math.max(0, Math.min(safeWidth, filled)))}${"░".repeat(Math.max(0, safeWidth - filled))}`;
 }
 
 function normalizeBias(bias) {
@@ -270,10 +278,7 @@ export function buildCookRecipePickerV2Message({
     ]
   });
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{ type: 17, components }]
-  };
+  return buildComponentsV2MenuPayload({ components });
 }
 
 export function buildCookMinigameV2Message({
@@ -314,36 +319,41 @@ export function buildCookMinigameV2Message({
   };
   const statusLabel = statusLabelByKey[String(lastTurnStatus || "").trim().toLowerCase()] ?? null;
   const sceneKey = "cook.minigame";
-
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{
-      type: 17,
-      components: [
-        text("## Kitchen Line"),
-        text(`Recipe: **${String(recipeName || "Unknown Dish")}** • Quantity: **${safeQuantity}**`),
-        text(`Turn **${Math.min(safeTurnIndex + 1, safeTurns)}/${safeTurns}** • Target action: **${targetLabel}**`),
-        text(`Pace: **${(safeTurnMs / 1000).toFixed(1)}s** + **${(safeGraceMs / 1000).toFixed(1)}s** grace`),
-        text(`Hits: **${safeScore}** • Misses: **${safeMisses}**`),
-        ...(statusLabel ? [text(`Last turn: **${statusLabel}**`)] : []),
-        {
-          type: 1,
-          components: [
-            button({ sceneKey, actionKey: "prep", userId: safeUserId, token: safeToken, label: "Prep", style: 1 }),
-            button({ sceneKey, actionKey: "heat", userId: safeUserId, token: safeToken, label: "Heat", style: 1 }),
-            button({ sceneKey, actionKey: "plate", userId: safeUserId, token: safeToken, label: "Plate", style: 1 }),
-            button({ sceneKey, actionKey: "serve", userId: safeUserId, token: safeToken, label: "Serve", style: 1 })
-          ]
-        },
-        {
-          type: 1,
-          components: [
-            button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
-          ]
-        }
-      ]
-    }]
+  const turnDisplay = Math.min(safeTurnIndex + 1, safeTurns);
+  const guideMap = {
+    prep: "Chop + setup",
+    heat: "Fire the wok",
+    plate: "Assemble bowl",
+    serve: "Send to counter"
   };
+  const buttonStyle = (actionKey) => (actionKey === target ? 3 : 2);
+
+  return buildComponentsV2MenuPayload({
+    components: [
+      text("## Kitchen Line Minigame"),
+      text(`Recipe: **${String(recipeName || "Unknown Dish")}** • Quantity: **${safeQuantity}**`),
+      text(`Turn **${turnDisplay}/${safeTurns}** • Progress: ${progressBar(turnDisplay - 1, safeTurns)}`),
+      text(`Tap the **highlighted action** now: **${targetLabel}** (${guideMap[target] || "Follow station cue"})`),
+      text(`Window: **${(safeTurnMs / 1000).toFixed(1)}s** + **${(safeGraceMs / 1000).toFixed(1)}s** grace • Wrong/late taps count as misses.`),
+      text(`Hits: **${safeScore}** • Misses: **${safeMisses}**`),
+      ...(statusLabel ? [text(`Last turn: **${statusLabel}**`)] : []),
+      {
+        type: 1,
+        components: [
+          button({ sceneKey, actionKey: "prep", userId: safeUserId, token: safeToken, label: "Prep", style: buttonStyle("prep") }),
+          button({ sceneKey, actionKey: "heat", userId: safeUserId, token: safeToken, label: "Heat", style: buttonStyle("heat") }),
+          button({ sceneKey, actionKey: "plate", userId: safeUserId, token: safeToken, label: "Plate", style: buttonStyle("plate") }),
+          button({ sceneKey, actionKey: "serve", userId: safeUserId, token: safeToken, label: "Serve", style: buttonStyle("serve") })
+        ]
+      },
+      {
+        type: 1,
+        components: [
+          button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
+        ]
+      }
+    ]
+  });
 }
 
 export function buildCookResultV2Message({
@@ -357,22 +367,18 @@ export function buildCookResultV2Message({
   const sceneKey = "cook.result";
   const lines = (summaryLines || []).filter(Boolean).map((line) => String(line));
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{
-      type: 17,
-      components: [
-        text(title),
-        ...(lines.length ? lines.map((line) => text(line)) : [text("Cook result unavailable.")]),
-        {
-          type: 1,
-          components: [
-            button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
-            button({ sceneKey, actionKey: "cook", userId: safeUserId, token: safeToken, label: "Cook Again", style: 3 }),
-            button({ sceneKey, actionKey: "serve", userId: safeUserId, token: safeToken, label: "Serve", style: 2 })
-          ]
-        }
-      ]
-    }]
-  };
+  return buildComponentsV2MenuPayload({
+    components: [
+      text(title),
+      ...(lines.length ? lines.map((line) => text(line)) : [text("Cook result unavailable.")]),
+      {
+        type: 1,
+        components: [
+          button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
+          button({ sceneKey, actionKey: "cook", userId: safeUserId, token: safeToken, label: "Cook Again", style: 3 }),
+          button({ sceneKey, actionKey: "serve", userId: safeUserId, token: safeToken, label: "Serve", style: 2 })
+        ]
+      }
+    ]
+  });
 }

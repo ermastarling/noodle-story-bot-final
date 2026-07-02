@@ -1,4 +1,4 @@
-import { MESSAGE_FLAG_IS_COMPONENTS_V2 } from "./componentsV2.js";
+import { buildComponentsV2MenuPayload } from "./componentsV2.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
@@ -79,10 +79,7 @@ export function buildAcceptPickerV2Message({ userId, token, entries = [] } = {})
     ]
   });
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{ type: 17, components }]
-  };
+  return buildComponentsV2MenuPayload({ components });
 }
 
 export function buildAcceptConfirmV2Message({ userId, token, selectedLine, selectedShortId } = {}) {
@@ -91,24 +88,20 @@ export function buildAcceptConfirmV2Message({ userId, token, selectedLine, selec
   const safeShort = String(selectedShortId || "").trim();
   const sceneKey = "orders.accept_result";
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{
-      type: 17,
-      components: [
-        text("## Confirm Accept"),
-        text(String(selectedLine || "Selected order.")),
-        {
-          type: 1,
-          components: [
-            button({ sceneKey, actionKey: "cfm", userId: safeUserId, token: safeToken, arg: safeShort, label: "Confirm", style: 3 }),
-            button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 }),
-            button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
-          ]
-        }
-      ]
-    }]
-  };
+  return buildComponentsV2MenuPayload({
+    components: [
+      text("## Confirm Accept"),
+      text(String(selectedLine || "Selected order.")),
+      {
+        type: 1,
+        components: [
+          button({ sceneKey, actionKey: "cfm", userId: safeUserId, token: safeToken, arg: safeShort, label: "Confirm", style: 3 }),
+          button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 }),
+          button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
+        ]
+      }
+    ]
+  });
 }
 
 export function buildAcceptResultV2Message({ userId, token, outcomeCode, detailLine } = {}) {
@@ -118,21 +111,17 @@ export function buildAcceptResultV2Message({ userId, token, outcomeCode, detailL
 
   const title = outcomeCode === "accepted" ? "## Order Accepted" : "## Accept Result";
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [{
-      type: 17,
-      components: [
-        text(title),
-        text(String(detailLine || "Result unavailable.")),
-        {
-          type: 1,
-          components: [
-            button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
-            button({ sceneKey, actionKey: "ck", userId: safeUserId, token: safeToken, label: "Cook", style: 3 })
-          ]
-        }
-      ]
-    }]
-  };
+  return buildComponentsV2MenuPayload({
+    components: [
+      text(title),
+      text(String(detailLine || "Result unavailable.")),
+      {
+        type: 1,
+        components: [
+          button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
+          button({ sceneKey, actionKey: "ck", userId: safeUserId, token: safeToken, label: "Cook", style: 3 })
+        ]
+      }
+    ]
+  });
 }

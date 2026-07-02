@@ -1,4 +1,4 @@
-import { MESSAGE_FLAG_IS_COMPONENTS_V2 } from "./componentsV2.js";
+import { buildComponentsV2MenuPayload } from "./componentsV2.js";
 
 function asText(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
@@ -109,13 +109,5 @@ export function buildOrdersBoardV2Message({
     components.push(...buttonRows);
   }
 
-  return {
-    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
-    components: [
-      {
-        type: 17,
-        components
-      }
-    ]
-  };
+  return buildComponentsV2MenuPayload({ components });
 }

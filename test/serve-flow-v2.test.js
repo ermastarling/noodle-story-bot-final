@@ -54,9 +54,10 @@ test("Serve flow V2: picker message includes serve action", () => {
     selectedShortId: "AB12"
   });
 
-  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
-  const actionRow = rows[0] ?? { components: [] };
-  const customIds = actionRow.components.map((component) => component.custom_id);
+  const sections = payload.components?.[0]?.components?.filter((component) => component?.type === 9) ?? [];
+  const customIds = sections
+    .map((section) => section?.accessory?.custom_id)
+    .filter(Boolean);
   assert.ok(customIds.some((id) => String(id || "").includes(":serve.order_picker:serve:")));
 });
 

@@ -10980,10 +10980,7 @@ ${lines.join("\n")}`;
             : "No new orders left right now."),
         acceptedDisplayEntries.length > 0
           ? `Accepted: **${acceptedDisplayEntries.length}**`
-          : "Accepted: **0**",
-        readyBowls.length > 0
-          ? `Serve-ready recipes: **${readyBowls.length}**`
-          : "Serve-ready recipes: **0**"
+          : "Accepted: **0**"
       ];
 
       const quickActions = [
@@ -12416,25 +12413,9 @@ if (v2Parsed.isV2) {
           ephemeral: true
         });
       }
-
-      const payload = buildServePickerScenePayload({
-        userId,
-        p: ensurePlayer(serverId, userId),
-        selectedShortId: nextShortId
-      });
-      return componentCommit(interaction, payload);
-    }
-
-    if (action === "serve") {
-      if (!selectedShortId) {
-        return componentCommit(interaction, {
-          content: "Select an order first.",
-          ephemeral: true
-        });
-      }
-
-      const fullOrderId = String(orderTokenByShortId?.[selectedShortId] ?? "").trim();
-      const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === selectedShortId);
+      // Backward compatibility: older messages use :sel, treat it as immediate serve.
+      const fullOrderId = String(orderTokenByShortId?.[nextShortId] ?? "").trim();
+      const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === nextShortId);
       if (!fullOrderId || !selectedEntry) {
         return componentCommit(interaction, {
           content: "That order is no longer available. Reopen `/noodle orders`.",
@@ -12472,7 +12453,7 @@ if (v2Parsed.isV2) {
         sceneKey: "serve.result",
         ownerId: userId,
         state: {
-          selectedShortId,
+          selectedShortId: nextShortId,
           fullOrderId,
           recipeId: selectedEntry.recipeId ?? null,
           outcomeCode: outcome.code
@@ -12480,7 +12461,74 @@ if (v2Parsed.isV2) {
       });
 
       const detailLine = outcome.code === "served"
-        ? `${getIcon("status_complete")} Served \`${selectedShortId}\` successfully.`
+        ? `${getIcon("status_complete")} Served \`${nextShortId}\` successfully.`
+        : `${getIcon("warning")} ${outcome.message}`;
+
+      return componentCommit(interaction, buildServeResultV2Message({
+        userId,
+        token: resultState.token,
+        outcomeCode: outcome.code,
+        detailLine
+      }));
+    }
+
+    if (action === "serve") {
+      const serveShortId = String(v2Parsed.args?.[0] ?? "").trim() || selectedShortId;
+      if (!serveShortId) {
+        return componentCommit(interaction, {
+          content: "Select an order first.",
+          ephemeral: true
+        });
+      }
+
+      const fullOrderId = String(orderTokenByShortId?.[serveShortId] ?? "").trim();
+      const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === serveShortId);
+      if (!fullOrderId || !selectedEntry) {
+        return componentCommit(interaction, {
+          content: "That order is no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const beforePlayer = ensurePlayer(serverId, userId);
+      const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
+      const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
+      const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
+      const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
+
+      await runNoodle(interaction, {
+        sub: "serve",
+        overrides: {
+          strings: { order_id: fullOrderId },
+          messageId: interaction.message?.id ?? null
+        }
+      });
+
+      const afterPlayer = ensurePlayer(serverId, userId);
+      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+      const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
+      const outcome = deriveServeOutcome({
+        targetOrderId: fullOrderId,
+        beforeAcceptedOrderIds,
+        afterAcceptedOrderIds,
+        beforeBowlCount,
+        afterBowlCount,
+        wasExpiredBefore
+      });
+
+      const resultState = putSceneState({
+        sceneKey: "serve.result",
+        ownerId: userId,
+        state: {
+          selectedShortId: serveShortId,
+          fullOrderId,
+          recipeId: selectedEntry.recipeId ?? null,
+          outcomeCode: outcome.code
+        }
+      });
+
+      const detailLine = outcome.code === "served"
+        ? `${getIcon("status_complete")} Served \`${serveShortId}\` successfully.`
         : `${getIcon("warning")} ${outcome.message}`;
 
       return componentCommit(interaction, buildServeResultV2Message({
