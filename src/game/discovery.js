@@ -22,6 +22,13 @@ import { getIcon } from "../ui/icons.js";
 
 const LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT = 0.25;
 
+export function getTakeoutDiscoveryAttemptLimit(servingsToProcess = 0, env = process.env) {
+  const requested = Math.max(0, Math.floor(Number(servingsToProcess) || 0));
+  const envCap = Math.floor(Number(env?.NOODLE_TAKEOUT_DISCOVERY_MAX_ATTEMPTS || 12) || 12);
+  const cap = Math.max(0, envCap);
+  return Math.min(requested, cap);
+}
+
 function isRecipeActiveForEvent(recipe, activeEventId) {
   if (!recipe?.event_id) return true;
   if (!activeEventId) return false;
