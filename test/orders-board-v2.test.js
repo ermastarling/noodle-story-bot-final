@@ -49,3 +49,28 @@ test("Orders board V2: quick actions are deduplicated by action key", () => {
   assert.equal(refreshButtons.length, 1);
   assert.equal(cookButtons.length, 1);
 });
+
+test("Orders board V2: second row keeps Main Menu then Quests", () => {
+  const payload = buildOrdersBoardV2Message({
+    userId: "u1",
+    token: "tok-3",
+    acceptedEntries: [],
+    quickActions: [
+      { label: "Accept", actionKey: "acc", style: 1, disabled: false },
+      { label: "Cook", actionKey: "ck", style: 2, disabled: false },
+      { label: "Serve", actionKey: "sv", style: 1, disabled: false },
+      { label: "Refresh", actionKey: "rf", style: 2, disabled: false },
+      { label: "Cancel", actionKey: "cnl", style: 2, disabled: false },
+      { label: "Main Menu", actionKey: "nm", style: 2, disabled: false },
+      { label: "Quests", actionKey: "qs", style: 2, disabled: false }
+    ]
+  });
+
+  const components = flattenComponents(payload);
+  const rows = components.filter((c) => c.type === 1);
+  assert.equal(rows.length >= 2, true);
+  const secondRowIds = rows[1].components.map((btn) => btn.custom_id);
+  assert.equal(secondRowIds.length, 2);
+  assert.equal(secondRowIds[0].includes(":nm:"), true);
+  assert.equal(secondRowIds[1].includes(":qs:"), true);
+});

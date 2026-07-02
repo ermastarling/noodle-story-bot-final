@@ -4590,21 +4590,29 @@ function buildAcceptPickerSceneEntries({ serverId, userId, p, s }) {
   return { entries, orderTokenByShortId };
 }
 
-function buildAcceptPickerScenePayload({ serverId, userId, p, s }) {
+function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortIds = [], statusLine = "" }) {
   const { entries, orderTokenByShortId } = buildAcceptPickerSceneEntries({ serverId, userId, p, s });
+  const entryShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+  const normalizedSelected = (selectedShortIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
+
   const sceneState = putSceneState({
     sceneKey: "orders.accept_picker",
     ownerId: userId,
     state: {
       entries,
-      orderTokenByShortId
+      orderTokenByShortId,
+      selectedShortIds: normalizedSelected
     }
   });
 
   return buildAcceptPickerV2Message({
     userId,
     token: sceneState.token,
-    entries
+    entries,
+    selectedShortIds: normalizedSelected,
+    statusLine
   });
 }
 
@@ -11005,9 +11013,10 @@ ${lines.join("\n")}`;
         { label: "Accept", actionKey: "acc", style: highlightAccept ? 3 : 1, disabled: disableAccept, emoji: getButtonEmoji("orders") },
         { label: "Cook", actionKey: "ck", style: 2, disabled: disableCook, emoji: getButtonEmoji("cook") },
         { label: "Serve", actionKey: "sv", style: disableServe ? 2 : 1, disabled: disableServe, emoji: getButtonEmoji("serve") },
-        { label: "Quests", actionKey: "qs", style: 2, disabled: false, emoji: getButtonEmoji("quests") },
         { label: "Refresh", actionKey: "rf", style: 2, disabled: false, emoji: getButtonEmoji("refresh") },
-        { label: "Main Menu", actionKey: "nm", style: 2, disabled: false, emoji: getButtonEmoji("back") }
+        { label: "Cancel", actionKey: "cnl", style: 2, disabled: !showCancel, emoji: getButtonEmoji("cancel") },
+        { label: "Main Menu", actionKey: "nm", style: 2, disabled: false, emoji: getButtonEmoji("back") },
+        { label: "Quests", actionKey: "qs", style: 2, disabled: false, emoji: getButtonEmoji("quests") }
       ];
 
       const v2Payload = buildOrdersBoardV2Message({
@@ -12027,6 +12036,7 @@ if (v2Parsed.isV2) {
     if (action === "qs") return runNoodle(interaction, { sub: "quests" });
     if (action === "rf") return runNoodle(interaction, { sub: "orders" });
     if (action === "nm") return runNoodle(interaction, { sub: "profile" });
+    if (action === "cnl") return runNoodle(interaction, { sub: "cancel" });
     if (action === "sv") {
       const p = ensurePlayer(serverId, userId);
       if (!serveArg) {
@@ -12064,56 +12074,130 @@ if (v2Parsed.isV2) {
         });
       }
 
-      const orderTokenByShortId = state.orderTokenByShortId ?? {};
-      const fullOrderId = String(orderTokenByShortId?.[selectedShortId] ?? "").trim();
-      if (!fullOrderId) {
+      const currentSelected = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      const selectedSet = new Set(currentSelected);
+      if (selectedSet.has(selectedShortId)) {
+        selectedSet.delete(selectedShortId);
+      } else {
+        const p = ensurePlayer(serverId, userId);
+        const cap = getOrderAcceptCap(p, nowTs());
+        const acceptedCount = Object.keys(p.orders?.accepted ?? {}).length;
+        const remainingSlots = Math.max(0, cap - acceptedCount);
+        if (selectedSet.size >= remainingSlots) {
+          const s = ensureServer(serverId);
+          const payload = buildAcceptPickerScenePayload({
+            serverId,
+            userId,
+            p,
+            s,
+            selectedShortIds: [...selectedSet],
+            statusLine: `${getIcon("warning")} You can accept up to **${cap}** order(s). Deselect one first.`
+          });
+          return componentCommit(interaction, payload);
+        }
+        selectedSet.add(selectedShortId);
+      }
+
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+      const payload = buildAcceptPickerScenePayload({
+        serverId,
+        userId,
+        p,
+        s,
+        selectedShortIds: [...selectedSet]
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const selectedShortIds = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      if (selectedShortIds.length <= 0) {
         return componentCommit(interaction, {
-          content: "That order is no longer available. Reopen `/noodle orders`.",
+          content: "Select one or more orders first.",
           ephemeral: true
         });
       }
 
+      const validShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+      const orderTokenByShortId = state.orderTokenByShortId ?? {};
+      const targets = selectedShortIds.filter((shortId) => validShortIds.has(shortId));
+      if (targets.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Those selections are no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      let acceptedCount = 0;
+      let duplicateCount = 0;
+      let invalidCount = 0;
+      let capCount = 0;
+
+      for (const shortId of targets) {
+        const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
+        if (!fullOrderId) {
+          invalidCount += 1;
+          continue;
+        }
+
+        const beforePlayer = ensurePlayer(serverId, userId);
+        const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
+        const cap = getOrderAcceptCap(beforePlayer, nowTs());
+
+        if (beforeAcceptedOrderIds.length >= cap) {
+          capCount += 1;
+          continue;
+        }
+
+        await runNoodle(interaction, {
+          sub: "accept",
+          overrides: {
+            silentResponse: true,
+            strings: { order_id: fullOrderId }
+          }
+        });
+
+        const afterPlayer = ensurePlayer(serverId, userId);
+        const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+        const outcome = deriveAcceptOutcome({
+          targetOrderId: fullOrderId,
+          cap,
+          beforeAcceptedOrderIds,
+          afterAcceptedOrderIds
+        });
+
+        if (outcome.code === "accepted") acceptedCount += 1;
+        else if (outcome.code === "duplicate") duplicateCount += 1;
+        else if (outcome.code === "cap") capCount += 1;
+        else invalidCount += 1;
+      }
+
+      const summaryParts = [];
+      if (acceptedCount > 0) summaryParts.push(`${getIcon("status_complete")} accepted: **${acceptedCount}**`);
+      if (duplicateCount > 0) summaryParts.push(`${getIcon("warning")} already accepted: **${duplicateCount}**`);
+      if (capCount > 0) summaryParts.push(`${getIcon("warning")} blocked by cap: **${capCount}**`);
+      if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} unavailable: **${invalidCount}**`);
+      const statusLine = summaryParts.length > 0
+        ? `Batch result — ${summaryParts.join(" • ")}`
+        : `${getIcon("warning")} No orders were accepted.`;
+
       const p = ensurePlayer(serverId, userId);
-      const beforeAcceptedOrderIds = Object.keys(p.orders?.accepted ?? {});
-      const cap = getOrderAcceptCap(p, nowTs());
-
-      await runNoodle(interaction, {
-        sub: "accept",
-        overrides: {
-          silentResponse: true,
-          strings: { order_id: fullOrderId }
-        }
-      });
-
-      const afterPlayer = ensurePlayer(serverId, userId);
-      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
-      const outcome = deriveAcceptOutcome({
-        targetOrderId: fullOrderId,
-        cap,
-        beforeAcceptedOrderIds,
-        afterAcceptedOrderIds
-      });
-
-      const resultState = putSceneState({
-        sceneKey: "orders.accept_result",
-        ownerId: userId,
-        state: {
-          entries,
-          orderTokenByShortId,
-          selectedShortId
-        }
-      });
-
-      const detailLine = outcome.code === "accepted"
-        ? `${getIcon("status_complete")} Accepted \`${shortOrderId(fullOrderId)}\`.`
-        : `${getIcon("warning")} ${outcome.message}`;
-
-      return componentCommit(interaction, buildAcceptResultV2Message({
+      const s = ensureServer(serverId);
+      const payload = buildAcceptPickerScenePayload({
+        serverId,
         userId,
-        token: resultState.token,
-        outcomeCode: outcome.code,
-        detailLine
-      }));
+        p,
+        s,
+        selectedShortIds: [],
+        statusLine
+      });
+      return componentCommit(interaction, payload);
     }
   }
 

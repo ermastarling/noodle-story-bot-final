@@ -41,20 +41,37 @@ export function deriveAcceptOutcome({ targetOrderId, cap, beforeAcceptedOrderIds
   return { code: "invalid", message: "Order is no longer available." };
 }
 
-export function buildAcceptPickerV2Message({ userId, token, entries = [] } = {}) {
+export function buildAcceptPickerV2Message({
+  userId,
+  token,
+  entries = [],
+  selectedShortIds = [],
+  statusLine = ""
+} = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
   const sceneKey = "orders.accept_picker";
+  const selectedSet = new Set(
+    (selectedShortIds || [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  );
+  const safeStatusLine = String(statusLine || "").trim();
 
   const components = [
     text("## Accept Orders"),
-    text("Pick an order to accept immediately.")
+    text("Select one or more orders, then tap Accept Selected.")
   ];
+
+  if (safeStatusLine) components.push(text(safeStatusLine));
 
   if ((entries || []).length === 0) {
     components.push(text("No orders are currently available to accept."));
   } else {
     for (const entry of entries) {
+      const shortId = String(entry?.shortId ?? "").trim();
+      if (!shortId) continue;
+      const isSelected = selectedSet.has(shortId);
       components.push({
         type: 9,
         components: [text(String(entry?.line ?? "").trim())],
@@ -63,17 +80,27 @@ export function buildAcceptPickerV2Message({ userId, token, entries = [] } = {})
           actionKey: "sel",
           userId: safeUserId,
           token: safeToken,
-          arg: String(entry?.shortId ?? "").trim(),
-          label: "Select",
-          style: 1
+          arg: shortId,
+          label: isSelected ? "Selected" : "Select",
+          style: isSelected ? 3 : 1
         })
       });
     }
   }
 
+  const selectedCount = selectedSet.size;
   components.push({
     type: 1,
     components: [
+      button({
+        sceneKey,
+        actionKey: "cfm",
+        userId: safeUserId,
+        token: safeToken,
+        label: selectedCount > 0 ? `Accept Selected (${selectedCount})` : "Select Orders First",
+        style: 3,
+        disabled: selectedCount <= 0
+      }),
       button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 }),
       button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 })
     ]

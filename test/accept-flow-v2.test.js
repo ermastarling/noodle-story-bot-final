@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildAcceptResultV2Message, deriveAcceptOutcome } from "../src/ui/acceptFlowV2.js";
+import { buildAcceptPickerV2Message, buildAcceptResultV2Message, deriveAcceptOutcome } from "../src/ui/acceptFlowV2.js";
 
 test("Accept flow V2: invalid target order is rejected", () => {
   const outcome = deriveAcceptOutcome({
@@ -59,4 +59,17 @@ test("Accept flow V2: result message includes Cook action", () => {
   const actionRow = rows[0] ?? { components: [] };
   const customIds = actionRow.components.map((component) => component.custom_id);
   assert.ok(customIds.some((id) => String(id || "").includes(":orders.accept_result:ck:")));
+});
+
+test("Accept flow V2: picker includes Accept Selected action", () => {
+  const payload = buildAcceptPickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [{ shortId: "A1", line: "Order A1" }],
+    selectedShortIds: ["A1"]
+  });
+
+  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
+  const customIds = rows.flatMap((row) => row.components.map((component) => component.custom_id));
+  assert.ok(customIds.some((id) => String(id || "").includes(":orders.accept_picker:cfm:")));
 });

@@ -1,6 +1,8 @@
+import { theme } from "./theme.js";
+
 const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 export const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
-const DEFAULT_MENU_ACCENT_COLOR = 0xE2B86B;
+const DEFAULT_MENU_ACCENT_COLOR = Number(theme?.colors?.primary ?? 0xE2B86B);
 const DEFAULT_MENU_DIVIDER_TEXT = "━━━━━━━━━━━━━━━━━━━━━━━━";
 
 function parseMenuColor(value, fallback = DEFAULT_MENU_ACCENT_COLOR) {
@@ -67,10 +69,10 @@ function applyMenuGuideToComponents(components = [], menuGuide = {}) {
   if (menuGuide.addDivider) {
     const firstActionRowIndex = out.findIndex((component) => Number(component?.type) === 1);
     if (firstActionRowIndex >= 0) {
-      const dividerText = String(menuGuide.dividerText || DEFAULT_MENU_DIVIDER_TEXT).trim();
       out.splice(firstActionRowIndex, 0, {
-        type: 10,
-        content: dividerText
+        type: 14,
+        divider: true,
+        spacing: 1
       });
     }
   }

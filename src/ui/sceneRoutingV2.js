@@ -1,5 +1,5 @@
 export const V2_SCENE_REGISTRY = Object.freeze({
-  "orders.board": new Set(["acc", "ck", "sv", "qs", "rf", "nm"]),
+  "orders.board": new Set(["acc", "ck", "sv", "qs", "rf", "nm", "cnl"]),
   "orders.accept_picker": new Set(["sel", "cfm", "cnl", "bk"]),
   "orders.accept_result": new Set(["cfm", "cnl", "bk", "ord", "ck"]),
   "cook.recipe_picker": new Set(["sel", "qty", "go", "bk"]),
