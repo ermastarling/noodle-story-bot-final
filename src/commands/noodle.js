@@ -123,7 +123,7 @@ import {
 import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { applySeasonRolloverReward } from "../game/seasonRollover.js";
 import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
-import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff } from "../game/discovery.js";
+import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff, getTakeoutDiscoveryAttemptLimit } from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
@@ -229,6 +229,35 @@ import {
 } from "../game/kitchen.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js";
+import {
+  buildComponentsV2ContainerMessage,
+  isComponentsV2Enabled,
+  replyOrEditInteraction
+} from "../ui/componentsV2.js";
+import { isV2OwnerMismatch, parseV2CustomId } from "../ui/sceneRoutingV2.js";
+import { getSceneState, putSceneState } from "../ui/sceneStateV2.js";
+import { buildOrdersBoardV2Message } from "../ui/ordersBoardV2.js";
+import {
+  buildAcceptConfirmV2Message,
+  buildAcceptPickerV2Message,
+  buildAcceptResultV2Message,
+  deriveAcceptOutcome
+} from "../ui/acceptFlowV2.js";
+import {
+  buildCookMinigameTargetActions,
+  buildCookMinigameV2Message,
+  createCookRunToken,
+  evaluateCookMinigameTurn,
+  buildCookRecipePickerV2Message,
+  buildCookResultV2Message,
+  deriveCookMinigamePerformance,
+  resolveCookOutcomeForFlow
+} from "../ui/cookFlowV2.js";
+import {
+  buildServePickerV2Message,
+  buildServeResultV2Message,
+  deriveServeOutcome
+} from "../ui/serveFlowV2.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -249,8 +278,17 @@ const multibuyCacheV2 = new Map();
 const sellSelectionCacheV2 = new Map();
 // Temporary cache for compost selections keyed by message id
 const compostSelectionCache = new Map();
+// Temporary cache for takeout menu draft selections across paginated picker pages
+const takeoutMenuSelectionCache = new Map();
+// Temporary cache for accept-order draft selections across paginated picker pages
+const acceptOrderSelectionCache = new Map();
+// Temporary cache for cancel-order draft selections across paginated picker pages
+const cancelOrderSelectionCache = new Map();
 
 const SELECTION_CACHE_TTL_MS = 5 * 60 * 1000;
+const TAKEOUT_MENU_SELECTION_CACHE_TTL_MS = 30 * 60 * 1000;
+const ACCEPT_ORDER_SELECTION_CACHE_TTL_MS = 15 * 60 * 1000;
+const CANCEL_ORDER_SELECTION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 function makeSelectionToken() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -261,6 +299,183 @@ function purgeExpiredSelectionCache(cache) {
   for (const [key, entry] of cache.entries()) {
     if ((entry?.expiresAt ?? 0) < now) cache.delete(key);
   }
+}
+
+function getTakeoutMenuSelectionCacheKey(serverId, userId) {
+  return `${String(serverId || "")}:${String(userId || "")}`;
+}
+
+function normalizeTakeoutDraftSelection(ids = [], availableRecipeIds = []) {
+  const availableSet = new Set((availableRecipeIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const out = [];
+  const seen = new Set();
+  for (const rawId of ids || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id) || !availableSet.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function readTakeoutMenuDraftSelection({ serverId, userId, availableRecipeIds = [], fallbackRecipeIds = [] } = {}) {
+  purgeExpiredSelectionCache(takeoutMenuSelectionCache);
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+  const cached = takeoutMenuSelectionCache.get(key);
+  const cachedIds = Array.isArray(cached?.selectedRecipeIds) ? cached.selectedRecipeIds : [];
+  const source = cachedIds.length ? cachedIds : (Array.isArray(fallbackRecipeIds) ? fallbackRecipeIds : []);
+  return normalizeTakeoutDraftSelection(source, availableRecipeIds);
+}
+
+function writeTakeoutMenuDraftSelection({ serverId, userId, selectedRecipeIds = [] } = {}) {
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+  takeoutMenuSelectionCache.set(key, {
+    selectedRecipeIds: [...selectedRecipeIds],
+    expiresAt: Date.now() + TAKEOUT_MENU_SELECTION_CACHE_TTL_MS
+  });
+}
+
+function clearTakeoutMenuDraftSelection({ serverId, userId } = {}) {
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+  takeoutMenuSelectionCache.delete(key);
+}
+
+function getAcceptOrderSelectionCacheKey(serverId, userId) {
+  return `${String(serverId || "")}:${String(userId || "")}`;
+}
+
+function normalizeAcceptOrderDraftSelection(ids = [], availableOrderIds = []) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const out = [];
+  const seen = new Set();
+  for (const rawId of ids || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id) || !availableSet.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function readAcceptOrderDraftSelection({ serverId, userId, availableOrderIds = [] } = {}) {
+  purgeExpiredSelectionCache(acceptOrderSelectionCache);
+  const key = getAcceptOrderSelectionCacheKey(serverId, userId);
+  const cached = acceptOrderSelectionCache.get(key);
+  const cachedIds = Array.isArray(cached?.selectedOrderIds) ? cached.selectedOrderIds : [];
+  if (!Array.isArray(availableOrderIds) || availableOrderIds.length === 0) {
+    return [...new Set(cachedIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  }
+  return normalizeAcceptOrderDraftSelection(cachedIds, availableOrderIds);
+}
+
+function writeAcceptOrderDraftSelection({ serverId, userId, selectedOrderIds = [] } = {}) {
+  const key = getAcceptOrderSelectionCacheKey(serverId, userId);
+  acceptOrderSelectionCache.set(key, {
+    selectedOrderIds: [...selectedOrderIds],
+    expiresAt: Date.now() + ACCEPT_ORDER_SELECTION_CACHE_TTL_MS
+  });
+}
+
+function clearAcceptOrderDraftSelection({ serverId, userId } = {}) {
+  const key = getAcceptOrderSelectionCacheKey(serverId, userId);
+  acceptOrderSelectionCache.delete(key);
+}
+
+function mergeAcceptOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSet = new Set((pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSelectedSet = new Set((pageSelectedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+
+  const merged = [];
+  const seen = new Set();
+
+  for (const rawId of currentSelectedOrderIds || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    if (pageSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  for (const rawId of pageSelectedSet) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  return merged;
+}
+
+function getCancelOrderSelectionCacheKey(serverId, userId) {
+  return `${String(serverId || "")}:${String(userId || "")}`;
+}
+
+function normalizeCancelOrderDraftSelection(ids = [], availableOrderIds = []) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const out = [];
+  const seen = new Set();
+  for (const rawId of ids || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id) || !availableSet.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function readCancelOrderDraftSelection({ serverId, userId, availableOrderIds = [] } = {}) {
+  purgeExpiredSelectionCache(cancelOrderSelectionCache);
+  const key = getCancelOrderSelectionCacheKey(serverId, userId);
+  const cached = cancelOrderSelectionCache.get(key);
+  const cachedIds = Array.isArray(cached?.selectedOrderIds) ? cached.selectedOrderIds : [];
+  if (!Array.isArray(availableOrderIds) || availableOrderIds.length === 0) {
+    return [...new Set(cachedIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  }
+  return normalizeCancelOrderDraftSelection(cachedIds, availableOrderIds);
+}
+
+function writeCancelOrderDraftSelection({ serverId, userId, selectedOrderIds = [] } = {}) {
+  const key = getCancelOrderSelectionCacheKey(serverId, userId);
+  cancelOrderSelectionCache.set(key, {
+    selectedOrderIds: [...selectedOrderIds],
+    expiresAt: Date.now() + CANCEL_ORDER_SELECTION_CACHE_TTL_MS
+  });
+}
+
+function clearCancelOrderDraftSelection({ serverId, userId } = {}) {
+  const key = getCancelOrderSelectionCacheKey(serverId, userId);
+  cancelOrderSelectionCache.delete(key);
+}
+
+function mergeCancelOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSet = new Set((pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSelectedSet = new Set((pageSelectedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+
+  const merged = [];
+  const seen = new Set();
+
+  for (const rawId of currentSelectedOrderIds || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    if (pageSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  for (const rawId of pageSelectedSet) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  return merged;
 }
 
 function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = {}) {
@@ -554,7 +769,7 @@ const db = openDb();
 const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
-const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
+const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_DEV_GUILD_ID || process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
 const DEFAULT_SUPPORT_SERVER_URL = "https://discord.gg/uue7K92pwj";
 const SUPPORT_SERVER_URL_ALLOWED_HOSTS = new Set([
@@ -2800,6 +3015,20 @@ function getValidAvailableRecipeIds(player) {
   return valid;
 }
 
+function filterRecipeIdsByActiveSeasonEvent(recipeIds, server) {
+  const activeSeason = server?.season ?? null;
+  const activeEventId = server?.active_event_id ?? null;
+  return (recipeIds ?? []).filter((rid) => {
+    const recipe = content.recipes?.[rid];
+    if (!recipe) return false;
+    if (recipe.is_event_recipe) {
+      return !!activeEventId && recipe.event_id === activeEventId;
+    }
+    if (recipe.tier !== "seasonal") return true;
+    return !!activeSeason && recipe.season === activeSeason;
+  });
+}
+
 function migrateLegacyRecipeIds(player) {
   if (!player || typeof player !== "object") return false;
   let changed = false;
@@ -3915,8 +4144,26 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   }
 
   if (!pageData.orders.length) {
+    clearAcceptOrderDraftSelection({ serverId, userId });
     return { content: "No orders available to accept.", ephemeral: true };
   }
+
+  const availableOrderIds = [];
+  const pageOrderIdsByPage = new Map();
+  const pagesToScan = availablePages.length > 0 ? availablePages : [safePage];
+  for (const pg of pagesToScan) {
+    const data = Number(pg) === safePage ? pageData : loadPage(pg);
+    const pageOrderIds = (data?.orders ?? []).map((o) => String(o.order_id));
+    pageOrderIdsByPage.set(Number(pg), pageOrderIds);
+    availableOrderIds.push(...pageOrderIds);
+  }
+
+  const selectedOrderIds = readAcceptOrderDraftSelection({
+    serverId,
+    userId,
+    availableOrderIds
+  });
+  const selectedSet = new Set(selectedOrderIds);
 
   const opts = pageData.orders.map((o) => {
     const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
@@ -3926,7 +4173,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     const descRaw = `${npcName}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
-    const option = { label, value: String(o.order_id), description };
+    const option = { label, value: String(o.order_id), description, default: selectedSet.has(String(o.order_id)) };
     if (readyBowls > 0) {
       const emoji = getButtonEmoji("status_complete");
       if (emoji) option.emoji = emoji;
@@ -3935,7 +4182,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   });
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:accept_select:${userId}`)
+    .setCustomId(`noodle:pick:accept_select:${userId}:${safePage}`)
     .setPlaceholder("Select orders to accept (up to 5)")
     .setMinValues(1)
     .setMaxValues(Math.min(5, opts.length))
@@ -3965,6 +4212,20 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   }
 
   const rows = [new ActionRowBuilder().addComponents(menu)];
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:pick:accept_commit:${userId}`)
+        .setLabel(`Accept Selected (${selectedOrderIds.length})`)
+        .setStyle(selectedOrderIds.length > 0 ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(selectedOrderIds.length === 0),
+      new ButtonBuilder()
+        .setCustomId(`noodle:pick:accept_clear:${userId}:${safePage}`)
+        .setLabel("Clear Selection")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(selectedOrderIds.length === 0)
+    )
+  );
   if (navRow) rows.push(navRow);
   const showBackButton = resolveTutorialGateValue({
     player: p,
@@ -3985,7 +4246,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   const acceptEmbed = buildMenuEmbed({
     title: `${getIcon("status_complete")} Accept Orders`,
-    description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.`,
+    description: `Select orders across pages, then use **Accept Selected**.\nSelected now: **${selectedOrderIds.length}**.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.`,
     user: ownerUser
   });
 
@@ -4001,10 +4262,21 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   };
 }
 
-function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
+function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser, page = 0 }) {
   const accepted = Object.entries(p.orders?.accepted ?? {});
   const hasAcceptedOrders = accepted.length > 0;
   const canServeAll = action === "serve" ? canServeAllOrders(p) : false;
+  const availableOrderIds = accepted.map(([oid]) => String(oid));
+
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, accepted.length) / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const pagedAccepted = accepted.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const pageOrderIds = pagedAccepted.map(([oid]) => String(oid));
+  const cancelSelectedOrderIds = action === "cancel"
+    ? readCancelOrderDraftSelection({ serverId, userId, availableOrderIds })
+    : [];
+  const cancelSelectedSet = new Set(cancelSelectedOrderIds);
 
   // Summarize missing bowls for accepted orders
   const neededByRecipe = {};
@@ -4026,7 +4298,7 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     })
     .filter(Boolean);
 
-  const opts = accepted.slice(0, 25).map(([oid, entry]) => {
+  const opts = pagedAccepted.map(([oid, entry]) => {
     const snap = entry?.order ?? null;
     const rName = snap ? displayRecipeName(snap.recipe_id) : "Unknown Recipe";
     const npcName = snap ? (content.npcs[snap.npc_archetype]?.name ?? snap.npc_archetype) : "Unknown NPC";
@@ -4035,7 +4307,12 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     const descRaw = `${npcName}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
     const ready = entry?.order?.recipe_id ? getTotalBowlsForRecipe(p, entry.order.recipe_id) > 0 : false;
-    const option = { label, value: oid, description };
+    const option = {
+      label,
+      value: oid,
+      description,
+      ...(action === "cancel" ? { default: cancelSelectedSet.has(String(oid)) } : {})
+    };
     if (action === "serve" && ready) {
       const emoji = getButtonEmoji("status_complete");
       if (emoji) option.emoji = emoji;
@@ -4048,46 +4325,340 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
   }
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:${action}_select:${userId}`)
-    .setPlaceholder(action === "serve" ? "Select orders to serve" : "Select an order to cancel")
+    .setCustomId(`noodle:pick:${action}_select:${userId}:${safePage}`)
+    .setPlaceholder(action === "serve" ? "Select orders to serve" : "Select orders to cancel")
     .setMinValues(1)
-    .setMaxValues(action === "serve" ? Math.min(5, opts.length) : 1)
+    .setMaxValues(action === "serve" ? Math.min(5, opts.length) : Math.min(25, opts.length))
     .addOptions(opts);
+
+  const navRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:${action}:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:${action}:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+      )
+    : null;
 
   const actionTitle = action === "serve"
     ? `${getIcon("bowl")} Serve Orders`
     : `${getIcon("cancel")} Cancel Order`;
   const actionDesc = action === "serve"
     ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
-    : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
+    : "Select accepted orders to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
   const descWithMissing = missingLines.length
     ? `${actionDesc}\n\n${getIcon("basket")} Missing bowls\n${missingLines.join("\n")}`
     : actionDesc;
 
   const actionEmbed = buildMenuEmbed({ title: actionTitle, description: descWithMissing, user: ownerUser });
+  actionEmbed.setFooter({ text: `Page ${safePage + 1}/${totalPages}` });
   const showOrdersActions = action === "serve"
     ? resolveTutorialGateValue({ player: p, gate: "servePickerShowOrdersActions", fallbackValue: true })
     : true;
 
+  const components = [new ActionRowBuilder().addComponents(menu)];
+  if (action === "cancel") {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:cancel_commit:${userId}`)
+          .setLabel(`Cancel Selected (${cancelSelectedOrderIds.length})`)
+          .setStyle(cancelSelectedOrderIds.length > 0 ? ButtonStyle.Danger : ButtonStyle.Secondary)
+          .setDisabled(cancelSelectedOrderIds.length === 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:cancel_clear:${userId}:${safePage}`)
+          .setLabel("Clear Selection")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(cancelSelectedOrderIds.length === 0)
+      )
+    );
+  }
+  if (navRow) components.push(navRow);
+  if (showOrdersActions) {
+    components.push(
+      action === "serve"
+        ? noodleOrdersActionRowWithBack(userId, {
+            highlightAccept: !hasAcceptedOrders,
+            disableServe: !hasAcceptedOrders,
+            showServeAll: true,
+            disableServeAll: !canServeAll
+          })
+        : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
+    );
+  }
+
   return {
     content: " ",
     embeds: [actionEmbed],
-    components: [
-      new ActionRowBuilder().addComponents(menu),
-      ...(showOrdersActions
-        ? [
-            action === "serve"
-              ? noodleOrdersActionRowWithBack(userId, {
-                  highlightAccept: !hasAcceptedOrders,
-                  disableServe: !hasAcceptedOrders,
-                  showServeAll: true,
-                  disableServeAll: !canServeAll
-                })
-              : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
-          ]
-        : [])
-    ]
+    components
   };
+}
+
+function buildAcceptPickerSceneEntries({ serverId, userId, p, s }) {
+  const set = buildSettingsMap(settingsCatalog, s.settings);
+  s.season = computeActiveSeason(set);
+  const activeEventEffects = getActiveEventEffects(eventsContent, s);
+  const activeEventId = s.active_event_id ?? null;
+  rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
+  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+  applyHouse247OrderBoardOverride(p);
+
+  const pageData = generateOrderPageForPlayer({
+    playerState: p,
+    settings: set,
+    content,
+    activeSeason: s.season,
+    serverId,
+    userId,
+    activeEventId,
+    page: 0,
+    pageSize: 25
+  });
+
+  const orderTokenByShortId = {};
+  const entries = (pageData?.orders ?? []).slice(0, 10).map((o) => {
+    const shortId = shortOrderId(o.order_id);
+    orderTokenByShortId[shortId] = String(o.order_id);
+    const recipeName = content.recipes[o.recipe_id]?.name ?? "a dish";
+    const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
+    const ready = getTotalBowlsForRecipe(p, o.recipe_id);
+    return {
+      shortId,
+      line: `\`${shortId}\` • **${recipeName}** — *${npcName}* (${o.tier}) • ready bowls: **${ready}**`
+    };
+  });
+
+  return { entries, orderTokenByShortId };
+}
+
+function buildAcceptPickerScenePayload({ serverId, userId, p, s }) {
+  const { entries, orderTokenByShortId } = buildAcceptPickerSceneEntries({ serverId, userId, p, s });
+  const sceneState = putSceneState({
+    sceneKey: "orders.accept_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      orderTokenByShortId
+    }
+  });
+
+  return buildAcceptPickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries
+  });
+}
+
+function buildCookRecipePickerSceneEntries({ p, s }) {
+  const available = getValidAvailableRecipeIds(p);
+  const seasonFiltered = filterRecipeIdsByActiveSeasonEvent(available, s);
+
+  const sortKey = (rid) => {
+    const r = content.recipes?.[rid];
+    return (r?.name ?? displayItemName(rid, content) ?? "").toLowerCase();
+  };
+
+  const sorted = [...seasonFiltered].sort((a, b) => sortKey(a).localeCompare(sortKey(b), "en", { sensitivity: "base" }));
+
+  const neededByRecipe = {};
+  Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+    const recipeId = String(entry?.order?.recipe_id || "").trim();
+    if (!recipeId) return;
+    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+  });
+
+  return sorted.map((rid) => {
+    const recipeId = String(rid || "").trim();
+    const recipe = content.recipes?.[recipeId] ?? null;
+    const recipeName = recipe?.name ?? displayItemName(recipeId, content);
+    const relevantIngredients = getRelevantRecipeIngredients(p, recipe);
+    const maxCookable = relevantIngredients
+      .filter((ing) => !isIngredientOptionalForPlayer(p, ing) && (ing?.qty ?? 0) > 0)
+      .map((ing) => Math.floor((p.inv_ingredients?.[ing.item_id] ?? 0) / (ing.qty ?? 1)))
+      .reduce((min, cur) => Math.min(min, cur), Infinity);
+    const cookable = Number.isFinite(maxCookable) ? Math.max(0, maxCookable) : 0;
+    const need = neededByRecipe[recipeId] ?? 0;
+    const ready = getTotalBowlsForRecipe(p, recipeId);
+    const short = Math.max(0, need - ready);
+    const needLine = short > 0 ? ` • needs **${short}**` : "";
+
+    return {
+      recipeId,
+      line: `**${recipeName}** (${recipe?.tier ?? "standard"}) • ready **${ready}** • max now **${cookable}**${needLine}`,
+      cookable
+    };
+  });
+}
+
+function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, quantity = 1 }) {
+  const entries = buildCookRecipePickerSceneEntries({ p, s });
+  const selectedId = String(selectedRecipeId || "").trim();
+  const selectedExists = entries.some((entry) => String(entry?.recipeId || "") === selectedId);
+  const fallbackSelected = selectedExists
+    ? selectedId
+    : String(entries?.[0]?.recipeId || "").trim();
+  const safeQuantity = Math.max(1, Math.min(99, Math.floor(Number(quantity) || 1)));
+
+  const sceneState = putSceneState({
+    sceneKey: "cook.recipe_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      selectedRecipeId: fallbackSelected || null,
+      quantity: safeQuantity
+    }
+  });
+
+  return buildCookRecipePickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries,
+    selectedRecipeId: fallbackSelected || null,
+    quantity: safeQuantity
+  });
+}
+
+function buildServePickerSceneEntries({ p }) {
+  const now = nowTs();
+  const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+  const orderTokenByShortId = {};
+
+  const entries = acceptedEntries.map(([fullOrderId, accepted]) => {
+    const shortId = shortOrderId(fullOrderId);
+    orderTokenByShortId[shortId] = String(fullOrderId);
+    const order = accepted?.order ?? null;
+    const recipeId = String(order?.recipe_id || "").trim();
+    const recipeName = recipeId ? displayRecipeName(recipeId) : "Unknown recipe";
+    const npcName = order?.npc_archetype
+      ? (content.npcs?.[order.npc_archetype]?.name ?? order.npc_archetype)
+      : "customer";
+    const expired = Boolean(accepted?.expires_at && now > Number(accepted.expires_at));
+    const ready = !expired && recipeId ? getTotalBowlsForRecipe(p, recipeId) > 0 : false;
+    const status = expired ? "expired" : (ready ? "ready" : "missing bowl");
+
+    return {
+      shortId,
+      fullOrderId: String(fullOrderId),
+      recipeId,
+      ready,
+      expired,
+      line: `\`${shortId}\` • **${recipeName}** — *${npcName}* • ${status}`
+    };
+  });
+
+  entries.sort((a, b) => {
+    if (a.ready !== b.ready) return a.ready ? -1 : 1;
+    if (a.expired !== b.expired) return a.expired ? 1 : -1;
+    return String(a.shortId).localeCompare(String(b.shortId));
+  });
+
+  return { entries, orderTokenByShortId };
+}
+
+function buildServePickerScenePayload({ userId, p, selectedShortId = null } = {}) {
+  const { entries, orderTokenByShortId } = buildServePickerSceneEntries({ p });
+  const requested = String(selectedShortId || "").trim();
+  const selected = entries.some((entry) => entry.shortId === requested)
+    ? requested
+    : String(entries[0]?.shortId || "").trim();
+
+  const sceneState = putSceneState({
+    sceneKey: "serve.order_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      orderTokenByShortId,
+      selectedShortId: selected || null
+    }
+  });
+
+  return buildServePickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries,
+    selectedShortId: selected || null
+  });
+}
+
+function buildCookMinigameScenePayload({
+  userId,
+  recipeId,
+  quantity = 1,
+  turnIndex = 0,
+  totalTurns = 8,
+  score = 0,
+  misses = 0,
+  targetActions = [],
+  runToken = null,
+  turnMs = 2200,
+  graceMs = 650,
+  turnStartedAt = null,
+  lastTurnStatus = null,
+  nowMs = Date.now()
+} = {}) {
+  const safeRecipeId = String(recipeId || "").trim();
+  const safeQuantity = Math.max(1, Math.min(99, Math.floor(Number(quantity) || 1)));
+  const safeTotalTurns = Math.max(1, Math.min(20, Math.floor(Number(totalTurns) || 8)));
+  const safeRunToken = String(runToken || "").trim() || createCookRunToken({
+    userId,
+    recipeId: safeRecipeId,
+    quantity: safeQuantity,
+    nowMs
+  });
+  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 2200));
+  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 650));
+  const normalizedTargets = Array.isArray(targetActions) && targetActions.length
+    ? targetActions.map((action) => String(action || "").trim().toLowerCase()).filter(Boolean)
+    : buildCookMinigameTargetActions({ recipeId: safeRecipeId, runToken: safeRunToken, totalTurns: safeTotalTurns });
+  const targets = normalizedTargets.slice(0, safeTotalTurns);
+  while (targets.length < safeTotalTurns) {
+    targets.push("prep");
+  }
+  const safeTurnIndex = Math.max(0, Math.min(safeTotalTurns - 1, Math.floor(Number(turnIndex) || 0)));
+  const safeScore = Math.max(0, Math.min(safeTotalTurns, Math.floor(Number(score) || 0)));
+  const safeMisses = Math.max(0, Math.floor(Number(misses) || 0));
+  const safeTurnStartedAt = Math.max(0, Math.floor(Number(turnStartedAt || nowMs) || nowMs));
+  const safeLastTurnStatus = String(lastTurnStatus || "").trim().toLowerCase() || null;
+
+  const sceneState = putSceneState({
+    sceneKey: "cook.minigame",
+    ownerId: userId,
+    state: {
+      recipeId: safeRecipeId,
+      quantity: safeQuantity,
+      turnIndex: safeTurnIndex,
+      totalTurns: safeTotalTurns,
+      score: safeScore,
+      misses: safeMisses,
+      targetActions: targets,
+      runToken: safeRunToken,
+      turnMs: safeTurnMs,
+      graceMs: safeGraceMs,
+      turnStartedAt: safeTurnStartedAt,
+      lastTurnStatus: safeLastTurnStatus
+    }
+  });
+
+  return buildCookMinigameV2Message({
+    userId,
+    token: sceneState.token,
+    recipeName: displayRecipeName(safeRecipeId),
+    quantity: safeQuantity,
+    turnIndex: safeTurnIndex,
+    totalTurns: safeTotalTurns,
+    score: safeScore,
+    misses: safeMisses,
+    targetAction: targets[safeTurnIndex] ?? "prep",
+    turnMs: safeTurnMs,
+    graceMs: safeGraceMs,
+    lastTurnStatus: safeLastTurnStatus
+  });
 }
 
 function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
@@ -4097,17 +4668,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const disableAccept = remainingOrders === 0;
   const highlightAccept = !hasAcceptedOrders && !disableAccept;
   const available = getValidAvailableRecipeIds(p);
-  const activeSeason = s?.season ?? null;
-  const activeEventId = s?.active_event_id ?? null;
-  const seasonFiltered = available.filter((rid) => {
-    const r = content.recipes?.[rid];
-    if (!r) return false;
-    if (r.is_event_recipe) {
-      return !!activeEventId && r.event_id === activeEventId;
-    }
-    if (r.tier !== "seasonal") return true;
-    return !!activeSeason && r.season === activeSeason;
-  });
+  const seasonFiltered = filterRecipeIdsByActiveSeasonEvent(available, s);
 
   const sortKey = (rid) => {
     const r = content.recipes?.[rid];
@@ -5582,6 +6143,9 @@ if (inDevPath && sub === "giveaway_winner") {
     const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
     const now = nowTs();
     const rewardSummaryLines = [];
+    const rewardTypeLabel = rewardType === "coin_pack"
+      ? "Coin Pack"
+      : (rewardType === "coins" ? "Coins" : "Perk");
     let publicWinnerLine = "";
 
     if (rewardType === "perk") {
@@ -5625,7 +6189,7 @@ if (inDevPath && sub === "giveaway_winner") {
           totalGrant += Math.max(0, Math.floor(Number(grantResult.amount || 0) || 0));
         }
 
-        rewardSummaryLines.push(`• Granted perk: ${perkNames[perkId]} (${perkId}) for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
+        rewardSummaryLines.push(`• Granted perk: ${perkNames[perkId]} for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
       }
 
       rewardSummaryLines.push(`• Monthly subscription coins credited now: **${totalGrant}c**.`);
@@ -5652,7 +6216,7 @@ if (inDevPath && sub === "giveaway_winner") {
         });
       }
 
-      rewardSummaryLines.push(`• Granted coin pack: ${pack.priceLabel} (${pack.coins.toLocaleString()}c) [${coinPackId}].`);
+      rewardSummaryLines.push(`• Granted coin pack: ${pack.priceLabel} (${pack.coins.toLocaleString()}c).`);
       publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${pack.coins.toLocaleString()}c** (${pack.priceLabel} pack).`;
     } else {
       if (coinAmount <= 0) {
@@ -5676,8 +6240,10 @@ if (inDevPath && sub === "giveaway_winner") {
     upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
 
     const messageLines = [
-      `${getIcon("status_complete")} Giveaway reward delivered to <@${targetUserId}> (${targetUserId}) on server ${targetServerId}.`,
-      `Reward type: ${rewardType}`,
+      `${getIcon("status_complete")} Giveaway reward delivered to <@${targetUserId}>.`,
+      `Reward type: ${rewardTypeLabel}`,
+      " ",
+      "Granted rewards:",
       ...rewardSummaryLines,
       reason ? `Reason: ${reason}` : null,
       !existingPlayer ? "Note: Created a new player profile for this target." : null
@@ -6804,7 +7370,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       });
     }
 
-    const availableRecipeIds = getValidAvailableRecipeIds(p);
+    const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
     const shiftActiveForMenu = isTakeoutShiftActive(p, now);
     if (!shiftActiveForMenu) {
       const availableRecipeSet = new Set(availableRecipeIds);
@@ -7029,12 +7595,23 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const menuPicker = showMenuPicker
         ? buildTakeoutMenuPickerRows(userId, {
             availableRecipeIds,
-            selectedRecipeIds: takeout.menu_recipe_ids,
+            selectedRecipeIds: readTakeoutMenuDraftSelection({
+              serverId,
+              userId,
+              availableRecipeIds,
+              fallbackRecipeIds: takeout.menu_recipe_ids
+            }),
             minRequired: menuLimits.minRequired,
             maxAllowed: menuLimits.maxAllowed,
             page: menuPage
           })
         : null;
+
+      const footerBase = `Coins: ${p.coins || 0}c`;
+      const footerOwner = ownerFooterText(interaction.member ?? interaction.user);
+      const pageLabel = menuPicker?.totalPages > 1 ? `Page ${menuPicker.safePage + 1}/${menuPicker.totalPages}` : null;
+      const footerParts = [footerBase, pageLabel].filter(Boolean).join(" • ");
+      embed.setFooter({ text: `${footerParts}\n${footerOwner}` });
 
       return {
         content: " ",
@@ -7062,6 +7639,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
 
       const rawRecipes = String(opt.getString("recipes") || "").trim();
+      const isDraftSelection = opt.getBoolean("menu_draft") === true;
       if (!rawRecipes) {
         if (!availableRecipeIds.length) {
           return finalize(renderStatus(`${getIcon("warning")} You need at least one learned recipe before setting a takeout menu.`, { ephemeral: true }));
@@ -7076,6 +7654,63 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         .split(",")
         .map((id) => resolveCanonicalRecipeId(id))
         .filter(Boolean);
+
+      if (isDraftSelection) {
+        const normalizedDraft = normalizeTakeoutDraftSelection(requestedIds, availableRecipeIds);
+        writeTakeoutMenuDraftSelection({
+          serverId,
+          userId,
+          selectedRecipeIds: normalizedDraft
+        });
+
+        if (normalizedDraft.length < menuLimits.minRequired) {
+          return finalize(renderStatus(
+            `${getIcon("recipes")} Menu draft saved: **${normalizedDraft.length}/${menuLimits.minRequired}** selected. Add at least **${menuLimits.minRequired - normalizedDraft.length}** more recipe${menuLimits.minRequired - normalizedDraft.length === 1 ? "" : "s"}.`,
+            {
+              ephemeral: true,
+              showMenuPicker: true,
+              menuPage: requestedMenuPage
+            }
+          ));
+        }
+
+        const menuResult = setTakeoutMenu(p, {
+          menuRecipeIds: normalizedDraft,
+          learnedRecipeIds: availableRecipeIds,
+          now
+        });
+
+        if (!menuResult.ok) {
+          if (menuResult.reason === "menu_too_small") {
+            const needed = menuResult.limits?.minRequired ?? 0;
+            return finalize(renderStatus(`${getIcon("warning")} Menu too small. Select at least **${needed}** recipe${needed === 1 ? "" : "s"}.`, {
+              ephemeral: true,
+              showMenuPicker: true,
+              menuPage: requestedMenuPage
+            }));
+          }
+          return finalize(renderStatus(`${getIcon("warning")} Could not update menu. Check recipe ids and try again.`, {
+            ephemeral: true,
+            showMenuPicker: true,
+            menuPage: requestedMenuPage
+          }));
+        }
+
+        clearTakeoutMenuDraftSelection({ serverId, userId });
+
+        if (!isTakeoutShiftActive(p, nowTs())) {
+          takeout.shift.idle_order_board_snapshot = takeout.menu_recipe_ids.map((rid) => ({
+            recipe_id: rid,
+            visible_order_count: 0
+          }));
+          clearTakeoutQuote();
+        }
+
+        return finalize(renderStatus(`${getIcon("status_complete")} Counter menu updated.`, {
+          showMenuPicker: true,
+          menuPage: requestedMenuPage
+        }));
+      }
 
       const menuResult = setTakeoutMenu(p, {
         menuRecipeIds: requestedIds,
@@ -7093,6 +7728,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         }
         return finalize(renderStatus(`${getIcon("warning")} Could not update menu. Check recipe ids and try again.`, { ephemeral: true }));
       }
+
+      clearTakeoutMenuDraftSelection({ serverId, userId });
 
       if (!isTakeoutShiftActive(p, nowTs())) {
         takeout.shift.idle_order_board_snapshot = takeout.menu_recipe_ids.map((rid) => ({
@@ -7307,6 +7944,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       if (servingsToProcess <= 0) {
         return finalize(renderStatus(`${getIcon("help")} No remaining counter orders for **${displayRecipeName(selectedRecipeId)}**.`, { ephemeral: true }));
       }
+      const discoveryAttemptLimit = getTakeoutDiscoveryAttemptLimit(servingsToProcess);
+      let discoveryAttemptsUsed = 0;
 
       let totalCoins = 0;
       let totalRep = 0;
@@ -7377,7 +8016,8 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
           seasonalServedCoins += rewards.coins;
         }
 
-        if (bowlQuality !== "salvage") {
+        if (bowlQuality !== "salvage" && discoveryAttemptsUsed < discoveryAttemptLimit) {
+          discoveryAttemptsUsed += 1;
           const dayKey = dayKeyUTC(servedAt);
           const discoveryRng = makeStreamRng({
             mode: "seeded",
@@ -7394,7 +8034,9 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
             tier: recipe?.tier ?? "common",
             rng: discoveryRng,
             activeSeason: s.season,
-            activeEventId: s.active_event_id ?? null
+            activeEventId: s.active_event_id ?? null,
+            allowPity: false,
+            trackPityStreak: false
           });
           for (const discovery of discoveries ?? []) {
             const result = applyDiscovery(p, discovery, content, discoveryRng, { badgesContent });
@@ -7793,7 +8435,21 @@ if (sub === "status") {
       ephemeral: true
     });
   }
+  const rolloutPlayer = ensurePlayer(serverId, userId);
   const statusEmbed = buildDevStatusEmbed();
+
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer })) {
+    const title = String(statusEmbed?.title ?? statusEmbed?.data?.title ?? `${getIcon("stats")} Status`).trim();
+    const description = String(statusEmbed?.description ?? statusEmbed?.data?.description ?? "").trim();
+    const lines = description ? description.split("\n") : ["Status unavailable."];
+    const payload = buildComponentsV2ContainerMessage({
+      title,
+      lines,
+      accentColor: theme.colors.primary,
+      ephemeral: false
+    });
+    return replyOrEditInteraction(interaction, payload);
+  }
 
   return commit({
     content: " ",
@@ -8271,9 +8927,14 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const status = getVoteRewardStatus(latestPlayer);
     const reward = status.reward;
     const rewardLine = [`${getIcon("coins")} **${reward.coins}c**`, `${getIcon("sxp")} **${reward.sxp} SXP**`, `${getIcon("rep")} **${reward.rep} REP**`].join(" · ");
-    const house247Line = status.house247ExpiresAt
-      ? `<t:${Math.floor(status.house247ExpiresAt / 1000)}:R>`
+    const house247Line = status.house247Active
+      ? (status.house247ExpiresAt
+        ? `<t:${Math.floor(status.house247ExpiresAt / 1000)}:R>`
+        : "Active")
       : "Not active";
+    const house247Label = status.house247ExpiresAt
+      ? `${getHouse247Label()} remaining: expires **${house247Line}**`
+      : `${getHouse247Label()} remaining: **${house247Line}**`;
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
     const maxButtonsPerRow = 5;
     const maxLinkRows = 3;
@@ -8331,7 +8992,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         "",
         `Per vote reward: ${rewardLine}`,
         `Per vote bonus: ${getHouse247Label()} **+12h** (unlimited orders + market stock)`,
-        `${getHouse247Label()} remaining: **${house247Line}**`,
+        "",
+        house247Label,
         `Ready to claim: **${status.pendingClaims}**`,
         `Last vote: **${lastVoteLine}**`,
         "_After voting, press **Vote Rewards** button to refresh._"
@@ -9743,6 +10405,11 @@ ${lines.join("\n")}`;
     const recipeId = opt.getString("recipe");
     const qty = opt.getInteger("quantity");
     const page = opt.getInteger("page") ?? 0;
+    const v2MinigameCook = opt.getBoolean("v2_minigame") === true;
+    const v2Score = Math.max(0, Math.floor(Number(opt.getInteger("v2_score") ?? 0) || 0));
+    const v2Turns = Math.max(1, Math.floor(Number(opt.getInteger("v2_turns") ?? 1) || 1));
+    const v2SuccessBowlsOverride = Number(opt.getInteger("v2_success_bowls") ?? null);
+    const v2QualityBias = String(opt.getString("v2_quality_bias") ?? "").trim().toLowerCase();
 
     if (!recipeId) {
       const payload = buildCookPickerPayload({
@@ -9856,15 +10523,25 @@ ${lines.join("\n")}`;
 
     const blessing = getActiveBlessing(p);
     const tutorialStep = getCurrentTutorialStep(p);
-    const disableFailures = tutorialStep?.id === "intro_cook";
-    const outcome = rollCookBatchOutcome({
-      quantity: batchOutput,
-      tier: r.tier,
-      player: p,
-      effects: combinedEffects,
-      rng: cookRng,
-      blessing,
-      disableFailures
+    const counterCookFlow = Boolean(opt.getBoolean("counter_cook"));
+    const disableFailures = counterCookFlow || tutorialStep?.id === "intro_cook";
+    const outcome = resolveCookOutcomeForFlow({
+      v2MinigameCook,
+      batchOutput,
+      minigameScore: v2Score,
+      minigameTurns: v2Turns,
+      successBowlsOverride: v2SuccessBowlsOverride,
+      qualityBias: v2QualityBias,
+      rollBatchOutcomeFn: rollCookBatchOutcome,
+      rollBatchOutcomeArgs: {
+        quantity: batchOutput,
+        tier: r.tier,
+        player: p,
+        effects: combinedEffects,
+        rng: cookRng,
+        blessing,
+        disableFailures
+      }
     });
 
     const doubleCrafted = combinedEffects.double_craft_chance > 0 && rollDoubleCraft(combinedEffects, cookRng);
@@ -9913,11 +10590,13 @@ ${lines.join("\n")}`;
       .filter(Boolean)
       .join(" · ");
     const salvageLine = outcome.salvage > 0 ? ` Salvaged **${outcome.salvage}** bowl(s).` : "";
+    const failCause = v2MinigameCook
+      ? "Kitchen Line performance"
+      : "recipe tier risk";
     const failInfo = outcome.failed > 0
-      ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: recipe tier risk.${salvageLine}`
+      ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: ${failCause}.${salvageLine}`
       : null;
 
-    const counterCookFlow = Boolean(opt.getBoolean("counter_cook"));
     const cookEmbed = buildMenuEmbed({
       title: counterCookFlow ? `${getIcon("cook")} Counter Cook` : `${getIcon("cook")} Cooked`,
       description: [
@@ -10044,7 +10723,7 @@ ${lines.join("\n")}`;
 
     const statusMsg = statusParts.join("\n\n");
 
-    const acceptedLines = acceptedEntries.map(([fullId, a]) => {
+    const acceptedDisplayEntries = acceptedEntries.map(([fullId, a]) => {
       const snap = a?.order ?? null;
 
       let timeLeft = "";
@@ -10056,14 +10735,26 @@ ${lines.join("\n")}`;
 
       const order = snap;
 
-      if (!order) return `${getIcon("status_complete")} \`${shortOrderId(fullId)}\`${timeLeft}`;
+      if (!order) {
+        return {
+          shortId: shortOrderId(fullId),
+          serveReady: false,
+          line: `${getIcon("status_complete")} \`${shortOrderId(fullId)}\`${timeLeft}`
+        };
+      }
 
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const lt = order.is_limited_time ? getIcon("hourglass") : "•";
+      const serveReady = getTotalBowlsForRecipe(p, order.recipe_id) > 0;
 
-      return `${getIcon("status_complete")} \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`;
+      return {
+        shortId: shortOrderId(fullId),
+        serveReady,
+        line: `${getIcon("status_complete")} \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`
+      };
     });
+    const acceptedLines = acceptedDisplayEntries.map((entry) => entry.line);
 
     const parts = [];
     if (sweep2.warning) parts.push(sweep2.warning, "");
@@ -10125,6 +10816,52 @@ ${lines.join("\n")}`;
     const disableCook = takeoutShiftActive;
     const disableServe = takeoutShiftActive || acceptedEntries.length === 0;
     const showTakeout = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
+
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      const sceneState = putSceneState({
+        sceneKey: "orders.board",
+        ownerId: userId,
+        state: {
+          acceptedOrderIds: acceptedDisplayEntries.map((entry) => entry.shortId),
+          readyServeOrderIds: acceptedDisplayEntries.filter((entry) => entry.serveReady).map((entry) => entry.shortId)
+        }
+      });
+
+      const headerLines = [
+        `${getIcon("orders")} **Orders Board**`,
+        takeoutShiftActive
+          ? `${getTakeoutCounterLabel()} Main board is paused while takeout shift is active.`
+          : (remaining > 0
+            ? `Open orders: **${remaining}**`
+            : "No new orders left right now."),
+        acceptedDisplayEntries.length > 0
+          ? `Accepted: **${acceptedDisplayEntries.length}**`
+          : "Accepted: **0**",
+        readyBowls.length > 0
+          ? `Serve-ready recipes: **${readyBowls.length}**`
+          : "Serve-ready recipes: **0**"
+      ];
+
+      const quickActions = [
+        { label: "Accept", actionKey: "acc", style: highlightAccept ? 3 : 1, disabled: disableAccept, emoji: getButtonEmoji("orders") },
+        { label: "Cook", actionKey: "ck", style: 2, disabled: disableCook, emoji: getButtonEmoji("cook") },
+        { label: "Serve", actionKey: "sv", style: disableServe ? 2 : 1, disabled: disableServe, emoji: getButtonEmoji("serve") },
+        { label: "Quests", actionKey: "qs", style: 2, disabled: false, emoji: getButtonEmoji("quests") },
+        { label: "Refresh", actionKey: "rf", style: 2, disabled: false, emoji: getButtonEmoji("refresh") },
+        { label: "Main Menu", actionKey: "nm", style: 2, disabled: false, emoji: getButtonEmoji("back") }
+      ];
+
+      const v2Payload = buildOrdersBoardV2Message({
+        userId,
+        token: sceneState.token,
+        headerLines,
+        acceptedEntries: acceptedDisplayEntries,
+        quickActions
+      });
+
+      return commitState(v2Payload);
+    }
+
     const menuEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Orders`,
       description: parts.join("\n"),
@@ -10519,13 +11256,24 @@ ${lines.join("\n")}`;
 
   /* ---------------- CANCEL ---------------- */
   if (sub === "cancel") {
-    const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
-    if (!input) {
+    const rawInput = String(opt.getString("order_id") ?? "").trim();
+    const tokens = rawInput
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (tokens.length) {
+      clearCancelOrderDraftSelection({ serverId, userId });
+    }
+
+    if (!tokens.length) {
       const payload = buildCancelServePickerPayload({
         action: "cancel",
         userId,
+        serverId,
         p,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page: Number(opt.getInteger("page") ?? 0) || 0
       });
 
       return payload;
@@ -10538,25 +11286,36 @@ ${lines.join("\n")}`;
     if (!p.orders.accepted) p.orders.accepted = {};
     const accepted = p.orders.accepted;
 
-    const fullId = Object.keys(accepted).find((id) => {
-      const full = String(id).toUpperCase();
-      const short = shortOrderId(id);
-      return full === input || short === input;
-    });
+    const results = [];
+    let canceled = 0;
+    for (const token of tokens) {
+      const fullId = Object.keys(accepted).find((id) => {
+        const full = String(id).toUpperCase();
+        const short = shortOrderId(id);
+        return full === token || short === token;
+      });
 
-    if (!fullId) return commitState({ content: "You don’t have that order accepted.", ephemeral: true });
+      if (!fullId) {
+        results.push(`${getIcon("question")} You don’t have order \`${token}\` accepted.`);
+        continue;
+      }
 
-    const entry = accepted[fullId];
-    const orderSnap = entry?.order ?? null;
+      const entry = accepted[fullId];
+      const orderSnap = entry?.order ?? null;
+      const rName = orderSnap ? (content.recipes[orderSnap.recipe_id]?.name ?? "a dish") : null;
+      const npcName = orderSnap ? (content.npcs[orderSnap.npc_archetype]?.name ?? orderSnap.npc_archetype) : null;
+      delete accepted[fullId];
+      canceled += 1;
+      results.push(`${getIcon("cancel")} Canceled \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`);
+    }
 
-    const rName = orderSnap ? (content.recipes[orderSnap.recipe_id]?.name ?? "a dish") : null;
-    const npcName = orderSnap ? (content.npcs[orderSnap.npc_archetype]?.name ?? orderSnap.npc_archetype) : null;
+    if (canceled <= 0) {
+      return commitState({ content: results.join("\n") || "You don’t have those orders accepted.", ephemeral: true });
+    }
 
-    delete accepted[fullId];
-
-    const cancelMsg = `${getIcon("cancel")} Canceled order \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
+    const cancelMsg = results.join("\n");
     const cancelEmbed = buildMenuEmbed({
-      title: `${getIcon("cancel")} Order Canceled`,
+      title: canceled === 1 ? `${getIcon("cancel")} Order Canceled` : `${getIcon("cancel")} Orders Canceled`,
       description: cancelMsg,
       user: interaction.member ?? interaction.user
     });
@@ -10588,8 +11347,10 @@ ${lines.join("\n")}`;
       const payload = buildCancelServePickerPayload({
         action: "serve",
         userId,
+        serverId,
         p,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page: Number(opt.getInteger("page") ?? 0) || 0
       });
 
       return payload;
@@ -11040,6 +11801,556 @@ const customId = String(interaction.customId || "");
 // Note: deferUpdate is already called in index.js for most components
 // We don't need to defer again here, just route to the appropriate handler
 const userId = interaction.user.id;
+const serverId = interaction.guildId;
+if (!serverId) {
+  return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
+}
+const v2Parsed = parseV2CustomId(customId);
+if (v2Parsed.isV2) {
+  const rolloutPlayer = ensurePlayer(serverId, userId);
+  if (!isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer })) {
+    return componentCommit(interaction, {
+      content: "This V2 menu is currently disabled. Use `/noodle` to reopen the V1 menu.",
+      ephemeral: true
+    });
+  }
+  if (!v2Parsed.valid) {
+    return componentCommit(interaction, {
+      content: "This menu expired or is invalid. Please reopen from /noodle.",
+      ephemeral: true
+    });
+  }
+  if (isV2OwnerMismatch(v2Parsed, userId)) {
+    return componentCommit(interaction, {
+      content: "That menu isn’t for you.",
+      ephemeral: true
+    });
+  }
+
+  const sceneState = getSceneState({
+    sceneKey: v2Parsed.sceneKey,
+    token: v2Parsed.token,
+    ownerId: userId
+  });
+  if (!sceneState.ok && sceneState.stale) {
+    return componentCommit(interaction, {
+      content: "That view is stale. Run `/noodle orders` to reopen the orders board.",
+      ephemeral: true
+    });
+  }
+
+  if (v2Parsed.sceneKey === "orders.board") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const serveArg = String(v2Parsed.args?.[0] ?? "").trim();
+
+    if (action === "acc") {
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildAcceptPickerScenePayload({ serverId, userId, p, s });
+      return componentCommit(interaction, payload);
+    }
+    if (action === "ck") {
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
+      return componentCommit(interaction, payload);
+    }
+    if (action === "qs") return runNoodle(interaction, { sub: "quests" });
+    if (action === "rf") return runNoodle(interaction, { sub: "orders" });
+    if (action === "nm") return runNoodle(interaction, { sub: "profile" });
+    if (action === "sv") {
+      const p = ensurePlayer(serverId, userId);
+      if (!serveArg) {
+        const payload = buildServePickerScenePayload({ userId, p });
+        return componentCommit(interaction, payload);
+      }
+      const readyServeOrderIds = new Set((state.readyServeOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+      if (!readyServeOrderIds.has(serveArg)) {
+        return componentCommit(interaction, {
+          content: "That order is no longer ready. Reopen `/noodle orders` and try again.",
+          ephemeral: true
+        });
+      }
+      const payload = buildServePickerScenePayload({ userId, p, selectedShortId: serveArg });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  if (v2Parsed.sceneKey === "orders.accept_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const selectedShortId = String(v2Parsed.args?.[0] ?? "").trim();
+
+    if (action === "bk" || action === "cnl") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const selected = entries.find((entry) => String(entry?.shortId ?? "") === selectedShortId);
+      if (!selected) {
+        return componentCommit(interaction, {
+          content: "That order is no longer selectable. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const confirmState = putSceneState({
+        sceneKey: "orders.accept_result",
+        ownerId: userId,
+        state: {
+          entries,
+          orderTokenByShortId: state.orderTokenByShortId ?? {},
+          selectedShortId
+        }
+      });
+
+      return componentCommit(interaction, buildAcceptConfirmV2Message({
+        userId,
+        token: confirmState.token,
+        selectedShortId,
+        selectedLine: selected.line
+      }));
+    }
+  }
+
+  if (v2Parsed.sceneKey === "orders.accept_result") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const argShortId = String(v2Parsed.args?.[0] ?? "").trim();
+    const selectedShortId = argShortId || String(state.selectedShortId ?? "").trim();
+    const orderTokenByShortId = state.orderTokenByShortId ?? {};
+    const fullOrderId = String(orderTokenByShortId?.[selectedShortId] ?? "").trim();
+
+    if (action === "ord") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "bk") {
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildAcceptPickerScenePayload({ serverId, userId, p, s });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cnl") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "ck") {
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      if (!fullOrderId) {
+        return componentCommit(interaction, {
+          content: "That order is no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const p = ensurePlayer(serverId, userId);
+      const beforeAcceptedOrderIds = Object.keys(p.orders?.accepted ?? {});
+      const cap = getOrderAcceptCap(p, nowTs());
+
+      await runNoodle(interaction, {
+        sub: "accept",
+        overrides: { strings: { order_id: fullOrderId } }
+      });
+
+      const afterPlayer = ensurePlayer(serverId, userId);
+      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+      const outcome = deriveAcceptOutcome({
+        targetOrderId: fullOrderId,
+        cap,
+        beforeAcceptedOrderIds,
+        afterAcceptedOrderIds
+      });
+
+      const resultState = putSceneState({
+        sceneKey: "orders.accept_result",
+        ownerId: userId,
+        state: {
+          entries: state.entries ?? [],
+          orderTokenByShortId,
+          selectedShortId
+        }
+      });
+
+      const detailLine = outcome.code === "accepted"
+        ? `${getIcon("status_complete")} Accepted \`${shortOrderId(fullOrderId)}\`.`
+        : `${getIcon("warning")} ${outcome.message}`;
+
+      return componentCommit(interaction, buildAcceptResultV2Message({
+        userId,
+        token: resultState.token,
+        outcomeCode: outcome.code,
+        detailLine
+      }));
+    }
+  }
+
+  if (v2Parsed.sceneKey === "cook.recipe_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const entries = Array.isArray(state.entries) ? state.entries : [];
+    const selectedRecipeId = String(state.selectedRecipeId || "").trim() || String(entries?.[0]?.recipeId || "").trim();
+    const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+
+    if (action === "bk") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const nextRecipeId = String(v2Parsed.args?.[0] ?? "").trim();
+      if (!entries.some((entry) => String(entry?.recipeId || "") === nextRecipeId)) {
+        return componentCommit(interaction, {
+          content: "That recipe is no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId: nextRecipeId,
+        quantity
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "qty") {
+      const arg = String(v2Parsed.args?.[0] ?? "").trim();
+      const deltas = { m5: -5, m1: -1, p1: 1, p5: 5 };
+      const delta = deltas[arg] ?? 0;
+      const nextQuantity = Math.max(1, Math.min(99, quantity + delta));
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId,
+        quantity: nextQuantity
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "go") {
+      if (!selectedRecipeId) {
+        return componentCommit(interaction, {
+          content: "Select a recipe first.",
+          ephemeral: true
+        });
+      }
+
+      const payload = buildCookMinigameScenePayload({
+        userId,
+        recipeId: selectedRecipeId,
+        quantity,
+        totalTurns: 8,
+        turnIndex: 0,
+        score: 0,
+        misses: 0
+      });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  if (v2Parsed.sceneKey === "cook.minigame") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const recipeId = String(state.recipeId || "").trim();
+    const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+    const totalTurns = Math.max(1, Math.min(20, Math.floor(Number(state.totalTurns) || 8)));
+    const turnIndex = Math.max(0, Math.min(totalTurns - 1, Math.floor(Number(state.turnIndex) || 0)));
+    const score = Math.max(0, Math.min(totalTurns, Math.floor(Number(state.score) || 0)));
+    const misses = Math.max(0, Math.floor(Number(state.misses) || 0));
+    const runToken = String(state.runToken || "").trim();
+    const turnMs = Math.max(250, Math.floor(Number(state.turnMs) || 2200));
+    const graceMs = Math.max(0, Math.floor(Number(state.graceMs) || 650));
+    const turnStartedAt = Math.max(0, Math.floor(Number(state.turnStartedAt) || Date.now()));
+    const targetActions = Array.isArray(state.targetActions)
+      ? state.targetActions.map((entry) => String(entry || "").trim().toLowerCase()).filter(Boolean)
+      : [];
+
+    if (!recipeId) {
+      return componentCommit(interaction, {
+        content: "This cook run is missing recipe context. Reopen `/noodle orders`.",
+        ephemeral: true
+      });
+    }
+
+    if (action === "bk") {
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId: recipeId,
+        quantity
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "prep" || action === "heat" || action === "plate" || action === "serve") {
+      const target = String(targetActions[turnIndex] || "prep").trim().toLowerCase();
+      const turnResult = evaluateCookMinigameTurn({
+        action,
+        targetAction: target,
+        turnStartedAt,
+        turnMs,
+        graceMs,
+        nowMs: Date.now()
+      });
+      const nextTurnIndex = turnIndex + 1;
+      const nextScore = score + turnResult.scoreDelta;
+      const nextMisses = misses + turnResult.missDelta;
+
+      if (nextTurnIndex < totalTurns) {
+        const payload = buildCookMinigameScenePayload({
+          userId,
+          recipeId,
+          quantity,
+          totalTurns,
+          turnIndex: nextTurnIndex,
+          score: nextScore,
+          misses: nextMisses,
+          targetActions,
+          runToken,
+          turnMs,
+          graceMs,
+          turnStartedAt: Date.now(),
+          lastTurnStatus: turnResult.status
+        });
+        return componentCommit(interaction, payload);
+      }
+
+      const performance = deriveCookMinigamePerformance({
+        score: nextScore,
+        totalTurns,
+        quantity
+      });
+
+      const beforePlayer = ensurePlayer(serverId, userId);
+      const beforeBowls = getTotalBowlsForRecipe(beforePlayer, recipeId);
+
+      await runNoodle(interaction, {
+        sub: "cook",
+        overrides: {
+          strings: {
+            recipe: recipeId,
+            v2_quality_bias: performance.qualityBias
+          },
+          integers: {
+            quantity,
+            v2_score: performance.score,
+            v2_turns: performance.totalTurns,
+            v2_success_bowls: performance.successBowls
+          },
+          booleans: {
+            v2_minigame: true
+          },
+          messageId: interaction.message?.id ?? null
+        }
+      });
+
+      const afterPlayer = ensurePlayer(serverId, userId);
+      const afterBowls = getTotalBowlsForRecipe(afterPlayer, recipeId);
+      const produced = Math.max(0, afterBowls - beforeBowls);
+
+      const resultState = putSceneState({
+        sceneKey: "cook.result",
+        ownerId: userId,
+        state: {
+          recipeId,
+          quantity,
+          score: performance.score,
+          totalTurns: performance.totalTurns,
+          successBowls: performance.successBowls,
+          failBowls: performance.failBowls,
+          qualityBias: performance.qualityBias,
+          runToken,
+          turnMs,
+          graceMs
+        }
+      });
+
+      const summaryLines = [
+        `${getIcon("cook")} **${displayRecipeName(recipeId)}** run complete.`,
+        `Kitchen Line score: **${performance.score}/${performance.totalTurns}** (${performance.accuracyLabel}).`,
+        `Planned bowls: **${performance.successBowls} success**, **${performance.failBowls} failed**.`,
+        produced > 0
+          ? `${getIcon("status_complete")} Produced **${produced}** bowl(s).`
+          : `${getIcon("warning")} No bowls were produced. Check ingredients/capacity and try again.`
+      ];
+
+      return componentCommit(interaction, buildCookResultV2Message({
+        userId,
+        token: resultState.token,
+        title: "## Kitchen Line Result",
+        summaryLines
+      }));
+    }
+  }
+
+  if (v2Parsed.sceneKey === "cook.result") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const recipeId = String(state.recipeId || "").trim();
+    const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+
+    if (action === "ord") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "cook") {
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId: recipeId,
+        quantity
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "serve") {
+      return runNoodle(interaction, { sub: "serve" });
+    }
+  }
+
+  if (v2Parsed.sceneKey === "serve.order_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const entries = Array.isArray(state.entries) ? state.entries : [];
+    const orderTokenByShortId = state.orderTokenByShortId ?? {};
+    const selectedShortId = String(state.selectedShortId || "").trim() || String(entries[0]?.shortId || "").trim();
+
+    if (action === "bk") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const nextShortId = String(v2Parsed.args?.[0] ?? "").trim();
+      if (!entries.some((entry) => String(entry?.shortId || "") === nextShortId)) {
+        return componentCommit(interaction, {
+          content: "That order is no longer selectable. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const payload = buildServePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        selectedShortId: nextShortId
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "serve") {
+      if (!selectedShortId) {
+        return componentCommit(interaction, {
+          content: "Select an order first.",
+          ephemeral: true
+        });
+      }
+
+      const fullOrderId = String(orderTokenByShortId?.[selectedShortId] ?? "").trim();
+      const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === selectedShortId);
+      if (!fullOrderId || !selectedEntry) {
+        return componentCommit(interaction, {
+          content: "That order is no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const beforePlayer = ensurePlayer(serverId, userId);
+      const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
+      const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
+      const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
+      const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
+
+      await runNoodle(interaction, {
+        sub: "serve",
+        overrides: {
+          strings: { order_id: fullOrderId },
+          messageId: interaction.message?.id ?? null
+        }
+      });
+
+      const afterPlayer = ensurePlayer(serverId, userId);
+      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+      const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
+      const outcome = deriveServeOutcome({
+        targetOrderId: fullOrderId,
+        beforeAcceptedOrderIds,
+        afterAcceptedOrderIds,
+        beforeBowlCount,
+        afterBowlCount,
+        wasExpiredBefore
+      });
+
+      const resultState = putSceneState({
+        sceneKey: "serve.result",
+        ownerId: userId,
+        state: {
+          selectedShortId,
+          fullOrderId,
+          recipeId: selectedEntry.recipeId ?? null,
+          outcomeCode: outcome.code
+        }
+      });
+
+      const detailLine = outcome.code === "served"
+        ? `${getIcon("status_complete")} Served \`${selectedShortId}\` successfully.`
+        : `${getIcon("warning")} ${outcome.message}`;
+
+      return componentCommit(interaction, buildServeResultV2Message({
+        userId,
+        token: resultState.token,
+        outcomeCode: outcome.code,
+        detailLine
+      }));
+    }
+  }
+
+  if (v2Parsed.sceneKey === "serve.result") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const recipeId = String(state.recipeId || "").trim();
+
+    if (action === "ord") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "again") {
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildServePickerScenePayload({ userId, p });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cook") {
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p,
+        s,
+        selectedRecipeId: recipeId || null,
+        quantity: 1
+      });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  return componentCommit(interaction, {
+    content: "This V2 scene is recognized but not wired yet.",
+    ephemeral: true
+  });
+}
 const id = String(interaction.customId || "");
 const parts = id.split(":"); // noodle:<kind>:<action>:<ownerId>:...
 
@@ -11119,11 +12430,6 @@ if (kind === "dm" && action === "reminders_toggle") {
     embeds: [reminderEmbed],
     components
   });
-}
-
-const serverId = interaction.guildId;
-if (!serverId) {
-  return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
 }
 
 const componentPlayer = ensurePlayer(serverId, userId);
@@ -11877,6 +13183,9 @@ if (action === "accept") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
   const rawPage = Number(parts[4] ?? 0);
+  if (!parts[4]) {
+    clearAcceptOrderDraftSelection({ serverId, userId });
+  }
   const payload = buildAcceptPickerPayload({
     userId,
     serverId,
@@ -11886,6 +13195,69 @@ if (action === "accept") {
     page: rawPage
   });
 
+  return componentCommit(interaction, payload);
+}
+
+if (action === "accept_commit") {
+  const selectedOrderIds = readAcceptOrderDraftSelection({ serverId, userId });
+  if (!selectedOrderIds.length) {
+    return componentCommit(interaction, { content: "Select at least one order first.", ephemeral: true });
+  }
+
+  clearAcceptOrderDraftSelection({ serverId, userId });
+  return runNoodle(interaction, {
+    sub: "accept",
+    overrides: {
+      strings: { order_id: selectedOrderIds.join(",") },
+      messageId: interaction.message?.id ?? null
+    }
+  });
+}
+
+if (action === "accept_clear") {
+  clearAcceptOrderDraftSelection({ serverId, userId });
+  const s = ensureServer(serverId);
+  const p = ensurePlayer(serverId, userId);
+  const rawPage = Number(parts[4] ?? 0);
+  const payload = buildAcceptPickerPayload({
+    userId,
+    serverId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user,
+    page: Number.isFinite(rawPage) ? rawPage : 0
+  });
+  return componentCommit(interaction, payload);
+}
+
+if (action === "cancel_commit") {
+  const selectedOrderIds = readCancelOrderDraftSelection({ serverId, userId });
+  if (!selectedOrderIds.length) {
+    return componentCommit(interaction, { content: "Select at least one order first.", ephemeral: true });
+  }
+
+  clearCancelOrderDraftSelection({ serverId, userId });
+  return runNoodle(interaction, {
+    sub: "cancel",
+    overrides: {
+      strings: { order_id: selectedOrderIds.join(",") },
+      messageId: interaction.message?.id ?? null
+    }
+  });
+}
+
+if (action === "cancel_clear") {
+  clearCancelOrderDraftSelection({ serverId, userId });
+  const p = ensurePlayer(serverId, userId);
+  const rawPage = Number(parts[4] ?? 0);
+  const payload = buildCancelServePickerPayload({
+    action: "cancel",
+    userId,
+    serverId,
+    p,
+    ownerUser: interaction.member ?? interaction.user,
+    page: Number.isFinite(rawPage) ? rawPage : 0
+  });
   return componentCommit(interaction, payload);
 }
 
@@ -11916,6 +13288,7 @@ if (action === "serveall") {
     const payload = buildCancelServePickerPayload({
       action: "serve",
       userId,
+      serverId,
       p,
       ownerUser: interaction.member ?? interaction.user
     });
@@ -11942,11 +13315,17 @@ if (action === "serveall") {
 
 if (action === "cancel" || action === "serve") {
   const p = ensurePlayer(serverId, userId);
+  const rawPage = Number(parts[4] ?? 0);
+  if (action === "cancel" && !parts[4]) {
+    clearCancelOrderDraftSelection({ serverId, userId });
+  }
   const payload = buildCancelServePickerPayload({
     action,
     userId,
+    serverId,
     p,
-    ownerUser: interaction.member ?? interaction.user
+    ownerUser: interaction.member ?? interaction.user,
+    page: Number.isFinite(rawPage) ? rawPage : 0
   });
 
   return componentCommit(interaction, payload);
@@ -12008,11 +13387,20 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
   const pageSelectedRecipeIds = (interaction.values ?? []).filter(Boolean);
 
   const p = ensurePlayer(serverId, interaction.user.id);
-  const availableRecipeIds = getValidAvailableRecipeIds(p);
+  const s = ensureServer(serverId);
+  const settings = buildSettingsMap(settingsCatalog, s.settings);
+  s.season = computeActiveSeason(settings);
+  const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
   const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
+  const currentDraftSelection = readTakeoutMenuDraftSelection({
+    serverId,
+    userId: interaction.user.id,
+    availableRecipeIds,
+    fallbackRecipeIds: p?.takeout?.menu_recipe_ids ?? []
+  });
   const selectedRecipeIds = mergeTakeoutMenuPageSelection({
     availableRecipeIds,
-    currentSelectedRecipeIds: p?.takeout?.menu_recipe_ids ?? [],
+    currentSelectedRecipeIds: currentDraftSelection,
     pageSelectedRecipeIds,
     page,
     maxAllowed: menuLimits.maxAllowed
@@ -12022,6 +13410,7 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
     sub: "takeout_menu",
     overrides: {
       strings: { recipes: selectedRecipeIds.join(",") },
+      booleans: { menu_draft: true },
       integers: { page },
       messageId: interaction.message?.id ?? null
     }
@@ -12030,20 +13419,105 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
 
 // accept picker
 if (cid.startsWith("noodle:pick:accept_select:")) {
-  const orderIds = interaction.values ?? [];
-  return await runNoodle(interaction, {
-    sub: "accept",
-    overrides: { strings: { order_id: orderIds.join(",") } }
+  const parts2 = cid.split(":");
+  const rawPage = Number(parts2[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+
+  const s = ensureServer(serverId);
+  const p = ensurePlayer(serverId, userId);
+  const set = buildSettingsMap(settingsCatalog, s.settings);
+  s.season = computeActiveSeason(set);
+  const activeEventEffects = getActiveEventEffects(eventsContent, s);
+  const activeEventId = s.active_event_id ?? null;
+  rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
+  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+  applyHouse247OrderBoardOverride(p);
+
+  const pageSize = 25;
+  const { totalCount, consumedSet } = getOrdersMeta(p);
+  const availablePages = [];
+  for (let idx = 0; idx < totalCount; idx++) {
+    if (consumedSet.has(idx)) continue;
+    const pageIdx = Math.floor(idx / pageSize);
+    if (!availablePages.includes(pageIdx)) availablePages.push(pageIdx);
+  }
+
+  const loadPage = (pageNumber) => generateOrderPageForPlayer({
+    playerState: p,
+    settings: set,
+    content,
+    activeSeason: s.season,
+    serverId,
+    userId,
+    activeEventId,
+    page: pageNumber,
+    pageSize
   });
+
+  const availableOrderIds = [];
+  const pageData = loadPage(page);
+  const pageOrderIds = (pageData?.orders ?? []).map((o) => String(o.order_id));
+  for (const pg of availablePages.length ? availablePages : [page]) {
+    const data = Number(pg) === page ? pageData : loadPage(pg);
+    availableOrderIds.push(...((data?.orders ?? []).map((o) => String(o.order_id))));
+  }
+
+  const currentSelected = readAcceptOrderDraftSelection({ serverId, userId, availableOrderIds });
+  const merged = mergeAcceptOrderPageSelection({
+    availableOrderIds,
+    currentSelectedOrderIds: currentSelected,
+    pageOrderIds,
+    pageSelectedOrderIds: interaction.values ?? []
+  });
+  writeAcceptOrderDraftSelection({ serverId, userId, selectedOrderIds: merged });
+
+  const payload = buildAcceptPickerPayload({
+    userId,
+    serverId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user,
+    page
+  });
+  return componentCommit(interaction, payload);
 }
 
 // cancel picker
 if (cid.startsWith("noodle:pick:cancel_select:")) {
-  const orderId = interaction.values?.[0];
-  return await runNoodle(interaction, {
-    sub: "cancel",
-    overrides: { strings: { order_id: orderId } }
+  const parts2 = cid.split(":");
+  const owner = parts2[3];
+  const rawPage = Number(parts2[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  if (owner && owner !== interaction.user.id) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+
+  const p = ensurePlayer(serverId, userId);
+  const accepted = Object.entries(p.orders?.accepted ?? {});
+  const pageSize = 25;
+  const safePage = Math.max(0, Math.min(page, Math.max(0, Math.ceil(accepted.length / pageSize) - 1)));
+  const pageOrderIds = accepted
+    .slice(safePage * pageSize, (safePage + 1) * pageSize)
+    .map(([oid]) => String(oid));
+  const availableOrderIds = accepted.map(([oid]) => String(oid));
+  const currentSelected = readCancelOrderDraftSelection({ serverId, userId, availableOrderIds });
+  const merged = mergeCancelOrderPageSelection({
+    availableOrderIds,
+    currentSelectedOrderIds: currentSelected,
+    pageOrderIds,
+    pageSelectedOrderIds: interaction.values ?? []
   });
+  writeCancelOrderDraftSelection({ serverId, userId, selectedOrderIds: merged });
+
+  const payload = buildCancelServePickerPayload({
+    action: "cancel",
+    userId,
+    serverId,
+    p,
+    ownerUser: interaction.member ?? interaction.user,
+    page: safePage
+  });
+  return componentCommit(interaction, payload);
 }
 
 // serve picker

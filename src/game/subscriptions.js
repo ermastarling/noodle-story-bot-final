@@ -4,8 +4,17 @@ export const SUBSCRIPTION_PERKS = Object.freeze({
 });
 
 export const SUBSCRIPTION_MONTHLY_COIN_GRANT = 50_000;
-export const ORDER_ACCEPT_CAP_BASE = 5;
-export const ORDER_ACCEPT_CAP_HOUSE_247 = 500;
+
+function resolveCapEnv(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const normalized = Math.floor(parsed);
+  if (normalized <= 0) return fallback;
+  return normalized;
+}
+
+export const ORDER_ACCEPT_CAP_BASE = resolveCapEnv(process.env.NOODLE_ORDER_ACCEPT_CAP_BASE, 5);
+export const ORDER_ACCEPT_CAP_HOUSE_247 = resolveCapEnv(process.env.NOODLE_ORDER_ACCEPT_CAP_HOUSE_247, 500);
 export const HOUSE_247_VOTE_DURATION_MS = 12 * 60 * 60 * 1000;
 
 const KNOWN_PERKS = new Set(Object.values(SUBSCRIPTION_PERKS));
@@ -198,9 +207,9 @@ export function hasUnlimitedMarketStock(player, now = Date.now()) {
 }
 
 export function getOrderAcceptCap(player, now = Date.now()) {
-  return hasUnlimitedMarketStock(player, now)
-    ? ORDER_ACCEPT_CAP_HOUSE_247
-    : ORDER_ACCEPT_CAP_BASE;
+  void player;
+  void now;
+  return ORDER_ACCEPT_CAP_BASE;
 }
 
 export function applySubscriptionEntitlementEvent(player, {

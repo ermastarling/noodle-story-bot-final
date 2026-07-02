@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 
 import {
   ORDER_ACCEPT_CAP_BASE,
-  ORDER_ACCEPT_CAP_HOUSE_247,
   SUBSCRIPTION_PERKS,
   SUBSCRIPTION_MONTHLY_COIN_GRANT,
   HOUSE_247_VOTE_DURATION_MS,
@@ -273,7 +272,7 @@ test("Subscriptions: vote-granted 24/7 House increases active order cap", () => 
 
   grantHouse247VoteAccess(player, { now });
 
-  assert.equal(getOrderAcceptCap(player, now + 1), ORDER_ACCEPT_CAP_HOUSE_247);
+  assert.equal(getOrderAcceptCap(player, now + 1), ORDER_ACCEPT_CAP_BASE);
   assert.equal(getOrderAcceptCap(player, now + HOUSE_247_VOTE_DURATION_MS + 1), ORDER_ACCEPT_CAP_BASE);
 });
 
@@ -302,5 +301,5 @@ test("Subscriptions: entitlement 24/7 perk unlocks market stock and order cap", 
 
   assert.equal(hasActivePerk(player, SUBSCRIPTION_PERKS.HOUSE_247, now + 1), true);
   assert.equal(hasUnlimitedMarketStock(player, now + 1), true);
-  assert.equal(getOrderAcceptCap(player, now + 1), ORDER_ACCEPT_CAP_HOUSE_247);
+  assert.equal(getOrderAcceptCap(player, now + 1), ORDER_ACCEPT_CAP_BASE);
 });

@@ -6,6 +6,51 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let cachedIcons = null;
+const FORCE_UNICODE_EMOJI = String(process.env.NOODLE_FORCE_UNICODE_EMOJI || "0") === "1";
+
+const UNICODE_EMOJI_FALLBACKS = {
+  orders: "📋",
+  cart: "🛒",
+  pantry: "🧺",
+  profile: "👤",
+  forage: "🌿",
+  garden: "🌱",
+  fishing: "🎣",
+  kitchen: "🍲",
+  refresh: "🔄",
+  compost_bag: "🧪",
+  harvest: "🪴",
+  cook: "🍜",
+  serve: "🍽️",
+  status_complete: "✅",
+  status_pending: "🕒",
+  cancel: "❌",
+  back: "◀️",
+  next: "▶️",
+  new: "🆕",
+  recipes: "📖",
+  regulars: "🤝",
+  quests: "🧭",
+  note: "📝",
+  tag: "🏷️",
+  sparkle: "✨",
+  daily_reward: "🎁",
+  season: "🍂",
+  event: "🎉",
+  vote: "🗳️",
+  coins: "🪙",
+  basket: "🧺",
+  mail: "✉️",
+  help: "❓",
+  warning: "⚠️",
+  confetti: "🎊",
+  lock: "🔒",
+  time: "⏰"
+};
+
+function getUnicodeEmojiFallback(id) {
+  return UNICODE_EMOJI_FALLBACKS?.[id] ?? null;
+}
 
 function flattenIcons(rawIcons) {
   const out = {};
@@ -39,8 +84,9 @@ function loadIcons() {
 export function getIcon(id, fallback = "?") {
   const icons = loadIcons();
   const value = icons?.[id];
-  if (!value) return fallback;
+  if (!value) return getUnicodeEmojiFallback(id) ?? fallback;
   if (typeof value === "string" && value.startsWith("http")) return fallback;
+  if (FORCE_UNICODE_EMOJI) return getUnicodeEmojiFallback(id) ?? fallback;
   return value;
 }
 
@@ -49,7 +95,8 @@ const CUSTOM_EMOJI_RE = /^<a?:([^:]+):(\d+)>$/;
 export function getButtonEmoji(id) {
   const icons = loadIcons();
   const value = icons?.[id];
-  if (!value || typeof value !== "string") return null;
+  if (FORCE_UNICODE_EMOJI) return getUnicodeEmojiFallback(id);
+  if (!value || typeof value !== "string") return getUnicodeEmojiFallback(id);
   if (value.startsWith("http")) return null;
   const match = value.match(CUSTOM_EMOJI_RE);
   if (match) {
