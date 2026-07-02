@@ -3488,6 +3488,27 @@ function normalizeComponents(rows) {
   return normalized.length ? normalized : [];
 }
 
+function normalizePayloadContent(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (typeof payload.content !== "string") return payload;
+
+  if (payload.content.trim().length > 0) return payload;
+
+  const hasEmbeds = Array.isArray(payload.embeds)
+    ? payload.embeds.length > 0
+    : Boolean(payload.embeds);
+  const hasComponents = Array.isArray(payload.components)
+    ? payload.components.length > 0
+    : Boolean(payload.components);
+
+  if (hasEmbeds || hasComponents) {
+    const { content, ...rest } = payload;
+    return rest;
+  }
+
+  return { ...payload, content: "\u200b" };
+}
+
 function buildInteractionFailureContext(interaction, messageId = null) {
   return {
     guildId: interaction?.guildId ?? null,
@@ -3528,13 +3549,14 @@ if (targetMessageId && !ephemeral) {
     const target = await interaction.channel?.messages?.fetch(targetMessageId);
     if (target) {
       // Convert components to JSON if they're builder objects
-      const editPayload = { ...rest };
+      let editPayload = { ...rest };
       if (editPayload.components) {
         editPayload.components = normalizeComponents(editPayload.components);
       }
       if (editPayload.embeds) {
         editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
       }
+      editPayload = normalizePayloadContent(editPayload);
       // Dismiss the modal response only for modal submits
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
@@ -5619,10 +5641,14 @@ if (overrides?.messageId && !payload?.ephemeral) {
     const target = await interaction.channel?.messages?.fetch(overrides.messageId);
     if (target) {
       // Convert components to JSON if they're builder objects
-      const editPayload = { ...payload };
+      let editPayload = { ...payload };
       if (editPayload.components) {
         editPayload.components = normalizeComponents(editPayload.components);
       }
+      if (editPayload.embeds) {
+        editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
+      }
+      editPayload = normalizePayloadContent(editPayload);
       const result = await target.edit(editPayload);
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
