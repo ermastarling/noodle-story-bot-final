@@ -5721,6 +5721,10 @@ const commit = async (payload) => {
     });
   }
   payload = withSeasonNotice(payload);
+
+if (overrides?.silentResponse === true) {
+  return payload;
+}
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
@@ -11974,6 +11978,15 @@ if (v2Parsed.isV2) {
     ownerId: userId
   });
   if (!sceneState.ok && sceneState.stale) {
+    const acceptedCount = Object.keys(ensurePlayer(serverId, userId).orders?.accepted ?? {}).length;
+    if (v2Parsed.sceneKey === "serve.order_picker" || v2Parsed.sceneKey === "serve.result") {
+      return componentCommit(interaction, {
+        content: acceptedCount > 0
+          ? "This serve view expired. Reopen `/noodle orders`, then tap **Serve** again."
+          : "You need to accept an order before serving. Open `/noodle orders` and tap **Accept**.",
+        ephemeral: true
+      });
+    }
     return componentCommit(interaction, {
       content: "That view is stale. Run `/noodle orders` to reopen the orders board.",
       ephemeral: true
@@ -12052,7 +12065,10 @@ if (v2Parsed.isV2) {
 
       await runNoodle(interaction, {
         sub: "accept",
-        overrides: { strings: { order_id: fullOrderId } }
+        overrides: {
+          silentResponse: true,
+          strings: { order_id: fullOrderId }
+        }
       });
 
       const afterPlayer = ensurePlayer(serverId, userId);
@@ -12131,7 +12147,10 @@ if (v2Parsed.isV2) {
 
       await runNoodle(interaction, {
         sub: "accept",
-        overrides: { strings: { order_id: fullOrderId } }
+        overrides: {
+          silentResponse: true,
+          strings: { order_id: fullOrderId }
+        }
       });
 
       const afterPlayer = ensurePlayer(serverId, userId);
@@ -12312,6 +12331,7 @@ if (v2Parsed.isV2) {
       await runNoodle(interaction, {
         sub: "cook",
         overrides: {
+          silentResponse: true,
           strings: {
             recipe: recipeId,
             v2_quality_bias: performance.qualityBias
@@ -12351,12 +12371,11 @@ if (v2Parsed.isV2) {
       });
 
       const summaryLines = [
-        `${getIcon("cook")} **${displayRecipeName(recipeId)}** run complete.`,
+        `${getIcon("cook")} "${displayRecipeName(recipeId)}" has been cooked.`,
         `Kitchen Line score: **${performance.score}/${performance.totalTurns}** (${performance.accuracyLabel}).`,
-        `Planned bowls: **${performance.successBowls} success**, **${performance.failBowls} failed**.`,
         produced > 0
-          ? `${getIcon("status_complete")} Produced **${produced}** bowl(s).`
-          : `${getIcon("warning")} No bowls were produced. Check ingredients/capacity and try again.`
+          ? `${getIcon("status_complete")} Cooked **${produced}** bowl(s).`
+          : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`
       ];
 
       return componentCommit(interaction, buildCookResultV2Message({
@@ -12390,7 +12409,9 @@ if (v2Parsed.isV2) {
     }
 
     if (action === "serve") {
-      return runNoodle(interaction, { sub: "serve" });
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildServePickerScenePayload({ userId, p });
+      return componentCommit(interaction, payload);
     }
   }
 
@@ -12432,6 +12453,7 @@ if (v2Parsed.isV2) {
       await runNoodle(interaction, {
         sub: "serve",
         overrides: {
+          silentResponse: true,
           strings: { order_id: fullOrderId },
           messageId: interaction.message?.id ?? null
         }
@@ -12499,6 +12521,7 @@ if (v2Parsed.isV2) {
       await runNoodle(interaction, {
         sub: "serve",
         overrides: {
+          silentResponse: true,
           strings: { order_id: fullOrderId },
           messageId: interaction.message?.id ?? null
         }

@@ -1,7 +1,7 @@
 const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 export const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
 const DEFAULT_MENU_ACCENT_COLOR = 0xE2B86B;
-const DEFAULT_MENU_DIVIDER_LABEL = "Actions";
+const DEFAULT_MENU_DIVIDER_TEXT = "━━━━━━━━━━━━━━━━━━━━━━━━";
 
 function parseMenuColor(value, fallback = DEFAULT_MENU_ACCENT_COLOR) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -38,9 +38,12 @@ export function resolveComponentsV2MenuGuide(env = process.env, overrides = {}) 
     overrides.accentColor ?? env?.NOODLE_COMPONENTS_V2_MENU_ACCENT_COLOR,
     DEFAULT_MENU_ACCENT_COLOR
   );
-  const dividerLabel = String(
-    overrides.dividerLabel ?? env?.NOODLE_COMPONENTS_V2_MENU_DIVIDER_LABEL ?? DEFAULT_MENU_DIVIDER_LABEL
-  ).trim() || DEFAULT_MENU_DIVIDER_LABEL;
+  const dividerText = String(
+    overrides.dividerText
+    ?? env?.NOODLE_COMPONENTS_V2_MENU_DIVIDER_TEXT
+    ?? env?.NOODLE_COMPONENTS_V2_MENU_DIVIDER_LABEL
+    ?? DEFAULT_MENU_DIVIDER_TEXT
+  ).trim() || DEFAULT_MENU_DIVIDER_TEXT;
   const imageUrl = normalizeUrl(overrides.imageUrl ?? env?.NOODLE_COMPONENTS_V2_MENU_IMAGE_URL ?? "");
   const addDivider = shouldShowDivider(
     overrides.addDivider ?? env?.NOODLE_COMPONENTS_V2_MENU_SHOW_DIVIDER,
@@ -49,7 +52,7 @@ export function resolveComponentsV2MenuGuide(env = process.env, overrides = {}) 
 
   return {
     accentColor,
-    dividerLabel,
+    dividerText,
     imageUrl,
     addDivider
   };
@@ -64,10 +67,10 @@ function applyMenuGuideToComponents(components = [], menuGuide = {}) {
   if (menuGuide.addDivider) {
     const firstActionRowIndex = out.findIndex((component) => Number(component?.type) === 1);
     if (firstActionRowIndex >= 0) {
-      const dividerText = String(menuGuide.dividerLabel || DEFAULT_MENU_DIVIDER_LABEL).trim();
+      const dividerText = String(menuGuide.dividerText || DEFAULT_MENU_DIVIDER_TEXT).trim();
       out.splice(firstActionRowIndex, 0, {
         type: 10,
-        content: `-# ---------------- ${dividerText} ----------------`
+        content: dividerText
       });
     }
   }
@@ -79,14 +82,14 @@ export function buildComponentsV2MenuPayload({
   components = [],
   ephemeral = false,
   accentColor,
-  dividerLabel,
+  dividerText,
   imageUrl,
   addDivider,
   env = process.env
 } = {}) {
   const menuGuide = resolveComponentsV2MenuGuide(env, {
     accentColor,
-    dividerLabel,
+    dividerText,
     imageUrl,
     addDivider
   });
