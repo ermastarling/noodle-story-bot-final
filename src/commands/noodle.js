@@ -232,6 +232,7 @@ import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js
 import {
   buildComponentsV2ContainerMessage,
   isComponentsV2Enabled,
+  MESSAGE_FLAG_IS_COMPONENTS_V2,
   replyOrEditInteraction
 } from "../ui/componentsV2.js";
 import { isV2OwnerMismatch, parseV2CustomId } from "../ui/sceneRoutingV2.js";
@@ -3465,8 +3466,28 @@ warning: `${lines.join("\n")}${more}`
 /*  Component-safe commit helpers                                      */
 /* ------------------------------------------------------------------ */
 
-function normalizeComponents(rows) {
+function normalizeComponents(rows, flags = 0) {
   if (!Array.isArray(rows)) return rows;
+  const isComponentsV2Payload = (Number(flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+
+  if (isComponentsV2Payload) {
+    const normalizeV2Node = (node) => {
+      const baseNode = node?.toJSON?.() ?? node;
+      if (!baseNode || typeof baseNode !== "object") return null;
+
+      if (!Array.isArray(baseNode.components)) return { ...baseNode };
+
+      const childNodes = baseNode.components
+        .map((child) => normalizeV2Node(child))
+        .filter(Boolean);
+      return { ...baseNode, components: childNodes };
+    };
+
+    return rows
+      .map((row) => normalizeV2Node(row))
+      .filter(Boolean);
+  }
+
   const normalized = [];
   for (const row of rows) {
     if (!row) continue;
@@ -3518,6 +3539,58 @@ function buildInteractionFailureContext(interaction, messageId = null) {
   };
 }
 
+function isComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    if ([9, 10, 17].includes(Number(node.type))) return true;
+    if (Array.isArray(node.components)) stack.push(...node.components);
+  }
+  return false;
+}
+
+function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
+function toRawWebhookPayload(payload = {}) {
+  const out = { ...payload };
+  const hasEphemeralFlag = (Number(out.flags) & MessageFlags.Ephemeral) !== 0;
+  if (out.ephemeral === true && !hasEphemeralFlag) {
+    out.flags = Number(out.flags || 0) | MessageFlags.Ephemeral;
+  }
+  delete out.ephemeral;
+  return out;
+}
+
+async function rawWebhookEditOriginal(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .messages("@original")
+    .patch({ data: toRawWebhookPayload(payload) });
+}
+
+async function rawWebhookFollowUp(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook followUp unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .post({ data: toRawWebhookPayload(payload) });
+}
+
 async function componentCommit(interaction, payload) {
 const { ephemeral, targetMessageId, ...rawRest } = payload ?? {};
 let rest = normalizePayloadContent(rawRest);
@@ -3553,7 +3626,7 @@ if (targetMessageId && !ephemeral) {
       // Convert components to JSON if they're builder objects
       let editPayload = { ...rest };
       if (editPayload.components) {
-        editPayload.components = normalizeComponents(editPayload.components);
+        editPayload.components = normalizeComponents(editPayload.components, editPayload.flags);
       }
       if (editPayload.embeds) {
         editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
@@ -3588,7 +3661,7 @@ if (options.embeds) {
   options.embeds = sanitizeEmbedsForDiscord(options.embeds);
 }
 if (options.components) {
-  options.components = normalizeComponents(options.components);
+  options.components = normalizeComponents(options.components, options.flags);
 }
 options = normalizePayloadContent(options);
 
@@ -3672,7 +3745,7 @@ return interaction.reply(options);
 // Convert components to JSON if they're builder objects
 let finalOptions = { ...options };
 if (finalOptions.components) {
-  finalOptions.components = normalizeComponents(finalOptions.components);
+  finalOptions.components = normalizeComponents(finalOptions.components, finalOptions.flags);
 }
 
 // Ensure embeds are included in finalOptions and converted to JSON
@@ -3693,6 +3766,17 @@ if (interaction.deferred || interaction.replied) {
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
+    if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e)) {
+      try {
+        return await rawWebhookEditOriginal(interaction, finalOptions);
+      } catch (rawError) {
+        console.error("Component raw webhook edit fallback failed", {
+          ...buildInteractionFailureContext(interaction),
+          errorCode: rawError?.code ?? null,
+          errorMessage: rawError?.message ?? String(rawError)
+        });
+      }
+    }
     console.error("Component editReply failed", {
       ...buildInteractionFailureContext(interaction),
       errorCode: e?.code ?? null,
@@ -3702,6 +3786,17 @@ if (interaction.deferred || interaction.replied) {
     try {
       return await interaction.followUp(normalizePayloadContent({ ...finalOptions, ephemeral: true }));
     } catch (e2) {
+      if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e2)) {
+        try {
+          return await rawWebhookFollowUp(interaction, normalizePayloadContent({ ...finalOptions, ephemeral: true }));
+        } catch (rawError2) {
+          console.error("Component raw webhook followUp fallback failed", {
+            ...buildInteractionFailureContext(interaction),
+            errorCode: rawError2?.code ?? null,
+            errorMessage: rawError2?.message ?? String(rawError2)
+          });
+        }
+      }
       console.error("Component followUp fallback also failed", {
         ...buildInteractionFailureContext(interaction),
         errorCode: e2?.code ?? null,
