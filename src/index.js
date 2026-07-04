@@ -809,6 +809,9 @@ import { theme } from "./ui/theme.js";
 
   function logRankTopRequestDiagnostics(kind, tokenValue, targetUrl, authHeaderValue, apiKeyHeaderValue = "") {
     if (!rankTopAuthDebugEnabled) return;
+    void tokenValue;
+    void authHeaderValue;
+    void apiKeyHeaderValue;
     const parsedTarget = (() => {
       try {
         return new URL(String(targetUrl || ""));
@@ -820,10 +823,7 @@ import { theme } from "./ui/theme.js";
       `DEBUG Rank.top ${kind} auth diagnostics:`,
       JSON.stringify({
         targetHost: parsedTarget?.host || null,
-        targetPath: parsedTarget?.pathname || null,
-        hasAuthorizationHeader: Boolean(String(authHeaderValue || "").trim()),
-        hasApiKeyHeader: Boolean(String(apiKeyHeaderValue || "").trim()),
-        hasTokenValue: Boolean(String(tokenValue || "").trim())
+        targetPath: parsedTarget?.pathname || null
       })
     );
   }
