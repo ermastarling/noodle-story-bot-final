@@ -284,7 +284,6 @@ const {
 MessageActionRow,
 MessageSelectMenu,
 MessageButton,
-MessageEmbed,
 MessageFlags,
 Modal,
 TextInputComponent,
@@ -717,7 +716,6 @@ const StringSelectMenuBuilder = MessageSelectMenu;
 const ModalBuilder = Modal;
 const TextInputBuilder = TextInputComponent;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
   Secondary: Constants?.MessageButtonStyles?.SECONDARY ?? 2,
@@ -954,7 +952,12 @@ function applyOwnerFooter(embed, user) {
 }
 
 function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
-  const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
+  const embed = {
+    title: String(title ?? ""),
+    description: String(description ?? ""),
+    color,
+    fields: []
+  };
   return applyOwnerFooter(embed, user);
 }
 
@@ -1310,9 +1313,8 @@ function buildDecorSetsViewData({ player, view = "specialization", page = 0, pag
       return { item, itemId: p.item_id };
     });
     const piecesList = pieces.map(({ item, itemId }) => item?.name ?? itemId).join(", ");
-    const imageUrl = getIconUrl(`decor_set_thumb_${set.set_id}`)
-      ?? (specId ? getIconUrl(`decor_set_thumb_${specId}`) : null)
-      ?? getIconUrl("decor_set_thumb_placeholder")
+    const imageUrl = getIconUrl(`decor_set_${set.set_id}`)
+      ?? (specId ? getIconUrl(`decor_set_${specId}`) : null)
       ?? getIconUrl("decor_set_placeholder");
 
     if (showSpecialization) {
@@ -1683,18 +1685,17 @@ function sanitizeEmbedsForDiscord(embeds) {
 
   return embeds.map((embed) => {
     if (!embed) return embed;
-    const safe = embed.toJSON ? new EmbedBuilder(embed) : embed; // clone if builder
-    const fields = safe?.data?.fields || safe?.fields || [];
+    const safe = embed?.toJSON ? embed.toJSON() : { ...(embed ?? {}) };
+    const fields = safe?.fields || safe?.data?.fields || [];
     if (fields.length) {
       const newFields = fields.flatMap((f) => chunkField(f));
-      if (safe.spliceFields) safe.spliceFields(0, safe.fields?.length ?? fields.length, ...newFields);
-      else safe.fields = newFields;
+      safe.fields = newFields;
     }
 
-    const desc = safe?.data?.description ?? safe?.description ?? "";
-    if (desc && desc.length > MAX_DESC && safe.setDescription) {
+    const desc = safe?.description ?? safe?.data?.description ?? "";
+    if (desc && desc.length > MAX_DESC) {
       const truncated = desc.slice(0, MAX_DESC);
-      safe.setDescription(`${truncated}\n\n(Description truncated)`);
+      safe.description = `${truncated}\n\n(Description truncated)`;
     }
 
     return safe;
@@ -2450,6 +2451,209 @@ function getIngredientCapacitiesByType(player, effects) {
   };
 }
 
+function runPrepChefAutoBuy({
+  p,
+  s,
+  acceptedOrdersNow = [],
+  acceptedNow = 0,
+  triggerOnOrdersBoard = false,
+  includeFailureMessages = true
+} = {}) {
+  const messages = [];
+  const prepChefLevel = Math.max(0, Number(p?.staff_levels?.prep_chef || 0));
+  if (prepChefLevel <= 0) return { messages, purchased: false };
+
+  const acceptedOrdersForAutoBuy = (() => {
+    const seen = new Set();
+    const merged = [];
+    const addOrder = (order) => {
+      const id = String(order?.order_id || "").trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      merged.push(order);
+    };
+    for (const order of acceptedOrdersNow || []) addOrder(order);
+    for (const entry of Object.values(p?.orders?.accepted ?? {})) {
+      addOrder(entry?.order ?? null);
+    }
+    return merged;
+  })();
+
+  const shouldRun = triggerOnOrdersBoard ? acceptedOrdersForAutoBuy.length > 0 : acceptedNow > 0;
+  if (!shouldRun || acceptedOrdersForAutoBuy.length <= 0) {
+    return { messages, purchased: false };
+  }
+
+  const acceptCap = Math.max(0, Number(getOrderAcceptCap(p, nowTs()) || 0));
+  const autoOrderCap = Math.min(acceptedOrdersForAutoBuy.length, prepChefLevel, acceptCap || prepChefLevel);
+  if (autoOrderCap <= 0) return { messages, purchased: false };
+
+  const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
+  const stockRemaining = { ...(p.market_stock ?? {}) };
+  const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
+  const countsByType = getIngredientCountsByType(p);
+  const remainingByType = {
+    broth: Math.max(0, (perTypeCap.broth ?? 0) - (countsByType.broth ?? 0)),
+    noodles: Math.max(0, (perTypeCap.noodles ?? 0) - (countsByType.noodles ?? 0)),
+    spice: Math.max(0, (perTypeCap.spice ?? 0) - (countsByType.spice ?? 0)),
+    topping: Math.max(0, (perTypeCap.topping ?? 0) - (countsByType.topping ?? 0)),
+    protein: Math.max(0, (perTypeCap.protein ?? 0) - (countsByType.protein ?? 0))
+  };
+  const bowlsRemaining = {};
+  const coinsStart = Number(p.coins || 0);
+  let coinsRemaining = coinsStart;
+
+  for (const order of acceptedOrdersForAutoBuy) {
+    bowlsRemaining[order.recipe_id] = getTotalBowlsForRecipe(p, order.recipe_id);
+  }
+
+  const purchasedByItem = {};
+  let totalAutoCost = 0;
+  let ordersCovered = 0;
+  let needsForageOnlyItems = false;
+  let blockedByCapacity = false;
+  let blockedByStock = false;
+  let blockedByCoins = false;
+  let missingMarketItems = false;
+  let allOrdersAlreadyReady = true;
+
+  let autoBuyTargetsProcessed = 0;
+  for (const order of acceptedOrdersForAutoBuy) {
+    if (autoBuyTargetsProcessed >= autoOrderCap) break;
+    const recipe = content.recipes?.[order.recipe_id];
+    if (!recipe?.ingredients) continue;
+
+    if ((bowlsRemaining[order.recipe_id] ?? 0) > 0) {
+      bowlsRemaining[order.recipe_id] -= 1;
+      ordersCovered += 1;
+      continue;
+    }
+
+    allOrdersAlreadyReady = false;
+    autoBuyTargetsProcessed += 1;
+
+    const allItems = [];
+    const neededItems = [];
+    let orderCost = 0;
+    let orderOk = true;
+
+    for (const ing of getRelevantRecipeIngredients(p, recipe)) {
+      const itemId = ing.item_id;
+      const need = Math.max(0, Number(ing.qty) || 0);
+      const have = Math.max(0, Number(inventoryAvailable[itemId] || 0));
+      const missing = Math.max(0, need - have);
+
+      const item = content.items?.[itemId];
+      if (!item) {
+        orderOk = false;
+        break;
+      }
+
+      const acqRaw = item?.acquisition;
+      const acqType = typeof acqRaw === "string" ? acqRaw : acqRaw?.type;
+      const isMarketItem = MARKET_ITEM_IDS.includes(itemId) || acqType === "market";
+      const type = normalizeIngredientType(itemId);
+      allItems.push({ itemId, need, have, missing, type, name: item.name });
+
+      if (missing > 0) {
+        if (!isMarketItem) {
+          needsForageOnlyItems = true;
+          continue;
+        }
+
+        missingMarketItems = true;
+
+        const remaining = remainingByType[type] ?? 0;
+        if (remaining < missing) {
+          blockedByCapacity = true;
+          orderOk = false;
+          break;
+        }
+
+        const stock = stockRemaining[itemId] ?? 0;
+        if (!unlimitedMarketStock && stock < missing) {
+          blockedByStock = true;
+          orderOk = false;
+          break;
+        }
+
+        const basePrice = s.market_prices?.[itemId] ?? item.base_price ?? 0;
+        const price = applyMarketDiscount(basePrice, combinedEffects);
+        orderCost += price * missing;
+        neededItems.push({ itemId, qty: missing, name: item.name, price, type });
+      }
+    }
+
+    if (!orderOk || coinsRemaining < orderCost) {
+      if (coinsRemaining < orderCost) {
+        blockedByCoins = true;
+      }
+      continue;
+    }
+
+    for (const item of allItems) {
+      const usedFromInventory = Math.min(item.need, item.have);
+      inventoryAvailable[item.itemId] = Math.max(0, (inventoryAvailable[item.itemId] || 0) - usedFromInventory);
+      if (usedFromInventory > 0) {
+        const t = item.type;
+        remainingByType[t] = (remainingByType[t] ?? 0) + usedFromInventory;
+      }
+    }
+
+    for (const needItem of neededItems) {
+      remainingByType[needItem.type] = Math.max(0, (remainingByType[needItem.type] ?? 0) - needItem.qty);
+      if (!unlimitedMarketStock) {
+        stockRemaining[needItem.itemId] = Math.max(0, (stockRemaining[needItem.itemId] ?? 0) - needItem.qty);
+      }
+      purchasedByItem[needItem.itemId] = (purchasedByItem[needItem.itemId] ?? 0) + needItem.qty;
+    }
+
+    coinsRemaining -= orderCost;
+    totalAutoCost += orderCost;
+    ordersCovered += 1;
+  }
+
+  const purchasedItems = Object.entries(purchasedByItem)
+    .map(([id, qty]) => `**${qty}× ${displayItemName(id)}**`)
+    .join(" · ");
+
+  if (totalAutoCost > 0) {
+    if (!p.inv_ingredients) p.inv_ingredients = {};
+    if (!p.market_stock) p.market_stock = {};
+    for (const [id, qty] of Object.entries(purchasedByItem)) {
+      p.inv_ingredients[id] = (p.inv_ingredients[id] ?? 0) + qty;
+      if (!unlimitedMarketStock) {
+        p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
+      }
+    }
+    p.coins = coinsRemaining;
+    messages.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
+    return { messages, purchased: true };
+  }
+
+  if (!includeFailureMessages) {
+    return { messages, purchased: false };
+  }
+
+  if (allOrdersAlreadyReady) {
+    messages.push(`${getIcon("chef")} Prep Chef skipped auto-buy: accepted orders already have ready bowls.`);
+  } else if (blockedByCoins) {
+    messages.push(`${getIcon("chef")} Prep Chef could not auto-buy: not enough coins.`);
+  } else if (blockedByStock) {
+    messages.push(`${getIcon("chef")} Prep Chef could not auto-buy: market stock is sold out for one or more needed items.`);
+  } else if (blockedByCapacity) {
+    messages.push(`${getIcon("chef")} Prep Chef could not auto-buy: pantry storage is full for one or more ingredient types.`);
+  } else if (needsForageOnlyItems && !missingMarketItems) {
+    messages.push(`${getIcon("chef")} Prep Chef found only forage/fishing ingredients missing (no market ingredients to auto-buy).`);
+  } else {
+    messages.push(`${getIcon("chef")} Prep Chef found no market purchases to make for the selected accepted orders.`);
+  }
+
+  return { messages, purchased: false };
+}
+
 function getBowlCount(player) {
   return Object.values(player?.inv_bowls ?? {}).reduce(
     (sum, bowl) => sum + Math.max(0, Number(bowl?.qty) || 0),
@@ -2984,7 +3188,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
   }
 
-  return { content: " ", embeds: [embed], components };
+  return { content: " ", ...composeV2FromLegacyEmbeds([embed]), components };
 }
 
 function getLimitedTimeWindowSeconds(player, baseSeconds) {
@@ -3304,11 +3508,11 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   }
   const titlePrefix = activePerkTitleIcons.length ? `${activePerkTitleIcons.join(" ")} ` : "";
 
-  const embed = new EmbedBuilder()
-    .setTitle(`${titlePrefix}${getIcon("profile")} ${player.profile.shop_name}`)
-    .setDescription(description)
-    .setColor(theme.colors.primary)
-    .addFields(
+  const embed = {
+    title: `${titlePrefix}${getIcon("profile")} ${player.profile.shop_name}`,
+    description,
+    color: theme.colors.primary,
+    fields: [
       {
         name: `${getIcon("serve")} Bowls Served`,
         value: String(player.lifetime.bowls_served_total || 0),
@@ -3332,10 +3536,11 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
       { name: `${getIcon("badges")} Badges`, value: badgesText, inline: false },
       { name: `${getIcon("collections")} Collections`, value: collectionsText, inline: false },
       { name: `${getIcon("decor")} Decor Set`, value: decorSetValue, inline: false }
-    );
+    ]
+  };
 
   if (decorSetImageUrl) {
-    embed.setImage(decorSetImageUrl);
+    embed.image = { url: decorSetImageUrl };
   }
 
   applyOwnerFooter(embed, ownerUser);
@@ -3350,10 +3555,11 @@ function isSpecializationVisible(player, spec) {
 }
 
 function getSpecializationThumbnailUrl(spec = null) {
-  if (!spec) return getIconUrl("decor_set_thumb_placeholder") ?? getIconUrl("decor_set_placeholder");
-  return getIconUrl(`decor_set_thumb_${spec.spec_id}`)
-    ?? getIconUrl(`decor_set_thumb_${spec.icon}`)
-    ?? getIconUrl("decor_set_thumb_placeholder")
+  if (!spec) return getIconUrl("decor_set_placeholder");
+  const decorSetId = getDecorSetIdForSpec(spec.spec_id);
+  return (decorSetId ? getIconUrl(`decor_set_${decorSetId}`) : null)
+    ?? getIconUrl(`decor_set_${spec.spec_id}`)
+    ?? getIconUrl(`decor_set_${spec.icon}`)
     ?? getIconUrl("decor_set_placeholder");
 }
 
@@ -3955,6 +4161,42 @@ function legacyEmbedToNoticeCardSpec(embed) {
 
 function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
   if (!payload || typeof payload !== "object") return payload;
+  const hasSourceNativeComponents = Array.isArray(payload.mainComponents) || Array.isArray(payload.notices);
+  if (hasSourceNativeComponents) {
+    const normalizedComponentRows = normalizeComponents(payload.components, payload.flags);
+    const normalizedRows = (Array.isArray(normalizedComponentRows) ? normalizedComponentRows : [])
+      .filter((row) => Number(row?.type) === 1);
+    const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+    const ownerId = payload.ownerId || detectOwnerIdFromComponents(normalizedRows);
+
+    const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [
+        ...(Array.isArray(payload.mainComponents) ? payload.mainComponents : []),
+        ...normalizedRows
+      ],
+      notices: Array.isArray(payload.notices) ? payload.notices : [],
+      ownerId,
+      ephemeral: isEphemeral,
+      includeGreenButtonTip: payload.disableGreenButtonTip !== true
+    });
+
+    const {
+      mainComponents: _mainComponents,
+      notices: _notices,
+      ownerId: _ownerId,
+      components,
+      flags,
+      ephemeral,
+      disableGreenButtonTip,
+      ...rest
+    } = payload;
+
+    return {
+      ...rest,
+      ...v2Payload
+    };
+  }
+
   if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
   if (isComponentsV2Payload(payload)) return payload;
 
@@ -3986,6 +4228,18 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
   };
 }
 
+function composeV2FromLegacyEmbeds(embeds = []) {
+  const list = Array.isArray(embeds) ? embeds : [];
+  const primaryEmbed = list[0] ?? null;
+  const notificationEmbeds = list.slice(1);
+  return {
+    mainComponents: legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
+    notices: notificationEmbeds
+      .map((embed) => legacyEmbedToNoticeCardSpec(embed))
+      .filter((notice) => (Array.isArray(notice?.details) && notice.details.length > 0) || notice?.title)
+  };
+}
+
 const LEGACY_TO_V2_SUBS = new Set([
   "buy",
   "sell",
@@ -3998,6 +4252,7 @@ const LEGACY_TO_V2_SUBS = new Set([
   "event",
   "status",
   "dashboard",
+  "giveaway_winner",
   "profile",
   "profile_edit",
   "specialize",
@@ -4028,12 +4283,9 @@ const LEGACY_TO_V2_SUBS = new Set([
 
 function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
   if (sourceMessageIsV2) return true;
-  if (!rolloutEnabled) return false;
-
-  // Full core-scene migration: when rollout is enabled for this user/guild,
-  // convert legacy embed payloads for all core noodle subroutes.
   const normalizedSub = String(sub || "").trim();
   const normalizedNavSource = String(navSource || "").trim();
+  void rolloutEnabled;
   return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource) || true;
 }
 
@@ -4090,6 +4342,12 @@ function isInvalidComponentTypeError(error) {
     || message.includes("valid MessageComponentType");
 }
 
+function isV2EmbedConflictError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 50035
+    && message.includes("embeds: The 'embeds' field cannot be used when using MessageFlags.IS_COMPONENTS_V2");
+}
+
 function toRawWebhookPayload(payload = {}) {
   const out = { ...payload };
   const hasEphemeralFlag = (Number(out.flags) & MessageFlags.Ephemeral) !== 0;
@@ -4135,6 +4393,13 @@ async function rawChannelEditMessage(interaction, channelId, messageId, payload)
 
 async function componentCommit(interaction, payload) {
 let sourcePayload = payload ?? {};
+const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+
+if (sourceMessageIsV2 && Array.isArray(sourcePayload?.embeds) && sourcePayload.embeds.length > 0) {
+  sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
+}
+
 if (shouldAutoConvertCommerceComponentPayload(interaction, sourcePayload)) {
   sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
 }
@@ -4344,6 +4609,18 @@ if (interaction.deferred || interaction.replied) {
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
+    if (isV2EmbedConflictError(e) && Array.isArray(finalOptions?.embeds) && finalOptions.embeds.length > 0) {
+      try {
+        const recovered = normalizeComponentsV2Payload(convertLegacyEmbedPayloadToComponentsV2(finalOptions));
+        return await rawWebhookEditOriginal(interaction, recovered);
+      } catch (recoverError) {
+        console.error("Component V2 embed-conflict recovery failed", {
+          ...buildInteractionFailureContext(interaction),
+          errorCode: recoverError?.code ?? null,
+          errorMessage: recoverError?.message ?? String(recoverError)
+        });
+      }
+    }
     if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e)) {
       try {
         return await rawWebhookEditOriginal(interaction, finalOptions);
@@ -4539,7 +4816,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
     emptyEmbed.setTimestamp(new Date(marketRestockMs));
     return {
       content: " ",
-      embeds: [emptyEmbed],
+      ...composeV2FromLegacyEmbeds([emptyEmbed]),
       components: [noodleMainMenuRow(userId)],
       ephemeral: true
     };
@@ -4631,7 +4908,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
 
   return {
     content: " ",
-    embeds: [buyEmbed],
+    ...composeV2FromLegacyEmbeds([buyEmbed]),
     components: rows
   };
 }
@@ -4771,7 +5048,7 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
   return {
     content: " ",
-    embeds: [sellEmbed],
+    ...composeV2FromLegacyEmbeds([sellEmbed]),
     components: [
       new ActionRowBuilder().addComponents(menu),
       ...(navRow ? [navRow] : []),
@@ -4956,7 +5233,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   return {
     content: " ",
-    embeds: [acceptEmbed],
+    ...composeV2FromLegacyEmbeds([acceptEmbed]),
     components: rows
   };
 }
@@ -5094,7 +5371,7 @@ function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser,
 
   return {
     content: " ",
-    embeds: [actionEmbed],
+    ...composeV2FromLegacyEmbeds([actionEmbed]),
     components
   };
 }
@@ -5816,7 +6093,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
   return {
     content: " ",
-    embeds: [cookEmbed],
+    ...composeV2FromLegacyEmbeds([cookEmbed]),
     components
   };
 }
@@ -5981,7 +6258,7 @@ function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0
     noodleMainMenuRowNoOrdersWithBack(userId)
   );
 
-  return { content: " ", embeds: [cookEmbed], components };
+  return { content: " ", ...composeV2FromLegacyEmbeds([cookEmbed]), components };
 }
 
 function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
@@ -6032,7 +6309,7 @@ function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
   const canCounterServe = needRows.some((entry) => entry.ready > 0);
   return {
     content: " ",
-    embeds: [serveEmbed],
+    ...composeV2FromLegacyEmbeds([serveEmbed]),
     components: [
       new ActionRowBuilder().addComponents(menu),
       noodleTakeoutActionRow(userId, {
@@ -6098,7 +6375,7 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
 
   return {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [
       ...(totalPages > 1
         ? [
@@ -6260,7 +6537,7 @@ function buildForageMenuPayload({
 
   return {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: buildForageFishingNavRows({
       userId,
       active: "forage",
@@ -6405,7 +6682,7 @@ function buildFishingMenuPayload({
 
   return {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: buildForageFishingNavRows({
       userId,
       active: "fishing",
@@ -6584,19 +6861,29 @@ const emitNavSubroutePhase = (subroute, phases = {}, extra = {}) => {
 const withSeasonNotice = (payload = {}) => {
   if (payload?.__seasonNoticeApplied) return payload;
   if (!seasonRolloverNotice?.message) return payload;
-  const updated = { ...payload };
+  let updated = { ...payload };
   const notice = seasonRolloverNotice.message;
 
-  const noticeEmbed = buildMenuEmbed({
+  const noticeCard = {
     title: `${getIcon("season")} Season Update`,
-    description: notice,
-    user: interaction.member ?? interaction.user
-  });
+    details: splitTextToV2Chunks(String(notice ?? "").trim()),
+    tone: "info"
+  };
 
-  if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
-    updated.embeds = [...updated.embeds, noticeEmbed];
+  const hasSourceNativeNoticeShape = Array.isArray(updated.mainComponents) || Array.isArray(updated.notices);
+
+  if (hasSourceNativeNoticeShape) {
+    updated.notices = [...(Array.isArray(updated.notices) ? updated.notices : []), noticeCard];
+  } else if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
+    const composed = composeV2FromLegacyEmbeds(updated.embeds);
+    const { embeds, ...rest } = updated;
+    updated = {
+      ...rest,
+      ...composed,
+      notices: [...(Array.isArray(composed.notices) ? composed.notices : []), noticeCard]
+    };
   } else {
-    updated.embeds = [noticeEmbed];
+    updated.notices = [noticeCard];
     if (updated.content === undefined) updated.content = " ";
   }
 
@@ -6628,7 +6915,8 @@ const commit = async (payload) => {
     rolloutEnabled: rolloutEnabledForUser,
     sourceMessageIsV2
   });
-  if (shouldUseV2ContainerPayload) {
+  const forceContainerForDev = String(group || "").trim() === "dev";
+  if (shouldUseV2ContainerPayload || forceContainerForDev) {
     payload = convertLegacyEmbedPayloadToComponentsV2(payload);
   }
 
@@ -6806,9 +7094,9 @@ const buildDevStatusEmbed = () => {
   });
 };
 
-const buildDevMessageEmbed = ({ message, isError = false }) =>
+const buildDevMessageEmbed = ({ message, isError = false, title = null }) =>
   buildMenuEmbed({
-    title: isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`,
+    title: String(title || "").trim() || (isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`),
     description: message,
     user: interaction.member ?? interaction.user
   });
@@ -6817,19 +7105,19 @@ if (inDevPath) {
   if (!isDevAdmin(userId)) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })]),
       ephemeral: true
     });
   }
   if (OFFICIAL_DEV_GUILD_ID && serverId !== OFFICIAL_DEV_GUILD_ID) {
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
           message: "Developer commands are only available in the official server.",
           isError: true
         })
-      ],
+      ]),
       ephemeral: true
     });
   }
@@ -6846,7 +7134,7 @@ if (inDevPath && sub === "reset_tutorial") {
   if (target?.bot || (interaction.client?.user?.id && target.id === interaction.client.user.id)) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Pick a real player account (non-bot) to reset.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Pick a real player account (non-bot) to reset.", isError: true })]),
       ephemeral: true
     });
   }
@@ -6854,7 +7142,7 @@ if (inDevPath && sub === "reset_tutorial") {
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -6888,11 +7176,11 @@ if (inDevPath && sub === "reset_tutorial") {
 
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
           message: `${getIcon("status_complete")} Complete reset for ${mention} (${target.id}) (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`
         })
-      ],
+      ]),
       ephemeral: true
     });
   });
@@ -6905,14 +7193,14 @@ if (inDevPath && sub === "wipe_user") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to wipe.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to wipe.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -6924,22 +7212,22 @@ if (inDevPath && sub === "wipe_user") {
     if (deleted === 0) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} No profile found for ${mention}.`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
           message: `${getIcon("status_complete")} Deleted ${deleted} profile row(s) for ${mention} across all servers.`
         })
-      ],
+      ]),
       ephemeral: true
     });
   });
@@ -6952,14 +7240,14 @@ if (inDevPath && sub === "repair_profile") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to repair.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to repair.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -6972,12 +7260,12 @@ if (inDevPath && sub === "repair_profile") {
     if (!result.ok) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} Repair failed for ${mention}: ${result.reason}.`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
@@ -6985,25 +7273,25 @@ if (inDevPath && sub === "repair_profile") {
     if (!result.repaired) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} No repair needed for ${mention} (${result.reason}).`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
 
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
           message:
             `${getIcon("status_complete")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
             `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`
         })
-      ],
+      ]),
       ephemeral: true
     });
   });
@@ -7018,14 +7306,14 @@ if (inDevPath && sub === "repair_party") {
   if (!partyIdInput) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a party ID or prefix to repair.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a party ID or prefix to repair.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -7050,7 +7338,7 @@ if (inDevPath && sub === "repair_party") {
         summary.push(`Applied fixes: ${result.changes.join(", ")}`);
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })]),
           ephemeral: true
         });
       }
@@ -7058,18 +7346,18 @@ if (inDevPath && sub === "repair_party") {
       summary.push("No repair needed.");
       return commit({
         content: " ",
-        embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+        ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })]),
         ephemeral: true
       });
     } catch (err) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} Party repair failed: ${err?.message || "unknown error"}`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
@@ -7084,14 +7372,14 @@ if (inDevPath && sub === "subscriptions") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to inspect.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to inspect.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -7102,12 +7390,12 @@ if (inDevPath && sub === "subscriptions") {
     if (!targetPlayer) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} No profile found for <@${targetUserId}> on server ${targetServerId}.`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
@@ -7156,7 +7444,7 @@ if (inDevPath && sub === "subscriptions") {
 
     return commit({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       ephemeral: true
     });
   });
@@ -7177,19 +7465,18 @@ if (inDevPath && sub === "giveaway_winner") {
   const durationDays = Number.isFinite(durationDaysRaw) && durationDaysRaw > 0
     ? Math.floor(durationDaysRaw)
     : 30;
-  const reason = String(opt.getString("reason") || "").trim();
 
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to update.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to update.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -7197,7 +7484,7 @@ if (inDevPath && sub === "giveaway_winner") {
   if (rewardType !== "perk" && rewardType !== "coin_pack" && rewardType !== "coins") {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Invalid reward type. Use perk, coin_pack, or coins.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Invalid reward type. Use perk, coin_pack, or coins.", isError: true })]),
       ephemeral: true
     });
   }
@@ -7208,9 +7495,6 @@ if (inDevPath && sub === "giveaway_winner") {
     const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
     const now = nowTs();
     const rewardSummaryLines = [];
-    const rewardTypeLabel = rewardType === "coin_pack"
-      ? "Coin Pack"
-      : (rewardType === "coins" ? "Coins" : "Perk");
     let publicWinnerLine = "";
 
     if (rewardType === "perk") {
@@ -7222,7 +7506,7 @@ if (inDevPath && sub === "giveaway_winner") {
       } else {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: "For perk rewards, choose house_247, takeout_counter, or both.", isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For perk rewards, choose house_247, takeout_counter, or both.", isError: true })]),
           ephemeral: true
         });
       }
@@ -7267,7 +7551,7 @@ if (inDevPath && sub === "giveaway_winner") {
       if (!pack) {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: "For coin pack rewards, choose a valid coin_pack option.", isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For coin pack rewards, choose a valid coin_pack option.", isError: true })]),
           ephemeral: true
         });
       }
@@ -7276,7 +7560,7 @@ if (inDevPath && sub === "giveaway_winner") {
       if (!grantResult?.ok) {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: `Failed to grant coin pack: ${grantResult?.reason || "unknown error"}.`, isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `Failed to grant coin pack: ${grantResult?.reason || "unknown error"}.`, isError: true })]),
           ephemeral: true
         });
       }
@@ -7287,7 +7571,7 @@ if (inDevPath && sub === "giveaway_winner") {
       if (coinAmount <= 0) {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: "For coin rewards, provide a coins value greater than 0.", isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For coin rewards, provide a coins value greater than 0.", isError: true })]),
           ephemeral: true
         });
       }
@@ -7304,19 +7588,18 @@ if (inDevPath && sub === "giveaway_winner") {
 
     upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
 
+    const conciseSummary = rewardSummaryLines.length > 0 ? rewardSummaryLines[0].replace(/^•\s*/, "") : "";
     const messageLines = [
-      `${getIcon("status_complete")} Giveaway reward delivered to <@${targetUserId}>.`,
-      `Reward type: ${rewardTypeLabel}`,
-      " ",
-      "Granted rewards:",
-      ...rewardSummaryLines,
-      reason ? `Reason: ${reason}` : null,
-      !existingPlayer ? "Note: Created a new player profile for this target." : null
+      publicWinnerLine,
+      conciseSummary ? `\n${conciseSummary}` : null
     ].filter(Boolean);
 
     return commit({
-      content: publicWinnerLine,
-      embeds: [buildDevMessageEmbed({ message: messageLines.join("\n") })],
+      content: " ",
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({
+        title: `${getIcon("status_complete")} Giveaway`,
+        message: messageLines.join("\n")
+      })]),
       ephemeral: false
     });
   });
@@ -7419,7 +7702,7 @@ if (inDevPath && sub === "dashboard") {
 
   return commit({
     content: " ",
-    embeds: [page === 0 ? serversEmbed : statusEmbed],
+    ...composeV2FromLegacyEmbeds([page === 0 ? serversEmbed : statusEmbed]),
     components: [navRow],
     ephemeral: false
   });
@@ -7467,7 +7750,7 @@ if (sub === "start") {
 
     return commit({
       content: " ",
-      embeds: [tutorialEmbed],
+      ...composeV2FromLegacyEmbeds([tutorialEmbed]),
       components: tutorialDone
         ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })]
         : [noodleTutorialMenuRow(userId)]
@@ -7485,7 +7768,7 @@ if (sub === "help") {
 
   return commit({
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components
   });
 }
@@ -7534,10 +7817,8 @@ if (sub === "profile") {
     }));
   }
 
-  const embedsWithFooter = applyGreenButtonFooter([embed], profileComponents);
-  
   return commit({
-    embeds: embedsWithFooter,
+    ...composeV2FromLegacyEmbeds([embed]),
     components: profileComponents
   });
 }
@@ -7597,7 +7878,7 @@ if (sub === "about") {
 
   return commit({
     content: " ",
-    embeds: [aboutEmbed],
+    ...composeV2FromLegacyEmbeds([aboutEmbed]),
     components: [noodleAboutNewsNavRow(userId, { active: "about" }), aboutSupportRow]
   });
 }
@@ -7762,7 +8043,7 @@ if (sub === "news") {
 
   return commit({
     content: " ",
-    embeds: [newsEmbed],
+    ...composeV2FromLegacyEmbeds([newsEmbed]),
     components: [noodleAboutNewsNavRow(userId, { active: "news" }), noodleAboutNewsBackRow(userId)]
   });
 }
@@ -7795,7 +8076,7 @@ if (sub === "profile_edit") {
   });
   return commit({
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
@@ -7867,7 +8148,7 @@ if (sub === "store") {
 
   return commit({
     content: " ",
-    embeds: [storeEmbed],
+    ...composeV2FromLegacyEmbeds([storeEmbed]),
     components: [storeLinkRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
@@ -8133,7 +8414,7 @@ if (sub === "pantry") {
 
     return {
       content: " ",
-      embeds: [pantryEmbed],
+      ...composeV2FromLegacyEmbeds([pantryEmbed]),
       components: [
         pantryPageRow(userId, safePage, totalPages, ingredientPages),
         noodleForageGardenRow(userId, {
@@ -8238,7 +8519,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       });
       return finalize({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         components: [
           noodleFeatureInfoRow(userId, {
             active: "kitchen",
@@ -8404,7 +8685,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       user: interaction.member ?? interaction.user,
       color: theme.colors.warning
     });
-    return commit({ content: " ", embeds: [unavailableEmbed], ephemeral: true });
+    return commit({ content: " ", ...composeV2FromLegacyEmbeds([unavailableEmbed]), ephemeral: true });
   }
 
   const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
@@ -8453,7 +8734,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       });
       return finalize({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         ephemeral: true
       });
     }
@@ -8703,7 +8984,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       return {
         content: " ",
-        embeds: firstCounterSetupEmbed ? [embed, firstCounterSetupEmbed] : [embed],
+        ...composeV2FromLegacyEmbeds(firstCounterSetupEmbed ? [embed, firstCounterSetupEmbed] : [embed]),
         components: [
           ...(menuPicker?.rows ?? []),
           noodleTakeoutActionRow(userId, {
@@ -9186,7 +9467,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
       return finalize({
         content: " ",
-        embeds: [confirmationEmbed],
+        ...composeV2FromLegacyEmbeds([confirmationEmbed]),
         components: [
           noodleTakeoutActionRow(userId, {
             activeShift: true,
@@ -9354,7 +9635,7 @@ if (sub === "recipes") {
 
   return commit({
     content: " ",
-    embeds: [recipesEmbed],
+    ...composeV2FromLegacyEmbeds([recipesEmbed]),
     components: [navRow, noodleMainMenuRow(userId)]
   });
 }
@@ -9425,7 +9706,7 @@ if (sub === "regulars") {
 
   return commit({
     content: " ",
-    embeds: [regularsEmbed],
+    ...composeV2FromLegacyEmbeds([regularsEmbed]),
     components: totalPages > 1 ? [navRow, noodleMainMenuRow(userId)] : [noodleMainMenuRow(userId)]
   });
 }
@@ -9515,7 +9796,7 @@ if (sub === "season") {
 
   return commit({
     content: " ",
-    embeds: [seasonEmbed],
+    ...composeV2FromLegacyEmbeds([seasonEmbed]),
     components: [noodleAboutNewsNavRow(userId, { active: "season" }), backRow]
   });
 }
@@ -9525,7 +9806,7 @@ if (sub === "status") {
   if (!isDevAdmin(userId)) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })]),
       ephemeral: true
     });
   }
@@ -9560,7 +9841,7 @@ if (sub === "status") {
 
   return commit({
     content: " ",
-    embeds: [statusEmbed],
+    ...composeV2FromLegacyEmbeds([statusEmbed]),
     ephemeral: false
   });
 }
@@ -9647,7 +9928,7 @@ if (sub === "event") {
 
   return commit({
     content: " ",
-    embeds: [eventEmbed],
+    ...composeV2FromLegacyEmbeds([eventEmbed]),
     components: [noodleAboutNewsNavRow(userId, { active: "event" }), backRow]
   });
 }
@@ -9874,12 +10155,15 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       finalEmbeds = undefined;
     }
 
-    const noticeApplied = withSeasonNotice({ ...replyWithUnlock, content: finalContent, embeds: finalEmbeds ?? replyWithUnlock.embeds });
+    const legacyBridgeSourceEmbeds = finalEmbeds ?? replyWithUnlock.embeds;
+    const legacyBridgePayload = Array.isArray(legacyBridgeSourceEmbeds) && legacyBridgeSourceEmbeds.length > 0
+      ? composeV2FromLegacyEmbeds(legacyBridgeSourceEmbeds)
+      : {};
+    const noticeApplied = withSeasonNotice({ ...replyWithUnlock, content: finalContent, ...legacyBridgePayload });
 
     let out = {
       ...noticeApplied,
       content: noticeApplied.content,
-      embeds: noticeApplied.embeds,
       ephemeral: noticeApplied.ephemeral ?? false,
       components: noticeApplied.ephemeral
         ? (noticeApplied.components ?? [])
@@ -10034,7 +10318,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [questsEmbed],
+      ...composeV2FromLegacyEmbeds([questsEmbed]),
       components: [
         pageRow,
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
@@ -10128,7 +10412,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [voteEmbed],
+      ...composeV2FromLegacyEmbeds([voteEmbed]),
       components: [
         ...voteSiteRows,
         actionRow
@@ -10151,7 +10435,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
           noodleQuestsBackRow(userId)
@@ -10179,7 +10463,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
         noodleQuestsBackRow(userId)
@@ -10198,7 +10482,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleQuestsMenuRow(userId, {
             showClaim: hasClaimableQuests(p),
@@ -10223,7 +10507,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleQuestsMenuRow(userId, {
           showClaim: hasClaimableQuests(p),
@@ -10256,7 +10540,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
         noodleQuestsBackRow(userId)
@@ -10318,7 +10602,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       );
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components
       });
     }
@@ -10351,7 +10635,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleSpecializeSelectRow(userId),
           noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -10386,7 +10670,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleSpecializeSelectRow(userId),
         noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -10448,7 +10732,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components
     });
   }
@@ -10478,7 +10762,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle-social:nav:stats:${userId}`)
@@ -10595,7 +10879,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [cooldownEmbed],
+        ...composeV2FromLegacyEmbeds([cooldownEmbed]),
         components: navRows
       });
     }
@@ -10698,7 +10982,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [forageFullEmbed],
+        ...composeV2FromLegacyEmbeds([forageFullEmbed]),
         components: navRows
       });
     }
@@ -10721,7 +11005,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [forageFullEmbed],
+        ...composeV2FromLegacyEmbeds([forageFullEmbed]),
         components: navRows
       });
     }
@@ -10824,7 +11108,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      embeds: [forageEmbed],
+      ...composeV2FromLegacyEmbeds([forageEmbed]),
       components
     });
   }
@@ -10851,7 +11135,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         components: [
           noodleFeatureInfoRow(userId, {
             active: "fishing",
@@ -10954,7 +11238,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         components: [
           noodleFeatureInfoRow(userId, {
             active: "fishing",
@@ -10982,7 +11266,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [cooldownEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([cooldownEmbed]), components: navRows });
     }
 
     const bonusItems = Math.max(0, Math.floor(combinedEffects.fishing_bonus_items || 0));
@@ -11070,7 +11354,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fullEmbed]), components: navRows });
     }
 
     const inventoryResult = applyFishingDrops(p, accepted);
@@ -11090,7 +11374,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fullEmbed]), components: navRows });
     }
 
     const totalCaught = Object.values(inventoryResult.added).reduce((sum, qty) => sum + (qty || 0), 0);
@@ -11132,7 +11416,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       color: theme.colors.success
     });
 
-    return commitState({ content: " ", embeds: [fishingEmbed], components: navRows });
+    return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fishingEmbed]), components: navRows });
   }
 
   /* ---------------- GARDEN ---------------- */
@@ -11169,7 +11453,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         }),
         noodleMainMenuRow(userId)
       ];
-      return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([lockedEmbed]), components: navRows });
     }
 
     const view = buildGardenView({
@@ -11185,7 +11469,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [view.embed],
+      ...composeV2FromLegacyEmbeds([view.embed]),
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -11238,7 +11522,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (maxCraftable <= 0) {
       const description = `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
       const embed = buildMenuEmbed({ title: `${getIcon("compost_bag")} Compost`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
-      return commitState({ content: " ", embeds: [embed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows });
     }
 
     if (bagsToMake <= 0) {
@@ -11248,7 +11532,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [embed], components: navRows, ephemeral: true });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows, ephemeral: true });
     }
 
     const unitsNeeded = bagsToMake * COMPOST_PER_BAG;
@@ -11294,7 +11578,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (remaining > 0) {
       const description = `${getIcon("warning")} Not enough ${source === "fresh" ? "fresh forageables" : source === "spoiled" ? "spoiled items" : "items"} to craft ${bagsToMake} bag(s).`;
       const embed = buildMenuEmbed({ title: `${getIcon("garden")} Garden`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
-      return commitState({ content: " ", embeds: [embed], components: navRows, ephemeral: true });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows, ephemeral: true });
     }
 
     garden.compost_bags = (garden.compost_bags || 0) + bagsToMake;
@@ -11323,7 +11607,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: navRows
     });
   }
@@ -11398,7 +11682,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [view.embed],
+      ...composeV2FromLegacyEmbeds([view.embed]),
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -11475,7 +11759,7 @@ ${lines.join("\n")}`;
 
     return commitState({
       content: " ",
-      embeds: [view.embed],
+      ...composeV2FromLegacyEmbeds([view.embed]),
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -11586,7 +11870,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      embeds: [buyEmbed],
+      ...composeV2FromLegacyEmbeds([buyEmbed]),
       components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : undefined
     });
   }
@@ -11638,7 +11922,7 @@ ${lines.join("\n")}`;
       description: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.`,
       user: interaction.member ?? interaction.user
     });
-    return commitState({ content: " ", embeds: [sellEmbed] });
+    return commitState({ content: " ", ...composeV2FromLegacyEmbeds([sellEmbed]) });
   }
 
   /* ---------------- COOK ---------------- */
@@ -11867,7 +12151,7 @@ ${lines.join("\n")}`;
       const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
       return commitState({
         content: " ",
-        embeds: [cookEmbed],
+        ...composeV2FromLegacyEmbeds([cookEmbed]),
         components: [
           noodleTakeoutActionRow(userId, {
             activeShift: true,
@@ -11881,7 +12165,7 @@ ${lines.join("\n")}`;
 
     return commitState({
       content: " ",
-      embeds: [cookEmbed],
+      ...composeV2FromLegacyEmbeds([cookEmbed]),
       components: showTutorialServeRowAfterCook
         ? [noodleTutorialServeRow(userId)]
         : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })]
@@ -11895,6 +12179,14 @@ ${lines.join("\n")}`;
     const takeoutShiftActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now2) && isTakeoutShiftActive(p, now2);
 
     const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+    const prepChefOrdersResult = runPrepChefAutoBuy({
+      p,
+      s,
+      acceptedOrdersNow: acceptedEntries.map(([, a]) => a?.order).filter(Boolean),
+      acceptedNow: 0,
+      triggerOnOrdersBoard: true,
+      includeFailureMessages: false
+    });
 
     // Aggregate ingredients needed across all accepted orders, subtracting bowls already cooked
     const neededCountsByRecipe = {};
@@ -11947,6 +12239,9 @@ ${lines.join("\n")}`;
       .filter(Boolean);
 
     const statusParts = [];
+    if (prepChefOrdersResult.messages.length > 0) {
+      statusParts.push(prepChefOrdersResult.messages.join("\n"));
+    }
     if (readyBowls.length > 0) {
       statusParts.push(`${getIcon("cook")} **Bowls Ready**\n${readyBowls.join("\n")}`);
     }
@@ -12160,7 +12455,7 @@ ${lines.join("\n")}`;
     const tutorialRows = getTutorialProgressRows(p, userId, { highlightAccept, disableAccept });
     return commitState({
       content: " ",
-      embeds: [menuEmbed],
+      ...composeV2FromLegacyEmbeds([menuEmbed]),
       components: tutorialRows
         ? tutorialRows
         : [
@@ -12302,154 +12597,16 @@ ${lines.join("\n")}`;
       acceptedNow += 1;
     }
 
-    const prepChefLevel = Math.max(0, Number(p.staff_levels?.prep_chef || 0));
-    if (prepChefLevel > 0 && acceptedOrdersNow.length > 0) {
-      const autoOrderCap = Math.min(acceptedOrdersNow.length, prepChefLevel);
-
-      const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
-      const stockRemaining = { ...(p.market_stock ?? {}) };
-      const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
-      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-      const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
-      const countsByType = getIngredientCountsByType(p);
-      const remainingByType = {
-        broth: Math.max(0, (perTypeCap.broth ?? 0) - (countsByType.broth ?? 0)),
-        noodles: Math.max(0, (perTypeCap.noodles ?? 0) - (countsByType.noodles ?? 0)),
-        spice: Math.max(0, (perTypeCap.spice ?? 0) - (countsByType.spice ?? 0)),
-        topping: Math.max(0, (perTypeCap.topping ?? 0) - (countsByType.topping ?? 0)),
-        protein: Math.max(0, (perTypeCap.protein ?? 0) - (countsByType.protein ?? 0))
-      };
-      const bowlsRemaining = {};
-      const coinsStart = Number(p.coins || 0);
-      let coinsRemaining = coinsStart;
-
-      for (const order of acceptedOrdersNow) {
-        bowlsRemaining[order.recipe_id] = getTotalBowlsForRecipe(p, order.recipe_id);
-      }
-
-      const purchasedByItem = {};
-      let totalAutoCost = 0;
-      let ordersCovered = 0;
-      let needsForageOnlyItems = false;
-      let blockedByCapacity = false;
-      let blockedByStock = false;
-      let blockedByCoins = false;
-      let missingMarketItems = false;
-      let allOrdersAlreadyReady = true;
-
-      for (const order of acceptedOrdersNow.slice(0, autoOrderCap)) {
-        const recipe = content.recipes?.[order.recipe_id];
-        if (!recipe?.ingredients) continue;
-
-        if ((bowlsRemaining[order.recipe_id] ?? 0) > 0) {
-          bowlsRemaining[order.recipe_id] -= 1;
-          ordersCovered += 1;
-          continue;
-        }
-
-        allOrdersAlreadyReady = false;
-
-        const allItems = [];
-        const neededItems = [];
-        let orderCost = 0;
-        let orderOk = true;
-
-        for (const ing of getRelevantRecipeIngredients(p, recipe)) {
-          const itemId = ing.item_id;
-          const need = Math.max(0, Number(ing.qty) || 0);
-          const have = Math.max(0, Number(inventoryAvailable[itemId] || 0));
-          const missing = Math.max(0, need - have);
-
-          const item = content.items?.[itemId];
-          if (!item) {
-            orderOk = false;
-            break;
-          }
-
-          const acqRaw = item?.acquisition;
-          const acqType = typeof acqRaw === "string" ? acqRaw : acqRaw?.type;
-          const isMarketItem = MARKET_ITEM_IDS.includes(itemId) || acqType === "market";
-          const type = normalizeIngredientType(itemId);
-          allItems.push({ itemId, need, have, missing, type, name: item.name });
-
-          if (missing > 0) {
-            if (!isMarketItem) {
-              needsForageOnlyItems = true;
-              continue;
-            }
-
-            missingMarketItems = true;
-
-            const remaining = remainingByType[type] ?? 0;
-            if (remaining < missing) {
-              blockedByCapacity = true;
-              orderOk = false;
-              break;
-            }
-
-            const stock = stockRemaining[itemId] ?? 0;
-            if (!unlimitedMarketStock && stock < missing) {
-              blockedByStock = true;
-              orderOk = false;
-              break;
-            }
-
-            const basePrice = s.market_prices?.[itemId] ?? item.base_price ?? 0;
-            const price = applyMarketDiscount(basePrice, combinedEffects);
-            orderCost += price * missing;
-            neededItems.push({ itemId, qty: missing, name: item.name, price, type });
-          }
-        }
-
-        if (!orderOk || coinsRemaining < orderCost) {
-          if (coinsRemaining < orderCost) {
-            blockedByCoins = true;
-          }
-          continue;
-        }
-
-        // Reserve inventory and apply purchases for this order
-        for (const item of allItems) {
-          const usedFromInventory = Math.min(item.need, item.have);
-          inventoryAvailable[item.itemId] = Math.max(0, (inventoryAvailable[item.itemId] || 0) - usedFromInventory);
-          // Free capacity for this type when we consume from inventory so capacity checks stay accurate for later orders
-          if (usedFromInventory > 0) {
-            const t = item.type;
-            remainingByType[t] = (remainingByType[t] ?? 0) + usedFromInventory;
-          }
-        }
-
-        for (const needItem of neededItems) {
-          remainingByType[needItem.type] = Math.max(0, (remainingByType[needItem.type] ?? 0) - needItem.qty);
-          if (!unlimitedMarketStock) {
-            stockRemaining[needItem.itemId] = Math.max(0, (stockRemaining[needItem.itemId] ?? 0) - needItem.qty);
-          }
-          purchasedByItem[needItem.itemId] = (purchasedByItem[needItem.itemId] ?? 0) + needItem.qty;
-        }
-
-        coinsRemaining -= orderCost;
-        totalAutoCost += orderCost;
-        ordersCovered += 1;
-      }
-
-      const purchasedItems = Object.entries(purchasedByItem)
-        .map(([id, qty]) => `**${qty}× ${displayItemName(id)}**`)
-        .join(" · ");
-
-      if (totalAutoCost > 0) {
-        if (!p.inv_ingredients) p.inv_ingredients = {};
-        if (!p.market_stock) p.market_stock = {};
-        for (const [id, qty] of Object.entries(purchasedByItem)) {
-          p.inv_ingredients[id] = (p.inv_ingredients[id] ?? 0) + qty;
-          if (!unlimitedMarketStock) {
-            p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
-          }
-        }
-        p.coins = coinsRemaining;
-        results.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
-      } else if (blockedByCoins) {
-        results.push(`${getIcon("chef")} Prep Chef could not auto-buy: not enough coins.`);
-      }
+    const prepChefAcceptResult = runPrepChefAutoBuy({
+      p,
+      s,
+      acceptedOrdersNow,
+      acceptedNow,
+      triggerOnOrdersBoard: false,
+      includeFailureMessages: true
+    });
+    if (prepChefAcceptResult.messages.length > 0) {
+      results.push(...prepChefAcceptResult.messages);
     }
 
     if (acceptedNow > 0) advanceTutorial(p, "accept");
@@ -12533,7 +12690,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      embeds: [acceptEmbed],
+      ...composeV2FromLegacyEmbeds([acceptEmbed]),
       components: showTutorialBuyRowAfterAccept
         ? [noodleTutorialBuyRow(userId)]
         : [
@@ -12614,7 +12771,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      embeds: [cancelEmbed]
+      ...composeV2FromLegacyEmbeds([cancelEmbed])
     });
   }
 
@@ -12971,7 +13128,7 @@ ${lines.join("\n")}`;
         description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
-      const failPayload = { content: " ", embeds: [failEmbed] };
+      const failPayload = { content: " ", ...composeV2FromLegacyEmbeds([failEmbed]) };
       if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
         return commitState(convertLegacyEmbedPayloadToComponentsV2(failPayload));
       }
@@ -13066,7 +13223,7 @@ ${lines.join("\n")}`;
     const servePayload = {
       content: " ",
       components,
-      embeds: [serveEmbed, ...embeds]
+      ...composeV2FromLegacyEmbeds([serveEmbed, ...embeds])
     };
     if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
       return commitState(convertLegacyEmbedPayloadToComponentsV2(servePayload));
@@ -13149,6 +13306,112 @@ function completeV2LoopTracker({ serverId, userId, loop } = {}) {
   };
 }
 
+function collectStringLeaves(value, out = []) {
+  if (typeof value === "string") {
+    out.push(value);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringLeaves(item, out);
+    return out;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectStringLeaves(item, out);
+    return out;
+  }
+  return out;
+}
+
+function extractPrepChefMessagesFromPayload(payload) {
+  const allStrings = collectStringLeaves(payload, []);
+  const seen = new Set();
+  const messages = [];
+  for (const raw of allStrings) {
+    const text = String(raw || "");
+    if (!text || !text.includes("Prep Chef")) continue;
+    for (const line of text.split(/\r?\n/)) {
+      const idx = line.indexOf("Prep Chef");
+      if (idx < 0) continue;
+      const prepLine = line.slice(idx).trim();
+      if (!prepLine) continue;
+      if (seen.has(prepLine)) continue;
+      seen.add(prepLine);
+      messages.push(prepLine);
+    }
+  }
+  return messages;
+}
+
+function summarizePrepChefMessages(messages, { includeFailureMessages = true } = {}) {
+  const lines = Array.isArray(messages)
+    ? messages.map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+
+  const purchasedByItem = new Map();
+  let totalAutoCost = 0;
+  let fallbackFailure = "";
+
+  for (const line of lines) {
+    const normalized = line.replace(/\*\*/g, "").trim();
+    if (!normalized) continue;
+
+    const lower = normalized.toLowerCase();
+    if (lower.includes("prep chef auto-bought:")) {
+      const match = normalized.match(/prep chef auto-bought:\s*(.+?)(?:\s*\(total\s*\d+c\)\.?|$)/i);
+      const purchasedItems = String(match?.[1] || "").trim();
+      if (purchasedItems) {
+        for (const token of purchasedItems.split(/\s*·\s*/)) {
+          const entry = String(token || "").trim();
+          if (!entry) continue;
+          const itemMatch = entry.match(/^(\d+)x\s+(.+)$/i);
+          const qty = Number(itemMatch?.[1] || 1);
+          const itemName = String(itemMatch?.[2] || entry).trim();
+          if (!itemName) continue;
+          purchasedByItem.set(itemName, (purchasedByItem.get(itemName) ?? 0) + Math.max(0, qty));
+        }
+      }
+
+      const costMatch = normalized.match(/total\s*(\d+)c/i);
+      if (costMatch) {
+        totalAutoCost += Math.max(0, Math.floor(Number(costMatch[1]) || 0));
+      }
+      continue;
+    }
+
+    if (!includeFailureMessages || fallbackFailure) continue;
+    if (lower.includes("prep chef found only forage/fishing ingredients missing")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef found only forage/fishing ingredients missing (no market ingredients to auto-buy).`;
+      continue;
+    }
+    if (lower.includes("prep chef could not auto-buy: not enough coins")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef could not auto-buy: not enough coins.`;
+      continue;
+    }
+    if (lower.includes("prep chef could not auto-buy: market stock is sold out")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef could not auto-buy: market stock is sold out for one or more needed items.`;
+      continue;
+    }
+    if (lower.includes("prep chef could not auto-buy: pantry storage is full")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef could not auto-buy: pantry storage is full for one or more ingredient types.`;
+      continue;
+    }
+    if (lower.includes("prep chef skipped auto-buy")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef skipped auto-buy: accepted orders already have ready bowls.`;
+    }
+  }
+
+  if (purchasedByItem.size > 0) {
+    const purchasedItems = [...purchasedByItem.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([itemName, qty]) => `${qty}x ${itemName}`)
+      .join(" · ");
+    return [`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`];
+  }
+
+  if (fallbackFailure) return [fallbackFailure];
+  return [];
+}
+
 async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
 
@@ -13211,6 +13474,50 @@ if (v2Parsed.isV2) {
       actionKey: String(v2Parsed.actionKey || ""),
       reason: String(sceneState.reason || "stale")
     });
+
+    if (v2Parsed.sceneKey === "orders.board" && (sceneState.reason === "missing_state" || sceneState.reason === "expired")) {
+      const action = String(v2Parsed.actionKey || "").trim();
+      const serveArg = String(v2Parsed.args?.[0] ?? "").trim();
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+
+      if (action === "acc") {
+        startV2LoopTracker({ serverId, userId, loop: "orders" });
+        const payload = buildAcceptPickerScenePayload({ serverId, userId, p, s });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "cnl") {
+        startV2LoopTracker({ serverId, userId, loop: "orders" });
+        const payload = buildCancelPickerScenePayload({ userId, p });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "sv") {
+        startV2LoopTracker({ serverId, userId, loop: "serve" });
+        const payload = serveArg
+          ? buildServePickerScenePayload({ userId, p, selectedShortIds: [serveArg], readyOnly: true })
+          : buildServePickerScenePayload({ userId, p });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "ck") {
+        startV2LoopTracker({ serverId, userId, loop: "cook" });
+        const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "fg") {
+        const forageSub = resolveForageNavSub(p);
+        if (forageSub === "forage") {
+          return runNoodle(interaction, { sub: "forage", navSource: "forage_random" });
+        }
+        return runNoodle(interaction, { sub: forageSub });
+      }
+      if (action === "buy") return runNoodle(interaction, { sub: "buy" });
+      if (action === "pn") return runNoodle(interaction, { sub: "pantry" });
+      if (action === "qs") return runNoodle(interaction, { sub: "quests" });
+      if (action === "tk") return runNoodle(interaction, { sub: "takeout" });
+      if (action === "rf") return runNoodle(interaction, { sub: "orders" });
+      if (action === "nm") return runNoodle(interaction, { sub: "profile" });
+    }
+
     if (rolloutPlayer?.tutorial?.active === true) {
       const recoverySub = resolveTutorialRecoverySub({ player: rolloutPlayer, fallbackSub: "orders" });
       return runNoodle(interaction, { sub: recoverySub });
@@ -13431,6 +13738,7 @@ if (v2Parsed.isV2) {
       let duplicateCount = 0;
       let invalidCount = 0;
       let capCount = 0;
+      const prepChefMessages = [];
 
       for (const shortId of targets) {
         const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
@@ -13448,13 +13756,18 @@ if (v2Parsed.isV2) {
           continue;
         }
 
-        await runNoodle(interaction, {
+        const silentResult = await runNoodle(interaction, {
           sub: "accept",
           overrides: {
             silentResponse: true,
             strings: { order_id: fullOrderId }
           }
         });
+
+        const extracted = extractPrepChefMessagesFromPayload(silentResult);
+        for (const msg of extracted) {
+          if (!prepChefMessages.includes(msg)) prepChefMessages.push(msg);
+        }
 
         const afterPlayer = ensurePlayer(serverId, userId);
         const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
@@ -13483,6 +13796,10 @@ if (v2Parsed.isV2) {
         if (summaryParts.length > 0) {
           statusLine = summaryParts.join(" • ");
         }
+      }
+      const prepChefSummaryLines = summarizePrepChefMessages(prepChefMessages, { includeFailureMessages: true });
+      if (prepChefSummaryLines.length > 0) {
+        statusLine = `${statusLine}\n${prepChefSummaryLines.join("\n")}`;
       }
 
       const p = ensurePlayer(serverId, userId);
@@ -13547,13 +13864,15 @@ if (v2Parsed.isV2) {
       const beforeAcceptedOrderIds = Object.keys(p.orders?.accepted ?? {});
       const cap = getOrderAcceptCap(p, nowTs());
 
-      await runNoodle(interaction, {
+      const silentResult = await runNoodle(interaction, {
         sub: "accept",
         overrides: {
           silentResponse: true,
           strings: { order_id: fullOrderId }
         }
       });
+      const prepChefMessages = extractPrepChefMessagesFromPayload(silentResult);
+      const prepChefSummaryLines = summarizePrepChefMessages(prepChefMessages, { includeFailureMessages: true });
 
       const afterPlayer = ensurePlayer(serverId, userId);
       const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
@@ -13577,6 +13896,9 @@ if (v2Parsed.isV2) {
       const detailLine = outcome.code === "accepted"
         ? `${getIcon("status_complete")} Accepted \`${shortOrderId(fullOrderId)}\`.`
         : `${getIcon("warning")} ${outcome.message}`;
+      const detailLineWithPrepChef = prepChefSummaryLines.length > 0
+        ? `${detailLine}\n${prepChefSummaryLines.join("\n")}`
+        : detailLine;
 
       const acceptLoop = completeV2LoopTracker({ serverId, userId, loop: "orders" });
       emitTelemetry("v2_loop_summary", {
@@ -13591,7 +13913,7 @@ if (v2Parsed.isV2) {
         userId,
         token: resultState.token,
         outcomeCode: outcome.code,
-        detailLine
+        detailLine: detailLineWithPrepChef
       }));
     }
   }
@@ -14163,91 +14485,15 @@ if (v2Parsed.isV2) {
         });
       }
 
-      let servedCount = 0;
-      let missingBowlCount = 0;
-      let expiredCount = 0;
-      let unavailableCount = 0;
-      let invalidCount = 0;
-      let rewardCoins = 0;
-      let rewardSxp = 0;
-      let rewardRep = 0;
-
-      for (const shortId of targets) {
-        const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
-        const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === shortId);
-        if (!fullOrderId || !selectedEntry) {
-          invalidCount += 1;
-          continue;
+      // Use the same serve execution path as Serve All so results stay identical.
+      const orderTokens = targets.join(",");
+      return runNoodle(interaction, {
+        sub: "serve",
+        overrides: {
+          strings: { order_id: orderTokens },
+          messageId: interaction.message?.id ?? null
         }
-
-        const beforePlayer = ensurePlayer(serverId, userId);
-        const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
-        const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
-        const beforeCoins = Math.max(0, Math.floor(Number(beforePlayer?.coins || 0) || 0));
-        const beforeSxpTotal = Math.max(0, Math.floor(Number(beforePlayer?.sxp_total || 0) || 0));
-        const beforeRep = Math.max(0, Math.floor(Number(beforePlayer?.rep || 0) || 0));
-        const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
-        const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
-
-        await runNoodle(interaction, {
-          sub: "serve",
-          overrides: {
-            silentResponse: true,
-            strings: { order_id: fullOrderId },
-            messageId: interaction.message?.id ?? null
-          }
-        });
-
-        const afterPlayer = ensurePlayer(serverId, userId);
-        const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
-        const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
-        const afterCoins = Math.max(0, Math.floor(Number(afterPlayer?.coins || 0) || 0));
-        const afterSxpTotal = Math.max(0, Math.floor(Number(afterPlayer?.sxp_total || 0) || 0));
-        const afterRep = Math.max(0, Math.floor(Number(afterPlayer?.rep || 0) || 0));
-        const outcome = deriveServeOutcome({
-          targetOrderId: fullOrderId,
-          beforeAcceptedOrderIds,
-          afterAcceptedOrderIds,
-          beforeBowlCount,
-          afterBowlCount,
-          wasExpiredBefore
-        });
-
-        if (outcome.code === "served") {
-          servedCount += 1;
-          rewardCoins += Math.max(0, afterCoins - beforeCoins);
-          rewardSxp += Math.max(0, afterSxpTotal - beforeSxpTotal);
-          rewardRep += Math.max(0, afterRep - beforeRep);
-        }
-        else if (outcome.code === "missing_bowl") missingBowlCount += 1;
-        else if (outcome.code === "expired") expiredCount += 1;
-        else if (outcome.code === "unavailable") unavailableCount += 1;
-        else invalidCount += 1;
-      }
-
-      let statusLine = `${getIcon("warning")} No orders were served.`;
-      if (servedCount > 0 && missingBowlCount === 0 && expiredCount === 0 && unavailableCount === 0 && invalidCount === 0) {
-        statusLine = `${getIcon("status_complete")} Served ${servedCount} ${servedCount === 1 ? "order" : "orders"}.`;
-      } else {
-        const summaryParts = [];
-        if (servedCount > 0) summaryParts.push(`${getIcon("status_complete")} Served: **${servedCount}**`);
-        if (missingBowlCount > 0) summaryParts.push(`${getIcon("warning")} Missing Bowls: **${missingBowlCount}**`);
-        if (expiredCount > 0) summaryParts.push(`${getIcon("warning")} Expired: **${expiredCount}**`);
-        if (unavailableCount > 0) summaryParts.push(`${getIcon("warning")} Unavailable: **${unavailableCount}**`);
-        if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} Failed: **${invalidCount}**`);
-        if (servedCount > 0) summaryParts.push(`${getIcon("coins")} Rewards: **+${rewardCoins}c**, **+${rewardSxp} SXP**, **+${rewardRep} REP**`);
-        if (summaryParts.length > 0) statusLine = summaryParts.join(" • ");
-      }
-
-      const p = ensurePlayer(serverId, userId);
-      const payload = buildServePickerScenePayload({
-        userId,
-        p,
-        selectedShortIds: [],
-        readyOnly: stateReadyOnly,
-        statusLine
       });
-      return componentCommit(interaction, payload);
     }
 
     if (action === "sfa") {
@@ -14442,7 +14688,7 @@ if (kind === "help" && action === "page") {
   });
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -14495,7 +14741,7 @@ if (kind === "dm" && action === "reminders_toggle") {
 
   const legacyPayload = {
     content: " ",
-    embeds: [reminderEmbed],
+    ...composeV2FromLegacyEmbeds([reminderEmbed]),
     components
   };
 
@@ -14640,7 +14886,7 @@ if (kind === "profile" && action === "specialize_select") {
 
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [
       new ActionRowBuilder().addComponents(menu),
       noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -14697,7 +14943,7 @@ if (kind === "profile" && action === "specialize_cancel") {
   );
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -14752,7 +14998,7 @@ if (kind === "profile" && action === "specialize_confirm") {
 
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [
       noodleSpecializeSelectRow(userId),
       noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -14891,7 +15137,7 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
   const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    embeds: [compostEmbed],
+    ...composeV2FromLegacyEmbeds([compostEmbed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -15017,7 +15263,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    embeds: [compostEmbed],
+    ...composeV2FromLegacyEmbeds([compostEmbed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -15196,7 +15442,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   return componentCommit(interaction, {
     content: " ",
-    embeds: [compostEmbed],
+    ...composeV2FromLegacyEmbeds([compostEmbed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -15219,7 +15465,24 @@ try {
 
   const sourceMessageId = interaction.message?.id;
   const page = parts[4] ? Number(parts[4]) : null;
+  const sourceMessageFlags = Number(interaction.message?.flags?.bitfield ?? interaction.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
   const runStartMs = performance.now();
+
+  if (resolvedSub === "accept" && sourceMessageIsV2) {
+    const s = ensureServer(serverId);
+    const payload = buildAcceptPickerScenePayload({
+      serverId,
+      userId,
+      p,
+      s,
+      page: page !== null && Number.isFinite(page) ? Math.max(0, page) : 0
+    });
+    const result = await componentCommit(interaction, payload);
+    runMs = performance.now() - runStartMs;
+    return result;
+  }
+
   const result = await runNoodle(interaction, {
     sub: resolvedSub,
     group: null,
@@ -15345,6 +15608,20 @@ if (action === "accept") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
   const rawPage = Number(parts[4] ?? 0);
+  const sourceMessageFlags = Number(interaction.message?.flags?.bitfield ?? interaction.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+
+  if (sourceMessageIsV2) {
+    const payload = buildAcceptPickerScenePayload({
+      serverId,
+      userId,
+      p,
+      s,
+      page: Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0
+    });
+    return componentCommit(interaction, payload);
+  }
+
   if (!parts[4]) {
     clearAcceptOrderDraftSelection({ serverId, userId });
   }
@@ -15751,8 +16028,14 @@ if (cid.startsWith("noodle:pick:takeout_cook_select:")) {
   } catch (e) {
     console.log(`⚠️ showModal failed for takeout cook:`, e?.message);
     const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+    if (code === 10062 || e?.message?.includes("Unknown interaction")) {
       return;
+    }
+    if (e?.message?.includes("already been acknowledged")) {
+      return componentCommit(interaction, {
+        content: `${getIcon("warning")} Counter Cook menu timed out. Tap **Counter Cook** again.`,
+        ephemeral: true
+      });
     }
     return componentCommit(interaction, {
       content: `${getIcon("warning")} Discord couldn't show the modal. Try using Counter Cook again.`,
@@ -15794,8 +16077,14 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   } catch (e) {
     console.log(`⚠️ showModal failed for cook:`, e?.message);
     const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+    if (code === 10062 || e?.message?.includes("Unknown interaction")) {
       return;
+    }
+    if (e?.message?.includes("already been acknowledged")) {
+      return componentCommit(interaction, {
+        content: `${getIcon("warning")} That cook menu timed out. Tap **Cook** again.`,
+        ephemeral: true
+      });
     }
     return componentCommit(interaction, {
       content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle cook" directly instead.`,
@@ -16058,7 +16347,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
@@ -16123,7 +16412,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
@@ -16185,7 +16474,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      embeds: [selectionEmbed],
+      ...composeV2FromLegacyEmbeds([selectionEmbed]),
       components: showSellButton ? [btnRow, sellButton] : [btnRow]
     });
   }
@@ -16233,7 +16522,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
       return componentCommit(interaction, {
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleSpecializeSelectRow(userId),
           noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -16278,7 +16567,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [confirmRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: interaction.message?.id
     });
@@ -16367,7 +16656,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       });
       return componentCommit(interaction, {
         content: " ",
-        embeds: [selectionEmbed],
+        ...composeV2FromLegacyEmbeds([selectionEmbed]),
         components: showSellButton ? [btnRow, sellButton] : [btnRow],
         targetMessageId: sourceId !== "none" ? sourceId : undefined
       });
@@ -16574,7 +16863,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const replyObj = {
           content: " ",
-          embeds: [buyEmbed],
+          ...composeV2FromLegacyEmbeds([buyEmbed]),
           components,
           targetMessageId: interaction.message?.id ?? sourceMessageId ?? null
         };
@@ -16635,7 +16924,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      embeds: [sellEmbed],
+      ...composeV2FromLegacyEmbeds([sellEmbed]),
       components: [btnRow],
       targetMessageId: interaction.message?.id ?? null
     });
@@ -16702,7 +16991,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
       return componentCommit(interaction, {
         content: " ",
-        embeds: [sellEmbed],
+        ...composeV2FromLegacyEmbeds([sellEmbed]),
         components: [btnRow],
         targetMessageId: interaction.message?.id ?? null
       });
@@ -16790,7 +17079,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const replyObj = {
           content: pickerPayload.content ?? " ",
-          embeds: [sellEmbed],
+          ...composeV2FromLegacyEmbeds([sellEmbed]),
           components: pickerPayload.ephemeral
             ? (pickerPayload.components ?? [])
             : [buildSellQuantityRow(userId, selectedIds, page, selectionToken), ...(pickerPayload.components ?? [noodleMainMenuRow(userId)])],

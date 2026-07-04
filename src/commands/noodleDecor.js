@@ -1,4 +1,3 @@
-import discordPkg from "discord.js";
 import {
   DECOR_SLOTS,
   buildDecorOwnershipSummary,
@@ -11,9 +10,6 @@ import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
 import { buildComponentsV2PayloadWithNoticeCards } from "../ui/componentsV2.js";
 
-const { MessageEmbed } = discordPkg;
-const EmbedBuilder = MessageEmbed;
-
 function ownerFooterText(userOrMember) {
   const member = userOrMember?.user ? userOrMember : null;
   const fallbackUser = member?.user ?? userOrMember;
@@ -25,13 +21,18 @@ function ownerFooterText(userOrMember) {
 
 function applyOwnerFooter(embed, user) {
   if (embed && user) {
-    embed.setFooter({ text: ownerFooterText(user) });
+    embed.footer = { text: ownerFooterText(user) };
   }
   return embed;
 }
 
 function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
-  const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
+  const embed = {
+    title: String(title ?? ""),
+    description: String(description ?? ""),
+    color,
+    fields: []
+  };
   return applyOwnerFooter(embed, user);
 }
 

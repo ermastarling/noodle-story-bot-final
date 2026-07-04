@@ -82,6 +82,7 @@ import { theme } from "./ui/theme.js";
     registerVoteFromSource,
     VOTE_SOURCES
   } = await import("./game/voteRewards.js");
+  const { buildComponentsV2PayloadWithNoticeCards } = await import("./ui/componentsV2.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
@@ -172,22 +173,19 @@ import { theme } from "./ui/theme.js";
       }));
     };
 
-    const EmbedCtor = Discord.EmbedBuilder || Discord.MessageEmbed || null;
-
     return embeds.map((embed) => {
       if (!embed) return embed;
-      const safe = embed.toJSON && EmbedCtor ? new EmbedCtor(embed) : embed;
+      const safe = embed?.toJSON ? embed.toJSON() : { ...(embed ?? {}) };
       const fields = safe?.data?.fields || safe?.fields || [];
       if (fields.length) {
         const newFields = fields.flatMap((f) => chunkField(f));
-        if (safe.spliceFields) safe.spliceFields(0, safe.fields?.length ?? fields.length, ...newFields);
-        else safe.fields = newFields;
+        safe.fields = newFields;
       }
 
       const desc = safe?.data?.description ?? safe?.description ?? "";
-      if (desc && desc.length > MAX_DESC && safe.setDescription) {
+      if (desc && desc.length > MAX_DESC) {
         const truncated = desc.slice(0, MAX_DESC);
-        safe.setDescription(`${truncated}\n\n(Description truncated)`);
+        safe.description = `${truncated}\n\n(Description truncated)`;
       }
 
       return safe;
@@ -484,7 +482,6 @@ import { theme } from "./ui/theme.js";
     const channelRef = interaction?.channelId ? `<#${interaction.channelId}>` : "that channel";
     const commandLabel = interaction?.commandName ? `/${interaction.commandName}` : "that action";
 
-    const EmbedCtor = Discord.EmbedBuilder || Discord.MessageEmbed || null;
     const description = [
       `I could not send a response for **${commandLabel}** in ${channelRef} on **${guildName}**.`,
       "",
@@ -492,23 +489,29 @@ import { theme } from "./ui/theme.js";
       "Please try another channel or ask a server admin to grant me **View Channel**, **Send Messages**, and **Embed Links** permissions.",
       ""
     ].join("\n");
-
-    const embed = EmbedCtor
-      ? new EmbedCtor()
-        .setTitle(`Access Alert ${getIcon("warning")}`)
-        .setDescription(description)
-        .setColor(theme.colors.primary)
-        .setFooter({ text: `Owner: ${user?.tag ?? user?.username ?? "Unknown"}` })
-      : null;
+    const dmPayload = buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [
+        { type: 10, content: `## Access Alert ${getIcon("warning")}` },
+        { type: 10, content: description },
+        { type: 10, content: `-# Owner: ${user?.tag ?? user?.username ?? "Unknown"}` }
+      ],
+      ownerId: user?.id,
+      ephemeral: false
+    });
 
     try {
-      if (embed) {
-        await user.send({ embeds: [embed] });
-      } else {
-        await user.send({ content: description.replace(/\*\*/g, "") });
-      }
+      await user.send(dmPayload);
       return true;
     } catch (error) {
+      emitTelemetry("hard_failure_dm_send", {
+        route: "index:missing_access_dm",
+        userId: user?.id ?? null,
+        guildId: interaction?.guildId ?? null,
+        channelId: interaction?.channelId ?? null,
+        errorCode: error?.code ?? null,
+        errorName: error?.name ?? null,
+        errorMessage: String(error?.message ?? error ?? "unknown_error")
+      });
       console.error("Missing-access DM fallback failed:", error?.message ?? error);
       return false;
     }
@@ -1341,20 +1344,35 @@ import { theme } from "./ui/theme.js";
 
       const shouldMention = Boolean(mentionUser && devAlertUserId);
       const ping = shouldMention ? ` <@${devAlertUserId}>` : "";
-      const content = `${title}${ping}`.slice(0, 2000);
+      const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
+      const bodyLines = [
+        mentionLine,
+        String(description || "").slice(0, 4096),
+        footerText ? `-# ${String(footerText).slice(0, 2048)}` : ""
+      ].filter(Boolean);
+      const payload = buildComponentsV2PayloadWithNoticeCards({
+        mainComponents: [
+          { type: 10, content: `## ${String(title || "Alert").slice(0, 200)}` },
+          { type: 10, content: bodyLines.join("\n\n") }
+        ],
+        ownerId: devAlertUserId || undefined,
+        ephemeral: false
+      });
       await alertChannel.send({
-        content,
-        allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined,
-        embeds: [
-          {
-            description: String(description || "").slice(0, 4096),
-            ...(typeof color === "number" ? { color } : {}),
-            ...(footerText ? { footer: { text: String(footerText).slice(0, 2048) } } : {})
-          }
-        ]
+        ...payload,
+        allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
       });
       return true;
     } catch (error) {
+      emitTelemetry("hard_failure_alert_send", {
+        route: "index:dev_alert",
+        guildId: officialGuildId || null,
+        channelId: devAlertChannelId || null,
+        mentionUserId: devAlertUserId || null,
+        errorCode: error?.code ?? null,
+        errorName: error?.name ?? null,
+        errorMessage: String(error?.message ?? error ?? "unknown_error")
+      });
       console.error("❌ Failed to send dev alert:", error?.stack ?? error);
       return false;
     }

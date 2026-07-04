@@ -1,5 +1,4 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
-import discordPkg from "discord.js";
 import { openDb, getPlayer, upsertPlayer, getServer, upsertServer } from "../db/index.js";
 import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
@@ -8,76 +7,30 @@ import { newServerState } from "../game/server.js";
 import { loadQuestsContent, loadDailyRewards } from "../content/index.js";
 import { claimDailyReward } from "../game/daily.js";
 import { claimCompletedQuests, getQuestSummary } from "../game/quests.js";
-import { theme } from "../ui/theme.js";
-import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import { getIcon } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
-  isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2
 } from "../ui/componentsV2.js";
 
-const {
-  MessageEmbed
-} = discordPkg;
-
-const EmbedBuilder = MessageEmbed;
 const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 
 const db = openDb();
 const questsContent = loadQuestsContent();
 const dailyRewards = loadDailyRewards();
 
-function ownerFooterText(userOrMember) {
-  const member = userOrMember?.user ? userOrMember : null;
-  const fallbackUser = member?.user ?? userOrMember;
-  const displayName = member?.displayName ?? userOrMember?.displayName ?? userOrMember?.nickname ?? null;
-  const tag = fallbackUser?.tag ?? fallbackUser?.username ?? "Unknown";
-  const name = displayName ?? fallbackUser?.globalName ?? tag;
-  return `Owner: ${name}`;
-}
+function buildMenuContainerReply({ title, description, ownerId, ephemeral = false } = {}) {
+  const mainComponents = [];
+  const safeTitle = String(title ?? "").trim();
+  const safeDescription = String(description ?? "").trim();
+  if (safeTitle) mainComponents.push({ type: 10, content: `## ${safeTitle}` });
+  if (safeDescription) mainComponents.push({ type: 10, content: safeDescription });
 
-function applyOwnerFooter(embed, user) {
-  if (embed && user) {
-    embed.setFooter({ text: ownerFooterText(user) });
-  }
-  return embed;
-}
-
-function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
-  const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
-  return applyOwnerFooter(embed, user);
-}
-
-function hasGreenButton(components) {
-  const rows = Array.isArray(components) ? components : (components ? [components] : []);
-  for (const row of rows) {
-    const rowJson = row?.toJSON ? row.toJSON() : row;
-    const comps = row?.components ?? rowJson?.components ?? [];
-    for (const comp of comps) {
-      const style = comp?.style ?? comp?.data?.style;
-      if (style === 3) return true;
-    }
-  }
-  return false;
-}
-
-function applyGreenButtonFooter(embeds, components) {
-  if (!Array.isArray(embeds) || embeds.length === 0) return embeds;
-  if (!hasGreenButton(components)) return embeds;
-
-  const note = "Tip: Tap the green button(s) to continue.";
-  return embeds.map((embed) => {
-    const footerText = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
-    if (footerText.includes("green button")) return embed;
-    const nextText = footerText ? `${footerText} • ${note}` : note;
-    if (typeof embed?.setFooter === "function") {
-      embed.setFooter({ text: nextText });
-    } else if (embed?.data) {
-      embed.data.footer = { ...(embed.data.footer ?? {}), text: nextText };
-    } else if (embed) {
-      embed.footer = { ...(embed.footer ?? {}), text: nextText };
-    }
-    return embed;
+  return buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices: [],
+    ownerId: String(ownerId || "").trim() || undefined,
+    ephemeral: Boolean(ephemeral)
   });
 }
 
@@ -171,8 +124,6 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
   const guildId = interaction?.guildId;
   const userId = interaction?.user?.id;
   if (!guildId || !userId) return payload;
-  const effectivePlayer = player || getPlayer(db, guildId, userId) || null;
-  if (!isComponentsV2Enabled({ guildId, userId, player: effectivePlayer })) return payload;
 
   const normalizedRows = normalizeComponents(payload.components);
   const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0);
@@ -193,11 +144,7 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
 }
 
 function normalizePayloadForReply(interaction, payload = {}, player = null) {
-  const converted = convertPayloadToComponentsV2(interaction, payload, player);
-  if (converted?.embeds) {
-    converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
-  }
-  return converted;
+  return convertPayloadToComponentsV2(interaction, payload, player);
 }
 
 function isInvalidComponentTypeError(error) {
@@ -323,12 +270,12 @@ export async function noodleQuestsHandler(interaction) {
     if (sub === "daily") {
       const result = claimDailyReward(player, dailyRewards);
       if (!result.ok) {
-        const embed = buildMenuEmbed({
+        reply = buildMenuContainerReply({
           title: `${getIcon("daily_reward")} Daily Reward`,
           description: result.message,
-          user: interaction.member ?? interaction.user
+          ownerId: userId,
+          ephemeral: true
         });
-        reply = { content: " ", embeds: [embed], ephemeral: true };
       } else {
         const rewardLines = [];
         if (result.reward.coins) rewardLines.push(`${getIcon("coins")} **${result.reward.coins}c**`);
@@ -337,12 +284,11 @@ export async function noodleQuestsHandler(interaction) {
 
         const levelLine = result.leveledUp > 0 ? `
 ${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
-        const embed = buildMenuEmbed({
+        reply = buildMenuContainerReply({
           title: `${getIcon("daily_reward")} Daily Reward`,
           description: `Streak: **${result.streak}** day(s)\nRewards: ${rewardLines.join(" · ")}${levelLine}`,
-          user: interaction.member ?? interaction.user
+          ownerId: userId
         });
-        reply = { content: " ", embeds: [embed] };
       }
     }
 
@@ -350,12 +296,12 @@ ${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
       const summary = getQuestSummary(player, questsContent, userId);
       const active = summary.active;
       if (!active.length) {
-        const embed = buildMenuEmbed({
+        reply = buildMenuContainerReply({
           title: `${getIcon("quests")} Quests`,
           description: "_No quests available right now._",
-          user: interaction.member ?? interaction.user
+          ownerId: userId,
+          ephemeral: true
         });
-        reply = { content: " ", embeds: [embed], ephemeral: true };
       } else {
         const lines = active.map((q) => {
           const status = q.completed_at ? getIcon("status_complete") : getIcon("status_pending");
@@ -367,24 +313,23 @@ ${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
           return `${status} **${q.name}** (${q.progress}/${q.target})${rewardText}`;
         });
 
-        const embed = buildMenuEmbed({
+        reply = buildMenuContainerReply({
           title: `${getIcon("quests")} Quests`,
           description: lines.join("\n"),
-          user: interaction.member ?? interaction.user
+          ownerId: userId
         });
-        reply = { content: " ", embeds: [embed] };
       }
     }
 
     if (sub === "claim") {
       const result = claimCompletedQuests(player);
       if (!result.claimed.length) {
-        const embed = buildMenuEmbed({
+        reply = buildMenuContainerReply({
           title: `${getIcon("quest_rewards")} Quest Rewards`,
           description: "_No completed quests to claim._",
-          user: interaction.member ?? interaction.user
+          ownerId: userId,
+          ephemeral: true
         });
-        reply = { content: " ", embeds: [embed], ephemeral: true };
       } else {
         const lines = result.claimed.map((entry) => {
           const rewardParts = [];
@@ -396,12 +341,11 @@ ${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
 
         const levelLine = result.leveledUp > 0 ? `
 ${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
-        const embed = buildMenuEmbed({
+        reply = buildMenuContainerReply({
           title: `${getIcon("quest_rewards")} Quest Rewards`,
           description: `${lines.join("\n")}${levelLine}`,
-          user: interaction.member ?? interaction.user
+          ownerId: userId
         });
-        reply = { content: " ", embeds: [embed] };
       }
     }
 

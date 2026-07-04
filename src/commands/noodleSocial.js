@@ -59,7 +59,6 @@ import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
-  isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2
 } from "../ui/componentsV2.js";
 
@@ -67,7 +66,6 @@ const {
   MessageActionRow,
   MessageSelectMenu,
   MessageButton,
-  MessageEmbed,
   MessageFlags,
   Modal,
   TextInputComponent,
@@ -78,7 +76,6 @@ const {
 const ActionRowBuilder = MessageActionRow;
 const StringSelectMenuBuilder = MessageSelectMenu;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 const ModalBuilder = Modal;
 const TextInputBuilder = TextInputComponent;
 
@@ -309,7 +306,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     })
     .join("\n");
 
-  const embed = new EmbedBuilder()
+  const embed = createCard()
     .setTitle(`${getIcon("leaderboard")} Server Leaderboard`)
     .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
     .setColor(theme.colors.info)
@@ -371,7 +368,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
   );
 
   return {
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [navRow, typeRow, socialMainMenuRow(userId)]
   };
 }
@@ -388,7 +385,7 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     })
     .join("\n");
 
-  const embed = new EmbedBuilder()
+  const embed = createCard()
     .setTitle(`${getIcon("leaderboard")} Global Leaderboard`)
     .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
     .setColor(theme.colors.info)
@@ -450,7 +447,7 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
   );
 
   return {
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [navRow, typeRow]
   };
 }
@@ -730,7 +727,7 @@ function buildRecentPickerPayload(interaction, {
   const options = buildRecentUserOptions(interaction, pageIds, { descriptionPrefix: `${verb} recent player` });
   const hasOptions = options.length > 0;
 
-  const embed = new EmbedBuilder()
+  const embed = createCard()
     .setTitle(title)
     .setDescription(hasOptions
       ? `Pick a recent player to ${verb.toLowerCase()}.`
@@ -761,7 +758,7 @@ function buildRecentPickerPayload(interaction, {
   components.push(socialMainMenuRow(userId));
 
   return {
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components
   };
 }
@@ -1166,23 +1163,40 @@ function detectOwnerIdFromComponents(components = []) {
 }
 
 function convertPayloadToComponentsV2(interaction, payload = {}) {
-  const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
-  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
-  const isSlashInteraction = Boolean(interaction?.isChatInputCommand?.() || interaction?.isCommand?.());
-
-  // Default to legacy social payloads, but always convert for slash and existing V2 message updates.
-  if (String(process.env.NOODLE_SOCIAL_V2_CONVERSION_ENABLED || "0") !== "1" && !sourceMessageIsV2 && !isSlashInteraction) {
-    return payload;
-  }
   if (!payload || typeof payload !== "object") return payload;
   if (isComponentsV2Payload(payload)) return payload;
+
+  const hasSourceNativeComponents = Array.isArray(payload.mainComponents) || Array.isArray(payload.notices);
+  if (hasSourceNativeComponents) {
+    const guildId = interaction?.guildId;
+    const userId = interaction?.user?.id;
+    if (!guildId || !userId) return payload;
+
+    const normalizedRows = normalizeComponents(payload.components);
+    const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+    const ownerId = payload.ownerId || detectOwnerIdFromComponents(normalizedRows) || userId;
+    const mainComponents = [
+      ...(Array.isArray(payload.mainComponents) ? payload.mainComponents : []),
+      ...normalizedRows
+    ];
+    const notices = Array.isArray(payload.notices) ? payload.notices : [];
+
+    const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+      mainComponents,
+      notices,
+      ownerId,
+      ephemeral: isEphemeral
+    });
+
+    const { mainComponents: _mainComponents, notices: _notices, ownerId: _ownerId, components, flags, ephemeral, ...rest } = payload;
+    return { ...rest, ...v2Payload };
+  }
+
   if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
 
   const guildId = interaction?.guildId;
   const userId = interaction?.user?.id;
   if (!guildId || !userId) return payload;
-  const player = ensurePlayer(guildId, userId);
-  if (!isComponentsV2Enabled({ guildId, userId, player })) return payload;
 
   const normalizedRows = normalizeComponents(payload.components);
   const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
@@ -1209,6 +1223,24 @@ function convertPayloadToComponentsV2(interaction, payload = {}) {
 
   const { embeds, components, flags, ephemeral, ...rest } = payload;
   return { ...rest, ...v2Payload };
+}
+
+function composeV2FromLegacyEmbeds(embeds = []) {
+  const list = Array.isArray(embeds) ? embeds : [];
+  const primaryEmbed = list[0] ?? null;
+  const notices = list.slice(1).map((embed) => {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim() || "Notification";
+    const details = legacyEmbedsToV2TextComponents([embed])
+      .map((entry) => String(entry?.content ?? "").trim())
+      .filter(Boolean);
+    return { title, details, tone: "info" };
+  });
+
+  return {
+    mainComponents: legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
+    notices
+  };
 }
 
 function normalizePayloadForReply(interaction, payload = {}) {
@@ -1593,7 +1625,7 @@ async function handleParty(interaction) {
 
       const result = createParty(db, serverId, userId, cleanedName);
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("party")} Party Created!`)
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
@@ -1607,7 +1639,7 @@ async function handleParty(interaction) {
       return {
         ok: true,
         response: {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
         }
       };
@@ -1622,7 +1654,7 @@ async function handleParty(interaction) {
         const joinServerId = resolveJoinPartyServerId(serverId, partyId);
         const result = joinParty(db, joinServerId, partyId, userId);
         
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Joined Party!`)
           .setDescription(`You've joined the party **${result.partyName}**`)
           .setColor(theme.colors.success);
@@ -1632,7 +1664,7 @@ async function handleParty(interaction) {
         return {
           ok: true,
           response: {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
           }
         };
@@ -1650,14 +1682,14 @@ async function handleParty(interaction) {
       try {
         leaveParty(db, currentParty.party_id, userId);
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Party`)
           .setDescription(`${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`)
           .setColor(theme.colors.info);
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyCreationRow(userId), socialMainMenuRow(userId)]
         };
 
@@ -1681,7 +1713,7 @@ async function handleParty(interaction) {
         .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
         .join("\n");
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("party")} Party • ${currentParty.party_name}`)
         .setDescription(`Party ID:\n\`\`\`${formatPartyId(currentParty.party_id)}\`\`\``)
         .addFields(
@@ -1698,7 +1730,7 @@ async function handleParty(interaction) {
       return {
         ok: true,
         response: {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
         }
       };
@@ -1753,7 +1785,7 @@ async function handleParty(interaction) {
           return { ok: false, error: `${getIcon("error")} No eligible party members found to transfer leadership.` };
         }
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Transfer Leadership`)
           .setDescription("Pick a party member from recent players.")
           .setColor(theme.colors.info);
@@ -1769,7 +1801,7 @@ async function handleParty(interaction) {
         return {
           ok: true,
           response: {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
           }
         };
@@ -1819,7 +1851,7 @@ async function handleParty(interaction) {
           return { ok: false, error: `${getIcon("error")} No kick-eligible party members found.` };
         }
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Kick Party Member`)
           .setDescription("Pick a party member from recent players.")
           .setColor(theme.colors.warning);
@@ -1835,7 +1867,7 @@ async function handleParty(interaction) {
         return {
           ok: true,
           response: {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
           }
         };
@@ -1948,7 +1980,7 @@ async function handleTip(interaction) {
         }
         noteRecentSocialUser(serverId, targetUser.id);
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("tips")} Tip Sent!`)
           .setDescription(`<@${userId}> tipped <@${targetUser.id}> **${amount}c**!`)
           .setColor(theme.colors.highlight);
@@ -1965,7 +1997,7 @@ async function handleTip(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = { 
-          embeds: [embed], 
+          ...composeV2FromLegacyEmbeds([embed]), 
           components: [socialMainMenuRow(userId)] 
         };
         if (db) {
@@ -2048,7 +2080,7 @@ async function handleVisit(interaction) {
         };
         const blessingName = blessingNames[blessingType] || blessingType;
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("star")} Shop Visit!`)
           .setDescription(
             `<@${userId}> visited <@${targetUser.id}>'s shop and granted them a **Blessing**!\n\n` +
@@ -2061,7 +2093,7 @@ async function handleVisit(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       const replyObj = { 
-        embeds: [embed], 
+        ...composeV2FromLegacyEmbeds([embed]), 
         components: [socialMainMenuRow(userId)] 
       };
         if (db) {
@@ -2165,7 +2197,7 @@ async function handleStats(interaction) {
     const party = getUserActivePartyBridge(serverId, userId);
     const blessing = getActiveBlessing(player);
 
-    const embed = new EmbedBuilder()
+    const embed = createCard()
       .setTitle(`${getIcon("stats")} Your Social Stats`)
       .setColor(theme.colors.success);
 
@@ -2221,7 +2253,7 @@ async function handleStats(interaction) {
     }
 
     return sendSocialPayload(interaction, normalizePayloadForReply(interaction, { 
-      embeds: [embed], 
+      ...composeV2FromLegacyEmbeds([embed]), 
       components: [socialMainMenuRow(userId)] 
     }));
   } catch (err) {
@@ -2278,7 +2310,7 @@ async function handleComponent(interaction) {
         try {
           const result = createParty(db, serverId, userId, cleanedName);
 
-          const embed = new EmbedBuilder()
+          const embed = createCard()
             .setTitle(`${getIcon("party")} Party Created!`)
             .setDescription(`You've created the party **${result.partyName}**`)
             .addFields(
@@ -2289,7 +2321,7 @@ async function handleComponent(interaction) {
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
           const replyObj = {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
           };
           return { ok: true, response: replyObj, targetMessageId: sourceMessageId };
@@ -2340,7 +2372,7 @@ async function handleComponent(interaction) {
           const joinServerId = resolveJoinPartyServerId(serverId, partyId);
           const result = joinParty(db, joinServerId, partyId, userId);
           
-          const embed = new EmbedBuilder()
+          const embed = createCard()
             .setTitle(`${getIcon("confetti")} Joined Party!`)
             .setDescription(`You've joined the party **${result.partyName}**`)
             .setColor(theme.colors.success);
@@ -2350,7 +2382,7 @@ async function handleComponent(interaction) {
           return {
             ok: true,
             response: {
-              embeds: [embed],
+              ...composeV2FromLegacyEmbeds([embed]),
               components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
             },
             targetMessageId: sourceMessageId
@@ -2406,7 +2438,7 @@ async function handleComponent(interaction) {
             const inviteResult = inviteUserToParty(db, currentParty.server_id, currentParty.party_id, targetId);
             noteRecentSocialUser(serverId, targetId);
             
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("status_complete")} User Invited!`)
               .setDescription(`<@${targetId}> has been invited to **${inviteResult.partyName}**`)
               .setColor(theme.colors.success);
@@ -2417,7 +2449,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               response: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
               }
             };
@@ -2491,7 +2523,7 @@ async function handleComponent(interaction) {
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("tips")} Tip Sent!`)
               .setDescription(`<@${userId}> tipped <@${targetId}> **${amount}c**!`)
               .setColor(theme.colors.highlight);
@@ -2506,7 +2538,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyRow, socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -2571,7 +2603,7 @@ async function handleComponent(interaction) {
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("tips")} Tip Sent!`)
               .setDescription(`<@${userId}> tipped <@${targetId}> **${amount}c**!`)
               .setColor(theme.colors.highlight);
@@ -2586,7 +2618,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyRow, socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -2663,7 +2695,7 @@ async function handleComponent(interaction) {
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("star")} Blessing Granted!`)
               .setDescription(
                 `<@${userId}> blessed <@${targetId}>!\n\n` +
@@ -2678,7 +2710,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyRow, socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -2811,7 +2843,7 @@ async function handleComponent(interaction) {
           // Contribute to shared order
           contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, { maxIngredientSlots: maxSlots });
 
-          const embed = new EmbedBuilder()
+          const embed = createCard()
             .setTitle(`${getIcon("status_complete")} Shared Order • Contribution Recorded`)
             .setDescription(
               `You contributed **${quantity}× ${ingredient.name}** to the shared order.\n\n` +
@@ -2835,7 +2867,7 @@ async function handleComponent(interaction) {
           return {
             ok: true,
             payload: {
-              embeds: [embed],
+              ...composeV2FromLegacyEmbeds([embed]),
               components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)],
               targetMessageId: sourceMessageId
             }
@@ -2948,7 +2980,7 @@ async function handleComponent(interaction) {
             const inviteResult = inviteUserToParty(db, currentParty.server_id, currentParty.party_id, targetId);
             noteRecentSocialUser(serverId, targetId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("status_complete")} User Invited!`)
               .setDescription(`<@${targetId}> has been invited to **${inviteResult.partyName}**`)
               .setColor(theme.colors.success);
@@ -2958,7 +2990,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -3010,7 +3042,7 @@ async function handleComponent(interaction) {
               const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
               const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-              const embed = new EmbedBuilder()
+              const embed = createCard()
                 .setTitle(`${getIcon("star")} Blessing Granted!`)
                 .setDescription(
                   `<@${userId}> blessed <@${targetId}>!\n\n` +
@@ -3024,7 +3056,7 @@ async function handleComponent(interaction) {
               return {
                 ok: true,
                 payload: {
-                  embeds: [embed],
+                  ...composeV2FromLegacyEmbeds([embed]),
                   components: [partyRow, socialMainMenuRow(userId)],
                   targetMessageId: sourceMessageId
                 }
@@ -3153,7 +3185,7 @@ async function handleComponent(interaction) {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      const servingsEmbed = new EmbedBuilder()
+      const servingsEmbed = createCard()
         .setTitle(`${getIcon("serve")} Create Shared Order`)
         .setDescription(`**Recipe**: ${recipe.name}\n\nStep 2: How many servings should your party make?`)
         .setColor(theme.colors.info);
@@ -3161,7 +3193,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(servingsEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [servingsEmbed],
+        ...composeV2FromLegacyEmbeds([servingsEmbed]),
         components: [new ActionRowBuilder().addComponents(menu), backRow]
       });
     }
@@ -3225,7 +3257,7 @@ async function handleComponent(interaction) {
           const ingredientBlock = ingredientList || "_No visible ingredients required before your current fishing unlock._";
 
             const totalReward = servings * SHARED_ORDER_REWARD.coinsPerServing;
-          const embed = new EmbedBuilder()
+          const embed = createCard()
             .setTitle(`${getIcon("serve")} Shared Order Created!`)
             .setDescription(
               `**${recipe.name}**\n\n` +
@@ -3246,7 +3278,7 @@ async function handleComponent(interaction) {
           return {
             ok: true,
             payload: {
-              embeds: [embed],
+              ...composeV2FromLegacyEmbeds([embed]),
               components: [partyActionRow(userId, true, isLeader, true), socialMainMenuRow(userId)]
             }
           };
@@ -3350,14 +3382,14 @@ async function handleComponent(interaction) {
       }
       const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Party`)
           .setDescription("You're not in any party. Create or join one!")
           .setColor(theme.colors.info);
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
         return componentCommit(interaction, {
           content: " ",
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyCreationRow(userId), socialMainMenuRow(userId)],
           ephemeral: false
         });
@@ -3367,7 +3399,7 @@ async function handleComponent(interaction) {
         .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
         .join("\n");
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
         .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
@@ -3400,7 +3432,7 @@ async function handleComponent(interaction) {
         });
       }
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
       });
     }
@@ -3412,7 +3444,7 @@ async function handleComponent(interaction) {
       const party = getUserActivePartyBridge(serverId, userId);
       const blessing = getActiveBlessing(player);
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("stats")} Your Social Stats`)
         .setColor(theme.colors.success);
 
@@ -3465,7 +3497,7 @@ async function handleComponent(interaction) {
       }
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: statsViewButtons(userId, { newsAvailable })
       });
     }
@@ -3554,7 +3586,7 @@ async function handleComponent(interaction) {
       applyGreenButtonFooter([embed], profileComponents);
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: profileComponents
       });
     }
@@ -3660,7 +3692,7 @@ async function handleComponent(interaction) {
             return `${itemName} ${bar}`;
           }).join('\n');
 
-          embed = new EmbedBuilder()
+          embed = createCard()
             .setTitle(`${getIcon("serve")} Shared Order • ${recipe.name}`)
             .setDescription(`**Recipe**: ${recipe.name}\n**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
             .addFields(
@@ -3687,7 +3719,7 @@ async function handleComponent(interaction) {
       if (embed) {
         replyObj.embeds = [embed];
       } else {
-        const emptyEmbed = new EmbedBuilder()
+        const emptyEmbed = createCard()
           .setTitle(`${getIcon("serve")} Shared Order`)
           .setDescription(
             isLeader
@@ -3756,7 +3788,7 @@ async function handleComponent(interaction) {
         return `${itemName} ${bar}`;
       }).join("\n");
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("serve")} Shared Order • ${recipe.name}`)
         .setDescription(`**Recipe**: ${recipe.name}\n**Servings**: ${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
         .addFields(
@@ -3777,7 +3809,7 @@ async function handleComponent(interaction) {
       const targetMessageId = interaction.message?.id ?? null;
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [sharedOrderActionRow(userId, true, true, canComplete), socialMainMenuRow(userId)],
         targetMessageId
       });
@@ -3838,7 +3870,7 @@ async function handleComponent(interaction) {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      const createEmbed = new EmbedBuilder()
+      const createEmbed = createCard()
         .setTitle(`${getIcon("serve")} Create Shared Order`)
         .setDescription("Step 1: Pick a recipe that your party members know.")
         .setColor(theme.colors.info);
@@ -3846,7 +3878,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(createEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [createEmbed],
+        ...composeV2FromLegacyEmbeds([createEmbed]),
         components: [new ActionRowBuilder().addComponents(menu), backRow]
       });
     }
@@ -3856,7 +3888,7 @@ async function handleComponent(interaction) {
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in any party.`,
-          embeds: [],
+          ...composeV2FromLegacyEmbeds([]),
           ephemeral: false
         });
       }
@@ -3865,7 +3897,7 @@ async function handleComponent(interaction) {
         .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
         .join("\n");
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
         .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
@@ -3876,7 +3908,7 @@ async function handleComponent(interaction) {
         .setColor(theme.colors.info);
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [socialMainMenuRow(userId)]
       });
     }
@@ -3893,7 +3925,7 @@ async function handleComponent(interaction) {
       try {
         leaveParty(db, currentParty.party_id, userId);
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Party`)
           .setDescription(`${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`)
           .setColor(theme.colors.info);
@@ -3901,7 +3933,7 @@ async function handleComponent(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         return componentCommit(interaction, {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [socialMainMenuRow(userId)]
         });
       } catch (err) {
@@ -4018,7 +4050,7 @@ async function handleComponent(interaction) {
         .addOptions(ingredientOptions);
 
       const isLeader = party.leader_user_id === userId;
-      const contributeEmbed = new EmbedBuilder()
+      const contributeEmbed = createCard()
         .setTitle(`${getIcon("contribute")} Shared Order • Contribute Ingredients`)
         .setDescription(`**Recipe**: ${recipe.name}\nPick an ingredient to add:`)
         .setColor(theme.colors.info);
@@ -4029,7 +4061,7 @@ async function handleComponent(interaction) {
       const canComplete = progress.isComplete && hasOtherContributor;
 
       return componentCommit(interaction, {
-        embeds: [contributeEmbed],
+        ...composeV2FromLegacyEmbeds([contributeEmbed]),
         components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
       });
     }
@@ -4086,7 +4118,7 @@ async function handleComponent(interaction) {
       }
 
       // Confirm completion
-      const promptEmbed = new EmbedBuilder()
+      const promptEmbed = createCard()
         .setTitle(`${getIcon("serve")} Shared Order • Complete Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
@@ -4099,7 +4131,7 @@ async function handleComponent(interaction) {
       const targetMessageId = interaction.message?.id ?? null;
 
       return componentCommit(interaction, {
-        embeds: [promptEmbed],
+        ...composeV2FromLegacyEmbeds([promptEmbed]),
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -4141,7 +4173,7 @@ async function handleComponent(interaction) {
       }
 
       const recipe = content.recipes?.[sharedOrder.order_id];
-      const promptEmbed = new EmbedBuilder()
+      const promptEmbed = createCard()
         .setTitle(`${getIcon("warning")} Shared Order • Cancel Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
@@ -4152,7 +4184,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(promptEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [promptEmbed],
+        ...composeV2FromLegacyEmbeds([promptEmbed]),
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -4298,7 +4330,7 @@ async function handleComponent(interaction) {
           ? rewardLines.join("\n")
           : "No contributions recorded.";
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("serve")} Shared Order • Complete`)
           .setDescription(
             `**${recipe.name}** (${servings} servings)\n\n` +
@@ -4312,7 +4344,7 @@ async function handleComponent(interaction) {
         const isLeader = party.leader_user_id === userId;
         const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
         const commitPayload = {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
         };
 
@@ -4341,7 +4373,7 @@ async function handleComponent(interaction) {
       const isLeader = party.leader_user_id === userId;
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
       const recipe = existingOrder ? content.recipes?.[existingOrder.order_id] : null;
-      const cancelEmbed = new EmbedBuilder()
+      const cancelEmbed = createCard()
         .setTitle(`${getIcon("cancel")} Shared Order • Completion Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
@@ -4352,7 +4384,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [cancelEmbed],
+        ...composeV2FromLegacyEmbeds([cancelEmbed]),
         components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
       });
     }
@@ -4416,7 +4448,7 @@ async function handleComponent(interaction) {
       cancelSharedOrder(db, sharedOrder.shared_order_id);
 
       const recipe = content.recipes?.[sharedOrder.order_id];
-      const cancelEmbed = new EmbedBuilder()
+      const cancelEmbed = createCard()
         .setTitle(`${getIcon("broom")} Shared Order • Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
@@ -4427,7 +4459,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [cancelEmbed],
+        ...composeV2FromLegacyEmbeds([cancelEmbed]),
         components: [sharedOrderActionRow(userId, false, true), socialMainMenuRow(userId)]
       });
     }
@@ -4457,7 +4489,7 @@ async function handleComponent(interaction) {
           canComplete = progress.isComplete && hasOtherContributor;
         }
       }
-      const keepEmbed = new EmbedBuilder()
+      const keepEmbed = createCard()
         .setTitle(`${getIcon("status_complete")} Shared Order • Kept`)
         .setDescription("Keeping the shared order active.")
         .setColor(theme.colors.info);
@@ -4465,7 +4497,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(keepEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [keepEmbed],
+        ...composeV2FromLegacyEmbeds([keepEmbed]),
         components: [sharedOrderActionRow(userId, !!existingOrder, isLeader, canComplete), socialMainMenuRow(userId)]
       });
     }

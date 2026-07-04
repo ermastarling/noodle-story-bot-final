@@ -8,7 +8,6 @@ import { newServerState } from "../game/server.js";
 import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import {
   levelUpStaff,
-  getStaffLevels,
   getMaxStaffCapacity,
   getStaffSlotsUsed,
   calculateStaffCost,
@@ -17,11 +16,9 @@ import {
   isStaffEffectUnlocked
 } from "../game/staff.js";
 import { calculateUpgradeEffects } from "../game/upgrades.js";
-import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
-  isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2
 } from "../ui/componentsV2.js";
 
@@ -29,7 +26,6 @@ const {
   MessageActionRow,
   MessageSelectMenu,
   MessageButton,
-  MessageEmbed,
   Constants
 } = discordPkg;
 
@@ -37,7 +33,6 @@ const {
 const ActionRowBuilder = MessageActionRow;
 const StringSelectMenuBuilder = MessageSelectMenu;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
@@ -54,22 +49,6 @@ const upgradesContent = loadUpgradesContent();
 
 function formatTwoDecimals(value) {
   return Number(Number(value ?? 0).toFixed(2));
-}
-
-function ownerFooterText(userOrMember) {
-  const member = userOrMember?.user ? userOrMember : null;
-  const fallbackUser = member?.user ?? userOrMember;
-  const displayName = member?.displayName ?? userOrMember?.displayName ?? userOrMember?.nickname ?? null;
-  const tag = fallbackUser?.tag ?? fallbackUser?.username ?? "Unknown";
-  const name = displayName ?? fallbackUser?.globalName ?? tag;
-  return `Owner: ${name}`;
-}
-
-function applyOwnerFooter(embed, user) {
-  if (embed && user) {
-    embed.setFooter({ text: ownerFooterText(user) });
-  }
-  return embed;
 }
 
 function hasGreenButton(components) {
@@ -192,8 +171,6 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
   const guildId = interaction?.guildId;
   const userId = interaction?.user?.id;
   if (!guildId || !userId) return payload;
-  const effectivePlayer = player || getPlayer(db, guildId, userId) || null;
-  if (!isComponentsV2Enabled({ guildId, userId, player: effectivePlayer })) return payload;
 
   const normalizedRows = normalizeComponents(payload.components);
   const mainComponents = [
@@ -389,15 +366,13 @@ export async function noodleStaffHandler(interaction) {
       p.state_rev = rev;
     }
 
-    const embed = buildStaffOverviewEmbed(p, s, interaction.user);
-    const components = buildStaffComponents(userId, p, s);
-
-    const response = {
-      embeds: [embed],
-      components,
+    const actionRows = buildStaffComponents(userId, p, s);
+    const normalizedResponse = buildStaffOverviewPayload({
+      player: p,
+      ownerId: userId,
+      actionRows,
       ephemeral: false
-    };
-    const normalizedResponse = normalizePayloadForReply(interaction, response, p);
+    });
 
     putIdempotentResult(db, { key: idempKey, userId, action: "noodle-staff", ttlSeconds: 900, result: normalizedResponse });
     return normalizedResponse;
@@ -407,12 +382,15 @@ export async function noodleStaffHandler(interaction) {
 }
 
 export function buildStaffOverviewEmbed(player, server, user) {
+  void server;
+  void user;
+
+  return buildStaffOverviewTextComponents(player);
+}
+
+function buildStaffOverviewTextComponents(player) {
   const staffCap = getMaxStaffCapacity(player, staffContent);
   const usedSlots = getStaffSlotsUsed(player);
-  
-  const embed = new EmbedBuilder()
-    .setTitle(`${getIcon("staff_management")} Staff Management`)
-    .setColor(theme.colors.info);
 
   const upgradeEffects = calculateUpgradeEffects(player, upgradesContent);
   const staffMultiplier = 1 + (upgradeEffects.staff_effect_multiplier || 0);
@@ -489,16 +467,26 @@ export function buildStaffOverviewEmbed(player, server, user) {
     staffLines.push(`${prefix}**${staff.name}** — ${status}${bonusPart}`);
   }
 
-  embed.addFields({
-    name: `Your Staff`,
-    value: staffLines.length ? staffLines.join("\n") : "_No staff leveled yet._",
-    inline: false
+  return [
+    { type: 10, content: `## ${getIcon("staff_management")} Staff Management` },
+    { type: 10, content: `${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${usedSlots}/${staffCap}**` },
+    { type: 10, content: `**Your Staff**\n${staffLines.length ? staffLines.join("\n") : "_No staff leveled yet._"}` }
+  ];
+}
+
+function buildStaffOverviewPayload({ player, ownerId, actionRows = [], ephemeral = false, content = " " } = {}) {
+  const mainComponents = [
+    ...buildStaffOverviewTextComponents(player),
+    ...normalizeComponents(actionRows)
+  ];
+
+  return buildComponentsV2PayloadWithNoticeCards({
+    content,
+    mainComponents,
+    notices: [],
+    ownerId: String(ownerId || "").trim() || undefined,
+    ephemeral: Boolean(ephemeral)
   });
-
-  embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${usedSlots}/${staffCap}**`);
-  applyOwnerFooter(embed, user);
-
-  return embed;
 }
 
 function buildStaffComponents(userId, player, server) {
@@ -603,29 +591,26 @@ export async function noodleStaffInteractionHandler(interaction) {
         upsertPlayer(db, serverId, userId, p, null, p.schema_version);
       }
 
-      const embed = buildStaffOverviewEmbed(p, s, interaction.user);
-      const components = buildStaffComponents(userId, p, s);
-
-      const response = {
+      const actionRows = buildStaffComponents(userId, p, s);
+      return buildStaffOverviewPayload({
+        player: p,
+        ownerId: userId,
+        actionRows,
         content: result.message,
-        embeds: [embed],
-        components,
         ephemeral: !result.success
-      };
-      return normalizePayloadForReply(interaction, response, p);
+      });
     }
 
     // Handle refresh
     if (action === "refresh") {
-      const embed = buildStaffOverviewEmbed(p, s, interaction.user);
-      const components = buildStaffComponents(userId, p, s);
-
-      const response = {
+      const actionRows = buildStaffComponents(userId, p, s);
+      return buildStaffOverviewPayload({
+        player: p,
+        ownerId: userId,
+        actionRows,
         content: " ",
-        embeds: [embed],
-        components
-      };
-      return normalizePayloadForReply(interaction, response, p);
+        ephemeral: false
+      });
     }
 
     return null;

@@ -288,12 +288,12 @@ test("Staff: Epic staff have max level of 10", () => {
   assert.strictEqual(sommelier.max_level, 10);
 });
 
-test("Staff: Common/Rare staff have max level of 20 (except Prep Chef)", () => {
+test("Staff: Common/Rare staff max levels match design", () => {
   const prepChef = staffContent.staff_members.prep_chef;
   const sousChef = staffContent.staff_members.sous_chef;
   const forager = staffContent.staff_members.forager;
   
-  assert.strictEqual(prepChef.max_level, 5);
+  assert.strictEqual(prepChef.max_level, 10);
   assert.strictEqual(sousChef.max_level, 20);
   assert.strictEqual(forager.max_level, 20);
 });

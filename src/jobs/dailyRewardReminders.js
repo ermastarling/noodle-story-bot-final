@@ -3,23 +3,20 @@ import discordPkg from "discord.js";
 import { openDb, getPlayer, getLatestServerIdForUser, upsertPlayer } from "../db/index.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
-import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import { emitTelemetry } from "../infra/telemetry.js";
 import {
-  buildComponentsV2PayloadWithNoticeCards,
-  isComponentsV2Enabled
+  buildComponentsV2PayloadWithNoticeCards
 } from "../ui/componentsV2.js";
 
 const {
   MessageActionRow,
   MessageButton,
-  MessageEmbed,
   Constants
 } = discordPkg;
 
 const ActionRowBuilder = MessageActionRow;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
   Secondary: Constants?.MessageButtonStyles?.SECONDARY ?? 2,
@@ -32,11 +29,6 @@ const DEFAULT_CRON = "15 * * * *";
 const DEFAULT_MAX_INACTIVE_DAYS = 30;
 const db = openDb();
 let isRunning = false;
-
-function ownerFooterText(user) {
-  const tag = user?.tag ?? user?.username ?? "Unknown";
-  return `Owner: ${tag}`;
-}
 
 function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   const row = new ActionRowBuilder();
@@ -57,19 +49,6 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function buildReminderEmbed({ guildName, channelLine, claimLine, user }) {
-  return new EmbedBuilder()
-    .setTitle(`Daily Noodle Mail ${getIcon("mail")}`)
-    .setDescription([
-      `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`,
-      `\nYour daily reward is also ready!`,
-      channelLine ? `${channelLine}` : null,
-      claimLine,
-      "\nDisable reminders below."
-    ].filter(Boolean).join("\n"))
-    .setColor(theme.colors.primary)
-    .setFooter({ text: ownerFooterText(user) });
-}
 
 function normalizeComponents(rows = []) {
   if (!Array.isArray(rows)) return [];
@@ -87,7 +66,7 @@ function normalizeComponents(rows = []) {
   return normalized;
 }
 
-function buildReminderV2Payload({ guildName, channelLine, claimLine, userId, components = [] }) {
+function buildReminderV2Payload({ channelLine, claimLine, userId, components = [] }) {
   const lines = [
     `Daily Noodle Mail ${getIcon("mail")}`,
     `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`,
@@ -171,39 +150,39 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
       if (!user) continue;
 
       const lastGuildId = player.notifications.last_noodle_guild_id ?? preferredServerId;
-      const guildName = lastGuildId && lastGuildId !== "global"
-        ? (client.guilds.cache.get(lastGuildId)?.name ?? "this server")
-        : "your last server";
       const channelId = player.notifications.last_noodle_channel_id ?? null;
       const channelUrl = channelId && lastGuildId && lastGuildId !== "global"
         ? `https://discord.com/channels/${lastGuildId}/${channelId}`
         : null;
       const channelLine = channelId ? `<#${channelId}>` : null;
       const claimLine = `Use /noodle quests_daily to claim your daily reward.`;
-      const embed = buildReminderEmbed({ guildName, channelLine, claimLine, user });
       const components = buildDmReminderComponents({
         userId,
         serverId: lastGuildId || preferredServerId,
         channelUrl,
         optOut: false
       });
-
-      const shouldUseV2 = isComponentsV2Enabled({
-        guildId: lastGuildId || preferredServerId,
-        userId,
-        player
-      });
-
-      const payload = shouldUseV2
-        ? buildReminderV2Payload({ guildName, channelLine, claimLine, userId, components })
-        : { embeds: [embed], components };
+      const payload = buildReminderV2Payload({ channelLine, claimLine, userId, components });
 
       try {
         await user.send(payload);
         player.notifications.last_daily_reminder_day = todayKey;
         upsertPlayer(db, preferredServerId, userId, player, null, player.schema_version ?? 1);
-      } catch {
-        // ignore DM failures
+      } catch (error) {
+        emitTelemetry("hard_failure_dm_send", {
+          route: "jobs:daily_reward_reminder",
+          userId,
+          guildId: lastGuildId || preferredServerId,
+          errorCode: error?.code ?? null,
+          errorName: error?.name ?? null,
+          errorMessage: String(error?.message ?? error ?? "unknown_error")
+        });
+        console.error("Daily reminder DM send failed", {
+          userId,
+          guildId: lastGuildId || preferredServerId,
+          errorCode: error?.code ?? null,
+          errorMessage: error?.message ?? String(error)
+        });
       }
     }
   } finally {

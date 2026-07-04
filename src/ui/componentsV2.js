@@ -135,6 +135,7 @@ function resolveSceneBannerFromHeading(heading = "") {
     event: ["event"],
     fishing: ["fishing"],
     forage: ["forage"],
+    giveaway: ["giveaway"],
     garden: ["garden"],
     kitchen: ["kitchen"],
     market: ["market"],

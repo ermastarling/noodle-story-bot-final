@@ -6,7 +6,7 @@
       "description": "Buys missing non-forage ingredients for you, +1 complete order per level on each accept action.",
       "category": "kitchen",
       "rarity": "common",
-        "max_level": 5,
+      "max_level": 10,
       "base_cost": 300,
       "cost_scaling": 1.35,
       "effects_per_level": {}
