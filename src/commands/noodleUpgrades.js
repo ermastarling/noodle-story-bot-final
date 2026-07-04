@@ -19,6 +19,11 @@ import {
 import { calculateStaffCost, levelUpStaff, getStaffUnlockStatus, filterUnlockedStaffEffects } from "../game/staff.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
+import {
+  buildComponentsV2PayloadWithNoticeCards,
+  isComponentsV2Enabled,
+  MESSAGE_FLAG_IS_COMPONENTS_V2
+} from "../ui/componentsV2.js";
 
 const {
   MessageActionRow,
@@ -105,6 +110,126 @@ function applyGreenButtonFooter(embeds, components) {
     }
     return embed;
   });
+}
+
+function isComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const type = Number(node.type);
+    if (type === 9 || type === 10 || type === 12 || type === 17) return true;
+    if (Array.isArray(node.components)) stack.push(...node.components);
+  }
+  return false;
+}
+
+function normalizeComponents(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
+    }
+    if (footerText) {
+      const compactFooter = footerText
+        .split("\n")
+        .map((line) => String(line ?? "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      if (compactFooter) blocks.push(`-# ${compactFooter}`);
+    }
+    const compact = blocks.join("\n\n").trim();
+    if (compact) out.push({ type: 10, content: compact });
+  }
+  return out;
+}
+
+function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (isComponentsV2Payload(payload)) return payload;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+
+  const guildId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  if (!guildId || !userId) return payload;
+  const effectivePlayer = player || getPlayer(db, guildId, userId) || null;
+  if (!isComponentsV2Enabled({ guildId, userId, player: effectivePlayer })) return payload;
+
+  const normalizedRows = normalizeComponents(payload.components);
+  const mainComponents = [
+    ...legacyEmbedsToV2TextComponents(payload.embeds.slice(0, 1)),
+    ...normalizedRows
+  ];
+  const notices = payload.embeds.slice(1).map((embed) => ({
+    title: String((embed?.toJSON?.() ?? embed ?? {})?.title ?? "Notice").trim() || "Notice",
+    details: legacyEmbedsToV2TextComponents([embed]).map((entry) => String(entry?.content ?? "").trim()).filter(Boolean),
+    tone: "info"
+  }));
+
+  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices,
+    ownerId: userId,
+    ephemeral: payload.ephemeral === true
+  });
+
+  const { embeds, components, ...rest } = payload;
+  return { ...rest, ...v2Payload };
+}
+
+function normalizePayloadForReply(interaction, payload = {}, player = null) {
+  const converted = convertPayloadToComponentsV2(interaction, payload, player);
+  if (converted?.embeds) {
+    converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
+  }
+  return converted;
 }
 
 function formatEffects(effects) {
@@ -278,10 +403,11 @@ export async function noodleUpgradesHandler(interaction) {
   });
   const existing = getIdempotentResult(db, idempKey);
   if (existing) {
+    const normalizedExisting = normalizePayloadForReply(interaction, existing);
     if (interaction.deferred || interaction.replied) {
-      return interaction.editReply(existing);
+      return interaction.editReply(normalizedExisting);
     }
-    return interaction.reply(existing);
+    return interaction.reply(normalizedExisting);
   }
 
   const lockKey = `user:${userId}`;
@@ -308,10 +434,10 @@ export async function noodleUpgradesHandler(interaction) {
       components,
       ephemeral: false
     };
-    response.embeds = applyGreenButtonFooter(response.embeds, response.components);
+    const normalizedResponse = normalizePayloadForReply(interaction, response, p);
 
-    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-upgrades", ttlSeconds: 900, result: response });
-    return response;
+    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-upgrades", ttlSeconds: 900, result: normalizedResponse });
+    return normalizedResponse;
   });
 
   if (interaction.deferred || interaction.replied) {
@@ -843,19 +969,21 @@ export async function noodleUpgradesInteractionHandler(interaction) {
       });
 
       if (!result.success) {
-        return {
+        const response = {
           content: result.message,
           embeds: [],
           components: [],
           ephemeral: true
         };
+        return normalizePayloadForReply(interaction, response, p);
       }
 
-      return {
+      const response = {
         embeds: [updatedEmbed],
         components: updatedComponents,
         ephemeral: false
       };
+      return normalizePayloadForReply(interaction, response, p);
     }
 
     if (action === "staff") {
@@ -877,14 +1005,15 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         ephemeral: !result.success
       };
       if (!result.success) response.content = result.message;
-      return response;
+      return normalizePayloadForReply(interaction, response, p);
     }
 
     if (action === "category" || action === "refresh" || action === "staffpage") {
-      return {
+      const response = {
         embeds: [embed],
         components
       };
+      return normalizePayloadForReply(interaction, response, p);
     }
 
       return null;

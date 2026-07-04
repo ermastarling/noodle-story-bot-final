@@ -31,6 +31,7 @@ import { theme } from "./ui/theme.js";
   const { startEventSyncScheduler } = await import("./jobs/eventSync.js");
   const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
   const { startDbMaintenanceScheduler } = await import("./jobs/dbMaintenance.js");
+  const { startV2TelemetryAlertScheduler } = await import("./jobs/v2TelemetryAlerts.js");
   const {
     loadContentBundle,
     loadSettingsCatalog,
@@ -1267,7 +1268,14 @@ import { theme } from "./ui/theme.js";
     };
   }
 
-  async function sendDevAlert({ title, description, footerText = "", requireMention = true, color }) {
+  async function sendDevAlert({
+    title,
+    description,
+    footerText = "",
+    requireMention = true,
+    mentionUser = requireMention,
+    color
+  }) {
     if (!officialGuildId || !devAlertChannelId) return false;
     if (requireMention && !devAlertUserId) {
       console.error("⚠️ Dev alert skipped: NOODLE_DEV_ALERT_USER_ID is required for mention.");
@@ -1288,11 +1296,12 @@ import { theme } from "./ui/theme.js";
         return false;
       }
 
-      const ping = devAlertUserId ? ` <@${devAlertUserId}>` : "";
+      const shouldMention = Boolean(mentionUser && devAlertUserId);
+      const ping = shouldMention ? ` <@${devAlertUserId}>` : "";
       const content = `${title}${ping}`.slice(0, 2000);
       await alertChannel.send({
         content,
-        allowedMentions: devAlertUserId ? { users: [devAlertUserId] } : undefined,
+        allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined,
         embeds: [
           {
             description: String(description || "").slice(0, 4096),
@@ -3296,6 +3305,7 @@ import { theme } from "./ui/theme.js";
     startEventSyncScheduler(getKnownServerIds);
     startDbBackupScheduler(db);
     startDbMaintenanceScheduler(db);
+    startV2TelemetryAlertScheduler({ sendAlert: sendDevAlert });
 
     const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";
     if (backupOnStart) {
@@ -3459,8 +3469,6 @@ import { theme } from "./ui/theme.js";
         // Check if this button/select will show a modal
           const willShowModal = cid?.includes("pick:cook_select:") ||
               cid?.includes("pick:takeout_cook_select:") ||
-              cid?.includes("pick:forage_item_select:") ||
-              cid?.includes("pick:fishing_item_select:") ||
               cid?.includes("action:party_create") ||
               cid?.includes("action:party_join") ||
               cid?.includes("action:party_invite") ||

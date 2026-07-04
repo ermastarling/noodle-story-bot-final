@@ -1,0 +1,35 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "ermastarling"
+    labels:
+      - "dependencies"
+      - "security"
+    versioning-strategy: "increase"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "ermastarling"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

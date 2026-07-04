@@ -2,6 +2,7 @@ const DEFAULT_SCENE_TTL_MS = Object.freeze({
   "orders.board": 10 * 60 * 1000,
   "orders.accept_picker": 5 * 60 * 1000,
   "orders.accept_result": 5 * 60 * 1000,
+  "orders.cancel_picker": 5 * 60 * 1000,
   "cook.recipe_picker": 5 * 60 * 1000,
   "cook.minigame": 3 * 60 * 1000,
   "cook.result": 5 * 60 * 1000,

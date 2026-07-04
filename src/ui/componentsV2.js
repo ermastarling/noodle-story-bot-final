@@ -80,9 +80,172 @@ function applyMenuGuideToComponents(components = [], menuGuide = {}) {
   return out;
 }
 
+function hasHeadingPrefix(content) {
+  return /^#{1,6}\s/.test(String(content ?? "").trim());
+}
+
+function normalizeContainerHeading(components = []) {
+  if (!Array.isArray(components) || components.length === 0) return components;
+  const [first, ...rest] = components;
+  if (Number(first?.type) !== 10) return components;
+
+  const raw = String(first?.content ?? "").trim();
+  if (!raw || hasHeadingPrefix(raw)) return components;
+
+  return [{ ...first, content: `## ${raw}` }, ...rest];
+}
+
+function extractOwnerIdFromCustomId(customId = "") {
+  const raw = String(customId ?? "");
+  if (!raw) return null;
+  const matches = raw.match(/(?:^|:)(\d{17,20})(?::|$)/g) ?? [];
+  if (!matches.length) return null;
+  const normalized = matches
+    .map((token) => String(token).replace(/:/g, "").trim())
+    .filter(Boolean);
+  return normalized[0] ?? null;
+}
+
+function detectOwnerIdInComponents(components = []) {
+  const stack = Array.isArray(components) ? [...components] : [];
+  const counts = new Map();
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+
+    const ownerId = extractOwnerIdFromCustomId(node.custom_id);
+    if (ownerId) {
+      counts.set(ownerId, (counts.get(ownerId) ?? 0) + 1);
+    }
+
+    if (Array.isArray(node.components) && node.components.length > 0) {
+      stack.push(...node.components);
+    }
+  }
+
+  let bestId = null;
+  let bestCount = 0;
+  for (const [ownerId, count] of counts.entries()) {
+    if (count > bestCount) {
+      bestId = ownerId;
+      bestCount = count;
+    }
+  }
+
+  return bestId;
+}
+
+function hasOwnerFooter(components = []) {
+  return (components || []).some(
+    (component) => Number(component?.type) === 10 && /menu owner:/i.test(String(component?.content ?? ""))
+  );
+}
+
+function stripLegacyOwnerFromFooterLines(components = []) {
+  const out = Array.isArray(components) ? [...components] : [];
+  for (let idx = 0; idx < out.length; idx += 1) {
+    const component = out[idx];
+    if (Number(component?.type) !== 10) continue;
+
+    const content = String(component?.content ?? "");
+    if (!content.includes("Owner:")) continue;
+
+    const nextContent = content
+      .split("\n")
+      .map((line) => {
+        const trimmed = String(line ?? "").trim();
+        if (!trimmed.startsWith("-# ")) return line;
+        const segments = trimmed
+          .slice(3)
+          .split("•")
+          .map((segment) => String(segment ?? "").trim())
+          .filter((segment) => segment && !/^owner\s*:/i.test(segment));
+        return segments.length ? `-# ${segments.join(" • ")}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+
+    out[idx] = { ...component, content: nextContent };
+  }
+  return out;
+}
+
+function hasFooterSegment(components = [], pattern) {
+  const matcher = pattern instanceof RegExp ? pattern : new RegExp(String(pattern || ""), "i");
+  return (components || []).some((component) => {
+    if (Number(component?.type) !== 10) return false;
+    const lines = String(component?.content ?? "").split("\n");
+    return lines.some((line) => String(line ?? "").trim().startsWith("-# ") && matcher.test(line));
+  });
+}
+
+function appendFooterSegment(components = [], segment = "") {
+  const safeSegment = String(segment ?? "").trim();
+  if (!safeSegment) return components;
+
+  const out = Array.isArray(components) ? [...components] : [];
+  for (let idx = out.length - 1; idx >= 0; idx -= 1) {
+    const component = out[idx];
+    if (Number(component?.type) !== 10) continue;
+    const content = String(component?.content ?? "").trim();
+    if (content) {
+      const lines = content.split("\n");
+      for (let lineIdx = lines.length - 1; lineIdx >= 0; lineIdx -= 1) {
+        const line = String(lines[lineIdx] ?? "").trim();
+        if (!line.startsWith("-# ")) continue;
+        lines[lineIdx] = `${line} • ${safeSegment}`;
+        out[idx] = { ...component, content: lines.join("\n") };
+        return out;
+      }
+    }
+
+    const footerLine = `-# ${safeSegment}`;
+    out[idx] = { ...component, content: content ? `${content}\n\n${footerLine}` : footerLine };
+    return out;
+  }
+
+  out.push({ type: 10, content: `-# ${safeSegment}` });
+  return out;
+}
+
+function hasGreenButtonInComponents(components = []) {
+  const stack = Array.isArray(components) ? [...components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+
+    if (Number(node.type) === 2) {
+      const style = node.style;
+      if (style === 3 || String(style || "").toLowerCase() === "success") {
+        return true;
+      }
+    }
+
+    if (Array.isArray(node.components) && node.components.length > 0) {
+      stack.push(...node.components);
+    }
+  }
+  return false;
+}
+
+function withOwnerFooter(components = [], ownerId = "") {
+  const safeOwnerId = String(ownerId ?? "").trim();
+  if (!safeOwnerId || hasOwnerFooter(components)) return components;
+
+  return appendFooterSegment(components, `Menu owner: <@${safeOwnerId}>`);
+}
+
+function withGreenButtonFooterTip(components = []) {
+  const tipPattern = /tip:\s*tap the green button\(s\) to continue\.?/i;
+  if (hasFooterSegment(components, tipPattern)) return components;
+  return appendFooterSegment(components, "Tip: Tap the green button(s) to continue.");
+}
+
 export function buildComponentsV2MenuPayload({
   components = [],
   ephemeral = false,
+  ownerId,
   accentColor,
   dividerText,
   imageUrl,
@@ -96,9 +259,17 @@ export function buildComponentsV2MenuPayload({
     addDivider
   });
 
+  const normalizedComponents = normalizeContainerHeading(components);
+  const ownerSanitizedComponents = stripLegacyOwnerFromFooterLines(normalizedComponents);
+  const resolvedOwnerId = String(ownerId ?? "").trim() || detectOwnerIdInComponents(ownerSanitizedComponents);
+  let footerComponents = withOwnerFooter(ownerSanitizedComponents, resolvedOwnerId);
+  if (hasGreenButtonInComponents(footerComponents)) {
+    footerComponents = withGreenButtonFooterTip(footerComponents);
+  }
+
   const container = {
     type: 17,
-    components: applyMenuGuideToComponents(components, menuGuide)
+    components: applyMenuGuideToComponents(footerComponents, menuGuide)
   };
 
   if (Number.isInteger(menuGuide.accentColor) && menuGuide.accentColor >= 0) {
@@ -112,6 +283,85 @@ export function buildComponentsV2MenuPayload({
   return {
     flags,
     components: [container]
+  };
+}
+
+function resolveNoticeAccentColor(tone = "info") {
+  const normalized = String(tone || "info").trim().toLowerCase();
+  if (normalized === "success") return Number(theme?.colors?.success ?? DEFAULT_MENU_ACCENT_COLOR);
+  if (normalized === "warning") return Number(theme?.colors?.warning ?? DEFAULT_MENU_ACCENT_COLOR);
+  if (normalized === "error") return Number(theme?.colors?.danger ?? DEFAULT_MENU_ACCENT_COLOR);
+  return Number(theme?.colors?.primary ?? DEFAULT_MENU_ACCENT_COLOR);
+}
+
+export function buildComponentsV2NoticeCardPayload({
+  title = "Notice",
+  details = [],
+  tone = "info",
+  ownerId,
+  ephemeral = false,
+  env = process.env
+} = {}) {
+  const heading = String(title || "").trim() || "Notice";
+  const detailLines = Array.isArray(details)
+    ? details.map((line) => String(line ?? "").trim()).filter(Boolean)
+    : [];
+
+  const components = [{ type: 10, content: `### ${heading}` }];
+  if (detailLines.length > 0) {
+    components.push({ type: 10, content: detailLines.join("\n\n") });
+  }
+
+  return buildComponentsV2MenuPayload({
+    components,
+    ownerId,
+    ephemeral,
+    accentColor: resolveNoticeAccentColor(tone),
+    addDivider: false,
+    env
+  });
+}
+
+export function buildComponentsV2PayloadWithNoticeCards({
+  mainComponents = [],
+  notices = [],
+  ownerId,
+  ephemeral = false,
+  accentColor,
+  dividerText,
+  imageUrl,
+  addDivider,
+  env = process.env
+} = {}) {
+  const mainPayload = buildComponentsV2MenuPayload({
+    components: mainComponents,
+    ownerId,
+    ephemeral,
+    accentColor,
+    dividerText,
+    imageUrl,
+    addDivider,
+    env
+  });
+
+  const stackedContainers = [...(mainPayload.components ?? [])];
+  for (const notice of notices || []) {
+    if (!notice || typeof notice !== "object") continue;
+    const noticePayload = buildComponentsV2NoticeCardPayload({
+      title: notice.title,
+      details: notice.details,
+      tone: notice.tone,
+      ownerId,
+      ephemeral,
+      env
+    });
+    const container = noticePayload.components?.[0];
+    if (container) stackedContainers.push(container);
+  }
+
+  return {
+    flags: Number(mainPayload.flags || 0),
+    components: stackedContainers
   };
 }
 

@@ -5,6 +5,10 @@ import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import {
+  buildComponentsV2PayloadWithNoticeCards,
+  isComponentsV2Enabled
+} from "../ui/componentsV2.js";
 
 const {
   MessageActionRow,
@@ -65,6 +69,43 @@ function buildReminderEmbed({ guildName, channelLine, claimLine, user }) {
     ].filter(Boolean).join("\n"))
     .setColor(theme.colors.primary)
     .setFooter({ text: ownerFooterText(user) });
+}
+
+function normalizeComponents(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function buildReminderV2Payload({ guildName, channelLine, claimLine, userId, components = [] }) {
+  const lines = [
+    `Daily Noodle Mail ${getIcon("mail")}`,
+    `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`,
+    "Your daily reward is also ready!",
+    channelLine || null,
+    claimLine,
+    "Disable reminders below."
+  ].filter(Boolean);
+
+  return buildComponentsV2PayloadWithNoticeCards({
+    mainComponents: [
+      { type: 10, content: `## ${lines[0]}` },
+      { type: 10, content: lines.slice(1).join("\n\n") },
+      ...normalizeComponents(components)
+    ],
+    ownerId: userId,
+    ephemeral: false
+  });
 }
 
 function normalizeNotifications(player) {
@@ -147,8 +188,18 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
         optOut: false
       });
 
+      const shouldUseV2 = isComponentsV2Enabled({
+        guildId: lastGuildId || preferredServerId,
+        userId,
+        player
+      });
+
+      const payload = shouldUseV2
+        ? buildReminderV2Payload({ guildName, channelLine, claimLine, userId, components })
+        : { embeds: [embed], components };
+
       try {
-        await user.send({ embeds: [embed], components });
+        await user.send(payload);
         player.notifications.last_daily_reminder_day = todayKey;
         upsertPlayer(db, preferredServerId, userId, player, null, player.schema_version ?? 1);
       } catch {

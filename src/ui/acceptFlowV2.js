@@ -46,7 +46,9 @@ export function buildAcceptPickerV2Message({
   token,
   entries = [],
   selectedShortIds = [],
-  statusLine = ""
+  statusLine = "",
+  currentPage = 0,
+  totalPages = 1
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
@@ -57,6 +59,8 @@ export function buildAcceptPickerV2Message({
       .filter(Boolean)
   );
   const safeStatusLine = String(statusLine || "").trim();
+  const safePage = Math.max(0, Math.floor(Number(currentPage) || 0));
+  const safeTotalPages = Math.max(1, Math.floor(Number(totalPages) || 1));
 
   const components = [
     text("## Accept Orders"),
@@ -64,6 +68,9 @@ export function buildAcceptPickerV2Message({
   ];
 
   if (safeStatusLine) components.push(text(safeStatusLine));
+  if (safeTotalPages > 1) {
+    components.push(text(`Page **${safePage + 1}/${safeTotalPages}**`));
+  }
 
   if ((entries || []).length === 0) {
     components.push(text("No orders are currently available to accept."));
@@ -105,6 +112,16 @@ export function buildAcceptPickerV2Message({
       button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 })
     ]
   });
+
+  if (safeTotalPages > 1) {
+    components.push({
+      type: 1,
+      components: [
+        button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2 }),
+        button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2 })
+      ]
+    });
+  }
 
   return buildComponentsV2MenuPayload({ components });
 }

@@ -5,7 +5,8 @@ import {
   resolveForageNavSub,
   resolveNavSubForTutorial,
   resolveTutorialGateValue,
-  resolveTutorialProgressRowKey
+  resolveTutorialProgressRowKey,
+  resolveTutorialRecoverySub
 } from "../src/game/tutorialRouting.js";
 
 test("Forage nav routes to direct forage during intro_forage tutorial step", () => {
@@ -189,4 +190,26 @@ test("Tutorial progress row key handles inactive and unknown steps", () => {
   assert.equal(resolveTutorialProgressRowKey({ tutorial: { active: false, queue: ["intro_order"], completed: [] } }), null);
   assert.equal(resolveTutorialProgressRowKey({ tutorial: { active: true, queue: ["unknown_step"], completed: [] } }), null);
   assert.equal(resolveTutorialProgressRowKey(null), null);
+});
+
+test("Tutorial recovery sub maps intro sequence for V2 stale recovery", () => {
+  const makePlayer = (stepId) => ({
+    tutorial: {
+      active: true,
+      queue: [stepId],
+      completed: []
+    }
+  });
+
+  assert.equal(resolveTutorialRecoverySub({ player: makePlayer("intro_order") }), "orders");
+  assert.equal(resolveTutorialRecoverySub({ player: makePlayer("intro_market") }), "buy");
+  assert.equal(resolveTutorialRecoverySub({ player: makePlayer("intro_forage") }), "forage");
+  assert.equal(resolveTutorialRecoverySub({ player: makePlayer("intro_cook") }), "cook");
+  assert.equal(resolveTutorialRecoverySub({ player: makePlayer("intro_serve") }), "serve");
+});
+
+test("Tutorial recovery sub falls back outside active tutorial", () => {
+  assert.equal(resolveTutorialRecoverySub({ player: { tutorial: { active: false, queue: ["intro_order"], completed: [] } }, fallbackSub: "orders" }), "orders");
+  assert.equal(resolveTutorialRecoverySub({ player: null, fallbackSub: "orders" }), "orders");
+  assert.equal(resolveTutorialRecoverySub({ player: { tutorial: { active: true, queue: ["unknown_step"], completed: [] } }, fallbackSub: "orders" }), "orders");
 });

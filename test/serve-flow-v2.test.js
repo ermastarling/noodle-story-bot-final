@@ -46,19 +46,17 @@ test("Serve flow V2: expired outcome is detected", () => {
   assert.equal(outcome.code, "expired");
 });
 
-test("Serve flow V2: picker message includes serve action", () => {
+test("Serve flow V2: picker message includes serve selected action", () => {
   const payload = buildServePickerV2Message({
     userId: "123",
     token: "tok",
     entries: [{ shortId: "AB12", line: "Order AB12" }],
-    selectedShortId: "AB12"
+    selectedShortIds: ["AB12"]
   });
 
-  const sections = payload.components?.[0]?.components?.filter((component) => component?.type === 9) ?? [];
-  const customIds = sections
-    .map((section) => section?.accessory?.custom_id)
-    .filter(Boolean);
-  assert.ok(customIds.some((id) => String(id || "").includes(":serve.order_picker:serve:")));
+  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
+  const customIds = rows.flatMap((row) => row.components.map((component) => component.custom_id));
+  assert.ok(customIds.some((id) => String(id || "").includes(":serve.order_picker:cfm:")));
 });
 
 test("Serve flow V2: result message includes next actions", () => {

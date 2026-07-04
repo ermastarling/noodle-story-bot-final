@@ -57,6 +57,11 @@ import { getOrdersMeta } from "../game/orders.js";
 import { containsProfanity } from "../util/profanity.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import {
+  buildComponentsV2PayloadWithNoticeCards,
+  isComponentsV2Enabled,
+  MESSAGE_FLAG_IS_COMPONENTS_V2
+} from "../ui/componentsV2.js";
 
 const {
   MessageActionRow,
@@ -1040,15 +1045,178 @@ function statsViewButtons(userId, { newsAvailable = false } = {}) {
 /*  Helper functions                                                   */
 /* ------------------------------------------------------------------ */
 
+function isComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const type = Number(node.type);
+    if (type === 9 || type === 10 || type === 12 || type === 17) return true;
+    if (Array.isArray(node.components)) stack.push(...node.components);
+  }
+  return false;
+}
+
+function normalizeComponents(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function splitTextToChunks(text, maxLen = 3800) {
+  const raw = String(text ?? "");
+  if (!raw) return [];
+  const chunks = [];
+  let remaining = raw;
+  while (remaining.length > maxLen) {
+    let cut = remaining.lastIndexOf("\n", maxLen);
+    if (cut <= 0) cut = maxLen;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.trim()) chunks.push(remaining.trim());
+  return chunks.filter(Boolean);
+}
+
+function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+    const imageUrl = String(raw?.image?.url ?? "").trim();
+    const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
+    }
+
+    if (imageUrl) blocks.push(`Image: ${imageUrl}`);
+    if (thumbnailUrl) blocks.push(`Thumbnail: ${thumbnailUrl}`);
+    if (footerText) {
+      const compactFooter = footerText
+        .split("\n")
+        .map((line) => String(line ?? "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      if (compactFooter) blocks.push(`-# ${compactFooter}`);
+    }
+
+    const compact = blocks.join("\n\n").trim();
+    const chunks = splitTextToChunks(compact);
+    for (const chunk of chunks) out.push({ type: 10, content: chunk });
+  }
+  return out;
+}
+
+function detectOwnerIdFromComponents(components = []) {
+  const stack = Array.isArray(components) ? [...components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const customId = String(node.custom_id ?? node.customId ?? "").trim();
+    if (customId) {
+      const match = customId.match(/(?:^|:)(\d{17,20})(?::|$)/);
+      if (match?.[1]) return match[1];
+    }
+    if (Array.isArray(node.components) && node.components.length > 0) {
+      stack.push(...node.components);
+    }
+  }
+  return null;
+}
+
+function convertPayloadToComponentsV2(interaction, payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (isComponentsV2Payload(payload)) return payload;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+
+  const guildId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  if (!guildId || !userId) return payload;
+  const player = ensurePlayer(guildId, userId);
+  if (!isComponentsV2Enabled({ guildId, userId, player })) return payload;
+
+  const normalizedRows = normalizeComponents(payload.components);
+  const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+  const ownerId = detectOwnerIdFromComponents(normalizedRows) || userId;
+
+  const primaryEmbed = payload.embeds[0];
+  const notificationEmbeds = payload.embeds.slice(1);
+  const mainComponents = [...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []), ...normalizedRows];
+  const notices = notificationEmbeds.map((embed) => {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim() || "Notification";
+    const details = legacyEmbedsToV2TextComponents([embed])
+      .map((entry) => String(entry?.content ?? "").trim())
+      .filter(Boolean);
+    return { title, details, tone: "info" };
+  });
+
+  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices,
+    ownerId,
+    ephemeral: isEphemeral
+  });
+
+  const { embeds, components, flags, ephemeral, ...rest } = payload;
+  return { ...rest, ...v2Payload };
+}
+
+function normalizePayloadForReply(interaction, payload = {}) {
+  const converted = convertPayloadToComponentsV2(interaction, payload);
+  if (converted?.embeds) {
+    converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
+  }
+  return converted;
+}
+
 /**
  * Commit a component interaction response
  */
 async function componentCommit(interaction, opts) {
-  const { ephemeral, targetMessageId, ...rest } = opts ?? {};
+  const normalizedPayload = normalizePayloadForReply(interaction, opts ?? {});
+  const { ephemeral, targetMessageId, ...rest } = normalizedPayload ?? {};
   const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
-  if (rest.embeds) {
-    rest.embeds = applyGreenButtonFooter(rest.embeds, rest.components);
-  }
 
   if (ephemeral) {
     if (interaction.deferred || interaction.replied) {
@@ -1068,7 +1236,7 @@ async function componentCommit(interaction, opts) {
     try {
       const target = await interaction.channel?.messages?.fetch(targetMessageId);
       if (target) {
-        const result = await target.edit(rest);
+        const result = await target.edit(normalizePayloadForReply(interaction, rest));
         if (interaction.deferred || interaction.replied) {
           if (!isMessageComponent) {
             try {
@@ -1086,9 +1254,9 @@ async function componentCommit(interaction, opts) {
   }
 
   if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(rest);
+    return interaction.editReply(normalizePayloadForReply(interaction, rest));
   }
-  return interaction.update(rest);
+  return interaction.update(normalizePayloadForReply(interaction, rest));
 }
 
 async function errorReply(interaction, content) {
@@ -1530,11 +1698,11 @@ async function handleParty(interaction) {
   }
 
   if (lockedResult.ephemeral) {
-    const payload = {
+    const payload = normalizePayloadForReply(interaction, {
       ...(lockedResult.response ?? {}),
       flags: MessageFlags.Ephemeral,
       ephemeral: true
-    };
+    });
     if (interaction.deferred || interaction.replied) {
       return interaction.followUp(payload);
     }
@@ -1544,7 +1712,7 @@ async function handleParty(interaction) {
   if (lockedResult.targetMessageId && interaction.channel?.messages) {
     try {
       const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
-      await msg.edit(lockedResult.response ?? {});
+      await msg.edit(normalizePayloadForReply(interaction, lockedResult.response ?? {}));
       if (interaction.deferred || interaction.replied) {
         await interaction.deleteReply().catch(() => {});
       }
@@ -1555,7 +1723,7 @@ async function handleParty(interaction) {
   }
 
   await ensurePublicReply();
-  return interaction.editReply(lockedResult.response ?? {});
+  return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response ?? {}));
 }
 
 async function handleTip(interaction) {
@@ -1581,7 +1749,7 @@ async function handleTip(interaction) {
   const action = "tip";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
   const cached = db ? getIdempotentResult(db, idemKey) : null;
-  if (cached) return interaction.editReply(cached);
+  if (cached) return interaction.editReply(normalizePayloadForReply(interaction, cached));
 
   const ownerLock = `discord:${interaction.id}`;
 
@@ -1639,7 +1807,7 @@ async function handleTip(interaction) {
   if (!lockedResult?.ok) {
     return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process tip.`);
   }
-  return interaction.editReply(lockedResult.response);
+  return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
 }
 
 async function handleVisit(interaction) {
@@ -1663,7 +1831,7 @@ async function handleVisit(interaction) {
   const action = "visit";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
   const cached = db ? getIdempotentResult(db, idemKey) : null;
-  if (cached) return interaction.editReply(cached);
+  if (cached) return interaction.editReply(normalizePayloadForReply(interaction, cached));
 
   const ownerLock = `discord:${interaction.id}`;
 
@@ -1742,7 +1910,7 @@ async function handleVisit(interaction) {
   if (!lockedResult?.ok) {
     return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process visit.`);
   }
-  return interaction.editReply(lockedResult.response);
+  return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
 }
 
 async function handleLeaderboard(interaction) {
@@ -1769,7 +1937,7 @@ async function handleLeaderboard(interaction) {
       ownerUser: interaction.member ?? interaction.user
     });
 
-    return interaction.editReply(view);
+    return interaction.editReply(normalizePayloadForReply(interaction, view));
   } catch (err) {
     console.error("Leaderboard error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading leaderboard: ${err.message}`);
@@ -1800,7 +1968,7 @@ async function handleGlobalLeaderboard(interaction) {
       ownerUser: interaction.member ?? interaction.user
     });
 
-    return interaction.editReply(view);
+    return interaction.editReply(normalizePayloadForReply(interaction, view));
   } catch (err) {
     console.error("Global leaderboard error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading global leaderboard: ${err.message}`);
@@ -1878,10 +2046,10 @@ async function handleStats(interaction) {
       });
     }
 
-    return interaction.editReply({ 
+    return interaction.editReply(normalizePayloadForReply(interaction, { 
       embeds: [embed], 
       components: [socialMainMenuRow(userId)] 
-    });
+    }));
   } catch (err) {
     console.error("Stats error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading stats: ${err.message}`);
@@ -1963,7 +2131,7 @@ async function handleComponent(interaction) {
       if (lockedResult.targetMessageId && interaction.channel?.messages) {
         try {
           const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
-          await msg.edit(lockedResult.response);
+          await msg.edit(normalizePayloadForReply(interaction, lockedResult.response));
           await interaction.deleteReply().catch(() => {});
           return;
         } catch {
@@ -1971,7 +2139,7 @@ async function handleComponent(interaction) {
         }
       }
 
-      return interaction.editReply(lockedResult.response);
+      return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
     }
 
     if (customId.startsWith("noodle-social:modal:join_party:")) {
@@ -2025,7 +2193,7 @@ async function handleComponent(interaction) {
       if (lockedResult.targetMessageId && interaction.channel?.messages) {
         try {
           const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
-          await msg.edit(lockedResult.response);
+          await msg.edit(normalizePayloadForReply(interaction, lockedResult.response));
           await interaction.deleteReply().catch(() => {});
           return;
         } catch {
@@ -2033,7 +2201,7 @@ async function handleComponent(interaction) {
         }
       }
 
-      return interaction.editReply(lockedResult.response);
+      return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
     }
 
     if (customId.startsWith("noodle-social:modal:invite_user:")) {
@@ -2088,7 +2256,7 @@ async function handleComponent(interaction) {
         if (!lockedResult?.ok) {
           return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to invite user.`);
         }
-        return interaction.editReply(lockedResult.response);
+        return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
       } catch (err) {
         console.error(`${getIcon("error")} withLock failed:`, err);
         try {

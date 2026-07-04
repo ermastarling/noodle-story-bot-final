@@ -81,11 +81,11 @@ export function evaluateCookMinigameTurn({
   targetAction,
   turnStartedAt,
   nowMs = Date.now(),
-  turnMs = 2200,
-  graceMs = 650
+  turnMs = 10000,
+  graceMs = 0
 } = {}) {
-  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 2200));
-  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 650));
+  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 10000));
+  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 0));
   const startedAt = Math.floor(Number(turnStartedAt) || nowMs);
   const elapsedMs = Math.max(0, Math.floor(Number(nowMs) || Date.now()) - startedAt);
   const allowedMs = safeTurnMs + safeGraceMs;
@@ -213,7 +213,10 @@ export function buildCookRecipePickerV2Message({
   token,
   entries = [],
   selectedRecipeId = null,
-  quantity = 1
+  quantity = 1,
+  currentPage = 0,
+  totalPages = 1,
+  needLines = []
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
@@ -221,33 +224,59 @@ export function buildCookRecipePickerV2Message({
 
   const selectedId = String(selectedRecipeId || "").trim();
   const safeQuantity = clampQuantity(quantity);
+  const safePage = Math.max(0, Math.floor(Number(currentPage) || 0));
+  const safeTotalPages = Math.max(1, Math.floor(Number(totalPages) || 1));
+  const safeNeedLines = (needLines || []).map((line) => String(line || "").trim()).filter(Boolean);
   const selectedEntry = (entries || []).find((entry) => String(entry?.recipeId || "") === selectedId) || null;
+  const options = (entries || []).map((entry) => {
+    const recipeId = String(entry?.recipeId || "").trim();
+    const recipeName = String(entry?.recipeName || recipeId || "Recipe").trim() || "Recipe";
+    const tier = String(entry?.tier || "standard").trim();
+    const ready = Math.max(0, Math.floor(Number(entry?.ready) || 0));
+    const cookable = Math.max(0, Math.floor(Number(entry?.cookable) || 0));
+    const short = Math.max(0, Math.floor(Number(entry?.short) || 0));
+    const descParts = [`${tier}`, `ready ${ready}`, `max ${cookable}`];
+    if (short > 0) descParts.push(`cook ${short}`);
+    const description = descParts.join(" • ").slice(0, 100);
+
+    return {
+      label: recipeName.slice(0, 100),
+      value: recipeId,
+      description,
+      default: recipeId === selectedId
+    };
+  }).filter((option) => Boolean(option.value));
 
   const components = [
-    text("## Cook Recipe Picker"),
+    text("## Cook Recipes"),
     text("Select a recipe and quantity, then cook.")
   ];
 
-  if (!entries.length) {
+  if (safeNeedLines.length > 0) {
+    components.push(text(`${safeNeedLines.slice(0, 6).join("\n")}${safeNeedLines.length > 6 ? "\n…" : ""}`));
+  }
+
+  if (!options.length) {
     components.push(text("No recipes are available to cook right now."));
   } else {
-    for (const entry of entries.slice(0, 10)) {
-      const recipeId = String(entry?.recipeId || "").trim();
-      if (!recipeId) continue;
-      const isSelected = selectedId === recipeId;
-      components.push({
-        type: 9,
-        components: [text(String(entry?.line || recipeId))],
-        accessory: button({
-          sceneKey,
-          actionKey: "sel",
-          userId: safeUserId,
-          token: safeToken,
-          arg: recipeId,
-          label: isSelected ? "Selected" : "Select",
-          style: isSelected ? 3 : 1
-        })
-      });
+    components.push({
+      type: 1,
+      components: [{
+        type: 3,
+        custom_id: `noodle:v2:${sceneKey}:sel:${safeUserId}:${safeToken}`,
+        placeholder: "Select a recipe",
+        min_values: 1,
+        max_values: 1,
+        options: options.slice(0, 25)
+      }]
+    });
+
+    if (safeTotalPages > 1) {
+      components.push(text(`Page **${safePage + 1}/${safeTotalPages}**`));
+    }
+
+    if (selectedEntry?.line) {
+      components.push(text(String(selectedEntry.line)));
     }
 
     components.push(text(`Quantity: **${safeQuantity}**`));
@@ -260,6 +289,16 @@ export function buildCookRecipePickerV2Message({
         button({ sceneKey, actionKey: "qty", userId: safeUserId, token: safeToken, arg: "p5", label: "+5" })
       ]
     });
+
+    if (safeTotalPages > 1) {
+      components.push({
+        type: 1,
+        components: [
+          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2 }),
+          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2 })
+        ]
+      });
+    }
   }
 
   components.push({
@@ -291,8 +330,8 @@ export function buildCookMinigameV2Message({
   score = 0,
   misses = 0,
   targetAction = "prep",
-  turnMs = 2200,
-  graceMs = 650,
+  turnMs = 10000,
+  graceMs = 0,
   lastTurnStatus = null
 } = {}) {
   const safeUserId = String(userId || "").trim();
@@ -302,8 +341,10 @@ export function buildCookMinigameV2Message({
   const safeScore = clampScore(score, safeTurns);
   const safeMisses = Math.max(0, Math.floor(Number(misses) || 0));
   const safeQuantity = clampQuantity(quantity);
-  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 2200));
-  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 650));
+  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 10000));
+  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 0));
+  const totalWindowSeconds = ((safeTurnMs + safeGraceMs) / 1000).toFixed(1);
+  const totalRunSeconds = ((safeTurns * (safeTurnMs + safeGraceMs)) / 1000).toFixed(1);
   const actionLabelByKey = {
     prep: "Prep",
     heat: "Heat",
@@ -333,8 +374,8 @@ export function buildCookMinigameV2Message({
       text("## Kitchen Line Minigame"),
       text(`Recipe: **${String(recipeName || "Unknown Dish")}** • Quantity: **${safeQuantity}**`),
       text(`Turn **${turnDisplay}/${safeTurns}** • Progress: ${progressBar(turnDisplay - 1, safeTurns)}`),
-      text(`Tap the **highlighted action** now: **${targetLabel}** (${guideMap[target] || "Follow station cue"})`),
-      text(`Window: **${(safeTurnMs / 1000).toFixed(1)}s** + **${(safeGraceMs / 1000).toFixed(1)}s** grace • Wrong/late taps count as misses.`),
+      text(`Tap the **GREEN button** now: **${targetLabel}** (${guideMap[target] || "Follow station cue"})`),
+      text(`You have **${totalWindowSeconds} seconds** to hit! Total time: **${totalRunSeconds} seconds**.`),
       text(`Hits: **${safeScore}** • Misses: **${safeMisses}**`),
       ...(statusLabel ? [text(`Last turn: **${statusLabel}**`)] : []),
       {

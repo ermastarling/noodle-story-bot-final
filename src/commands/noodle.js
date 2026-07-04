@@ -22,7 +22,8 @@ import {
 import {
   resolveTutorialGateValue,
   isTutorialStep as isTutorialStepFromRouting,
-  resolveTutorialProgressRowKey
+  resolveTutorialProgressRowKey,
+  resolveTutorialRecoverySub
 } from "../game/tutorialRouting.js";
 import { resolveComponentNavSub } from "./navDispatch.js";
 import {
@@ -230,6 +231,8 @@ import {
 import { theme } from "../ui/theme.js";
 import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 import {
+  buildComponentsV2MenuPayload,
+  buildComponentsV2PayloadWithNoticeCards,
   buildComponentsV2ContainerMessage,
   isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
@@ -259,6 +262,19 @@ import {
   buildServeResultV2Message,
   deriveServeOutcome
 } from "../ui/serveFlowV2.js";
+import {
+  buildCancelPickerV2Message,
+  deriveCancelOutcome
+} from "../ui/cancelFlowV2.js";
+import {
+  buildProfileHomeV2Message,
+  buildProfileEditV2Message,
+  buildSpecializationListV2Message,
+  buildSpecializationPickerV2Message,
+  buildSpecializationConfirmV2Message,
+  buildSpecializationUpdatedV2Message,
+  buildDecorSetsV2Message
+} from "../ui/profileFlowV2.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 
@@ -285,6 +301,7 @@ const takeoutMenuSelectionCache = new Map();
 const acceptOrderSelectionCache = new Map();
 // Temporary cache for cancel-order draft selections across paginated picker pages
 const cancelOrderSelectionCache = new Map();
+const v2LoopTracker = new Map();
 
 const SELECTION_CACHE_TTL_MS = 5 * 60 * 1000;
 const TAKEOUT_MENU_SELECTION_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -1252,7 +1269,7 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization", page = 0, pageSize = 5 }) {
+function buildDecorSetsViewData({ player, view = "specialization", page = 0, pageSize = 5 }) {
   const completed = new Set(player.profile?.decor_sets_completed ?? []);
   const owned = new Set(getOwnedDecorItems(player));
   const activeSpecId = player.profile?.specialization?.active_spec_id ?? null;
@@ -1268,7 +1285,7 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
   const pageSets = showSpecialization
     ? sets.slice(safePage * pageSize, (safePage + 1) * pageSize)
     : sets;
-  const lines = pageSets.map((set) => {
+  const entries = pageSets.map((set) => {
     const specId = getDecorSetSpecId(set.set_id);
     const spec = specId ? getSpecializationById(specializationsContent, specId) : null;
     const requirements = spec?.requirements ?? null;
@@ -1291,9 +1308,20 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
       return { item, itemId: p.item_id };
     });
     const piecesList = pieces.map(({ item, itemId }) => item?.name ?? itemId).join(", ");
+    const imageUrl = getIconUrl(`decor_set_thumb_${set.set_id}`)
+      ?? (specId ? getIconUrl(`decor_set_thumb_${specId}`) : null)
+      ?? getIconUrl("decor_set_thumb_placeholder")
+      ?? getIconUrl("decor_set_placeholder");
 
     if (showSpecialization) {
-      return `${status} **${set.name}**\n${piecesList}\n${description}`;
+      return {
+        setId: set.set_id,
+        name: set.name,
+        statusLine: status,
+        piecesLine: piecesList,
+        description,
+        imageUrl
+      };
     }
 
     const totalPieces = (set.pieces ?? []).length;
@@ -1324,8 +1352,33 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
         }
       }
     }
-    return `${status} **${set.name}**\n${piecesList}\n${countLine}\n${description}\n${missingBlock}`;
+    return {
+      setId: set.set_id,
+      name: set.name,
+      statusLine: status,
+      piecesLine: `${piecesList}\n${countLine}`,
+      description: `${description}\n${missingBlock}`,
+      imageUrl
+    };
   });
+
+  return {
+    entries,
+    page: safePage,
+    totalPages,
+    showSpecialization
+  };
+}
+
+function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization", page = 0, pageSize = 5 }) {
+  const {
+    entries,
+    page: safePage,
+    totalPages,
+    showSpecialization
+  } = buildDecorSetsViewData({ player, view, page, pageSize });
+
+  const lines = entries.map((entry) => `${entry.statusLine} **${entry.name}**\n${entry.piecesLine}\n${entry.description}`);
 
   let description = lines.length ? lines.join("\n\n") : "_No sets available on this page yet._";
   if (showSpecialization && totalPages > 1) {
@@ -3294,29 +3347,70 @@ function isSpecializationVisible(player, spec) {
   return reqCheck.ok || player?.profile?.specialization?.active_spec_id === spec.spec_id;
 }
 
-function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0, pageSize = 5) {
+function getSpecializationThumbnailUrl(spec = null) {
+  if (!spec) return getIconUrl("decor_set_thumb_placeholder") ?? getIconUrl("decor_set_placeholder");
+  return getIconUrl(`decor_set_thumb_${spec.spec_id}`)
+    ?? getIconUrl(`decor_set_thumb_${spec.icon}`)
+    ?? getIconUrl("decor_set_thumb_placeholder")
+    ?? getIconUrl("decor_set_placeholder");
+}
+
+function buildSpecializationListData(player, now = nowTs(), page = 0, pageSize = 5) {
   const state = ensureSpecializationState(player);
   const specs = (specializationsContent?.specializations ?? [])
     .filter((spec) => isSpecializationVisible(player, spec));
   const totalPages = Math.max(1, Math.ceil(specs.length / pageSize));
   const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
   const pageSpecs = specs.slice(safePage * pageSize, (safePage + 1) * pageSize);
-  const lines = pageSpecs.map((spec) => {
+
+  const entries = pageSpecs.map((spec) => {
     const isActive = state.active_spec_id === spec.spec_id;
     const check = canSelectSpecialization(player, specializationsContent, spec.spec_id, now);
-    const status = isActive
+    const statusLine = isActive
       ? `${getIcon("status_complete")} Equipped`
       : check.ok
         ? "Available"
         : `${getIcon("lock")} ${check.reason}`;
-    const icon = resolveIcon(spec.icon, getIcon("sparkle"));
-    const description = spec.description ? `\n_${spec.description}_` : "";
-    return `${icon} **${spec.name}** — ${status}${description}`;
+
+    return {
+      specId: spec.spec_id,
+      name: spec.name,
+      icon: resolveIcon(spec.icon, getIcon("sparkle")),
+      description: spec.description ? `_${spec.description}_` : "",
+      statusLine,
+      thumbnailUrl: getSpecializationThumbnailUrl(spec)
+    };
   });
 
   if (state?.active_spec_id && !specs.some((s) => s.spec_id === state.active_spec_id)) {
-    lines.unshift(`${getIcon("sparkle")} **${state.active_spec_id}** — ${getIcon("status_complete")} Equipped`);
+    entries.unshift({
+      specId: state.active_spec_id,
+      name: state.active_spec_id,
+      icon: getIcon("sparkle"),
+      description: "",
+      statusLine: `${getIcon("status_complete")} Equipped`,
+      thumbnailUrl: getIconUrl("decor_set_placeholder")
+    });
   }
+
+  const selectOptions = specs.slice(0, 25).map((spec) => ({
+    label: spec.name?.slice(0, 100) ?? spec.spec_id,
+    description: (spec.description ?? "").slice(0, 100) || "No description yet.",
+    value: spec.spec_id
+  }));
+
+  return {
+    entries,
+    page: safePage,
+    totalPages,
+    selectOptions,
+    visibleSpecs: specs
+  };
+}
+
+function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0, pageSize = 5) {
+  const { entries, page: safePage, totalPages } = buildSpecializationListData(player, now, page, pageSize);
+  const lines = entries.map((entry) => `${entry.icon} **${entry.name}** — ${entry.statusLine}${entry.description ? `\n${entry.description}` : ""}`);
 
   let description = lines.length
     ? `${lines.join("\n\n")}\n\nUse **Select Specialization** below to switch.`
@@ -3334,6 +3428,25 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
   embed.setFooter({ text: footerText });
 
   return { embed, page: safePage, totalPages };
+}
+
+function getProfileV2ButtonEmoji() {
+  return {
+    orders: getButtonEmoji("orders"),
+    cart: getButtonEmoji("cart"),
+    pantry: getButtonEmoji("pantry"),
+    new: getButtonEmoji("new"),
+    party: getButtonEmoji("party"),
+    upgrades: getButtonEmoji("upgrades"),
+    stats: getButtonEmoji("stats"),
+    quests: getButtonEmoji("quests"),
+    customize: getButtonEmoji("customize"),
+    note: getButtonEmoji("note"),
+    tag: getButtonEmoji("tag"),
+    sparkle: getButtonEmoji("sparkle"),
+    back: getButtonEmoji("back"),
+    next: getButtonEmoji("next")
+  };
 }
 
 function resetTutorialState(player) {
@@ -3554,6 +3667,340 @@ function normalizeComponentsV2Payload(payload = {}) {
   return rest;
 }
 
+function splitTextToV2Chunks(text, maxLen = 3800) {
+  const raw = String(text ?? "");
+  if (!raw) return [];
+  const chunks = [];
+  let remaining = raw;
+  while (remaining.length > maxLen) {
+    let cut = remaining.lastIndexOf("\n", maxLen);
+    if (cut <= 0) cut = maxLen;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.trim()) chunks.push(remaining.trim());
+  return chunks.filter(Boolean);
+}
+
+function normalizeEmbedFieldName(name = "") {
+  return String(name ?? "")
+    .toLowerCase()
+    .replace(/:[a-z0-9_+-]+:/gi, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function buildProfileEmbedV2Components(raw = {}) {
+  const title = String(raw?.title ?? "").trim();
+  const description = String(raw?.description ?? "").trim();
+  const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+  const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+  const imageUrl = String(raw?.image?.url ?? "").trim();
+  const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+  const components = [];
+  if (title) components.push({ type: 10, content: `## ${title}` });
+  if (description) components.push({ type: 10, content: description });
+
+  const fieldMap = new Map();
+  for (const field of fields) {
+    const normalized = normalizeEmbedFieldName(field?.name);
+    const value = String(field?.value ?? "").trim();
+    if (!normalized || !value) continue;
+    fieldMap.set(normalized, value);
+  }
+
+  const bowlsServed = fieldMap.get("bowls served") ?? "-";
+  const level = fieldMap.get("level") ?? "-";
+  const rep = fieldMap.get("rep") ?? "-";
+  const coins = fieldMap.get("coins") ?? "-";
+
+  components.push({
+    type: 10,
+    content: [
+      `**Bowls Served**: ${bowlsServed}    **Level**: ${level}`,
+      `**REP**: ${rep}    **Coins**: ${coins}`
+    ].join("\n")
+  });
+
+  for (const field of fields) {
+    const name = String(field?.name ?? "").trim();
+    const value = String(field?.value ?? "").trim();
+    if (!name && !value) continue;
+
+    const normalized = normalizeEmbedFieldName(name);
+    if (normalized === "bowls served" || normalized === "level" || normalized === "rep" || normalized === "coins") {
+      continue;
+    }
+
+    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+    if (block) components.push({ type: 10, content: block });
+  }
+
+  if (imageUrl) components.push({ type: 10, content: `Decor set image: ${imageUrl}` });
+  if (thumbnailUrl) components.push({ type: 10, content: `Thumbnail: ${thumbnailUrl}` });
+
+  if (footerText) {
+    const compactFooter = footerText
+      .split("\n")
+      .map((line) => String(line ?? "").trim())
+      .filter(Boolean)
+      .join(" • ");
+    if (compactFooter) components.push({ type: 10, content: `-# ${compactFooter}` });
+  }
+
+  return components;
+}
+
+function isProfileEmbedForV2(raw = {}) {
+  const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+  if (fields.length < 4) return false;
+  const normalized = new Set(fields.map((field) => normalizeEmbedFieldName(field?.name)).filter(Boolean));
+  return normalized.has("bowls served")
+    && normalized.has("level")
+    && normalized.has("rep")
+    && normalized.has("coins");
+}
+
+function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    if (isProfileEmbedForV2(raw)) {
+      out.push(...buildProfileEmbedV2Components(raw));
+      continue;
+    }
+
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+    const imageUrl = String(raw?.image?.url ?? "").trim();
+    const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+      if (block) blocks.push(block);
+    }
+
+    // Components V2 text blocks do not render markdown image syntax.
+    if (imageUrl) blocks.push(`Image: ${imageUrl}`);
+    if (thumbnailUrl) blocks.push(`Thumbnail: ${thumbnailUrl}`);
+
+    if (footerText) {
+      const compactFooter = footerText
+        .split("\n")
+        .map((line) => String(line ?? "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      if (compactFooter) blocks.push(`-# ${compactFooter}`);
+    }
+
+    const compact = blocks.join("\n\n").trim();
+    const chunks = splitTextToV2Chunks(compact);
+    for (const chunk of chunks) {
+      out.push({ type: 10, content: chunk });
+    }
+  }
+  return out;
+}
+
+function detectOwnerIdFromComponents(components = []) {
+  const stack = Array.isArray(components) ? [...components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+
+    const customId = String(node.custom_id ?? node.customId ?? "").trim();
+    if (customId) {
+      const match = customId.match(/(?:^|:)(\d{17,20})(?::|$)/);
+      if (match?.[1]) return match[1];
+    }
+
+    if (Array.isArray(node.components) && node.components.length > 0) {
+      stack.push(...node.components);
+    }
+  }
+  return null;
+}
+
+function inferNoticeToneFromEmbed(raw = {}) {
+  const title = String(raw?.title ?? "").trim().toLowerCase();
+  const description = String(raw?.description ?? "").trim().toLowerCase();
+  const haystack = `${title}\n${description}`;
+  if (/warning|failed|error|lock|cooldown|missing/.test(haystack)) return "warning";
+  if (/complete|unlocked|started|success|claimed/.test(haystack)) return "success";
+  return "info";
+}
+
+function legacyEmbedToNoticeCardSpec(embed) {
+  const raw = embed?.toJSON?.() ?? embed ?? {};
+  const title = String(raw?.title ?? "").trim() || "Notification";
+  const description = String(raw?.description ?? "").trim();
+  const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+  const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+  const imageUrl = String(raw?.image?.url ?? "").trim();
+  const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+  const detailBlocks = [];
+  if (description) detailBlocks.push(description);
+
+  for (const field of fields) {
+    const name = String(field?.name ?? "").trim();
+    const value = String(field?.value ?? "").trim();
+    if (!name && !value) continue;
+    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+    if (block) detailBlocks.push(block);
+  }
+
+  if (imageUrl) detailBlocks.push(`Image: ${imageUrl}`);
+  if (thumbnailUrl) detailBlocks.push(`Thumbnail: ${thumbnailUrl}`);
+  if (footerText) {
+    const compactFooter = footerText
+      .split("\n")
+      .map((line) => String(line ?? "").trim())
+      .filter(Boolean)
+      .join(" • ");
+    if (compactFooter) detailBlocks.push(`-# ${compactFooter}`);
+  }
+
+  const compact = detailBlocks.join("\n\n").trim();
+  const details = splitTextToV2Chunks(compact);
+  return {
+    title,
+    details,
+    tone: inferNoticeToneFromEmbed(raw)
+  };
+}
+
+function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+  if (isComponentsV2Payload(payload)) return payload;
+
+  const normalizedRows = normalizeComponents(payload.components, payload.flags).filter((row) => Number(row?.type) === 1);
+  const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+  const ownerId = detectOwnerIdFromComponents(normalizedRows);
+
+  const primaryEmbed = payload.embeds[0];
+  const notificationEmbeds = payload.embeds.slice(1);
+  const primaryTextComponents = legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []);
+  const notices = notificationEmbeds
+    .map((embed) => legacyEmbedToNoticeCardSpec(embed))
+    .filter((notice) => notice.details.length > 0 || notice.title);
+
+  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+    mainComponents: [...primaryTextComponents, ...normalizedRows],
+    notices,
+    ownerId,
+    ephemeral: isEphemeral
+  });
+
+  const { embeds, components, flags, ephemeral, ...rest } = payload;
+  return {
+    ...rest,
+    ...v2Payload
+  };
+}
+
+const LEGACY_TO_V2_SUBS = new Set([
+  "buy",
+  "sell",
+  "cook",
+  "pantry",
+  "help",
+  "recipes",
+  "regulars",
+  "season",
+  "event",
+  "status",
+  "dashboard",
+  "profile",
+  "profile_edit",
+  "specialize",
+  "decor",
+  "decor_sets_spec",
+  "store",
+  "about",
+  "news",
+  "takeout",
+  "takeout_menu",
+  "takeout_open",
+  "takeout_claim",
+  "takeout_cook",
+  "takeout_serve",
+  "takeout_needs",
+  "forage",
+  "forage_menu",
+  "fishing",
+  "fishing_menu",
+  "garden",
+  "compost",
+  "plant",
+  "harvest",
+  "kitchen",
+  "kitchen_start",
+  "kitchen_collect"
+]);
+
+function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
+  if (sourceMessageIsV2) return true;
+  if (!rolloutEnabled) return false;
+  const normalizedSub = String(sub || "").trim();
+  const normalizedNavSource = String(navSource || "").trim();
+  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource);
+}
+
+function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
+  if (!interaction || !payload || typeof payload !== "object") return false;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return false;
+  if (isComponentsV2Payload(payload)) return false;
+
+  const customId = String(interaction?.customId ?? "").trim();
+  const isConvertibleComponent =
+    /^noodle:(multibuy|sell):/.test(customId)
+    || /^noodle:nav:(buy|sell|pantry|help|recipes|regulars|season|event|profile|profile_edit|specialize|decor|about|news|takeout|takeout_menu|takeout_open|takeout_claim|takeout_needs|forage|fishing|garden|compost|kitchen):/.test(customId)
+    || /^noodle:action:(store):/.test(customId)
+    || /^noodle:profile:(edit_shop_name|edit_tagline|specialize_select|specialize_confirm|specialize_cancel):/.test(customId)
+    || /^noodle:profile:specialize_pick:/.test(customId)
+    || /^noodle:pick:(forage_|fishing_)/.test(customId)
+    || /^noodle:pick:(takeout_cook|takeout_serve|takeout_cook_select|takeout_serve_select|takeout_cook_qty):/.test(customId)
+    || /^noodle:garden:(plant_select|harvest_select):/.test(customId)
+    || /^noodle:kitchen:(start|collect):/.test(customId);
+  if (!isConvertibleComponent) return false;
+
+  const guildId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  if (!guildId || !userId) return false;
+  const player = ensurePlayer(guildId, userId);
+  return isComponentsV2Enabled({ guildId, userId, player });
+}
+
 function buildInteractionFailureContext(interaction, messageId = null) {
   return {
     guildId: interaction?.guildId ?? null,
@@ -3615,8 +4062,23 @@ async function rawWebhookFollowUp(interaction, payload) {
     .post({ data: toRawWebhookPayload(payload) });
 }
 
+async function rawChannelEditMessage(interaction, channelId, messageId, payload) {
+  if (!interaction?.client?.api || !channelId || !messageId) {
+    throw new Error("Raw channel message edit unavailable: missing client api/channelId/messageId");
+  }
+  return interaction.client.api
+    .channels(channelId)
+    .messages(messageId)
+    .patch({ data: toRawWebhookPayload(payload) });
+}
+
 async function componentCommit(interaction, payload) {
-const { ephemeral, targetMessageId, ...rawRest } = payload ?? {};
+let sourcePayload = payload ?? {};
+if (shouldAutoConvertCommerceComponentPayload(interaction, sourcePayload)) {
+  sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
+}
+
+const { ephemeral, targetMessageId, ...rawRest } = sourcePayload;
 let rest = normalizePayloadContent(rawRest);
 rest = normalizeComponentsV2Payload(rest);
 
@@ -3649,8 +4111,13 @@ if (targetMessageId && !ephemeral) {
   try {
     const target = await interaction.channel?.messages?.fetch(targetMessageId);
     if (target) {
+      const targetFlags = Number(target?.flags?.bitfield ?? target?.flags ?? 0);
+      const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
       // Convert components to JSON if they're builder objects
       let editPayload = { ...rest };
+      if (targetIsV2 && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+        editPayload = convertLegacyEmbedPayloadToComponentsV2(editPayload);
+      }
       if (editPayload.components) {
         editPayload.components = normalizeComponents(editPayload.components, editPayload.flags);
       }
@@ -3667,7 +4134,10 @@ if (targetMessageId && !ephemeral) {
           // Ignore if already deleted
         }
       }
-      return target.edit(editPayload);
+      if (isComponentsV2Payload(editPayload)) {
+        return await rawChannelEditMessage(interaction, target.channelId ?? interaction.channelId, targetMessageId, editPayload);
+      }
+      return await target.edit(editPayload);
     }
   } catch (e) {
     console.error("Failed to edit target message", {
@@ -3792,9 +4262,24 @@ if (finalOptions.embeds) {
 }
 finalOptions = normalizePayloadContent(finalOptions);
 finalOptions = normalizeComponentsV2Payload(finalOptions);
+if ((Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && finalOptions.embeds) {
+  const { embeds, ...restFinal } = finalOptions;
+  finalOptions = restFinal;
+}
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
+  if (isComponentsV2Payload(finalOptions)) {
+    try {
+      return await rawWebhookEditOriginal(interaction, finalOptions);
+    } catch (rawEditError) {
+      console.error("Component raw webhook edit failed", {
+        ...buildInteractionFailureContext(interaction),
+        errorCode: rawEditError?.code ?? null,
+        errorMessage: rawEditError?.message ?? String(rawEditError)
+      });
+    }
+  }
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
@@ -4553,7 +5038,7 @@ function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser,
   };
 }
 
-function buildAcceptPickerSceneEntries({ serverId, userId, p, s }) {
+function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageSize = 10 }) {
   const set = buildSettingsMap(settingsCatalog, s.settings);
   s.season = computeActiveSeason(set);
   const activeEventEffects = getActiveEventEffects(eventsContent, s);
@@ -4562,37 +5047,58 @@ function buildAcceptPickerSceneEntries({ serverId, userId, p, s }) {
   ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
   applyHouse247OrderBoardOverride(p);
 
-  const pageData = generateOrderPageForPlayer({
-    playerState: p,
-    settings: set,
-    content,
-    activeSeason: s.season,
-    serverId,
-    userId,
-    activeEventId,
-    page: 0,
-    pageSize: 25
-  });
+  const acceptedOrderIds = new Set(Object.keys(p.orders?.accepted ?? {}).map((id) => String(id || "").trim()).filter(Boolean));
+  const { totalCount, consumedSet } = getOrdersMeta(p);
+  const totalBoardPages = Math.max(1, Math.ceil(Math.max(0, totalCount) / 25));
+  const availableBoardPages = [];
+  for (let idx = 0; idx < totalCount; idx += 1) {
+    if (consumedSet.has(idx)) continue;
+    const pageIdx = Math.floor(idx / 25);
+    if (!availableBoardPages.includes(pageIdx)) availableBoardPages.push(pageIdx);
+  }
 
   const orderTokenByShortId = {};
-  const entries = (pageData?.orders ?? []).slice(0, 10).map((o) => {
-    const shortId = shortOrderId(o.order_id);
-    orderTokenByShortId[shortId] = String(o.order_id);
-    const recipeName = content.recipes[o.recipe_id]?.name ?? "a dish";
-    const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
-    const ready = getTotalBowlsForRecipe(p, o.recipe_id);
-    return {
-      shortId,
-      line: `\`${shortId}\` • **${recipeName}** — *${npcName}* (${o.tier}) • ready bowls: **${ready}**`
-    };
-  });
+  const allEntries = [];
+  const pagesToScan = availableBoardPages.length > 0 ? availableBoardPages : Array.from({ length: totalBoardPages }, (_, idx) => idx);
+  for (const boardPage of pagesToScan) {
+    const pageData = generateOrderPageForPlayer({
+      playerState: p,
+      settings: set,
+      content,
+      activeSeason: s.season,
+      serverId,
+      userId,
+      activeEventId,
+      page: boardPage,
+      pageSize: 25
+    });
+    for (const o of pageData?.orders ?? []) {
+      const fullOrderId = String(o?.order_id || "").trim();
+      if (!fullOrderId || acceptedOrderIds.has(fullOrderId)) continue;
+      const shortId = shortOrderId(fullOrderId);
+      orderTokenByShortId[shortId] = fullOrderId;
+      const recipeName = content.recipes[o.recipe_id]?.name ?? "a dish";
+      const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
+      const ready = getTotalBowlsForRecipe(p, o.recipe_id);
+      allEntries.push({
+        shortId,
+        line: `\`${shortId}\` • **${recipeName}** — *${npcName}* (${o.tier}) • ready bowls: **${ready}**`
+      });
+    }
+  }
 
-  return { entries, orderTokenByShortId };
+  allEntries.sort((a, b) => String(a.shortId).localeCompare(String(b.shortId)));
+  const safePageSize = Math.max(1, Math.floor(Number(pageSize) || 10));
+  const totalPages = Math.max(1, Math.ceil(allEntries.length / safePageSize));
+  const safePage = Math.max(0, Math.min(Math.floor(Number(page) || 0), totalPages - 1));
+  const entries = allEntries.slice(safePage * safePageSize, (safePage + 1) * safePageSize);
+
+  return { entries, orderTokenByShortId, page: safePage, totalPages };
 }
 
-function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortIds = [], statusLine = "" }) {
-  const { entries, orderTokenByShortId } = buildAcceptPickerSceneEntries({ serverId, userId, p, s });
-  const entryShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortIds = [], statusLine = "", page = 0 }) {
+  const { entries, orderTokenByShortId, page: safePage, totalPages } = buildAcceptPickerSceneEntries({ serverId, userId, p, s, page });
+  const entryShortIds = new Set(Object.keys(orderTokenByShortId));
   const normalizedSelected = (selectedShortIds || [])
     .map((id) => String(id || "").trim())
     .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
@@ -4603,7 +5109,9 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
     state: {
       entries,
       orderTokenByShortId,
-      selectedShortIds: normalizedSelected
+      selectedShortIds: normalizedSelected,
+      page: safePage,
+      totalPages
     }
   });
 
@@ -4612,7 +5120,9 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
     token: sceneState.token,
     entries,
     selectedShortIds: normalizedSelected,
-    statusLine
+    statusLine,
+    currentPage: safePage,
+    totalPages
   });
 }
 
@@ -4651,28 +5161,56 @@ function buildCookRecipePickerSceneEntries({ p, s }) {
 
     return {
       recipeId,
+      recipeName,
+      tier: String(recipe?.tier ?? "standard"),
+      need,
+      ready,
+      short,
       line: `**${recipeName}** (${recipe?.tier ?? "standard"}) • ready **${ready}** • max now **${cookable}**${needLine}`,
       cookable
     };
   });
 }
 
-function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, quantity = 1 }) {
-  const entries = buildCookRecipePickerSceneEntries({ p, s });
+function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, quantity = 1, page = null }) {
+  const allEntries = buildCookRecipePickerSceneEntries({ p, s });
+  const pageSize = 25;
   const selectedId = String(selectedRecipeId || "").trim();
-  const selectedExists = entries.some((entry) => String(entry?.recipeId || "") === selectedId);
+  const selectedExists = allEntries.some((entry) => String(entry?.recipeId || "") === selectedId);
   const fallbackSelected = selectedExists
     ? selectedId
-    : String(entries?.[0]?.recipeId || "").trim();
+    : String(allEntries?.[0]?.recipeId || "").trim();
   const safeQuantity = Math.max(1, Math.min(99, Math.floor(Number(quantity) || 1)));
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, allEntries.length) / pageSize));
+  const selectedIndex = fallbackSelected
+    ? allEntries.findIndex((entry) => String(entry?.recipeId || "") === fallbackSelected)
+    : -1;
+  const selectedPage = selectedIndex >= 0 ? Math.floor(selectedIndex / pageSize) : 0;
+  const requestedPage = Number.isFinite(Number(page)) ? Math.floor(Number(page)) : selectedPage;
+  const safePage = Math.max(0, Math.min(requestedPage, totalPages - 1));
+  const entries = allEntries.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const selectedOnPage = entries.some((entry) => String(entry?.recipeId || "") === fallbackSelected);
+  const effectiveSelected = selectedOnPage
+    ? fallbackSelected
+    : String(entries?.[0]?.recipeId || "").trim();
+
+  const needsByRecipe = allEntries
+    .filter((entry) => Number(entry?.short) > 0)
+    .sort((a, b) => Number(b?.short || 0) - Number(a?.short || 0));
+  const needLines = needsByRecipe.map((entry) => {
+    const recipeName = String(entry?.recipeName || entry?.recipeId || "Recipe");
+    return `• ${recipeName} — need **${entry.need}**, ready **${entry.ready}** (cook **${entry.short}** more)`;
+  });
 
   const sceneState = putSceneState({
     sceneKey: "cook.recipe_picker",
     ownerId: userId,
     state: {
       entries,
-      selectedRecipeId: fallbackSelected || null,
-      quantity: safeQuantity
+      selectedRecipeId: effectiveSelected || null,
+      quantity: safeQuantity,
+      page: safePage,
+      totalPages
     }
   });
 
@@ -4680,17 +5218,21 @@ function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, qua
     userId,
     token: sceneState.token,
     entries,
-    selectedRecipeId: fallbackSelected || null,
-    quantity: safeQuantity
+    selectedRecipeId: effectiveSelected || null,
+    quantity: safeQuantity,
+    currentPage: safePage,
+    totalPages,
+    needLines
   });
 }
 
-function buildServePickerSceneEntries({ p }) {
+function buildServePickerSceneEntries({ p, readyOnly = false }) {
   const now = nowTs();
   const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
   const orderTokenByShortId = {};
+  const onlyReady = Boolean(readyOnly);
 
-  const entries = acceptedEntries.map(([fullOrderId, accepted]) => {
+  const mappedEntries = acceptedEntries.map(([fullOrderId, accepted]) => {
     const shortId = shortOrderId(fullOrderId);
     orderTokenByShortId[shortId] = String(fullOrderId);
     const order = accepted?.order ?? null;
@@ -4713,6 +5255,10 @@ function buildServePickerSceneEntries({ p }) {
     };
   });
 
+  const entries = onlyReady
+    ? mappedEntries.filter((entry) => entry.ready && !entry.expired)
+    : mappedEntries;
+
   entries.sort((a, b) => {
     if (a.ready !== b.ready) return a.ready ? -1 : 1;
     if (a.expired !== b.expired) return a.expired ? 1 : -1;
@@ -4722,12 +5268,13 @@ function buildServePickerSceneEntries({ p }) {
   return { entries, orderTokenByShortId };
 }
 
-function buildServePickerScenePayload({ userId, p, selectedShortId = null } = {}) {
-  const { entries, orderTokenByShortId } = buildServePickerSceneEntries({ p });
-  const requested = String(selectedShortId || "").trim();
-  const selected = entries.some((entry) => entry.shortId === requested)
-    ? requested
-    : String(entries[0]?.shortId || "").trim();
+function buildServePickerScenePayload({ userId, p, selectedShortIds = [], readyOnly = false, statusLine = "" } = {}) {
+  const onlyReady = Boolean(readyOnly);
+  const { entries, orderTokenByShortId } = buildServePickerSceneEntries({ p, readyOnly: onlyReady });
+  const entryShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+  const normalizedSelected = (selectedShortIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
 
   const sceneState = putSceneState({
     sceneKey: "serve.order_picker",
@@ -4735,7 +5282,8 @@ function buildServePickerScenePayload({ userId, p, selectedShortId = null } = {}
     state: {
       entries,
       orderTokenByShortId,
-      selectedShortId: selected || null
+      selectedShortIds: normalizedSelected,
+      readyOnly: onlyReady
     }
   });
 
@@ -4743,7 +5291,61 @@ function buildServePickerScenePayload({ userId, p, selectedShortId = null } = {}
     userId,
     token: sceneState.token,
     entries,
-    selectedShortId: selected || null
+    selectedShortIds: normalizedSelected,
+    readyOnly: onlyReady,
+    statusLine
+  });
+}
+
+function buildCancelPickerSceneEntries({ p }) {
+  const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+  const orderTokenByShortId = {};
+
+  const entries = acceptedEntries.map(([fullOrderId, accepted]) => {
+    const shortId = shortOrderId(fullOrderId);
+    orderTokenByShortId[shortId] = String(fullOrderId);
+    const order = accepted?.order ?? null;
+    const recipeId = String(order?.recipe_id || "").trim();
+    const recipeName = recipeId ? displayRecipeName(recipeId) : "Unknown recipe";
+    const npcName = order?.npc_archetype
+      ? (content.npcs?.[order.npc_archetype]?.name ?? order.npc_archetype)
+      : "customer";
+
+    return {
+      shortId,
+      fullOrderId: String(fullOrderId),
+      line: `\`${shortId}\` • **${recipeName}** — *${npcName}*`
+    };
+  });
+
+  entries.sort((a, b) => String(a.shortId).localeCompare(String(b.shortId)));
+
+  return { entries, orderTokenByShortId };
+}
+
+function buildCancelPickerScenePayload({ userId, p, selectedShortIds = [], statusLine = "" } = {}) {
+  const { entries, orderTokenByShortId } = buildCancelPickerSceneEntries({ p });
+  const entryShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+  const normalizedSelected = (selectedShortIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
+
+  const sceneState = putSceneState({
+    sceneKey: "orders.cancel_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      orderTokenByShortId,
+      selectedShortIds: normalizedSelected
+    }
+  });
+
+  return buildCancelPickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries,
+    selectedShortIds: normalizedSelected,
+    statusLine
   });
 }
 
@@ -4757,10 +5359,12 @@ function buildCookMinigameScenePayload({
   misses = 0,
   targetActions = [],
   runToken = null,
-  turnMs = 2200,
-  graceMs = 650,
+  turnMs = 10000,
+  graceMs = 0,
   turnStartedAt = null,
   lastTurnStatus = null,
+  counterCook = false,
+  returnSub = "orders",
   nowMs = Date.now()
 } = {}) {
   const safeRecipeId = String(recipeId || "").trim();
@@ -4772,8 +5376,8 @@ function buildCookMinigameScenePayload({
     quantity: safeQuantity,
     nowMs
   });
-  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 2200));
-  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 650));
+  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 10000));
+  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 0));
   const normalizedTargets = Array.isArray(targetActions) && targetActions.length
     ? targetActions.map((action) => String(action || "").trim().toLowerCase()).filter(Boolean)
     : buildCookMinigameTargetActions({ recipeId: safeRecipeId, runToken: safeRunToken, totalTurns: safeTotalTurns });
@@ -4786,6 +5390,8 @@ function buildCookMinigameScenePayload({
   const safeMisses = Math.max(0, Math.floor(Number(misses) || 0));
   const safeTurnStartedAt = Math.max(0, Math.floor(Number(turnStartedAt || nowMs) || nowMs));
   const safeLastTurnStatus = String(lastTurnStatus || "").trim().toLowerCase() || null;
+  const safeCounterCook = Boolean(counterCook);
+  const safeReturnSub = String(returnSub || "orders").trim() || "orders";
 
   const sceneState = putSceneState({
     sceneKey: "cook.minigame",
@@ -4802,7 +5408,9 @@ function buildCookMinigameScenePayload({
       turnMs: safeTurnMs,
       graceMs: safeGraceMs,
       turnStartedAt: safeTurnStartedAt,
-      lastTurnStatus: safeLastTurnStatus
+      lastTurnStatus: safeLastTurnStatus,
+      counterCook: safeCounterCook,
+      returnSub: safeReturnSub
     }
   });
 
@@ -5355,7 +5963,8 @@ function buildForageMenuPayload({
   kitchenJustUnlocked,
   fishingUnlocked,
   fishingJustUnlocked,
-  page = 0
+  page = 0,
+  selectedItemId = null
 }) {
   const gardenUnlocked = isGardenUnlocked(player);
   const now = nowTs();
@@ -5379,11 +5988,23 @@ function buildForageMenuPayload({
     randomPrimary: true,
     page
   });
+  const normalizedSelectedItemId = String(selectedItemId || "").trim();
+  const allowedForageIds = new Set(getAllowedForageIdsForPlayer(player));
+  const selectedForageItemId = allowedForageIds.has(normalizedSelectedItemId) ? normalizedSelectedItemId : null;
+  const forageQtyRow = selectedForageItemId
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:1:${safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:2:${safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:3:${safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:4:${safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:5:${safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+      )
+    : null;
   const forageBaseDescription = forageCount > 0
     ? [
         "Choose how you want to forage:",
         `• Take a forage stroll for surprise finds`,
-        `• **OR** Pick a specific ingredient, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Forager's level*`
+        `• **OR** Pick a specific ingredient, then tap a quantity button (**1-5**)\n\n**Final amount you receive is increased by your Forager's level*`
       ].join("\n")
     : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.";
 
@@ -5410,7 +6031,7 @@ function buildForageMenuPayload({
       fishingJustUnlocked,
       kitchenUnlocked,
       kitchenJustUnlocked,
-      prependRows: [actionRow, pickerRow, ...(pageRow ? [pageRow] : [])]
+      prependRows: [actionRow, pickerRow, ...(forageQtyRow ? [forageQtyRow] : []), ...(pageRow ? [pageRow] : [])]
     })
   };
 }
@@ -5489,7 +6110,8 @@ function buildFishingMenuPayload({
   kitchenJustUnlocked,
   fishingUnlocked,
   fishingJustUnlocked,
-  page = 0
+  page = 0,
+  selectedItemId = null
 }) {
   const gardenUnlocked = isGardenUnlocked(player);
   const now = nowTs();
@@ -5509,12 +6131,24 @@ function buildFishingMenuPayload({
     randomPrimary: true,
     page
   });
+  const normalizedSelectedItemId = String(selectedItemId || "").trim();
+  const allowedFishingIds = new Set(getAllowedFishingIdsForPlayer(player));
+  const selectedFishingItemId = allowedFishingIds.has(normalizedSelectedItemId) ? normalizedSelectedItemId : null;
+  const fishingQtyRow = selectedFishingItemId
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:1:${safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:2:${safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:3:${safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:4:${safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:5:${safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+      )
+    : null;
 
   const fishingBaseDescription = fishingCount > 0
     ? [
         "Choose how you want to fish:",
         "• Enjoy a casual fishing trip for surprise catches",
-        "• **OR** Pick a specific fish or seafood, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Fisher Crew's level*"
+        "• **OR** Pick a specific fish or seafood, then tap a quantity button (**1-5**)\n\n**Final amount you receive is increased by your Fisher Crew's level*"
       ].join("\n")
     : "No fishing items are available right now.";
 
@@ -5542,7 +6176,7 @@ function buildFishingMenuPayload({
       fishingJustUnlocked,
       kitchenUnlocked,
       kitchenJustUnlocked,
-      prependRows: [actionRow, pickerRow, ...(pageRow ? [pageRow] : [])]
+      prependRows: [actionRow, pickerRow, ...(fishingQtyRow ? [fishingQtyRow] : []), ...(pageRow ? [pageRow] : [])]
     })
   };
 }
@@ -5743,6 +6377,23 @@ const commit = async (payload) => {
   }
   payload = withSeasonNotice(payload);
 
+  const rolloutEnabledForUser = isComponentsV2Enabled({
+    guildId: serverId,
+    userId,
+    player: ensurePlayer(serverId, userId)
+  });
+  const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  const shouldUseV2ContainerPayload = shouldConvertLegacyPayloadToV2ForSub({
+    sub,
+    navSource: overrides?.navSource,
+    rolloutEnabled: rolloutEnabledForUser,
+    sourceMessageIsV2
+  });
+  if (shouldUseV2ContainerPayload) {
+    payload = convertLegacyEmbedPayloadToComponentsV2(payload);
+  }
+
 if (overrides?.silentResponse === true) {
   return payload;
 }
@@ -5783,17 +6434,24 @@ if (overrides?.messageId && !payload?.ephemeral) {
   try {
     const target = await interaction.channel?.messages?.fetch(overrides.messageId);
     if (target) {
+      const targetFlags = Number(target?.flags?.bitfield ?? target?.flags ?? 0);
+      const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
       // Convert components to JSON if they're builder objects
       let editPayload = { ...payload };
+      if (targetIsV2 && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+        editPayload = convertLegacyEmbedPayloadToComponentsV2(editPayload);
+      }
       if (editPayload.components) {
-        editPayload.components = normalizeComponents(editPayload.components);
+        editPayload.components = normalizeComponents(editPayload.components, editPayload.flags);
       }
       if (editPayload.embeds) {
         editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
       }
       editPayload = normalizePayloadContent(editPayload);
       editPayload = normalizeComponentsV2Payload(editPayload);
-      const result = await target.edit(editPayload);
+      const result = isComponentsV2Payload(editPayload)
+        ? await rawChannelEditMessage(interaction, target.channelId ?? interaction.channelId, target.id, editPayload)
+        : await target.edit(editPayload);
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
           await interaction.deleteReply();
@@ -5820,6 +6478,7 @@ if (overrides?.messageId && !payload?.ephemeral) {
 }
 
 // Components: editReply flow
+payload = normalizeComponentsV2Payload(payload);
 return componentCommit(interaction, payload);
 };
 
@@ -6624,6 +7283,21 @@ if (sub === "profile") {
   const profileComponents = viewingSelf
     ? [noodleMainMenuRowNoProfile(userId, { newsAvailable, showTakeout: showTakeoutProfileButton }), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
     : [];
+
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: selfPlayer })) {
+    return commit(buildProfileHomeV2Message({
+      userId,
+      embed,
+      viewingSelf,
+      showTakeout: showTakeoutProfileButton,
+      newsAvailable,
+      questsAvailable,
+      specializationsAvailable,
+      ownerId: userId,
+      buttonEmoji: getProfileV2ButtonEmoji()
+    }));
+  }
+
   const embedsWithFooter = applyGreenButtonFooter([embed], profileComponents);
   
   return commit({
@@ -6861,6 +7535,14 @@ if (sub === "news") {
 if (sub === "profile_edit") {
   const p = ensurePlayer(serverId, userId);
   const specializationsAvailable = getSpecializationAlert(p);
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    return commitState(buildProfileEditV2Message({
+      userId,
+      specializationsAvailable,
+      ownerId: userId,
+      buttonEmoji: getProfileV2ButtonEmoji()
+    }));
+  }
   const embed = buildMenuEmbed({
     title: `${getIcon("customize")} Customize Profile`,
     description: [
@@ -8216,16 +8898,16 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
 
       const remainingForRecipe = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0));
-      const serveSummary = [
-        `${getIcon("serve")} Served **${servedCount}× ${displayRecipeName(selectedRecipeId)}** from the takeout counter.`,
-        `${getIcon("coins")} +${totalCoins}c · ${getIcon("rep")} +${totalRep} rep · ${getIcon("sxp")} +${totalSxp} sxp`,
+      if (servedCount <= 0) {
+        return finalize(renderStatus(`${getIcon("basket")} You need a ready bowl of **${displayRecipeName(selectedRecipeId)}** first.`, { ephemeral: true }));
+      }
+
+      const serveResults = [
+        `Served **${servedCount}× ${displayRecipeName(selectedRecipeId)}** from ${getTakeoutCounterLabel()}.`,
         `${getIcon("orders")} Remaining counter orders for this recipe: **${remainingForRecipe}**`
       ];
       if (leveledUp) {
-        serveSummary.push(`${getIcon("status_complete")} Level up! You are now **Lv.${Math.max(1, Number(p.shop_level || 1))}**.`);
-      }
-      if (discoveryMessages.length > 0) {
-        serveSummary.push(discoveryMessages.slice(0, 4).join("\n"));
+        serveResults.push(`${getIcon("level_up")} Level up! You're now **Level ${Math.max(1, Number(p.shop_level || 1))}**.`);
       }
 
       if (servedCount > 0) {
@@ -8251,9 +8933,15 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
         }
       }
 
+      const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
+      const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.slice(0, 4).join("\n")}` : "";
       const confirmationEmbed = buildMenuEmbed({
-        title: `${getIcon("serve")} Counter Serve`,
-        description: serveSummary.join("\n\n"),
+        title: `${getIcon("serve")} Orders Served`,
+        description: [
+          serveResults.join("\n"),
+          "",
+          `${summary}${discoveryLine}`
+        ].join("\n"),
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -8939,7 +9627,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const noticeApplied = withSeasonNotice({ ...replyWithUnlock, content: finalContent, embeds: finalEmbeds ?? replyWithUnlock.embeds });
 
-    const out = {
+    let out = {
       ...noticeApplied,
       content: noticeApplied.content,
       embeds: noticeApplied.embeds,
@@ -8948,6 +9636,19 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         ? (noticeApplied.components ?? [])
         : (noticeApplied.components ?? [noodleMainMenuRow(userId)])
     };
+
+    const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+    const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+    const shouldUseV2ContainerPayload = shouldConvertLegacyPayloadToV2ForSub({
+      sub,
+      navSource: overrides?.navSource,
+      rolloutEnabled: isComponentsV2Enabled({ guildId: serverId, userId, player: p }),
+      sourceMessageIsV2
+    });
+    if (shouldUseV2ContainerPayload) {
+      out = convertLegacyEmbedPayloadToComponentsV2(out);
+    }
+
     if (out.embeds) {
       out.embeds = sanitizeEmbedsForDiscord(out.embeds);
     }
@@ -9319,6 +10020,18 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     if (!specId) {
       const rawPage = opt.getInteger("page") ?? 0;
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        const { entries, page, totalPages } = buildSpecializationListData(p, now, rawPage, 5);
+        return commitState(buildSpecializationListV2Message({
+          userId,
+          entries,
+          page,
+          totalPages,
+          specializationsAvailable,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }));
+      }
       const { embed, page, totalPages } = buildSpecializationListEmbed(
         p,
         interaction.member ?? interaction.user,
@@ -9365,6 +10078,18 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
 
     if (!confirm) {
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return commitState(buildSpecializationConfirmV2Message({
+          userId,
+          specId,
+          specName: spec.name,
+          specDescription: spec.description,
+          specThumbnailUrl: getSpecializationThumbnailUrl(spec),
+          specializationsAvailable,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }));
+      }
       const embed = buildMenuEmbed({
         title: `${getIcon("sparkle")} Confirm Specialization`,
         description: `You're about to switch to **${spec.name}**. Re-run with confirm=true to proceed.`,
@@ -9395,6 +10120,16 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       description: `Active specialization: **${result.specialization?.name ?? specId}**.`,
       user: interaction.member ?? interaction.user
     });
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return commitState(buildSpecializationUpdatedV2Message({
+        userId,
+        specName: result.specialization?.name ?? specId,
+        specThumbnailUrl: getSpecializationThumbnailUrl(result.specialization ?? spec),
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }));
+    }
     return commitState({
       content: " ",
       embeds: [embed],
@@ -9414,6 +10149,22 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     grantUnlockedDecor(p, decorContent, s);
 
     const rawPage = opt.getInteger("page") ?? 0;
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      const { entries, page, totalPages } = buildDecorSetsViewData({
+        player: p,
+        view: "specialization",
+        page: rawPage,
+        pageSize: 5
+      });
+      return commitState(buildDecorSetsV2Message({
+        userId,
+        entries,
+        page,
+        totalPages,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }));
+    }
     const { embed, page, totalPages } = renderDecorSetsEmbedLocal({
       player: p,
       ownerUser: interaction.member ?? interaction.user,
@@ -9491,6 +10242,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+    const selectedItemId = String(opt.getString("item") ?? "").trim() || null;
     const payload = buildForageMenuPayload({
       userId,
       player: p,
@@ -9499,7 +10251,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       kitchenJustUnlocked,
       fishingUnlocked,
       fishingJustUnlocked,
-      page: pickerPage
+      page: pickerPage,
+      selectedItemId
     });
     emitNavSubroutePhase("nav:forage", {
       renderMs: performance.now() - forageMenuStartMs
@@ -9517,6 +10270,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+    const itemId = opt.getString("item") ?? null;
+    const isExplicitRandomForage = navSource === "forage_random";
     ensureGardenState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects, {
@@ -9525,6 +10280,19 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
     const gardenState = getGardenActionState(p, combinedEffects);
     const foragePickerRows = buildForagePickerRows({ userId, player: p, randomPrimary: false, page: pickerPage });
+    const normalizedForageItemId = String(itemId || "").trim();
+    const selectedForageItemId = getAllowedForageIdsForPlayer(p).includes(normalizedForageItemId)
+      ? normalizedForageItemId
+      : null;
+    const forageQtyRow = selectedForageItemId
+      ? new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:1:${foragePickerRows.safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:2:${foragePickerRows.safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:3:${foragePickerRows.safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:4:${foragePickerRows.safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:5:${foragePickerRows.safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+        )
+      : null;
     const navRows = buildForageFishingNavRows({
       userId,
       active: "forage",
@@ -9536,9 +10304,24 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       prependRows: [
         foragePickerRows.actionRow,
         foragePickerRows.pickerRow,
+        ...(forageQtyRow ? [forageQtyRow] : []),
         ...(foragePickerRows.pageRow ? [foragePickerRows.pageRow] : [])
       ]
     });
+
+    if (!selectedForageItemId && !isExplicitRandomForage) {
+      return commitState(buildForageMenuPayload({
+        userId,
+        player: p,
+        ownerUser: interaction.member ?? interaction.user,
+        kitchenUnlocked,
+        kitchenJustUnlocked,
+        fishingUnlocked,
+        fishingJustUnlocked,
+        page: pickerPage,
+        selectedItemId: null
+      }));
+    }
 
     const baseCooldownMs = 2 * 60 * 1000;
     const cooldownMs = applyCooldownReduction(baseCooldownMs, combinedEffects);
@@ -9559,7 +10342,6 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
     }
 
-    const itemId = opt.getString("item") ?? null;
     const qtyRaw = opt.getInteger("quantity") ?? 1;
     const quantity = Math.max(1, Math.min(5, qtyRaw));
     const bonusItems = Math.max(0, Math.floor(combinedEffects.forage_bonus_items || 0));
@@ -9796,6 +10578,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+    const selectedItemId = String(opt.getString("item") ?? "").trim() || null;
 
     if (!fishingUnlocked) {
       const gardenUnlocked = isGardenUnlocked(p);
@@ -9833,7 +10616,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       kitchenJustUnlocked,
       fishingUnlocked,
       fishingJustUnlocked,
-      page: pickerPage
+      page: pickerPage,
+      selectedItemId
     }));
   }
 
@@ -9848,10 +10632,24 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
     const itemId = opt.getString("item") ?? null;
+    const isExplicitRandomFishing = navSource === "fishing_random";
     const qtyRaw = opt.getInteger("quantity") ?? 1;
     const quantity = Math.max(1, Math.min(5, qtyRaw));
 
     const fishingPickerRows = buildFishingPickerRows({ userId, player: p, randomPrimary: false, page: pickerPage });
+    const normalizedFishingItemId = String(itemId || "").trim();
+    const selectedFishingItemId = getAllowedFishingIdsForPlayer(p).includes(normalizedFishingItemId)
+      ? normalizedFishingItemId
+      : null;
+    const fishingQtyRow = selectedFishingItemId
+      ? new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:1:${fishingPickerRows.safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:2:${fishingPickerRows.safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:3:${fishingPickerRows.safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:4:${fishingPickerRows.safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:5:${fishingPickerRows.safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+        )
+      : null;
     const navRows = buildForageFishingNavRows({
       userId,
       active: "fishing",
@@ -9863,9 +10661,24 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       prependRows: [
         fishingPickerRows.actionRow,
         fishingPickerRows.pickerRow,
+        ...(fishingQtyRow ? [fishingQtyRow] : []),
         ...(fishingPickerRows.pageRow ? [fishingPickerRows.pageRow] : [])
       ]
     });
+
+    if (!selectedFishingItemId && !isExplicitRandomFishing) {
+      return commitState(buildFishingMenuPayload({
+        userId,
+        player: p,
+        ownerUser: interaction.member ?? interaction.user,
+        kitchenUnlocked,
+        kitchenJustUnlocked,
+        fishingUnlocked,
+        fishingJustUnlocked,
+        page: pickerPage,
+        selectedItemId: null
+      }));
+    }
 
     if (fishingUnlocked && !p.fishing.first_visit_ack) {
       p.fishing.first_visit_ack = true;
@@ -10582,12 +11395,12 @@ ${lines.join("\n")}`;
     const v2QualityBias = String(opt.getString("v2_quality_bias") ?? "").trim().toLowerCase();
 
     if (!recipeId) {
-      const payload = buildCookPickerPayload({
+      const payload = buildCookRecipePickerScenePayload({
         userId,
         p,
         s,
-        ownerUser: interaction.member ?? interaction.user,
-        page
+        quantity: 1,
+        page: Number.isFinite(Number(page)) ? Number(page) : 0
       });
 
       return payload;
@@ -10964,17 +11777,19 @@ ${lines.join("\n")}`;
     }
 
 
-    if (acceptedLines.length) {
-      parts.push(
-        "",
-        "**Your Accepted Orders**",
-        acceptedLines.join("\n"),
-        "",
-        statusMsg,
-        ""
-      );
-    } else {
-      parts.push("", "**Your Accepted Orders**", "_None right now._", "");
+    if (!takeoutShiftActive) {
+      if (acceptedLines.length) {
+        parts.push(
+          "",
+          "**Your Accepted Orders**",
+          acceptedLines.join("\n"),
+          "",
+          statusMsg,
+          ""
+        );
+      } else {
+        parts.push("", "**Your Accepted Orders**", "_None right now._", "");
+      }
     }
 
     const tutSuffix = tutorialSuffix(p);
@@ -10998,25 +11813,32 @@ ${lines.join("\n")}`;
       });
 
       const headerLines = [
-        `${getIcon("orders")} **Orders Board**`,
         takeoutShiftActive
-          ? `${getTakeoutCounterLabel()} Main board is paused while takeout shift is active.`
+          ? `${getTakeoutCounterLabel()} Your shop is idle on the main **Order Board** while your Take Out Counter shift is active. Serve orders from **${getTakeoutCounterLabel()}** until the shift ends.`
           : (remaining > 0
             ? `Open orders: **${remaining}**`
-            : "No new orders left right now."),
-        acceptedDisplayEntries.length > 0
-          ? `Accepted: **${acceptedDisplayEntries.length}**`
-          : "Accepted: **0**"
+            : "No new orders left right now.")
       ];
+      if (!takeoutShiftActive) {
+        headerLines.push(
+          acceptedDisplayEntries.length > 0
+            ? `Accepted: **${acceptedDisplayEntries.length}**`
+            : "Accepted: **0**"
+        );
+      }
 
       const quickActions = [
         { label: "Accept", actionKey: "acc", style: highlightAccept ? 3 : 1, disabled: disableAccept, emoji: getButtonEmoji("orders") },
         { label: "Cook", actionKey: "ck", style: 2, disabled: disableCook, emoji: getButtonEmoji("cook") },
         { label: "Serve", actionKey: "sv", style: disableServe ? 2 : 1, disabled: disableServe, emoji: getButtonEmoji("serve") },
-        { label: "Refresh", actionKey: "rf", style: 2, disabled: false, emoji: getButtonEmoji("refresh") },
         { label: "Cancel", actionKey: "cnl", style: 2, disabled: !showCancel, emoji: getButtonEmoji("cancel") },
         { label: "Main Menu", actionKey: "nm", style: 2, disabled: false, emoji: getButtonEmoji("back") },
-        { label: "Quests", actionKey: "qs", style: 2, disabled: false, emoji: getButtonEmoji("quests") }
+        { label: "Buy", actionKey: "buy", style: 2, disabled: false, emoji: getButtonEmoji("cart") },
+        { label: "Pantry", actionKey: "pn", style: 2, disabled: false, emoji: getButtonEmoji("pantry") },
+        { label: "Quests", actionKey: "qs", style: 2, disabled: false, emoji: getButtonEmoji("quests") },
+        ...(showTakeout
+          ? [{ label: "Takeout", actionKey: "tk", style: takeoutShiftActive ? 1 : 3, disabled: false, emoji: getButtonEmoji("orders") }]
+          : [])
       ];
 
       const v2Payload = buildOrdersBoardV2Message({
@@ -11024,6 +11846,7 @@ ${lines.join("\n")}`;
         token: sceneState.token,
         headerLines,
         acceptedEntries: acceptedDisplayEntries,
+        showAcceptedSection: !takeoutShiftActive,
         quickActions
       });
 
@@ -11435,6 +12258,10 @@ ${lines.join("\n")}`;
     }
 
     if (!tokens.length) {
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return buildCancelPickerScenePayload({ userId, p });
+      }
+
       const payload = buildCancelServePickerPayload({
         action: "cancel",
         userId,
@@ -11963,6 +12790,59 @@ function getCustomIdPrefix(customId, maxSegments = 3) {
   return parts.slice(0, maxSegments).join(":");
 }
 
+function getV2SceneModule(sceneKey = "") {
+  const key = String(sceneKey || "").trim();
+  if (!key) return "unknown";
+  const [moduleKey] = key.split(".");
+  return moduleKey || "unknown";
+}
+
+function getV2LoopTrackerKey({ serverId, userId, loop = "" } = {}) {
+  return `${String(serverId || "")}:${String(userId || "")}:${String(loop || "")}`;
+}
+
+function startV2LoopTracker({ serverId, userId, loop } = {}) {
+  const key = getV2LoopTrackerKey({ serverId, userId, loop });
+  const now = nowTs();
+  v2LoopTracker.set(key, {
+    startedAt: now,
+    clicks: 0,
+    lastAt: now
+  });
+}
+
+function touchV2LoopTracker({ serverId, userId, loop } = {}) {
+  const key = getV2LoopTrackerKey({ serverId, userId, loop });
+  const now = nowTs();
+  const current = v2LoopTracker.get(key) ?? {
+    startedAt: now,
+    clicks: 0,
+    lastAt: now
+  };
+  current.clicks = Number(current.clicks || 0) + 1;
+  current.lastAt = now;
+  if (!Number.isFinite(Number(current.startedAt)) || Number(current.startedAt) <= 0) {
+    current.startedAt = now;
+  }
+  v2LoopTracker.set(key, current);
+  return {
+    clicks: current.clicks,
+    elapsedMs: Math.max(0, now - Number(current.startedAt || now))
+  };
+}
+
+function completeV2LoopTracker({ serverId, userId, loop } = {}) {
+  const key = getV2LoopTrackerKey({ serverId, userId, loop });
+  const now = nowTs();
+  const current = v2LoopTracker.get(key);
+  v2LoopTracker.delete(key);
+  if (!current) return { clicks: 0, elapsedMs: 0 };
+  return {
+    clicks: Number(current.clicks || 0),
+    elapsedMs: Math.max(0, now - Number(current.startedAt || now))
+  };
+}
+
 async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
 
@@ -11977,18 +12857,36 @@ const v2Parsed = parseV2CustomId(customId);
 if (v2Parsed.isV2) {
   const rolloutPlayer = ensurePlayer(serverId, userId);
   if (!isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer })) {
+    emitTelemetry("v2_scene_error", {
+      module: "gate",
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: "v2_disabled"
+    });
     return componentCommit(interaction, {
       content: "This V2 menu is currently disabled. Use `/noodle` to reopen the V1 menu.",
       ephemeral: true
     });
   }
   if (!v2Parsed.valid) {
+    emitTelemetry("v2_scene_error", {
+      module: getV2SceneModule(v2Parsed.sceneKey),
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: String(v2Parsed.error || "invalid_route")
+    });
     return componentCommit(interaction, {
       content: "This menu expired or is invalid. Please reopen from /noodle.",
       ephemeral: true
     });
   }
   if (isV2OwnerMismatch(v2Parsed, userId)) {
+    emitTelemetry("v2_scene_error", {
+      module: getV2SceneModule(v2Parsed.sceneKey),
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: "owner_mismatch"
+    });
     return componentCommit(interaction, {
       content: "That menu isn’t for you.",
       ephemeral: true
@@ -12001,6 +12899,16 @@ if (v2Parsed.isV2) {
     ownerId: userId
   });
   if (!sceneState.ok && sceneState.stale) {
+    emitTelemetry("v2_scene_error", {
+      module: getV2SceneModule(v2Parsed.sceneKey),
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: String(sceneState.reason || "stale")
+    });
+    if (rolloutPlayer?.tutorial?.active === true) {
+      const recoverySub = resolveTutorialRecoverySub({ player: rolloutPlayer, fallbackSub: "orders" });
+      return runNoodle(interaction, { sub: recoverySub });
+    }
     const acceptedCount = Object.keys(ensurePlayer(serverId, userId).orders?.accepted ?? {}).length;
     if (v2Parsed.sceneKey === "serve.order_picker" || v2Parsed.sceneKey === "serve.result") {
       return componentCommit(interaction, {
@@ -12016,28 +12924,53 @@ if (v2Parsed.isV2) {
     });
   }
 
+  const transition = touchV2LoopTracker({
+    serverId,
+    userId,
+    loop: getV2SceneModule(v2Parsed.sceneKey)
+  });
+  emitTelemetry("v2_scene_transition", {
+    module: getV2SceneModule(v2Parsed.sceneKey),
+    sceneKey: String(v2Parsed.sceneKey || ""),
+    actionKey: String(v2Parsed.actionKey || ""),
+    clickCount: transition.clicks,
+    loopElapsedMs: transition.elapsedMs,
+    argsCount: Array.isArray(v2Parsed.args) ? v2Parsed.args.length : 0
+  });
+
   if (v2Parsed.sceneKey === "orders.board") {
     const state = sceneState?.value?.state ?? {};
     const action = v2Parsed.actionKey;
     const serveArg = String(v2Parsed.args?.[0] ?? "").trim();
 
     if (action === "acc") {
+      startV2LoopTracker({ serverId, userId, loop: "orders" });
       const s = ensureServer(serverId);
       const p = ensurePlayer(serverId, userId);
       const payload = buildAcceptPickerScenePayload({ serverId, userId, p, s });
       return componentCommit(interaction, payload);
     }
     if (action === "ck") {
+      startV2LoopTracker({ serverId, userId, loop: "cook" });
       const s = ensureServer(serverId);
       const p = ensurePlayer(serverId, userId);
       const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
       return componentCommit(interaction, payload);
     }
+    if (action === "buy") return runNoodle(interaction, { sub: "buy" });
+    if (action === "pn") return runNoodle(interaction, { sub: "pantry" });
     if (action === "qs") return runNoodle(interaction, { sub: "quests" });
+    if (action === "tk") return runNoodle(interaction, { sub: "takeout" });
     if (action === "rf") return runNoodle(interaction, { sub: "orders" });
     if (action === "nm") return runNoodle(interaction, { sub: "profile" });
-    if (action === "cnl") return runNoodle(interaction, { sub: "cancel" });
+    if (action === "cnl") {
+      startV2LoopTracker({ serverId, userId, loop: "orders" });
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCancelPickerScenePayload({ userId, p });
+      return componentCommit(interaction, payload);
+    }
     if (action === "sv") {
+      startV2LoopTracker({ serverId, userId, loop: "serve" });
       const p = ensurePlayer(serverId, userId);
       if (!serveArg) {
         const payload = buildServePickerScenePayload({ userId, p });
@@ -12050,7 +12983,7 @@ if (v2Parsed.isV2) {
           ephemeral: true
         });
       }
-      const payload = buildServePickerScenePayload({ userId, p, selectedShortId: serveArg });
+      const payload = buildServePickerScenePayload({ userId, p, selectedShortIds: [serveArg], readyOnly: true });
       return componentCommit(interaction, payload);
     }
   }
@@ -12107,7 +13040,32 @@ if (v2Parsed.isV2) {
         userId,
         p,
         s,
-        selectedShortIds: [...selectedSet]
+        selectedShortIds: [...selectedSet],
+        page: Number(state.page) || 0
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "pg") {
+      const arg = String(v2Parsed.args?.[0] ?? "").trim().toLowerCase();
+      const totalPages = Math.max(1, Math.floor(Number(state.totalPages) || 1));
+      const currentPage = Math.max(0, Math.min(Math.floor(Number(state.page) || 0), totalPages - 1));
+      const nextPage = arg === "prev"
+        ? (currentPage <= 0 ? totalPages - 1 : currentPage - 1)
+        : (currentPage >= totalPages - 1 ? 0 : currentPage + 1);
+      const currentSelected = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+      const payload = buildAcceptPickerScenePayload({
+        serverId,
+        userId,
+        p,
+        s,
+        selectedShortIds: currentSelected,
+        page: nextPage
       });
       return componentCommit(interaction, payload);
     }
@@ -12178,14 +13136,19 @@ if (v2Parsed.isV2) {
         else invalidCount += 1;
       }
 
-      const summaryParts = [];
-      if (acceptedCount > 0) summaryParts.push(`${getIcon("status_complete")} accepted: **${acceptedCount}**`);
-      if (duplicateCount > 0) summaryParts.push(`${getIcon("warning")} already accepted: **${duplicateCount}**`);
-      if (capCount > 0) summaryParts.push(`${getIcon("warning")} blocked by cap: **${capCount}**`);
-      if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} unavailable: **${invalidCount}**`);
-      const statusLine = summaryParts.length > 0
-        ? `Batch result — ${summaryParts.join(" • ")}`
-        : `${getIcon("warning")} No orders were accepted.`;
+      let statusLine = `${getIcon("warning")} No orders were accepted.`;
+      if (acceptedCount > 0 && duplicateCount === 0 && capCount === 0 && invalidCount === 0) {
+        statusLine = `${getIcon("status_complete")} Accepted ${acceptedCount} ${acceptedCount === 1 ? "order" : "orders"}.`;
+      } else {
+        const summaryParts = [];
+        if (acceptedCount > 0) summaryParts.push(`${getIcon("status_complete")} Accepted: **${acceptedCount}**`);
+        if (duplicateCount > 0) summaryParts.push(`${getIcon("warning")} Already Accepted: **${duplicateCount}**`);
+        if (capCount > 0) summaryParts.push(`${getIcon("warning")} Blocked By Cap: **${capCount}**`);
+        if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} Unavailable: **${invalidCount}**`);
+        if (summaryParts.length > 0) {
+          statusLine = summaryParts.join(" • ");
+        }
+      }
 
       const p = ensurePlayer(serverId, userId);
       const s = ensureServer(serverId);
@@ -12195,7 +13158,8 @@ if (v2Parsed.isV2) {
         p,
         s,
         selectedShortIds: [],
-        statusLine
+        statusLine,
+        page: Number(state.page) || 0
       });
       return componentCommit(interaction, payload);
     }
@@ -12274,6 +13238,15 @@ if (v2Parsed.isV2) {
         ? `${getIcon("status_complete")} Accepted \`${shortOrderId(fullOrderId)}\`.`
         : `${getIcon("warning")} ${outcome.message}`;
 
+      const acceptLoop = completeV2LoopTracker({ serverId, userId, loop: "orders" });
+      emitTelemetry("v2_loop_summary", {
+        module: "orders",
+        loop: "accept",
+        outcomeCode: outcome.code,
+        clickCount: acceptLoop.clicks,
+        completionMs: acceptLoop.elapsedMs
+      });
+
       return componentCommit(interaction, buildAcceptResultV2Message({
         userId,
         token: resultState.token,
@@ -12283,19 +13256,132 @@ if (v2Parsed.isV2) {
     }
   }
 
+  if (v2Parsed.sceneKey === "orders.cancel_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const selectedShortId = String(v2Parsed.args?.[0] ?? "").trim();
+
+    if (action === "bk" || action === "cnl") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const selected = entries.find((entry) => String(entry?.shortId ?? "") === selectedShortId);
+      if (!selected) {
+        return componentCommit(interaction, {
+          content: "That order is no longer selectable. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const currentSelected = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      const selectedSet = new Set(currentSelected);
+      if (selectedSet.has(selectedShortId)) selectedSet.delete(selectedShortId);
+      else selectedSet.add(selectedShortId);
+
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCancelPickerScenePayload({
+        userId,
+        p,
+        selectedShortIds: [...selectedSet]
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const selectedShortIds = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      if (selectedShortIds.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Select one or more orders first.",
+          ephemeral: true
+        });
+      }
+
+      const validShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+      const orderTokenByShortId = state.orderTokenByShortId ?? {};
+      const targets = selectedShortIds.filter((shortId) => validShortIds.has(shortId));
+      if (targets.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Those selections are no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      let canceledCount = 0;
+      let missingCount = 0;
+      let invalidCount = 0;
+
+      for (const shortId of targets) {
+        const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
+        if (!fullOrderId) {
+          invalidCount += 1;
+          continue;
+        }
+
+        const beforePlayer = ensurePlayer(serverId, userId);
+        const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
+
+        await runNoodle(interaction, {
+          sub: "cancel",
+          overrides: {
+            silentResponse: true,
+            strings: { order_id: fullOrderId }
+          }
+        });
+
+        const afterPlayer = ensurePlayer(serverId, userId);
+        const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+        const outcome = deriveCancelOutcome({
+          targetOrderId: fullOrderId,
+          beforeAcceptedOrderIds,
+          afterAcceptedOrderIds
+        });
+
+        if (outcome.code === "canceled") canceledCount += 1;
+        else if (outcome.code === "missing") missingCount += 1;
+        else invalidCount += 1;
+      }
+
+      const summaryParts = [];
+      if (canceledCount > 0) summaryParts.push(`${getIcon("status_complete")} Canceled: **${canceledCount}**`);
+      if (missingCount > 0) summaryParts.push(`${getIcon("warning")} Unavailable: **${missingCount}**`);
+      if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} Failed: **${invalidCount}**`);
+      const statusLine = summaryParts.length > 0
+        ? summaryParts.join(" • ")
+        : `${getIcon("warning")} No orders were canceled.`;
+
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCancelPickerScenePayload({
+        userId,
+        p,
+        selectedShortIds: [],
+        statusLine
+      });
+      return componentCommit(interaction, payload);
+    }
+  }
+
   if (v2Parsed.sceneKey === "cook.recipe_picker") {
     const state = sceneState?.value?.state ?? {};
     const action = v2Parsed.actionKey;
     const entries = Array.isArray(state.entries) ? state.entries : [];
     const selectedRecipeId = String(state.selectedRecipeId || "").trim() || String(entries?.[0]?.recipeId || "").trim();
     const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+    const page = Math.max(0, Math.floor(Number(state.page) || 0));
+    const totalPages = Math.max(1, Math.floor(Number(state.totalPages) || 1));
 
     if (action === "bk") {
       return runNoodle(interaction, { sub: "orders" });
     }
 
     if (action === "sel") {
-      const nextRecipeId = String(v2Parsed.args?.[0] ?? "").trim();
+      const nextRecipeId = String(interaction.values?.[0] ?? v2Parsed.args?.[0] ?? "").trim();
       if (!entries.some((entry) => String(entry?.recipeId || "") === nextRecipeId)) {
         return componentCommit(interaction, {
           content: "That recipe is no longer available. Reopen `/noodle orders`.",
@@ -12308,7 +13394,24 @@ if (v2Parsed.isV2) {
         p: ensurePlayer(serverId, userId),
         s: ensureServer(serverId),
         selectedRecipeId: nextRecipeId,
-        quantity
+        quantity,
+        page
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "pg") {
+      const arg = String(v2Parsed.args?.[0] ?? "").trim().toLowerCase();
+      const nextPage = arg === "prev"
+        ? (page <= 0 ? totalPages - 1 : page - 1)
+        : (page >= totalPages - 1 ? 0 : page + 1);
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId,
+        quantity,
+        page: nextPage
       });
       return componentCommit(interaction, payload);
     }
@@ -12323,7 +13426,8 @@ if (v2Parsed.isV2) {
         p: ensurePlayer(serverId, userId),
         s: ensureServer(serverId),
         selectedRecipeId,
-        quantity: nextQuantity
+        quantity: nextQuantity,
+        page
       });
       return componentCommit(interaction, payload);
     }
@@ -12359,9 +13463,11 @@ if (v2Parsed.isV2) {
     const score = Math.max(0, Math.min(totalTurns, Math.floor(Number(state.score) || 0)));
     const misses = Math.max(0, Math.floor(Number(state.misses) || 0));
     const runToken = String(state.runToken || "").trim();
-    const turnMs = Math.max(250, Math.floor(Number(state.turnMs) || 2200));
-    const graceMs = Math.max(0, Math.floor(Number(state.graceMs) || 650));
+    const turnMs = Math.max(250, Math.floor(Number(state.turnMs) || 10000));
+    const graceMs = Math.max(0, Math.floor(Number(state.graceMs) || 0));
     const turnStartedAt = Math.max(0, Math.floor(Number(state.turnStartedAt) || Date.now()));
+    const counterCookFlow = Boolean(state.counterCook === true);
+    const returnSub = String(state.returnSub || "orders").trim() || "orders";
     const targetActions = Array.isArray(state.targetActions)
       ? state.targetActions.map((entry) => String(entry || "").trim().toLowerCase()).filter(Boolean)
       : [];
@@ -12374,6 +13480,9 @@ if (v2Parsed.isV2) {
     }
 
     if (action === "bk") {
+      if (counterCookFlow) {
+        return runNoodle(interaction, { sub: "takeout_cook" });
+      }
       const payload = buildCookRecipePickerScenePayload({
         userId,
         p: ensurePlayer(serverId, userId),
@@ -12412,7 +13521,9 @@ if (v2Parsed.isV2) {
           turnMs,
           graceMs,
           turnStartedAt: Date.now(),
-          lastTurnStatus: turnResult.status
+          lastTurnStatus: turnResult.status,
+          counterCook: counterCookFlow,
+          returnSub
         });
         return componentCommit(interaction, payload);
       }
@@ -12441,7 +13552,8 @@ if (v2Parsed.isV2) {
             v2_success_bowls: performance.successBowls
           },
           booleans: {
-            v2_minigame: true
+            v2_minigame: true,
+            counter_cook: counterCookFlow
           },
           messageId: interaction.message?.id ?? null
         }
@@ -12464,7 +13576,9 @@ if (v2Parsed.isV2) {
           qualityBias: performance.qualityBias,
           runToken,
           turnMs,
-          graceMs
+          graceMs,
+          counterCook: counterCookFlow,
+          returnSub
         }
       });
 
@@ -12475,6 +13589,24 @@ if (v2Parsed.isV2) {
           ? `${getIcon("status_complete")} Cooked **${produced}** bowl(s).`
           : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`
       ];
+
+      const cookLoop = completeV2LoopTracker({ serverId, userId, loop: "cook" });
+      emitTelemetry("v2_minigame_outcome", {
+        module: "cook",
+        outcome: performance.accuracyLabel,
+        score: performance.score,
+        totalTurns: performance.totalTurns,
+        qualityBias: performance.qualityBias,
+        successBowls: performance.successBowls,
+        failBowls: performance.failBowls
+      });
+      emitTelemetry("v2_loop_summary", {
+        module: "cook",
+        loop: "cook_minigame",
+        outcomeCode: performance.accuracyLabel,
+        clickCount: cookLoop.clicks,
+        completionMs: cookLoop.elapsedMs
+      });
 
       return componentCommit(interaction, buildCookResultV2Message({
         userId,
@@ -12490,12 +13622,20 @@ if (v2Parsed.isV2) {
     const action = String(v2Parsed.actionKey || "").trim();
     const recipeId = String(state.recipeId || "").trim();
     const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+    const counterCookFlow = Boolean(state.counterCook === true);
+    const returnSub = String(state.returnSub || "orders").trim() || "orders";
 
     if (action === "ord") {
+      if (counterCookFlow) {
+        return runNoodle(interaction, { sub: returnSub === "orders" ? "orders" : "takeout" });
+      }
       return runNoodle(interaction, { sub: "orders" });
     }
 
     if (action === "cook") {
+      if (counterCookFlow) {
+        return runNoodle(interaction, { sub: "takeout_cook" });
+      }
       const payload = buildCookRecipePickerScenePayload({
         userId,
         p: ensurePlayer(serverId, userId),
@@ -12518,7 +13658,10 @@ if (v2Parsed.isV2) {
     const action = String(v2Parsed.actionKey || "").trim();
     const entries = Array.isArray(state.entries) ? state.entries : [];
     const orderTokenByShortId = state.orderTokenByShortId ?? {};
-    const selectedShortId = String(state.selectedShortId || "").trim() || String(entries[0]?.shortId || "").trim();
+    const selectedShortIds = Array.isArray(state.selectedShortIds)
+      ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+    const stateReadyOnly = Boolean(state.readyOnly);
 
     if (action === "bk") {
       return runNoodle(interaction, { sub: "orders" });
@@ -12532,68 +13675,111 @@ if (v2Parsed.isV2) {
           ephemeral: true
         });
       }
-      // Backward compatibility: older messages use :sel, treat it as immediate serve.
-      const fullOrderId = String(orderTokenByShortId?.[nextShortId] ?? "").trim();
-      const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === nextShortId);
-      if (!fullOrderId || !selectedEntry) {
+      const selectedSet = new Set(selectedShortIds);
+      if (selectedSet.has(nextShortId)) selectedSet.delete(nextShortId);
+      else selectedSet.add(nextShortId);
+
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildServePickerScenePayload({
+        userId,
+        p,
+        selectedShortIds: [...selectedSet],
+        readyOnly: stateReadyOnly
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      if (selectedShortIds.length <= 0) {
         return componentCommit(interaction, {
-          content: "That order is no longer available. Reopen `/noodle orders`.",
+          content: "Select one or more orders first.",
           ephemeral: true
         });
       }
 
-      const beforePlayer = ensurePlayer(serverId, userId);
-      const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
-      const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
-      const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
-      const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
+      const validShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+      const targets = selectedShortIds.filter((shortId) => validShortIds.has(shortId));
+      if (targets.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Those selections are no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
 
-      await runNoodle(interaction, {
-        sub: "serve",
-        overrides: {
-          silentResponse: true,
-          strings: { order_id: fullOrderId },
-          messageId: interaction.message?.id ?? null
+      let servedCount = 0;
+      let missingBowlCount = 0;
+      let expiredCount = 0;
+      let unavailableCount = 0;
+      let invalidCount = 0;
+
+      for (const shortId of targets) {
+        const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
+        const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === shortId);
+        if (!fullOrderId || !selectedEntry) {
+          invalidCount += 1;
+          continue;
         }
-      });
 
-      const afterPlayer = ensurePlayer(serverId, userId);
-      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
-      const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
-      const outcome = deriveServeOutcome({
-        targetOrderId: fullOrderId,
-        beforeAcceptedOrderIds,
-        afterAcceptedOrderIds,
-        beforeBowlCount,
-        afterBowlCount,
-        wasExpiredBefore
-      });
+        const beforePlayer = ensurePlayer(serverId, userId);
+        const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
+        const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
+        const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
+        const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
 
-      const resultState = putSceneState({
-        sceneKey: "serve.result",
-        ownerId: userId,
-        state: {
-          selectedShortId: nextShortId,
-          fullOrderId,
-          recipeId: selectedEntry.recipeId ?? null,
-          outcomeCode: outcome.code
-        }
-      });
+        await runNoodle(interaction, {
+          sub: "serve",
+          overrides: {
+            silentResponse: true,
+            strings: { order_id: fullOrderId },
+            messageId: interaction.message?.id ?? null
+          }
+        });
 
-      const detailLine = outcome.code === "served"
-        ? `${getIcon("status_complete")} Served \`${nextShortId}\` successfully.`
-        : `${getIcon("warning")} ${outcome.message}`;
+        const afterPlayer = ensurePlayer(serverId, userId);
+        const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+        const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
+        const outcome = deriveServeOutcome({
+          targetOrderId: fullOrderId,
+          beforeAcceptedOrderIds,
+          afterAcceptedOrderIds,
+          beforeBowlCount,
+          afterBowlCount,
+          wasExpiredBefore
+        });
 
-      return componentCommit(interaction, buildServeResultV2Message({
+        if (outcome.code === "served") servedCount += 1;
+        else if (outcome.code === "missing_bowl") missingBowlCount += 1;
+        else if (outcome.code === "expired") expiredCount += 1;
+        else if (outcome.code === "unavailable") unavailableCount += 1;
+        else invalidCount += 1;
+      }
+
+      let statusLine = `${getIcon("warning")} No orders were served.`;
+      if (servedCount > 0 && missingBowlCount === 0 && expiredCount === 0 && unavailableCount === 0 && invalidCount === 0) {
+        statusLine = `${getIcon("status_complete")} Served ${servedCount} ${servedCount === 1 ? "order" : "orders"}.`;
+      } else {
+        const summaryParts = [];
+        if (servedCount > 0) summaryParts.push(`${getIcon("status_complete")} Served: **${servedCount}**`);
+        if (missingBowlCount > 0) summaryParts.push(`${getIcon("warning")} Missing Bowls: **${missingBowlCount}**`);
+        if (expiredCount > 0) summaryParts.push(`${getIcon("warning")} Expired: **${expiredCount}**`);
+        if (unavailableCount > 0) summaryParts.push(`${getIcon("warning")} Unavailable: **${unavailableCount}**`);
+        if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} Failed: **${invalidCount}**`);
+        if (summaryParts.length > 0) statusLine = summaryParts.join(" • ");
+      }
+
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildServePickerScenePayload({
         userId,
-        token: resultState.token,
-        outcomeCode: outcome.code,
-        detailLine
-      }));
+        p,
+        selectedShortIds: [],
+        readyOnly: stateReadyOnly,
+        statusLine
+      });
+      return componentCommit(interaction, payload);
     }
 
     if (action === "serve") {
-      const serveShortId = String(v2Parsed.args?.[0] ?? "").trim() || selectedShortId;
+      const serveShortId = String(v2Parsed.args?.[0] ?? "").trim() || String(selectedShortIds[0] || "").trim();
       if (!serveShortId) {
         return componentCommit(interaction, {
           content: "Select an order first.",
@@ -12644,13 +13830,23 @@ if (v2Parsed.isV2) {
           selectedShortId: serveShortId,
           fullOrderId,
           recipeId: selectedEntry.recipeId ?? null,
-          outcomeCode: outcome.code
+          outcomeCode: outcome.code,
+          readyOnly: Boolean(state.readyOnly)
         }
       });
 
       const detailLine = outcome.code === "served"
         ? `${getIcon("status_complete")} Served \`${serveShortId}\` successfully.`
         : `${getIcon("warning")} ${outcome.message}`;
+
+      const serveLoop = completeV2LoopTracker({ serverId, userId, loop: "serve" });
+      emitTelemetry("v2_loop_summary", {
+        module: "serve",
+        loop: "serve_order",
+        outcomeCode: outcome.code,
+        clickCount: serveLoop.clicks,
+        completionMs: serveLoop.elapsedMs
+      });
 
       return componentCommit(interaction, buildServeResultV2Message({
         userId,
@@ -12672,7 +13868,11 @@ if (v2Parsed.isV2) {
 
     if (action === "again") {
       const p = ensurePlayer(serverId, userId);
-      const payload = buildServePickerScenePayload({ userId, p });
+      const payload = buildServePickerScenePayload({
+        userId,
+        p,
+        readyOnly: Boolean(state.readyOnly)
+      });
       return componentCommit(interaction, payload);
     }
 
@@ -12769,11 +13969,17 @@ if (kind === "dm" && action === "reminders_toggle") {
     optOut: nextOptOut
   });
 
-  return componentCommit(interaction, {
+  const legacyPayload = {
     content: " ",
     embeds: [reminderEmbed],
     components
-  });
+  };
+
+  if (isComponentsV2Enabled({ guildId: targetServerId, userId, player: p })) {
+    return componentCommit(interaction, convertLegacyEmbedPayloadToComponentsV2(legacyPayload));
+  }
+
+  return componentCommit(interaction, legacyPayload);
 }
 
 const componentPlayer = ensurePlayer(serverId, userId);
@@ -12882,6 +14088,19 @@ if (kind === "profile" && action === "specialize_select") {
     value: spec.spec_id
   }));
 
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    return componentCommit(interaction, {
+      ...buildSpecializationPickerV2Message({
+        userId,
+        options,
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }),
+      targetMessageId: interaction.message?.id
+    });
+  }
+
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:profile:specialize_pick:${userId}`)
     .setPlaceholder("Select a specialization")
@@ -12913,6 +14132,21 @@ if (kind === "profile" && action === "specialize_cancel") {
   const p = ensurePlayer(serverId, userId);
   markSpecializationShopLevelSeen(p, specializationsContent);
   const specializationsAvailable = getSpecializationAlert(p);
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    const { entries, page, totalPages } = buildSpecializationListData(p, nowTs(), 0, 5);
+    return componentCommit(interaction, {
+      ...buildSpecializationListV2Message({
+        userId,
+        entries,
+        page,
+        totalPages,
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }),
+      targetMessageId: interaction.message?.id
+    });
+  }
   const { embed, page, totalPages } = buildSpecializationListEmbed(p, interaction.member ?? interaction.user, nowTs(), 0, 5);
   const components = [];
   if (totalPages > 1) {
@@ -12970,6 +14204,20 @@ if (kind === "profile" && action === "specialize_confirm") {
 
   if (db) {
     upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+  }
+
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    return componentCommit(interaction, {
+      ...buildSpecializationUpdatedV2Message({
+        userId,
+        specName: result.specialization?.name ?? specId,
+        specThumbnailUrl: getSpecializationThumbnailUrl(result.specialization ?? spec),
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }),
+      targetMessageId: interaction.message?.id
+    });
   }
 
   const embed = buildMenuEmbed({
@@ -13492,7 +14740,11 @@ if (action === "forage_random") {
   const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   return runNoodle(interaction, {
     sub: "forage",
-    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      navSource: "forage_random",
+      integers: { page }
+    }
   });
 }
 
@@ -13510,7 +14762,11 @@ if (action === "fishing_random") {
   const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   return runNoodle(interaction, {
     sub: "fishing",
-    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      navSource: "fishing_random",
+      integers: { page }
+    }
   });
 }
 
@@ -13520,6 +14776,44 @@ if (action === "fishing_page") {
   return runNoodle(interaction, {
     sub: "fishing_menu",
     overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+  });
+}
+
+if (action === "forage_qty") {
+  const itemId = String(parts[4] ?? "").trim();
+  const rawQty = Number(parts[5] ?? 1);
+  const qty = Number.isFinite(rawQty) ? Math.max(1, Math.min(5, Math.floor(rawQty))) : 1;
+  const rawPage = Number(parts[6] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  if (!itemId || !getAllowedForageIdsForPlayer(ensurePlayer(serverId, userId)).includes(itemId)) {
+    return componentCommit(interaction, { content: "Pick a valid ingredient first.", ephemeral: true });
+  }
+  return runNoodle(interaction, {
+    sub: "forage",
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      strings: { item: itemId },
+      integers: { quantity: qty, page }
+    }
+  });
+}
+
+if (action === "fishing_qty") {
+  const itemId = String(parts[4] ?? "").trim();
+  const rawQty = Number(parts[5] ?? 1);
+  const qty = Number.isFinite(rawQty) ? Math.max(1, Math.min(5, Math.floor(rawQty))) : 1;
+  const rawPage = Number(parts[6] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  if (!itemId || !getAllowedFishingIdsForPlayer(ensurePlayer(serverId, userId)).includes(itemId)) {
+    return componentCommit(interaction, { content: "Pick a valid fishing target first.", ephemeral: true });
+  }
+  return runNoodle(interaction, {
+    sub: "fishing",
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      strings: { item: itemId },
+      integers: { quantity: qty, page }
+    }
   });
 }
 
@@ -13976,37 +15270,14 @@ if (cid.startsWith("noodle:pick:forage_item_select:")) {
     return componentCommit(interaction, { content: "Pick an ingredient first.", ephemeral: true });
   }
 
-  if (interaction.deferred || interaction.replied) {
-    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-  }
-
-  const sourceMessageId = interaction.message?.id ?? "none";
-  const modal = new ModalBuilder()
-    .setCustomId(`noodle:pick:forage_qty:${userId}:${itemId}:${page}:${sourceMessageId}`)
-    .setTitle(`Forage ${displayItemName(itemId)}`);
-
-  const input = new TextInputBuilder()
-    .setCustomId("qty")
-    .setLabel("Quantity (1-5)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("1");
-
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-
-  try {
-    return await interaction.showModal(modal);
-  } catch (e) {
-    console.log(`⚠️ showModal failed for forage:`, e?.message);
-    const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
-      return;
+  return runNoodle(interaction, {
+    sub: "forage_menu",
+    overrides: {
+      strings: { item: itemId },
+      integers: { page },
+      messageId: interaction.message?.id ?? null
     }
-    return componentCommit(interaction, {
-      content: `${getIcon("warning")} Discord couldn't show the modal. Try again.`,
-      ephemeral: true
-    });
-  }
+  });
 }
 
 // fishing picker -> open qty modal
@@ -14019,37 +15290,14 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     return componentCommit(interaction, { content: "Pick a fishing target first.", ephemeral: true });
   }
 
-  if (interaction.deferred || interaction.replied) {
-    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-  }
-
-  const sourceMessageId = interaction.message?.id ?? "none";
-  const modal = new ModalBuilder()
-    .setCustomId(`noodle:pick:fishing_qty:${userId}:${itemId}:${page}:${sourceMessageId}`)
-    .setTitle(`Fish For ${displayItemName(itemId)}`);
-
-  const input = new TextInputBuilder()
-    .setCustomId("qty")
-    .setLabel("Quantity (1-5)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("1");
-
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-
-  try {
-    return await interaction.showModal(modal);
-  } catch (e) {
-    console.log(`⚠️ showModal failed for fishing:`, e?.message);
-    const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
-      return;
+  return runNoodle(interaction, {
+    sub: "fishing_menu",
+    overrides: {
+      strings: { item: itemId },
+      integers: { page },
+      messageId: interaction.message?.id ?? null
     }
-    return componentCommit(interaction, {
-      content: `${getIcon("warning")} Discord couldn't show the modal. Try again.`,
-      ephemeral: true
-    });
-  }
+  });
 }
 
 }
@@ -14116,15 +15364,18 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       }
     }
 
-    return runNoodle(interaction, {
-      sub: "cook",
-      overrides: {
-        strings: { recipe: recipeId },
-        integers: { quantity: qty },
-        booleans: { counter_cook: true },
-        messageId
-      }
+    const payload = buildCookMinigameScenePayload({
+      userId,
+      recipeId,
+      quantity: qty,
+      totalTurns: 8,
+      turnIndex: 0,
+      score: 0,
+      misses: 0,
+      counterCook: true,
+      returnSub: "takeout"
     });
+    return componentCommit(interaction, payload);
   }
 
   /* ---------------- FORAGE QTY MODAL ---------------- */
@@ -14248,6 +15499,19 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       user: interaction.member ?? interaction.user
     });
 
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return componentCommit(interaction, {
+        ...buildProfileEditV2Message({
+          userId,
+          specializationsAvailable,
+          statusLine: `${getIcon("status_complete")} Shop name updated to **${trimmed}**.`,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }),
+        targetMessageId: messageId ?? interaction.message?.id
+      });
+    }
+
     return componentCommit(interaction, {
       content: " ",
       embeds: [embed],
@@ -14299,6 +15563,19 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       description: `Your tagline is now: *${trimmed}*`,
       user: interaction.member ?? interaction.user
     });
+
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return componentCommit(interaction, {
+        ...buildProfileEditV2Message({
+          userId,
+          specializationsAvailable,
+          statusLine: `${getIcon("status_complete")} Tagline updated: *${trimmed}*`,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }),
+        targetMessageId: messageId ?? interaction.message?.id
+      });
+    }
 
     return componentCommit(interaction, {
       content: " ",
@@ -14387,6 +15664,23 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     const description = spec.description ? `\n_${spec.description}_` : "";
 
     if (!check.ok) {
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return componentCommit(interaction, {
+          ...buildSpecializationConfirmV2Message({
+            userId,
+            specId,
+            specName: spec.name,
+            specDescription: spec.description,
+            specThumbnailUrl: getSpecializationThumbnailUrl(spec),
+            specializationsAvailable,
+            ownerId: userId,
+            buttonEmoji: getProfileV2ButtonEmoji(),
+            lockedReason: `Reason: ${check.reason}`
+          }),
+          targetMessageId: interaction.message?.id
+        });
+      }
+
       const embed = buildMenuEmbed({
         title: `${getIcon("sparkle")} Specialization Locked`,
         description: `You can't select **${spec.name}** yet.\nReason: ${check.reason}${description}`,
@@ -14421,6 +15715,22 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       description: `You're about to switch to **${spec.name}**.${description}\n\nPress **Confirm** to apply.`,
       user: interaction.member ?? interaction.user
     });
+
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return componentCommit(interaction, {
+        ...buildSpecializationConfirmV2Message({
+          userId,
+          specId,
+          specName: spec.name,
+          specDescription: spec.description,
+          specThumbnailUrl: getSpecializationThumbnailUrl(spec),
+          specializationsAvailable,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }),
+        targetMessageId: interaction.message?.id
+      });
+    }
 
     return componentCommit(interaction, {
       content: " ",

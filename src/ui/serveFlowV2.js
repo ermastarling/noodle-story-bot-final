@@ -54,42 +54,71 @@ export function deriveServeOutcome({
   return { code: "unavailable", message: "That order was no longer serveable." };
 }
 
-export function buildServePickerV2Message({ userId, token, entries = [], selectedShortId = null } = {}) {
+export function buildServePickerV2Message({
+  userId,
+  token,
+  entries = [],
+  selectedShortIds = [],
+  readyOnly = false,
+  statusLine = ""
+} = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
   const sceneKey = "serve.order_picker";
+  const onlyReady = Boolean(readyOnly);
+  const selectedSet = new Set(
+    (selectedShortIds || [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  );
+  const safeStatusLine = String(statusLine || "").trim();
 
   const components = [
     text("## Serve Orders"),
-    text("Tap Serve on an order to serve it immediately.")
+    text("Select one or more orders, then tap Serve Selected.")
   ];
 
+  if (safeStatusLine) components.push(text(safeStatusLine));
+
   if ((entries || []).length === 0) {
-    components.push(text("No accepted orders are currently available to serve."));
+    components.push(text(onlyReady
+      ? "No ready orders are currently available to serve."
+      : "No accepted orders are currently available to serve."));
   } else {
     for (const entry of entries) {
       const shortId = String(entry?.shortId || "").trim();
       if (!shortId) continue;
+      const isSelected = selectedSet.has(shortId);
       components.push({
         type: 9,
         components: [text(String(entry?.line || shortId))],
         accessory: button({
           sceneKey,
-          actionKey: "serve",
+          actionKey: "sel",
           userId: safeUserId,
           token: safeToken,
           arg: shortId,
-          label: "Serve",
-          style: 3,
+          label: isSelected ? "Selected" : "Select",
+          style: isSelected ? 3 : 1,
           disabled: false
         })
       });
     }
   }
 
+  const selectedCount = selectedSet.size;
   components.push({
     type: 1,
     components: [
+      button({
+        sceneKey,
+        actionKey: "cfm",
+        userId: safeUserId,
+        token: safeToken,
+        label: selectedCount > 0 ? `Serve Selected (${selectedCount})` : "Select Orders First",
+        style: 3,
+        disabled: selectedCount <= 0
+      }),
       button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
     ]
   });

@@ -41,6 +41,14 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_TELEMETRY_MODE` - `all` (default), `slow` (only `interaction_slow_event` + `rate_limited`), or `off` (alias: `none`)
 - `NOODLE_TELEMETRY_SAMPLE_RATE` - `0..1` sampling rate for high-volume events (`interaction_latency`, `component_nav_phase`, `component_nav_subroute_phase`)
 - `NOODLE_TELEMETRY_MAX_BUFFER_BYTES` - max write buffer guard (default `262144`); events are dropped under sustained backpressure to protect process memory
+- `NOODLE_V2_TELEMETRY_REPORTS_ENABLED` - set `1` to enable scheduled V2 telemetry reports in the dev alert channel
+- `NOODLE_V2_TELEMETRY_REPORT_INTERVAL_MS` - report interval in milliseconds (default `21600000` / 6h, minimum 5m)
+- `NOODLE_V2_TELEMETRY_REPORT_WINDOW_HOURS` - rolling analysis window hours per report (default `24`)
+- `NOODLE_V2_TELEMETRY_ALERT_MIN_LOOPS` - minimum loop samples required before high-issue alert evaluation (default `20`)
+- `NOODLE_V2_TELEMETRY_ALERT_LOOP_P95_MS` - high-issue threshold for loop p95 latency in milliseconds (default `20000`)
+- `NOODLE_V2_TELEMETRY_ALERT_CLICK_AVG` - high-issue threshold for average clicks per loop (default `6`)
+- `NOODLE_V2_TELEMETRY_ALERT_ERROR_RATE_PCT` - high-issue threshold for scene error rate percent (default `8`)
+- `NOODLE_V2_TELEMETRY_ALERT_P95_REGRESSION_PCT` - high-issue threshold for p95 regression vs prior window (default `20`)
 
 ## Official Stats Counter Env Vars
 
@@ -236,3 +244,5 @@ NOODLE_BOT_ID=1460058511802105976
 - Guild join/leave alerts include current server count in the embed footer.
 - Guild join/leave events also POST updated stats (guild and user counts when supported) to each configured bot list endpoint.
 - Purchase alerts include specialization purchase count in the embed footer (all-time from durable purchase history).
+- V2 telemetry reports (`NOODLE_V2_TELEMETRY_REPORTS_ENABLED=1`) are posted on a schedule to the same dev alert channel.
+- High telemetry issue reports automatically escalate to mention alerts when thresholds are breached.

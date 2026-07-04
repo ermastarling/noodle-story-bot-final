@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { isV2OwnerMismatch, parseV2CustomId } from "../src/ui/sceneRoutingV2.js";
+import { V2_SCENE_REGISTRY, isV2OwnerMismatch, parseV2CustomId } from "../src/ui/sceneRoutingV2.js";
 
 test("V2 parser: parses valid route and args", () => {
   const parsed = parseV2CustomId("noodle:v2:orders.board:acc:123:tok123:argA:argB");
@@ -46,6 +46,15 @@ test("V2 parser: accepts cook action from accept result scene", () => {
   assert.equal(parsed.actionKey, "ck");
 });
 
+test("V2 parser: accepts accept picker page route", () => {
+  const parsed = parseV2CustomId("noodle:v2:orders.accept_picker:pg:123:tok:next");
+
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.sceneKey, "orders.accept_picker");
+  assert.equal(parsed.actionKey, "pg");
+  assert.deepEqual(parsed.args, ["next"]);
+});
+
 test("V2 parser: accepts cook recipe picker qty route", () => {
   const parsed = parseV2CustomId("noodle:v2:cook.recipe_picker:qty:123:tok:p5");
 
@@ -79,10 +88,54 @@ test("V2 parser: accepts serve order picker route", () => {
   assert.equal(parsed.actionKey, "serve");
 });
 
+test("V2 parser: accepts serve order picker confirm route", () => {
+  const parsed = parseV2CustomId("noodle:v2:serve.order_picker:cfm:123:tok");
+
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.sceneKey, "serve.order_picker");
+  assert.equal(parsed.actionKey, "cfm");
+});
+
 test("V2 parser: accepts serve result route", () => {
   const parsed = parseV2CustomId("noodle:v2:serve.result:again:123:tok");
 
   assert.equal(parsed.valid, true);
   assert.equal(parsed.sceneKey, "serve.result");
   assert.equal(parsed.actionKey, "again");
+});
+
+test("V2 parser: accepts cancel picker route", () => {
+  const parsed = parseV2CustomId("noodle:v2:orders.cancel_picker:cfm:123:tok");
+
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.sceneKey, "orders.cancel_picker");
+  assert.equal(parsed.actionKey, "cfm");
+});
+
+test("V2 parser: accepts orders board buy route", () => {
+  const parsed = parseV2CustomId("noodle:v2:orders.board:buy:123:tok");
+
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.sceneKey, "orders.board");
+  assert.equal(parsed.actionKey, "buy");
+});
+
+test("V2 parser: accepts orders board pantry route", () => {
+  const parsed = parseV2CustomId("noodle:v2:orders.board:pn:123:tok");
+
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.sceneKey, "orders.board");
+  assert.equal(parsed.actionKey, "pn");
+});
+
+test("V2 parser: accepts all registered scene routes", () => {
+  for (const [sceneKey, actionSet] of Object.entries(V2_SCENE_REGISTRY)) {
+    for (const actionKey of actionSet) {
+      const customId = `noodle:v2:${sceneKey}:${actionKey}:123:tok`;
+      const parsed = parseV2CustomId(customId);
+      assert.equal(parsed.valid, true, `expected valid parser result for ${customId}`);
+      assert.equal(parsed.sceneKey, sceneKey);
+      assert.equal(parsed.actionKey, actionKey);
+    }
+  }
 });
