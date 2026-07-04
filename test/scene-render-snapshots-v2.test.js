@@ -70,7 +70,7 @@ test("Scene snapshots V2: orders.board", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Orders Board",
+    heading: null,
     buttonIds: [
       "noodle:v2:orders.board:acc:123456789012345678:tok-fixed",
       "noodle:v2:orders.board:ck:123456789012345678:tok-fixed",
@@ -98,7 +98,7 @@ test("Scene snapshots V2: orders.accept_picker", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Accept Orders",
+    heading: null,
     buttonIds: [
       "noodle:v2:orders.accept_picker:bk:123456789012345678:tok-fixed",
       "noodle:v2:orders.accept_picker:cfm:123456789012345678:tok-fixed",
@@ -144,7 +144,7 @@ test("Scene snapshots V2: orders.cancel_picker", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Cancel Orders",
+    heading: null,
     buttonIds: [
       "noodle:v2:orders.cancel_picker:bk:123456789012345678:tok-fixed",
       "noodle:v2:orders.cancel_picker:cfm:123456789012345678:tok-fixed",
@@ -173,9 +173,10 @@ test("Scene snapshots V2: cook.recipe_picker", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Cook Recipes",
+    heading: null,
     buttonIds: [
       "noodle:v2:cook.recipe_picker:bk:123456789012345678:tok-fixed",
+      "noodle:v2:cook.recipe_picker:cfa:123456789012345678:tok-fixed",
       "noodle:v2:cook.recipe_picker:go:123456789012345678:tok-fixed",
       "noodle:v2:cook.recipe_picker:pg:123456789012345678:tok-fixed:next",
       "noodle:v2:cook.recipe_picker:pg:123456789012345678:tok-fixed:prev",
@@ -206,7 +207,7 @@ test("Scene snapshots V2: cook.minigame", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Kitchen Line Minigame",
+    heading: null,
     buttonIds: [
       "noodle:v2:cook.minigame:bk:123456789012345678:tok-fixed",
       "noodle:v2:cook.minigame:heat:123456789012345678:tok-fixed",
@@ -227,7 +228,7 @@ test("Scene snapshots V2: cook.result", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Cook Result",
+    heading: null,
     buttonIds: [
       "noodle:v2:cook.result:cook:123456789012345678:tok-fixed",
       "noodle:v2:cook.result:ord:123456789012345678:tok-fixed",
@@ -251,12 +252,13 @@ test("Scene snapshots V2: serve.order_picker", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Serve Orders",
+    heading: null,
     buttonIds: [
       "noodle:v2:serve.order_picker:bk:123456789012345678:tok-fixed",
       "noodle:v2:serve.order_picker:cfm:123456789012345678:tok-fixed",
       "noodle:v2:serve.order_picker:sel:123456789012345678:tok-fixed:AB12",
-      "noodle:v2:serve.order_picker:sel:123456789012345678:tok-fixed:CD34"
+      "noodle:v2:serve.order_picker:sel:123456789012345678:tok-fixed:CD34",
+      "noodle:v2:serve.order_picker:sfa:123456789012345678:tok-fixed"
     ],
     selectIds: []
   });
@@ -272,7 +274,7 @@ test("Scene snapshots V2: serve.result", () => {
 
   assert.deepEqual(snapshotScene(payload), {
     flags: 32768,
-    heading: "## Order Served",
+    heading: null,
     buttonIds: [
       "noodle:v2:serve.result:again:123456789012345678:tok-fixed",
       "noodle:v2:serve.result:cook:123456789012345678:tok-fixed",
