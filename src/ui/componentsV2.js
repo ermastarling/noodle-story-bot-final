@@ -1,4 +1,5 @@
 import { theme } from "./theme.js";
+import { getSceneBannerUrl } from "./icons.js";
 
 const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 export const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
@@ -95,6 +96,191 @@ function normalizeContainerHeading(components = []) {
   return [{ ...first, content: `## ${raw}` }, ...rest];
 }
 
+function normalizeHeadingSceneKey(value = "") {
+  const withoutCustomEmoji = String(value ?? "").replace(/<a?:[^:>]+:\d+>/g, " ");
+  return withoutCustomEmoji
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function resolveSceneBannerFromHeading(heading = "") {
+  const normalized = normalizeHeadingSceneKey(heading);
+  if (!normalized) return "";
+
+  const aliases = {
+    noodle_story_store: ["store"],
+    customize_profile: ["customize"],
+    orders_served: ["serve"],
+    serve_orders: ["serve"],
+    accept_orders: ["orders"],
+    order_ingredients: ["pantry"],
+    bot_list_vote_rewards: ["vote_rewards"],
+    send_a_tip: ["tip"],
+    shop_visit: ["blessing"],
+    take_out_counter: ["takeout_counter"],
+    shared_order: ["party"],
+    create_shared_order: ["party"],
+    shared_order_status: ["party"],
+    shared_order_contributions: ["party"]
+  };
+
+  const keywordAliases = {
+    about: ["about"],
+    blessing: ["blessing"],
+    bless: ["blessing"],
+    collections: ["collections"],
+    cook: ["cook"],
+    customize: ["customize"],
+    event: ["event"],
+    fishing: ["fishing"],
+    forage: ["forage"],
+    garden: ["garden"],
+    kitchen: ["kitchen"],
+    market: ["market"],
+    buy: ["market"],
+    multi_buy: ["market"],
+    multibuy: ["market"],
+    news: ["news"],
+    orders: ["orders"],
+    pantry: ["pantry"],
+    party: ["party"],
+    profile: ["profile"],
+    quests: ["quests"],
+    recipes: ["recipes"],
+    regulars: ["regulars"],
+    season: ["season"],
+    sell: ["sell"],
+    serve: ["serve"],
+    specializations: ["specializations"],
+    staff: ["staff"],
+    status: ["status"],
+    store: ["store"],
+    take_out: ["takeout_counter"],
+    takeout: ["takeout_counter"],
+    takeout_counter: ["takeout_counter"],
+    tip: ["tip"],
+    visit: ["blessing"],
+    shared: ["party"],
+    shared_order: ["party"],
+    upgrades: ["upgrades"],
+    vote_rewards: ["vote_rewards"],
+    bot_list_vote_rewards: ["vote_rewards"]
+  };
+
+  const candidates = [normalized, ...(aliases[normalized] ?? [])];
+  for (const [token, mapped] of Object.entries(keywordAliases)) {
+    if (normalized.includes(token)) {
+      candidates.push(...mapped);
+    }
+  }
+
+  const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
+  for (const key of uniqueCandidates) {
+    const bannerUrl = String(getSceneBannerUrl(key, "") ?? "").trim();
+    if (bannerUrl) return bannerUrl;
+  }
+
+  return "";
+}
+
+function replaceHeadingWithSceneBanner(components = []) {
+  if (!Array.isArray(components) || components.length === 0) return components;
+
+  let firstTextLocation = null;
+  for (let idx = 0; idx < components.length; idx += 1) {
+    const component = components[idx];
+    if (Number(component?.type) === 10) {
+      firstTextLocation = { kind: "top", componentIndex: idx, textIndex: null, textComponent: component };
+      break;
+    }
+
+    if (Number(component?.type) === 9 && Array.isArray(component?.components)) {
+      const childIndex = component.components.findIndex((child) => Number(child?.type) === 10);
+      if (childIndex >= 0) {
+        firstTextLocation = {
+          kind: "section",
+          componentIndex: idx,
+          textIndex: childIndex,
+          textComponent: component.components[childIndex]
+        };
+        break;
+      }
+    }
+  }
+
+  if (!firstTextLocation?.textComponent) return components;
+
+  const lines = String(firstTextLocation.textComponent?.content ?? "").split("\n");
+  let headingLineIndex = -1;
+  let headingText = "";
+
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const line = String(lines[idx] ?? "").trim();
+    if (!line) continue;
+    const match = line.match(/^#{1,6}\s+(.+)$/);
+    if (!match?.[1]) return components;
+    headingLineIndex = idx;
+    headingText = String(match[1]).trim();
+    break;
+  }
+
+  if (headingLineIndex < 0 || !headingText) return components;
+
+  const bannerUrl = resolveSceneBannerFromHeading(headingText);
+  if (!bannerUrl) return components;
+
+  const out = [...components];
+  const remainingLines = [...lines];
+  remainingLines.splice(headingLineIndex, 1);
+
+  // Trim a single blank line after removed heading so spacing stays clean.
+  while (remainingLines.length > 0 && !String(remainingLines[0] ?? "").trim()) {
+    remainingLines.shift();
+  }
+
+  const nextContent = remainingLines.join("\n").trim();
+  if (firstTextLocation.kind === "top") {
+    const textComponent = out[firstTextLocation.componentIndex];
+    if (nextContent) {
+      out[firstTextLocation.componentIndex] = { ...textComponent, content: nextContent };
+    } else {
+      out.splice(firstTextLocation.componentIndex, 1);
+    }
+  } else {
+    const parent = out[firstTextLocation.componentIndex];
+    const childComponents = Array.isArray(parent?.components) ? [...parent.components] : [];
+    if (nextContent) {
+      childComponents[firstTextLocation.textIndex] = {
+        ...childComponents[firstTextLocation.textIndex],
+        content: nextContent
+      };
+      out[firstTextLocation.componentIndex] = { ...parent, components: childComponents };
+    } else {
+      childComponents.splice(firstTextLocation.textIndex, 1);
+      if (childComponents.length > 0) {
+        out[firstTextLocation.componentIndex] = { ...parent, components: childComponents };
+      } else {
+        out.splice(firstTextLocation.componentIndex, 1);
+      }
+    }
+  }
+
+  const hasBannerMedia = out.some((component) => {
+    if (Number(component?.type) !== 12) return false;
+    const firstItemUrl = String(component?.items?.[0]?.media?.url ?? "").trim();
+    return firstItemUrl === bannerUrl;
+  });
+  if (!hasBannerMedia) {
+    out.unshift({
+      type: 12,
+      items: [{ media: { url: bannerUrl } }]
+    });
+  }
+
+  return out;
+}
+
 function extractOwnerIdFromCustomId(customId = "") {
   const raw = String(customId ?? "");
   if (!raw) return null;
@@ -185,27 +371,25 @@ function appendFooterSegment(components = [], segment = "") {
   if (!safeSegment) return components;
 
   const out = Array.isArray(components) ? [...components] : [];
-  for (let idx = out.length - 1; idx >= 0; idx -= 1) {
+  const firstActionRowIndex = out.findIndex((component) => Number(component?.type) === 1);
+  const insertIndex = firstActionRowIndex >= 0 ? firstActionRowIndex : out.length;
+
+  for (let idx = insertIndex - 1; idx >= 0; idx -= 1) {
     const component = out[idx];
     if (Number(component?.type) !== 10) continue;
     const content = String(component?.content ?? "").trim();
-    if (content) {
-      const lines = content.split("\n");
-      for (let lineIdx = lines.length - 1; lineIdx >= 0; lineIdx -= 1) {
-        const line = String(lines[lineIdx] ?? "").trim();
-        if (!line.startsWith("-# ")) continue;
-        lines[lineIdx] = `${line} • ${safeSegment}`;
-        out[idx] = { ...component, content: lines.join("\n") };
-        return out;
-      }
+    if (!content) continue;
+    const lines = content.split("\n");
+    for (let lineIdx = lines.length - 1; lineIdx >= 0; lineIdx -= 1) {
+      const line = String(lines[lineIdx] ?? "").trim();
+      if (!line.startsWith("-# ")) continue;
+      lines[lineIdx] = `${line} • ${safeSegment}`;
+      out[idx] = { ...component, content: lines.join("\n") };
+      return out;
     }
-
-    const footerLine = `-# ${safeSegment}`;
-    out[idx] = { ...component, content: content ? `${content}\n\n${footerLine}` : footerLine };
-    return out;
   }
 
-  out.push({ type: 10, content: `-# ${safeSegment}` });
+  out.splice(insertIndex, 0, { type: 10, content: `-# ${safeSegment}` });
   return out;
 }
 
@@ -246,6 +430,7 @@ export function buildComponentsV2MenuPayload({
   components = [],
   ephemeral = false,
   ownerId,
+  includeGreenButtonTip = true,
   accentColor,
   dividerText,
   imageUrl,
@@ -260,10 +445,11 @@ export function buildComponentsV2MenuPayload({
   });
 
   const normalizedComponents = normalizeContainerHeading(components);
-  const ownerSanitizedComponents = stripLegacyOwnerFromFooterLines(normalizedComponents);
+  const sceneBannerComponents = replaceHeadingWithSceneBanner(normalizedComponents);
+  const ownerSanitizedComponents = stripLegacyOwnerFromFooterLines(sceneBannerComponents);
   const resolvedOwnerId = String(ownerId ?? "").trim() || detectOwnerIdInComponents(ownerSanitizedComponents);
   let footerComponents = withOwnerFooter(ownerSanitizedComponents, resolvedOwnerId);
-  if (hasGreenButtonInComponents(footerComponents)) {
+  if (includeGreenButtonTip && hasGreenButtonInComponents(footerComponents)) {
     footerComponents = withGreenButtonFooterTip(footerComponents);
   }
 
@@ -300,6 +486,7 @@ export function buildComponentsV2NoticeCardPayload({
   tone = "info",
   ownerId,
   ephemeral = false,
+  includeGreenButtonTip = true,
   env = process.env
 } = {}) {
   const heading = String(title || "").trim() || "Notice";
@@ -316,6 +503,7 @@ export function buildComponentsV2NoticeCardPayload({
     components,
     ownerId,
     ephemeral,
+    includeGreenButtonTip,
     accentColor: resolveNoticeAccentColor(tone),
     addDivider: false,
     env
@@ -327,6 +515,7 @@ export function buildComponentsV2PayloadWithNoticeCards({
   notices = [],
   ownerId,
   ephemeral = false,
+  includeGreenButtonTip = true,
   accentColor,
   dividerText,
   imageUrl,
@@ -337,6 +526,7 @@ export function buildComponentsV2PayloadWithNoticeCards({
     components: mainComponents,
     ownerId,
     ephemeral,
+    includeGreenButtonTip,
     accentColor,
     dividerText,
     imageUrl,
@@ -353,6 +543,7 @@ export function buildComponentsV2PayloadWithNoticeCards({
       tone: notice.tone,
       ownerId,
       ephemeral,
+      includeGreenButtonTip,
       env
     });
     const container = noticePayload.components?.[0];
@@ -409,10 +600,13 @@ function isUserAllowed(userId, env = process.env) {
 }
 
 function isTutorialUserAllowed(userId, env = process.env) {
-  if (isEnabled(env?.NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED)) return true;
+  const explicitToggle = String(env?.NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED ?? "").trim();
+  if (explicitToggle === "1") return true;
   const configured = parseAllowlist(env?.NOODLE_COMPONENTS_V2_TUTORIAL_USER_ALLOWLIST);
-  if (configured.size === 0) return false;
-  return configured.has(normalizeSnowflake(userId));
+  if (configured.size > 0) return configured.has(normalizeSnowflake(userId));
+  if (explicitToggle === "0") return false;
+  // Default to enabled for tutorial users unless explicitly disabled.
+  return true;
 }
 
 export function isComponentsV2Enabled({ guildId, userId, player, env = process.env } = {}) {
@@ -448,8 +642,68 @@ export function buildComponentsV2ContainerMessage({ title, lines = [], accentCol
 
 export async function replyOrEditInteraction(interaction, payload) {
   if (!interaction) throw new Error("interaction is required");
+
+  const isV2Payload = (() => {
+    if (!payload || typeof payload !== "object") return false;
+    if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+    const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node || typeof node !== "object") continue;
+      const type = Number(node.type);
+      if (type === 9 || type === 10 || type === 12 || type === 17) return true;
+      if (Array.isArray(node.components)) stack.push(...node.components);
+    }
+    return false;
+  })();
+
+  const isInvalidComponentTypeError = (error) => {
+    const message = String(error?.message ?? "");
+    return String(error?.code ?? "") === "INVALID_TYPE"
+      || message.includes("valid MessageComponentType");
+  };
+
+  const toRawWebhookPayload = (input = {}) => {
+    const out = { ...input };
+    const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
+    const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
+    if (out.ephemeral === true && !hasEphemeralFlag) {
+      out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
+    }
+    delete out.ephemeral;
+    return out;
+  };
+
+  const rawWebhookEditOriginal = async () => {
+    const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+    const token = interaction?.token;
+    if (!interaction?.client?.api || !applicationId || !token) {
+      throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+    }
+    return interaction.client.api
+      .webhooks(applicationId, token)
+      .messages("@original")
+      .patch({ data: toRawWebhookPayload(payload) });
+  };
+
   if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(payload);
+    if (isV2Payload) {
+      try {
+        return await rawWebhookEditOriginal();
+      } catch {
+        // Fall through to discord.js editReply fallback.
+      }
+    }
+
+    try {
+      return await interaction.editReply(payload);
+    } catch (error) {
+      if (isV2Payload && isInvalidComponentTypeError(error)) {
+        return rawWebhookEditOriginal();
+      }
+      throw error;
+    }
   }
+
   return interaction.reply(payload);
 }

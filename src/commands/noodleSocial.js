@@ -89,6 +89,7 @@ const ButtonStyle = {
   Danger: Constants?.MessageButtonStyles?.DANGER ?? 4,
   Link: Constants?.MessageButtonStyles?.LINK ?? 5
 };
+const MESSAGE_FLAG_EPHEMERAL = MessageFlags?.Ephemeral ?? (1 << 6);
 
 const db = openDb();
 const baseContent = loadContentBundle(1);
@@ -567,7 +568,7 @@ function socialMainMenuRow(userId, { partyHasActiveOrder = null } = {}) {
       .setLabel("Stats").setEmoji(getButtonEmoji("stats"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:profile:${userId}`)
+      .setCustomId(`noodle:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
       .setStyle(ButtonStyle.Secondary)
   );
@@ -1033,7 +1034,7 @@ function statsViewButtons(userId, { newsAvailable = false } = {}) {
       .setEmoji(getButtonEmoji("new"))
       .setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:profile:${userId}`)
+      .setCustomId(`noodle:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
       .setStyle(ButtonStyle.Secondary)
   );
@@ -1165,6 +1166,14 @@ function detectOwnerIdFromComponents(components = []) {
 }
 
 function convertPayloadToComponentsV2(interaction, payload = {}) {
+  const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  const isSlashInteraction = Boolean(interaction?.isChatInputCommand?.() || interaction?.isCommand?.());
+
+  // Default to legacy social payloads, but always convert for slash and existing V2 message updates.
+  if (String(process.env.NOODLE_SOCIAL_V2_CONVERSION_ENABLED || "0") !== "1" && !sourceMessageIsV2 && !isSlashInteraction) {
+    return payload;
+  }
   if (!payload || typeof payload !== "object") return payload;
   if (isComponentsV2Payload(payload)) return payload;
   if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
@@ -1210,13 +1219,102 @@ function normalizePayloadForReply(interaction, payload = {}) {
   return converted;
 }
 
+function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
+function isUnknownWebhookError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 10015 || message.includes("Unknown Webhook");
+}
+
+function isUnknownInteractionError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 10062 || message.includes("Unknown interaction");
+}
+
+function toRawWebhookPayload(payload = {}) {
+  const out = { ...payload };
+  const hasEphemeralFlag = (Number(out.flags) & MessageFlags.Ephemeral) !== 0;
+  if (out.ephemeral === true && !hasEphemeralFlag) {
+    out.flags = Number(out.flags || 0) | MessageFlags.Ephemeral;
+  }
+  delete out.ephemeral;
+  return out;
+}
+
+async function rawWebhookEditOriginal(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .messages("@original")
+    .patch({ data: toRawWebhookPayload(payload) });
+}
+
+async function sendSocialPayload(interaction, payload = {}) {
+  const finalPayload = payload ?? {};
+  const isV2 = isComponentsV2Payload(finalPayload);
+
+  if (!isV2) {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(finalPayload);
+    }
+    return interaction.reply(finalPayload);
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    try {
+      return await rawWebhookEditOriginal(interaction, finalPayload);
+    } catch {
+      try {
+        return await interaction.editReply(finalPayload);
+      } catch (e) {
+        if (isInvalidComponentTypeError(e)) {
+          return rawWebhookEditOriginal(interaction, finalPayload);
+        }
+        throw e;
+      }
+    }
+  }
+
+  const isEphemeral = finalPayload.ephemeral === true
+    || ((Number(finalPayload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0);
+  try {
+    await interaction.deferReply({ ephemeral: isEphemeral });
+    return await rawWebhookEditOriginal(interaction, finalPayload);
+  } catch {
+    try {
+      return await interaction.reply(finalPayload);
+    } catch (e) {
+      if (isInvalidComponentTypeError(e)) {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferReply({ ephemeral: isEphemeral });
+        }
+        return rawWebhookEditOriginal(interaction, finalPayload);
+      }
+      throw e;
+    }
+  }
+}
+
 /**
  * Commit a component interaction response
  */
 async function componentCommit(interaction, opts) {
   const normalizedPayload = normalizePayloadForReply(interaction, opts ?? {});
   const { ephemeral, targetMessageId, ...rest } = normalizedPayload ?? {};
-  const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
+  const isMessageComponent = (
+    (typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent())
+      || Boolean(interaction?.message)
+      || Boolean(interaction?.isButton?.())
+      || Boolean(interaction?.isSelectMenu?.())
+  );
 
   if (ephemeral) {
     if (interaction.deferred || interaction.replied) {
@@ -1227,9 +1325,23 @@ async function componentCommit(interaction, opts) {
           // ignore if already deleted or not present
         }
       }
-      return interaction.followUp({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+      try {
+        return await interaction.followUp({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+      } catch (e) {
+        if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+          return null;
+        }
+        throw e;
+      }
     }
-    return interaction.reply({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+    try {
+      return await interaction.reply({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+    } catch (e) {
+      if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+        return null;
+      }
+      throw e;
+    }
   }
 
   if (targetMessageId) {
@@ -1254,14 +1366,62 @@ async function componentCommit(interaction, opts) {
   }
 
   if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(normalizePayloadForReply(interaction, rest));
+    const editPayload = normalizePayloadForReply(interaction, rest);
+    if (isComponentsV2Payload(editPayload)) {
+      try {
+        return await rawWebhookEditOriginal(interaction, editPayload);
+      } catch (e) {
+        if (isMessageComponent && (isUnknownWebhookError(e) || isUnknownInteractionError(e)) && interaction.message?.edit) {
+          return interaction.message.edit(editPayload);
+        }
+        // Fall back to discord.js path below.
+      }
+    }
+    try {
+      return await interaction.editReply(editPayload);
+    } catch (e) {
+      if (isMessageComponent && (isUnknownWebhookError(e) || isUnknownInteractionError(e)) && interaction.message?.edit) {
+        return interaction.message.edit(editPayload);
+      }
+      if (isComponentsV2Payload(editPayload) && isInvalidComponentTypeError(e)) {
+        return rawWebhookEditOriginal(interaction, editPayload);
+      }
+      throw e;
+    }
   }
-  return interaction.update(normalizePayloadForReply(interaction, rest));
+
+  const updatePayload = normalizePayloadForReply(interaction, rest);
+  try {
+    return await interaction.update(updatePayload);
+  } catch (e) {
+    if (isMessageComponent && (isUnknownWebhookError(e) || isUnknownInteractionError(e)) && interaction.message?.edit) {
+      return interaction.message.edit(updatePayload);
+    }
+    if (isComponentsV2Payload(updatePayload) && isInvalidComponentTypeError(e)) {
+      try {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferUpdate();
+        }
+        return await rawWebhookEditOriginal(interaction, updatePayload);
+      } catch (webhookError) {
+        if (isMessageComponent && (isUnknownWebhookError(webhookError) || isUnknownInteractionError(webhookError)) && interaction.message?.edit) {
+          return interaction.message.edit(updatePayload);
+        }
+        throw webhookError;
+      }
+    }
+    throw e;
+  }
 }
 
 async function errorReply(interaction, content) {
   const payload = { content, flags: MessageFlags.Ephemeral, ephemeral: true };
-  const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
+  const isMessageComponent = (
+    (typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent())
+      || Boolean(interaction?.message)
+      || Boolean(interaction?.isButton?.())
+      || Boolean(interaction?.isSelectMenu?.())
+  );
   if (interaction.deferred || interaction.replied) {
     if (!isMessageComponent) {
       try {
@@ -1270,9 +1430,23 @@ async function errorReply(interaction, content) {
         // ignore if already deleted or not present
       }
     }
-    return interaction.followUp(payload);
+    try {
+      return await interaction.followUp(payload);
+    } catch (e) {
+      if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+        return null;
+      }
+      throw e;
+    }
   }
-  return interaction.reply(payload);
+  try {
+    return await interaction.reply(payload);
+  } catch (e) {
+    if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+      return null;
+    }
+    throw e;
+  }
 }
 
 /**
@@ -1508,7 +1682,7 @@ async function handleParty(interaction) {
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("party")} ${currentParty.party_name}`)
+        .setTitle(`${getIcon("party")} Party • ${currentParty.party_name}`)
         .setDescription(`Party ID:\n\`\`\`${formatPartyId(currentParty.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${currentParty.leader_user_id}>`, inline: true },
@@ -1723,7 +1897,7 @@ async function handleParty(interaction) {
   }
 
   await ensurePublicReply();
-  return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response ?? {}));
+  return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response ?? {}));
 }
 
 async function handleTip(interaction) {
@@ -1749,7 +1923,7 @@ async function handleTip(interaction) {
   const action = "tip";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
   const cached = db ? getIdempotentResult(db, idemKey) : null;
-  if (cached) return interaction.editReply(normalizePayloadForReply(interaction, cached));
+  if (cached) return sendSocialPayload(interaction, normalizePayloadForReply(interaction, cached));
 
   const ownerLock = `discord:${interaction.id}`;
 
@@ -1807,7 +1981,7 @@ async function handleTip(interaction) {
   if (!lockedResult?.ok) {
     return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process tip.`);
   }
-  return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
+  return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
 }
 
 async function handleVisit(interaction) {
@@ -1831,7 +2005,7 @@ async function handleVisit(interaction) {
   const action = "visit";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
   const cached = db ? getIdempotentResult(db, idemKey) : null;
-  if (cached) return interaction.editReply(normalizePayloadForReply(interaction, cached));
+  if (cached) return sendSocialPayload(interaction, normalizePayloadForReply(interaction, cached));
 
   const ownerLock = `discord:${interaction.id}`;
 
@@ -1910,7 +2084,7 @@ async function handleVisit(interaction) {
   if (!lockedResult?.ok) {
     return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process visit.`);
   }
-  return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
+  return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
 }
 
 async function handleLeaderboard(interaction) {
@@ -1937,7 +2111,7 @@ async function handleLeaderboard(interaction) {
       ownerUser: interaction.member ?? interaction.user
     });
 
-    return interaction.editReply(normalizePayloadForReply(interaction, view));
+    return sendSocialPayload(interaction, normalizePayloadForReply(interaction, view));
   } catch (err) {
     console.error("Leaderboard error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading leaderboard: ${err.message}`);
@@ -1968,7 +2142,7 @@ async function handleGlobalLeaderboard(interaction) {
       ownerUser: interaction.member ?? interaction.user
     });
 
-    return interaction.editReply(normalizePayloadForReply(interaction, view));
+    return sendSocialPayload(interaction, normalizePayloadForReply(interaction, view));
   } catch (err) {
     console.error("Global leaderboard error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading global leaderboard: ${err.message}`);
@@ -2046,7 +2220,7 @@ async function handleStats(interaction) {
       });
     }
 
-    return interaction.editReply(normalizePayloadForReply(interaction, { 
+    return sendSocialPayload(interaction, normalizePayloadForReply(interaction, { 
       embeds: [embed], 
       components: [socialMainMenuRow(userId)] 
     }));
@@ -2139,7 +2313,7 @@ async function handleComponent(interaction) {
         }
       }
 
-      return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
+      return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
     }
 
     if (customId.startsWith("noodle-social:modal:join_party:")) {
@@ -2201,7 +2375,7 @@ async function handleComponent(interaction) {
         }
       }
 
-      return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
+      return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
     }
 
     if (customId.startsWith("noodle-social:modal:invite_user:")) {
@@ -2256,7 +2430,7 @@ async function handleComponent(interaction) {
         if (!lockedResult?.ok) {
           return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to invite user.`);
         }
-        return interaction.editReply(normalizePayloadForReply(interaction, lockedResult.response));
+        return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
       } catch (err) {
         console.error(`${getIcon("error")} withLock failed:`, err);
         try {
@@ -2638,7 +2812,7 @@ async function handleComponent(interaction) {
           contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, { maxIngredientSlots: maxSlots });
 
           const embed = new EmbedBuilder()
-            .setTitle(`${getIcon("status_complete")} Contribution Recorded!`)
+            .setTitle(`${getIcon("status_complete")} Shared Order • Contribution Recorded`)
             .setDescription(
               `You contributed **${quantity}× ${ingredient.name}** to the shared order.\n\n` +
               `Thank you for helping the party! ${getIcon("party")}`
@@ -2671,7 +2845,13 @@ async function handleComponent(interaction) {
         }
       });
 
-      return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
+      if (!lockedResult?.ok) {
+        return errorReply(
+          interaction,
+          String(lockedResult?.payload?.content || `${getIcon("error")} Unable to record contribution.`)
+        );
+      }
+      return componentCommit(interaction, lockedResult.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
     }
   }
 
@@ -3188,8 +3368,8 @@ async function handleComponent(interaction) {
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("party")} ${party.party_name}`)
-        .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
+        .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
+        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
@@ -3481,8 +3661,8 @@ async function handleComponent(interaction) {
           }).join('\n');
 
           embed = new EmbedBuilder()
-            .setTitle(`${getIcon("serve")} ${recipe.name}`)
-            .setDescription(`**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
+            .setTitle(`${getIcon("serve")} Shared Order • ${recipe.name}`)
+            .setDescription(`**Recipe**: ${recipe.name}\n**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
             .addFields(
               {
                 name: `${getIcon("ingredient_capacity")} Ingredients`,
@@ -3577,8 +3757,8 @@ async function handleComponent(interaction) {
       }).join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("serve")} ${recipe.name}`)
-        .setDescription(`**Servings**: ${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
+        .setTitle(`${getIcon("serve")} Shared Order • ${recipe.name}`)
+        .setDescription(`**Recipe**: ${recipe.name}\n**Servings**: ${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
         .addFields(
           {
             name: `${getIcon("ingredient_capacity")} Ingredients`,
@@ -3686,8 +3866,8 @@ async function handleComponent(interaction) {
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("party")} ${party.party_name}`)
-        .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
+        .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
+        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
@@ -3839,8 +4019,8 @@ async function handleComponent(interaction) {
 
       const isLeader = party.leader_user_id === userId;
       const contributeEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("contribute")} Contribute Ingredients`)
-        .setDescription("Pick an ingredient to add:")
+        .setTitle(`${getIcon("contribute")} Shared Order • Contribute Ingredients`)
+        .setDescription(`**Recipe**: ${recipe.name}\nPick an ingredient to add:`)
         .setColor(theme.colors.info);
 
       applyOwnerFooter(contributeEmbed, interaction.member ?? interaction.user);
@@ -3907,7 +4087,7 @@ async function handleComponent(interaction) {
 
       // Confirm completion
       const promptEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("serve")} Complete Shared Order?`)
+        .setTitle(`${getIcon("serve")} Shared Order • Complete Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Mark this shared order as complete? This will distribute rewards to all contributors."
@@ -3962,7 +4142,7 @@ async function handleComponent(interaction) {
 
       const recipe = content.recipes?.[sharedOrder.order_id];
       const promptEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("warning")} Cancel Shared Order?`)
+        .setTitle(`${getIcon("warning")} Shared Order • Cancel Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributors will not receive rewards, but their ingredients will be returned."
@@ -4119,7 +4299,7 @@ async function handleComponent(interaction) {
           : "No contributions recorded.";
 
         const embed = new EmbedBuilder()
-          .setTitle(`${getIcon("serve")} Shared Order Complete!`)
+          .setTitle(`${getIcon("serve")} Shared Order • Complete`)
           .setDescription(
             `**${recipe.name}** (${servings} servings)\n\n` +
             `${getIcon("group")} **Contributors**: ${Object.keys(contributorQuantities).length}\n` +
@@ -4162,7 +4342,7 @@ async function handleComponent(interaction) {
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
       const recipe = existingOrder ? content.recipes?.[existingOrder.order_id] : null;
       const cancelEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("cancel")} Cancelled`)
+        .setTitle(`${getIcon("cancel")} Shared Order • Completion Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Shared order completion cancelled."
@@ -4237,7 +4417,7 @@ async function handleComponent(interaction) {
 
       const recipe = content.recipes?.[sharedOrder.order_id];
       const cancelEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("broom")} Shared Order Cancelled`)
+        .setTitle(`${getIcon("broom")} Shared Order • Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributions have been returned to the party."
@@ -4278,7 +4458,7 @@ async function handleComponent(interaction) {
         }
       }
       const keepEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("status_complete")} Shared Order Kept`)
+        .setTitle(`${getIcon("status_complete")} Shared Order • Kept`)
         .setDescription("Keeping the shared order active.")
         .setColor(theme.colors.info);
 

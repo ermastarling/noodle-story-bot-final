@@ -46,6 +46,7 @@ const ButtonStyle = {
   Danger: Constants?.MessageButtonStyles?.DANGER ?? 4,
   Link: Constants?.MessageButtonStyles?.LINK ?? 5
 };
+const MESSAGE_FLAG_EPHEMERAL = Constants?.MessageFlags?.EPHEMERAL ?? (1 << 6);
 
 const db = openDb();
 const upgradesContent = loadUpgradesContent();
@@ -192,6 +193,14 @@ function legacyEmbedsToV2TextComponents(embeds = []) {
 }
 
 function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+  const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  const isSlashInteraction = Boolean(interaction?.isChatInputCommand?.() || interaction?.isCommand?.());
+
+  // Default to legacy upgrades payloads, but always convert when editing an existing V2 message.
+  if (String(process.env.NOODLE_UPGRADES_V2_CONVERSION_ENABLED || "0") !== "1" && !sourceMessageIsV2 && !isSlashInteraction) {
+    return payload;
+  }
   if (!payload || typeof payload !== "object") return payload;
   if (isComponentsV2Payload(payload)) return payload;
   if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
@@ -230,6 +239,80 @@ function normalizePayloadForReply(interaction, payload = {}, player = null) {
     converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
   }
   return converted;
+}
+
+function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
+function toRawWebhookPayload(payload = {}) {
+  const out = { ...payload };
+  const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
+  if (out.ephemeral === true && !hasEphemeralFlag) {
+    out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
+  }
+  delete out.ephemeral;
+  return out;
+}
+
+async function rawWebhookEditOriginal(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .messages("@original")
+    .patch({ data: toRawWebhookPayload(payload) });
+}
+
+async function sendUpgradesPayload(interaction, payload = {}) {
+  const finalPayload = payload ?? {};
+  const isV2 = isComponentsV2Payload(finalPayload);
+
+  if (!isV2) {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(finalPayload);
+    }
+    return interaction.reply(finalPayload);
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    try {
+      return await rawWebhookEditOriginal(interaction, finalPayload);
+    } catch {
+      try {
+        return await interaction.editReply(finalPayload);
+      } catch (e) {
+        if (isInvalidComponentTypeError(e)) {
+          return rawWebhookEditOriginal(interaction, finalPayload);
+        }
+        throw e;
+      }
+    }
+  }
+
+  const isEphemeral = finalPayload.ephemeral === true
+    || ((Number(finalPayload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0);
+  try {
+    await interaction.deferReply({ ephemeral: isEphemeral });
+    return await rawWebhookEditOriginal(interaction, finalPayload);
+  } catch {
+    try {
+      return await interaction.reply(finalPayload);
+    } catch (e) {
+      if (isInvalidComponentTypeError(e)) {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferReply({ ephemeral: isEphemeral });
+        }
+        return rawWebhookEditOriginal(interaction, finalPayload);
+      }
+      throw e;
+    }
+  }
 }
 
 function formatEffects(effects) {
@@ -404,10 +487,7 @@ export async function noodleUpgradesHandler(interaction) {
   const existing = getIdempotentResult(db, idempKey);
   if (existing) {
     const normalizedExisting = normalizePayloadForReply(interaction, existing);
-    if (interaction.deferred || interaction.replied) {
-      return interaction.editReply(normalizedExisting);
-    }
-    return interaction.reply(normalizedExisting);
+    return sendUpgradesPayload(interaction, normalizedExisting);
   }
 
   const lockKey = `user:${userId}`;
@@ -440,10 +520,7 @@ export async function noodleUpgradesHandler(interaction) {
     return normalizedResponse;
   });
 
-  if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(lockedResult);
-  }
-  return interaction.reply(lockedResult);
+  return sendUpgradesPayload(interaction, lockedResult);
 }
 
 function buildUpgradesOverviewEmbed(player, user) {

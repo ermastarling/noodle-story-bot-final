@@ -1,6 +1,7 @@
 {
   "notes": {
-    "custom_emoji": "You can replace any icon value with a Discord custom emoji string like <:icon_name:123456789012345678> or <a:icon_name:123456789012345678>."
+    "custom_emoji": "You can replace any icon value with a Discord custom emoji string like <:icon_name:123456789012345678> or <a:icon_name:123456789012345678>.",
+    "scene_banners": "Set menu-scene banner image URLs under icons.scene_banners using keys like scene_banner_market, scene_banner_sell, scene_banner_pantry, scene_banner_kitchen. When present, V2 scene title headings are replaced by the banner image."
   },
   "icons": {
     "badges": {
@@ -226,6 +227,38 @@
       "customize": "<:customize:1470315759124217907>",
       "tag": "<:tag:1470315777084358760>",
       "about_profile": "https://noodlestory.lol/wp-content/uploads/2026/04/enoodles.png"
+    },
+    "scene_banners": {
+      "scene_banner_about": "https://noodlestory.lol/wp-content/uploads/2026/07/About.png",
+      "scene_banner_blessing": "https://noodlestory.lol/wp-content/uploads/2026/07/Blessing.png",
+      "scene_banner_collections": "https://noodlestory.lol/wp-content/uploads/2026/07/Collections.png",
+      "scene_banner_cook": "https://noodlestory.lol/wp-content/uploads/2026/07/Cook.png",
+      "scene_banner_customize": "https://noodlestory.lol/wp-content/uploads/2026/07/Customize.png",
+      "scene_banner_daily_reward": "https://noodlestory.lol/wp-content/uploads/2026/07/Daily_Rewards.png",
+      "scene_banner_event": "https://noodlestory.lol/wp-content/uploads/2026/07/Event.png",
+      "scene_banner_fishing": "https://noodlestory.lol/wp-content/uploads/2026/07/Fishing.png",
+      "scene_banner_forage": "https://noodlestory.lol/wp-content/uploads/2026/07/Forage.png",
+      "scene_banner_garden": "https://noodlestory.lol/wp-content/uploads/2026/07/Garden.png",
+      "scene_banner_kitchen": "https://noodlestory.lol/wp-content/uploads/2026/07/Kitchen.png",
+      "scene_banner_market": "https://noodlestory.lol/wp-content/uploads/2026/07/Market.png",
+      "scene_banner_news": "https://noodlestory.lol/wp-content/uploads/2026/07/News.png",
+      "scene_banner_orders": "https://noodlestory.lol/wp-content/uploads/2026/07/Orders.png",
+      "scene_banner_pantry": "https://noodlestory.lol/wp-content/uploads/2026/07/Pantry.png",
+      "scene_banner_party": "https://noodlestory.lol/wp-content/uploads/2026/07/Party.png",
+      "scene_banner_purchase_complete": "https://noodlestory.lol/wp-content/uploads/2026/07/Purchase_Complete.png",
+      "scene_banner_quests": "https://noodlestory.lol/wp-content/uploads/2026/07/Quests.png",
+      "scene_banner_recipes": "https://noodlestory.lol/wp-content/uploads/2026/07/Recipes.png",
+      "scene_banner_regulars": "https://noodlestory.lol/wp-content/uploads/2026/07/Regulars.png",
+      "scene_banner_season": "https://noodlestory.lol/wp-content/uploads/2026/07/Season.png",
+      "scene_banner_sell": "https://noodlestory.lol/wp-content/uploads/2026/07/Sell.png",
+      "scene_banner_serve": "https://noodlestory.lol/wp-content/uploads/2026/07/Serve.png",
+      "scene_banner_specializations": "https://noodlestory.lol/wp-content/uploads/2026/07/Specializations.png",
+      "scene_banner_staff": "https://noodlestory.lol/wp-content/uploads/2026/07/Staff.png",
+      "scene_banner_store": "https://noodlestory.lol/wp-content/uploads/2026/07/Store.png",
+      "scene_banner_takeout_counter": "https://noodlestory.lol/wp-content/uploads/2026/07/Takeout_Counter.png",
+      "scene_banner_tip": "https://noodlestory.lol/wp-content/uploads/2026/07/Tip.png",
+      "scene_banner_upgrades": "https://noodlestory.lol/wp-content/uploads/2026/07/Upgrades.png",
+      "scene_banner_vote_rewards": "https://noodlestory.lol/wp-content/uploads/2026/07/Vote_Rewards.png"
     },
     "staff_upgrades": {
       "staff_management": "<:staff_management:1470315769735676057>",

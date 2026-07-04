@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildCookMinigameTargetActions,
+  buildCookMinigameV2Message,
   buildCookRecipePickerV2Message,
   buildCookResultV2Message,
   createCookRunToken,
@@ -39,6 +40,8 @@ test("Cook flow V2: renders quantity controls and cook action", () => {
   assert.ok(actionRow, "expected action row");
   const cookButton = actionRow.components.find((btn) => String(btn?.custom_id || "").includes(":go:"));
   assert.equal(cookButton.disabled, false);
+  const cookAllButton = actionRow.components.find((btn) => String(btn?.custom_id || "").includes(":cfa:"));
+  assert.equal(Boolean(cookAllButton), true);
 });
 
 test("Cook flow V2: disables cook action when no recipe entries exist", () => {
@@ -105,6 +108,38 @@ test("Cook flow V2: result scene exposes next actions", () => {
   assert.ok(customIds.some((id) => String(id || "").includes(":cook.result:serve:")));
 });
 
+test("Cook flow V2: result scene prefers serve action when all bowls are ready", () => {
+  const payload = buildCookResultV2Message({
+    userId: "123",
+    token: "tok",
+    summaryLines: ["line"],
+    preferServe: true
+  });
+
+  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
+  const actionRow = rows[0] ?? { components: [] };
+  const cookButton = actionRow.components.find((component) => String(component?.custom_id || "").includes(":cook.result:cook:"));
+  const serveButton = actionRow.components.find((component) => String(component?.custom_id || "").includes(":cook.result:serve:"));
+  assert.equal(Number(cookButton?.style || 0), 2);
+  assert.equal(Number(serveButton?.style || 0), 3);
+});
+
+test("Cook flow V2: tutorial result scene shows only next tutorial step action", () => {
+  const payload = buildCookResultV2Message({
+    userId: "123",
+    token: "tok",
+    summaryLines: ["line"],
+    tutorialNextOnly: true,
+    tutorialNextLabel: "Next Tutorial Step"
+  });
+
+  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
+  const actionRow = rows[0] ?? { components: [] };
+  const customIds = actionRow.components.map((component) => component.custom_id);
+  assert.equal(customIds.length, 1);
+  assert.ok(String(customIds[0] || "").includes(":cook.result:nxt:"));
+});
+
 test("Cook flow V2: target pattern is deterministic per run token", () => {
   const token = createCookRunToken({ userId: "u1", recipeId: "ramen", quantity: 3, nowMs: 1700000000000 });
   const seqA = buildCookMinigameTargetActions({ recipeId: "ramen", runToken: token, totalTurns: 8 });
@@ -157,4 +192,31 @@ test("Cook flow V2: outcome resolver bypasses random roll callback for minigame 
 
   assert.equal(outcome.success, 10);
   assert.equal(outcome.failed, 0);
+});
+
+test("Cook flow V2: tutorial mode includes forgiving timer guidance and future 10s note", () => {
+  const payload = buildCookMinigameV2Message({
+    userId: "123",
+    token: "tok",
+    recipeName: "Classic Soy Ramen",
+    quantity: 1,
+    turnIndex: 0,
+    totalTurns: 6,
+    score: 0,
+    misses: 0,
+    targetAction: "prep",
+    turnMs: 18000,
+    graceMs: 3000,
+    tutorialMode: true,
+    coachingLine: "Tutorial mode: generous timing is enabled for this step. Future kitchen turns use a **10s** order window."
+  });
+
+  const nodes = payload.components?.[0]?.components ?? [];
+  const allText = nodes
+    .filter((node) => node?.type === 10)
+    .map((node) => String(node?.content ?? ""))
+    .join("\n");
+
+  assert.match(allText, /generous timing/i);
+  assert.match(allText, /10s/i);
 });

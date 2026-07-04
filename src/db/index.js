@@ -123,6 +123,22 @@ function invalidateSharedPlayer(serverId, userId) {
   sharedProjectionCache.delete(makePlayerCacheKey(serverId, userId));
 }
 
+function invalidateSharedPlayerByUser(userId) {
+  const suffix = `:${String(userId ?? "").trim()}`;
+  if (!suffix || suffix === ":") return;
+
+  for (const key of [...sharedPlayerCache.keys()]) {
+    if (String(key).endsWith(suffix)) {
+      sharedPlayerCache.delete(key);
+    }
+  }
+  for (const key of [...sharedProjectionCache.keys()]) {
+    if (String(key).endsWith(suffix)) {
+      sharedProjectionCache.delete(key);
+    }
+  }
+}
+
 function parsePlayerRow(row, userId) {
   if (!row?.data_json) return null;
   try {
@@ -544,6 +560,25 @@ export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null,
   const rev = measureDbWrite(() => tx());
   invalidateSharedPlayer(storageServerId, userId);
   return rev;
+}
+
+export function deletePlayerProfiles(db, userId, { serverId = null, allServers = false } = {}) {
+  const safeUserId = String(userId ?? "").trim();
+  if (!safeUserId) return 0;
+
+  if (allServers) {
+    const tx = db.transaction(() => prepareCached(db, "DELETE FROM players WHERE user_id=?").run(safeUserId));
+    const result = measureDbWrite(() => tx());
+    invalidateSharedPlayerByUser(safeUserId);
+    return Number(result?.changes ?? 0);
+  }
+
+  const storageServerId = getPlayerStorageServerId(serverId ?? "");
+  const tx = db.transaction(() => prepareCached(db, "DELETE FROM players WHERE server_id=? AND user_id=?")
+    .run(storageServerId, safeUserId));
+  const result = measureDbWrite(() => tx());
+  invalidateSharedPlayer(storageServerId, safeUserId);
+  return Number(result?.changes ?? 0);
 }
 
 export function getLastActiveAt(db, serverId, userId) {

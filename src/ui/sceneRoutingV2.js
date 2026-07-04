@@ -1,12 +1,12 @@
 export const V2_SCENE_REGISTRY = Object.freeze({
-  "orders.board": new Set(["acc", "ck", "sv", "qs", "rf", "nm", "buy", "pn", "cnl", "tk"]),
+  "orders.board": new Set(["acc", "ck", "sv", "fg", "qs", "rf", "nm", "buy", "pn", "cnl", "tk"]),
   "orders.accept_picker": new Set(["sel", "cfm", "pg", "cnl", "bk"]),
   "orders.accept_result": new Set(["cfm", "cnl", "bk", "ord", "ck"]),
   "orders.cancel_picker": new Set(["sel", "cfm", "cnl", "bk"]),
-  "cook.recipe_picker": new Set(["sel", "qty", "pg", "go", "bk"]),
+  "cook.recipe_picker": new Set(["sel", "qty", "pg", "go", "cfa", "bk"]),
   "cook.minigame": new Set(["prep", "heat", "plate", "serve", "bk"]),
-  "cook.result": new Set(["ord", "cook", "serve"]),
-  "serve.order_picker": new Set(["sel", "cfm", "serve", "bk"]),
+  "cook.result": new Set(["ord", "cook", "serve", "nxt"]),
+  "serve.order_picker": new Set(["sel", "cfm", "serve", "sfa", "bk"]),
   "serve.result": new Set(["ord", "cook", "again"])
 });
 

@@ -143,6 +143,16 @@ export function resolveForageNavSub(player) {
   return resolveNavSubForTutorial({ player, action: "forage", fallbackSub: "forage_menu" });
 }
 
+export function resolveTutorialOrdersActionKey(player) {
+  const rowKey = resolveTutorialProgressRowKey(player);
+  if (rowKey === "accept_only") return "acc";
+  if (rowKey === "buy") return "buy";
+  if (rowKey === "forage") return "fg";
+  if (rowKey === "cook") return "ck";
+  if (rowKey === "serve") return "sv";
+  return null;
+}
+
 export function resolveTutorialRecoverySub({ player, fallbackSub = "orders" } = {}) {
   const stepId = getTutorialStepId(player);
   if (!stepId) return fallbackSub;

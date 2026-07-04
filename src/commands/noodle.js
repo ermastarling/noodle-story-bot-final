@@ -23,7 +23,9 @@ import {
   resolveTutorialGateValue,
   isTutorialStep as isTutorialStepFromRouting,
   resolveTutorialProgressRowKey,
-  resolveTutorialRecoverySub
+  resolveTutorialRecoverySub,
+  resolveForageNavSub,
+  resolveTutorialOrdersActionKey
 } from "../game/tutorialRouting.js";
 import { resolveComponentNavSub } from "./navDispatch.js";
 import {
@@ -46,6 +48,7 @@ import {
   openDb,
   getPlayer,
   upsertPlayer,
+  deletePlayerProfiles,
   getServer,
   upsertServer,
   getLastActiveAt,
@@ -233,7 +236,6 @@ import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js
 import {
   buildComponentsV2MenuPayload,
   buildComponentsV2PayloadWithNoticeCards,
-  buildComponentsV2ContainerMessage,
   isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
   replyOrEditInteraction
@@ -3715,12 +3717,35 @@ function buildProfileEmbedV2Components(raw = {}) {
   const rep = fieldMap.get("rep") ?? "-";
   const coins = fieldMap.get("coins") ?? "-";
 
+  const statRows = [
+    { leftLabel: "Bowls Served", leftValue: bowlsServed, rightLabel: "Level", rightValue: level },
+    { leftLabel: "REP", leftValue: rep, rightLabel: "Coins", rightValue: coins }
+  ];
+  const leftColWidth = Math.max(14, ...statRows.map((row) => Math.max(
+    String(row.leftLabel).length,
+    String(row.leftValue).length
+  )));
+  const rightColWidth = Math.max(10, ...statRows.map((row) => Math.max(
+    String(row.rightLabel).length,
+    String(row.rightValue).length
+  )));
+  const divider = "  |  ";
+  const separator = `${"-".repeat(leftColWidth)}${divider}${"-".repeat(rightColWidth)}`;
+  const statLines = [];
+  for (let idx = 0; idx < statRows.length; idx += 1) {
+    const row = statRows[idx];
+    const leftLabel = String(row.leftLabel).padEnd(leftColWidth, " ");
+    const rightLabel = String(row.rightLabel).padEnd(rightColWidth, " ");
+    const leftValue = String(row.leftValue).padEnd(leftColWidth, " ");
+    const rightValue = String(row.rightValue).padEnd(rightColWidth, " ");
+    statLines.push(`${leftLabel}${divider}${rightLabel}`);
+    statLines.push(`${leftValue}${divider}${rightValue}`);
+    if (idx < statRows.length - 1) statLines.push(separator);
+  }
+
   components.push({
     type: 10,
-    content: [
-      `**Bowls Served**: ${bowlsServed}    **Level**: ${level}`,
-      `**REP**: ${rep}    **Coins**: ${coins}`
-    ].join("\n")
+    content: ["```", ...statLines, "```"].join("\n")
   });
 
   for (const field of fields) {
@@ -3737,8 +3762,18 @@ function buildProfileEmbedV2Components(raw = {}) {
     if (block) components.push({ type: 10, content: block });
   }
 
-  if (imageUrl) components.push({ type: 10, content: `Decor set image: ${imageUrl}` });
-  if (thumbnailUrl) components.push({ type: 10, content: `Thumbnail: ${thumbnailUrl}` });
+  if (imageUrl) {
+    components.push({
+      type: 12,
+      items: [{ media: { url: imageUrl } }]
+    });
+  }
+  if (thumbnailUrl) {
+    components.push({
+      type: 12,
+      items: [{ media: { url: thumbnailUrl } }]
+    });
+  }
 
   if (footerText) {
     const compactFooter = footerText
@@ -3808,10 +3843,6 @@ function legacyEmbedsToV2TextComponents(embeds = []) {
       if (block) blocks.push(block);
     }
 
-    // Components V2 text blocks do not render markdown image syntax.
-    if (imageUrl) blocks.push(`Image: ${imageUrl}`);
-    if (thumbnailUrl) blocks.push(`Thumbnail: ${thumbnailUrl}`);
-
     if (footerText) {
       const compactFooter = footerText
         .split("\n")
@@ -3823,8 +3854,32 @@ function legacyEmbedsToV2TextComponents(embeds = []) {
 
     const compact = blocks.join("\n\n").trim();
     const chunks = splitTextToV2Chunks(compact);
-    for (const chunk of chunks) {
-      out.push({ type: 10, content: chunk });
+    if (chunks.length > 0 && thumbnailUrl) {
+      out.push({
+        type: 9,
+        components: [{ type: 10, content: chunks[0] }],
+        accessory: { type: 11, media: { url: thumbnailUrl } }
+      });
+      for (const chunk of chunks.slice(1)) {
+        out.push({ type: 10, content: chunk });
+      }
+    } else {
+      for (const chunk of chunks) {
+        out.push({ type: 10, content: chunk });
+      }
+    }
+
+    if (imageUrl) {
+      out.push({
+        type: 12,
+        items: [{ media: { url: imageUrl } }]
+      });
+    }
+    if (thumbnailUrl && chunks.length === 0) {
+      out.push({
+        type: 12,
+        items: [{ media: { url: thumbnailUrl } }]
+      });
     }
   }
   return out;
@@ -3903,7 +3958,9 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
   if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
   if (isComponentsV2Payload(payload)) return payload;
 
-  const normalizedRows = normalizeComponents(payload.components, payload.flags).filter((row) => Number(row?.type) === 1);
+  const normalizedComponentRows = normalizeComponents(payload.components, payload.flags);
+  const normalizedRows = (Array.isArray(normalizedComponentRows) ? normalizedComponentRows : [])
+    .filter((row) => Number(row?.type) === 1);
   const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
   const ownerId = detectOwnerIdFromComponents(normalizedRows);
 
@@ -3912,16 +3969,17 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
   const primaryTextComponents = legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []);
   const notices = notificationEmbeds
     .map((embed) => legacyEmbedToNoticeCardSpec(embed))
-    .filter((notice) => notice.details.length > 0 || notice.title);
+    .filter((notice) => (Array.isArray(notice?.details) && notice.details.length > 0) || notice?.title);
 
   const v2Payload = buildComponentsV2PayloadWithNoticeCards({
     mainComponents: [...primaryTextComponents, ...normalizedRows],
     notices,
     ownerId,
-    ephemeral: isEphemeral
+    ephemeral: isEphemeral,
+    includeGreenButtonTip: payload.disableGreenButtonTip !== true
   });
 
-  const { embeds, components, flags, ephemeral, ...rest } = payload;
+  const { embeds, components, flags, ephemeral, disableGreenButtonTip, ...rest } = payload;
   return {
     ...rest,
     ...v2Payload
@@ -3971,9 +4029,12 @@ const LEGACY_TO_V2_SUBS = new Set([
 function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
   if (sourceMessageIsV2) return true;
   if (!rolloutEnabled) return false;
+
+  // Full core-scene migration: when rollout is enabled for this user/guild,
+  // convert legacy embed payloads for all core noodle subroutes.
   const normalizedSub = String(sub || "").trim();
   const normalizedNavSource = String(navSource || "").trim();
-  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource);
+  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource) || true;
 }
 
 function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
@@ -3984,11 +4045,11 @@ function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
   const customId = String(interaction?.customId ?? "").trim();
   const isConvertibleComponent =
     /^noodle:(multibuy|sell):/.test(customId)
-    || /^noodle:nav:(buy|sell|pantry|help|recipes|regulars|season|event|profile|profile_edit|specialize|decor|about|news|takeout|takeout_menu|takeout_open|takeout_claim|takeout_needs|forage|fishing|garden|compost|kitchen):/.test(customId)
+    || /^noodle:nav:(orders|buy|sell|pantry|cook|serve|cancel|help|recipes|regulars|season|event|profile|profile_edit|specialize|decor|about|news|takeout|takeout_menu|takeout_open|takeout_claim|takeout_needs|forage|fishing|garden|compost|kitchen):/.test(customId)
     || /^noodle:action:(store):/.test(customId)
     || /^noodle:profile:(edit_shop_name|edit_tagline|specialize_select|specialize_confirm|specialize_cancel):/.test(customId)
     || /^noodle:profile:specialize_pick:/.test(customId)
-    || /^noodle:pick:(forage_|fishing_)/.test(customId)
+    || /^noodle:pick:(cook|cook_select|serve|serve_select|cancel|cancel_select|forage_|fishing_)/.test(customId)
     || /^noodle:pick:(takeout_cook|takeout_serve|takeout_cook_select|takeout_serve_select|takeout_cook_qty):/.test(customId)
     || /^noodle:garden:(plant_select|harvest_select):/.test(customId)
     || /^noodle:kitchen:(start|collect):/.test(customId);
@@ -5038,7 +5099,7 @@ function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser,
   };
 }
 
-function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageSize = 10 }) {
+function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageSize = 7 }) {
   const set = buildSettingsMap(settingsCatalog, s.settings);
   s.season = computeActiveSeason(set);
   const activeEventEffects = getActiveEventEffects(eventsContent, s);
@@ -5082,6 +5143,7 @@ function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageS
       const ready = getTotalBowlsForRecipe(p, o.recipe_id);
       allEntries.push({
         shortId,
+        recipeId: String(o.recipe_id || "").trim(),
         line: `\`${shortId}\` • **${recipeName}** — *${npcName}* (${o.tier}) • ready bowls: **${ready}**`
       });
     }
@@ -5097,8 +5159,24 @@ function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageS
 }
 
 function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortIds = [], statusLine = "", page = 0 }) {
+  const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
   const { entries, orderTokenByShortId, page: safePage, totalPages } = buildAcceptPickerSceneEntries({ serverId, userId, p, s, page });
-  const entryShortIds = new Set(Object.keys(orderTokenByShortId));
+
+  const scopedEntries = (() => {
+    if (!tutorialSingleAcceptMode) return entries;
+    const preferred = entries.find((entry) => String(entry?.recipeId ?? "") === "classic_soy_ramen");
+    if (preferred) return [preferred];
+    return entries.slice(0, 1);
+  })();
+
+  const scopedOrderTokenByShortId = scopedEntries.reduce((acc, entry) => {
+    const sid = String(entry?.shortId ?? "").trim();
+    const full = String(orderTokenByShortId?.[sid] ?? "").trim();
+    if (sid && full) acc[sid] = full;
+    return acc;
+  }, {});
+
+  const entryShortIds = new Set(Object.keys(scopedOrderTokenByShortId));
   const normalizedSelected = (selectedShortIds || [])
     .map((id) => String(id || "").trim())
     .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
@@ -5108,22 +5186,40 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
     ownerId: userId,
     state: {
       entries,
-      orderTokenByShortId,
+      orderTokenByShortId: scopedOrderTokenByShortId,
       selectedShortIds: normalizedSelected,
       page: safePage,
-      totalPages
+      totalPages,
+      tutorialSingleAcceptMode
     }
   });
 
   return buildAcceptPickerV2Message({
     userId,
     token: sceneState.token,
-    entries,
+    entries: scopedEntries,
     selectedShortIds: normalizedSelected,
     statusLine,
     currentPage: safePage,
-    totalPages
+    totalPages: tutorialSingleAcceptMode ? 1 : totalPages,
+    directAcceptMode: tutorialSingleAcceptMode,
+    tutorialSingleAcceptMode
   });
+}
+
+function resolveTutorialCookRecipeId(player) {
+  const acceptedRecipeIds = Object.values(player?.orders?.accepted ?? {})
+    .map((entry) => String(entry?.order?.recipe_id || "").trim())
+    .filter(Boolean);
+
+  if (acceptedRecipeIds.includes("classic_soy_ramen")) return "classic_soy_ramen";
+  if (acceptedRecipeIds.length > 0) return acceptedRecipeIds[0];
+
+  const knownRecipeIds = getValidAvailableRecipeIds(player)
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  if (knownRecipeIds.includes("classic_soy_ramen")) return "classic_soy_ramen";
+  return knownRecipeIds[0] ?? "";
 }
 
 function buildCookRecipePickerSceneEntries({ p, s }) {
@@ -5172,8 +5268,122 @@ function buildCookRecipePickerSceneEntries({ p, s }) {
   });
 }
 
+function buildCookAllPlanForAcceptedOrders(p) {
+  const neededByRecipe = {};
+  Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+    const recipeId = String(entry?.order?.recipe_id || "").trim();
+    if (!recipeId) return;
+    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+  });
+
+  const plan = Object.entries(neededByRecipe)
+    .map(([recipeId, need]) => {
+      const ready = getTotalBowlsForRecipe(p, recipeId);
+      const quantity = Math.max(0, need - ready);
+      return {
+        recipeId,
+        need,
+        ready,
+        quantity
+      };
+    })
+    .filter((row) => row.quantity > 0)
+    .sort((a, b) => b.quantity - a.quantity || String(a.recipeId).localeCompare(String(b.recipeId)));
+
+  const requiredByItem = {};
+  for (const row of plan) {
+    const recipe = content.recipes?.[row.recipeId] ?? null;
+    const relevantIngredients = getRelevantRecipeIngredients(p, recipe)
+      .filter((ing) => !isIngredientOptionalForPlayer(p, ing) && (ing?.qty ?? 0) > 0);
+    for (const ing of relevantIngredients) {
+      const perBowlQty = Math.max(0, Number(ing?.qty) || 0);
+      if (perBowlQty <= 0) continue;
+      requiredByItem[ing.item_id] = (requiredByItem[ing.item_id] ?? 0) + (perBowlQty * row.quantity);
+    }
+  }
+
+  const shortages = Object.entries(requiredByItem)
+    .map(([itemId, needed]) => {
+      const have = Math.max(0, Math.floor(Number(p.inv_ingredients?.[itemId] || 0) || 0));
+      const short = Math.max(0, needed - have);
+      return {
+        itemId,
+        needed,
+        have,
+        short
+      };
+    })
+    .filter((row) => row.short > 0)
+    .sort((a, b) => b.short - a.short || String(a.itemId).localeCompare(String(b.itemId)));
+
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const bowlCap = getBowlCapacity(p, combinedEffects);
+  const bowlCount = getBowlCount(p);
+  const remainingBowls = Math.max(0, bowlCap - bowlCount);
+  const totalQuantity = plan.reduce((sum, row) => sum + row.quantity, 0);
+  const hasIngredients = shortages.length === 0;
+  const hasCapacity = remainingBowls >= totalQuantity;
+  const canCookAll = totalQuantity > 0 && hasIngredients && hasCapacity;
+
+  const summaryLines = plan.map((row) => {
+    const recipeName = displayRecipeName(row.recipeId);
+    return `• ${recipeName} — need **${row.need}**, ready **${row.ready}** (cook **${row.quantity}** more)`;
+  });
+
+  return {
+    plan,
+    totalQuantity,
+    shortages,
+    remainingBowls,
+    canCookAll,
+    summaryLines
+  };
+}
+
+function allocateSuccessBowlsAcrossPlan(plan = [], totalSuccess = 0) {
+  const safePlan = (plan || [])
+    .map((row) => ({
+      recipeId: String(row?.recipeId || "").trim(),
+      quantity: Math.max(0, Math.floor(Number(row?.quantity) || 0))
+    }))
+    .filter((row) => row.recipeId && row.quantity > 0);
+  const totalQuantity = safePlan.reduce((sum, row) => sum + row.quantity, 0);
+  const cappedSuccess = Math.max(0, Math.min(totalQuantity, Math.floor(Number(totalSuccess) || 0)));
+  if (safePlan.length <= 0 || totalQuantity <= 0 || cappedSuccess <= 0) {
+    return Object.fromEntries(safePlan.map((row) => [row.recipeId, 0]));
+  }
+
+  const allocations = safePlan.map((row, idx) => {
+    const exact = (row.quantity / totalQuantity) * cappedSuccess;
+    const floorVal = Math.floor(exact);
+    return {
+      idx,
+      recipeId: row.recipeId,
+      quantity: row.quantity,
+      value: floorVal,
+      remainder: exact - floorVal
+    };
+  });
+
+  let used = allocations.reduce((sum, row) => sum + row.value, 0);
+  let remaining = Math.max(0, cappedSuccess - used);
+  allocations.sort((a, b) => b.remainder - a.remainder || b.quantity - a.quantity || a.idx - b.idx);
+  for (const row of allocations) {
+    if (remaining <= 0) break;
+    row.value += 1;
+    remaining -= 1;
+  }
+
+  const byRecipe = {};
+  for (const row of allocations) {
+    byRecipe[row.recipeId] = Math.max(0, Math.min(row.quantity, row.value));
+  }
+  return byRecipe;
+}
+
 function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, quantity = 1, page = null }) {
   const allEntries = buildCookRecipePickerSceneEntries({ p, s });
+  const cookAllState = buildCookAllPlanForAcceptedOrders(p);
   const pageSize = 25;
   const selectedId = String(selectedRecipeId || "").trim();
   const selectedExists = allEntries.some((entry) => String(entry?.recipeId || "") === selectedId);
@@ -5207,6 +5417,9 @@ function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, qua
     ownerId: userId,
     state: {
       entries,
+      cookAllPlan: cookAllState.plan,
+      canCookAll: cookAllState.canCookAll,
+      cookAllTotalQuantity: cookAllState.totalQuantity,
       selectedRecipeId: effectiveSelected || null,
       quantity: safeQuantity,
       page: safePage,
@@ -5222,7 +5435,9 @@ function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, qua
     quantity: safeQuantity,
     currentPage: safePage,
     totalPages,
-    needLines
+    needLines,
+    canCookAll: cookAllState.canCookAll,
+    cookAllQuantity: cookAllState.totalQuantity
   });
 }
 
@@ -5271,6 +5486,7 @@ function buildServePickerSceneEntries({ p, readyOnly = false }) {
 function buildServePickerScenePayload({ userId, p, selectedShortIds = [], readyOnly = false, statusLine = "" } = {}) {
   const onlyReady = Boolean(readyOnly);
   const { entries, orderTokenByShortId } = buildServePickerSceneEntries({ p, readyOnly: onlyReady });
+  const canServeAll = canServeAllOrders(p);
   const entryShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
   const normalizedSelected = (selectedShortIds || [])
     .map((id) => String(id || "").trim())
@@ -5293,7 +5509,8 @@ function buildServePickerScenePayload({ userId, p, selectedShortIds = [], readyO
     entries,
     selectedShortIds: normalizedSelected,
     readyOnly: onlyReady,
-    statusLine
+    statusLine,
+    canServeAll
   });
 }
 
@@ -5352,6 +5569,7 @@ function buildCancelPickerScenePayload({ userId, p, selectedShortIds = [], statu
 function buildCookMinigameScenePayload({
   userId,
   recipeId,
+  recipeNameOverride = "",
   quantity = 1,
   turnIndex = 0,
   totalTurns = 8,
@@ -5365,6 +5583,9 @@ function buildCookMinigameScenePayload({
   lastTurnStatus = null,
   counterCook = false,
   returnSub = "orders",
+  tutorialMode = false,
+  coachingLine = "",
+  cookAllPlan = [],
   nowMs = Date.now()
 } = {}) {
   const safeRecipeId = String(recipeId || "").trim();
@@ -5392,6 +5613,17 @@ function buildCookMinigameScenePayload({
   const safeLastTurnStatus = String(lastTurnStatus || "").trim().toLowerCase() || null;
   const safeCounterCook = Boolean(counterCook);
   const safeReturnSub = String(returnSub || "orders").trim() || "orders";
+  const safeTutorialMode = Boolean(tutorialMode);
+  const safeCoachingLine = String(coachingLine || "").trim();
+  const safeRecipeNameOverride = String(recipeNameOverride || "").trim();
+  const safeCookAllPlan = Array.isArray(cookAllPlan)
+    ? cookAllPlan
+      .map((row) => ({
+        recipeId: String(row?.recipeId || "").trim(),
+        quantity: Math.max(0, Math.floor(Number(row?.quantity) || 0))
+      }))
+      .filter((row) => row.recipeId && row.quantity > 0)
+    : [];
 
   const sceneState = putSceneState({
     sceneKey: "cook.minigame",
@@ -5410,14 +5642,18 @@ function buildCookMinigameScenePayload({
       turnStartedAt: safeTurnStartedAt,
       lastTurnStatus: safeLastTurnStatus,
       counterCook: safeCounterCook,
-      returnSub: safeReturnSub
+      returnSub: safeReturnSub,
+      tutorialMode: safeTutorialMode,
+      coachingLine: safeCoachingLine,
+      recipeNameOverride: safeRecipeNameOverride,
+      cookAllPlan: safeCookAllPlan
     }
   });
 
   return buildCookMinigameV2Message({
     userId,
     token: sceneState.token,
-    recipeName: displayRecipeName(safeRecipeId),
+    recipeName: safeRecipeNameOverride || displayRecipeName(safeRecipeId),
     quantity: safeQuantity,
     turnIndex: safeTurnIndex,
     totalTurns: safeTotalTurns,
@@ -5426,7 +5662,9 @@ function buildCookMinigameScenePayload({
     targetAction: targets[safeTurnIndex] ?? "prep",
     turnMs: safeTurnMs,
     graceMs: safeGraceMs,
-    lastTurnStatus: safeLastTurnStatus
+    lastTurnStatus: safeLastTurnStatus,
+    tutorialMode: safeTutorialMode,
+    coachingLine: safeCoachingLine
   });
 }
 
@@ -6681,16 +6919,14 @@ if (inDevPath && sub === "wipe_user") {
 
   const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const storageServerId = getPlayerStorageServerId(targetServerId);
-    const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(storageServerId, targetUserId);
-    const deleted = result?.changes ?? 0;
+    const deleted = deletePlayerProfiles(db, targetUserId, { allServers: true });
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
       return commit({
         content: " ",
         embeds: [
           buildDevMessageEmbed({
-            message: `${getIcon("error")} No profile found for ${mention} on server ${targetServerId}.`,
+            message: `${getIcon("error")} No profile found for ${mention}.`,
             isError: true
           })
         ],
@@ -6701,7 +6937,7 @@ if (inDevPath && sub === "wipe_user") {
       content: " ",
       embeds: [
         buildDevMessageEmbed({
-          message: `${getIcon("status_complete")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`
+          message: `${getIcon("status_complete")} Deleted ${deleted} profile row(s) for ${mention} across all servers.`
         })
       ],
       ephemeral: true
@@ -7536,7 +7772,7 @@ if (sub === "profile_edit") {
   const p = ensurePlayer(serverId, userId);
   const specializationsAvailable = getSpecializationAlert(p);
   if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
-    return commitState(buildProfileEditV2Message({
+    return commit(buildProfileEditV2Message({
       userId,
       specializationsAvailable,
       ownerId: userId,
@@ -9300,9 +9536,22 @@ if (sub === "status") {
     const title = String(statusEmbed?.title ?? statusEmbed?.data?.title ?? `${getIcon("stats")} Status`).trim();
     const description = String(statusEmbed?.description ?? statusEmbed?.data?.description ?? "").trim();
     const lines = description ? description.split("\n") : ["Status unavailable."];
-    const payload = buildComponentsV2ContainerMessage({
-      title,
-      lines,
+    const payload = buildComponentsV2MenuPayload({
+      components: [
+        { type: 10, content: [`## ${title}`, lines.join("\n")].filter(Boolean).join("\n\n") },
+        {
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 2,
+              label: "Refresh",
+              custom_id: `noodle:nav:status:${userId}`
+            }
+          ]
+        }
+      ],
+      ownerId: userId,
       accentColor: theme.colors.primary,
       ephemeral: false
     });
@@ -9645,6 +9894,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       rolloutEnabled: isComponentsV2Enabled({ guildId: serverId, userId, player: p }),
       sourceMessageIsV2
     });
+    const suppressGreenButtonTip = sub === "pantry" || sub === "store";
+    if (suppressGreenButtonTip) {
+      out.disableGreenButtonTip = true;
+    }
+
     if (shouldUseV2ContainerPayload) {
       out = convertLegacyEmbedPayloadToComponentsV2(out);
     }
@@ -9652,7 +9906,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (out.embeds) {
       out.embeds = sanitizeEmbedsForDiscord(out.embeds);
     }
-    if (out.embeds) {
+    if (out.embeds && !suppressGreenButtonTip) {
       out.embeds = applyGreenButtonFooter(out.embeds, out.components);
     }
 
@@ -9996,7 +10250,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const embed = buildMenuEmbed({
-      title: `${getIcon("status_complete")} Quest Rewards`,
+      title: `${getIcon("quests")} Quests Claimed`,
       description: `${lines.join("\n")}${levelLine}`,
       user: interaction.member ?? interaction.user
     });
@@ -10237,6 +10491,10 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   /* ---------------- FORAGE MENU ---------------- */
   if (sub === "forage_menu") {
+    if (isTutorialStepFromRouting(p, "intro_forage")) {
+      return runNoodle(interaction, { sub: "forage", navSource: "forage_random" });
+    }
+
     const forageMenuStartMs = performance.now();
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
@@ -10271,7 +10529,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
     const itemId = opt.getString("item") ?? null;
-    const isExplicitRandomForage = navSource === "forage_random";
+    const isExplicitRandomForage = navSource === "forage_random" || isTutorialStepFromRouting(p, "intro_forage");
     ensureGardenState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects, {
@@ -11827,7 +12085,42 @@ ${lines.join("\n")}`;
         );
       }
 
-      const quickActions = [
+      const tutorialActionKey = resolveTutorialOrdersActionKey(p);
+      const tutorialQuickActions = tutorialActionKey
+        ? [
+            {
+              label: tutorialActionKey === "acc"
+                ? "Accept"
+                : tutorialActionKey === "buy"
+                  ? "Buy"
+                  : tutorialActionKey === "fg"
+                    ? "Forage"
+                    : tutorialActionKey === "ck"
+                      ? "Cook"
+                      : "Serve",
+              actionKey: tutorialActionKey,
+              style: 3,
+              disabled: tutorialActionKey === "acc"
+                ? disableAccept
+                : tutorialActionKey === "ck"
+                  ? disableCook
+                  : tutorialActionKey === "sv"
+                    ? disableServe
+                    : false,
+              emoji: tutorialActionKey === "acc"
+                ? getButtonEmoji("orders")
+                : tutorialActionKey === "buy"
+                  ? getButtonEmoji("cart")
+                  : tutorialActionKey === "fg"
+                    ? getButtonEmoji("forage")
+                    : tutorialActionKey === "ck"
+                      ? getButtonEmoji("cook")
+                      : getButtonEmoji("serve")
+            }
+          ]
+        : null;
+
+      const quickActions = tutorialQuickActions ?? [
         { label: "Accept", actionKey: "acc", style: highlightAccept ? 3 : 1, disabled: disableAccept, emoji: getButtonEmoji("orders") },
         { label: "Cook", actionKey: "ck", style: 2, disabled: disableCook, emoji: getButtonEmoji("cook") },
         { label: "Serve", actionKey: "sv", style: disableServe ? 2 : 1, disabled: disableServe, emoji: getButtonEmoji("serve") },
@@ -11846,6 +12139,7 @@ ${lines.join("\n")}`;
         token: sceneState.token,
         headerLines,
         acceptedEntries: acceptedDisplayEntries,
+        acceptedSummaryLines: !takeoutShiftActive && acceptedDisplayEntries.length > 0 ? statusParts : [],
         showAcceptedSection: !takeoutShiftActive,
         quickActions
       });
@@ -11894,6 +12188,7 @@ ${lines.join("\n")}`;
       });
     }
 
+    const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
     const rawInput = String(opt.getString("order_id") ?? "").trim();
     if (!rawInput) {
       const payload = buildAcceptPickerPayload({
@@ -11962,10 +12257,13 @@ ${lines.join("\n")}`;
 
       const acceptedAt = nowTs();
       const baseSpeedWindowSeconds = order.speed_window_seconds ?? 180;
-      const speedWindowSeconds = order.is_limited_time
+      const isLimitedTimeOrder = tutorialSingleAcceptMode && acceptedNow === 0
+        ? false
+        : Boolean(order.is_limited_time);
+      const speedWindowSeconds = isLimitedTimeOrder
         ? getLimitedTimeWindowSeconds(p, baseSpeedWindowSeconds)
         : baseSpeedWindowSeconds;
-      const expiresAt = order.is_limited_time
+      const expiresAt = isLimitedTimeOrder
         ? acceptedAt + (speedWindowSeconds * 1000)
         : null;
 
@@ -11978,7 +12276,7 @@ ${lines.join("\n")}`;
           recipe_id: order.recipe_id,
           tier: order.tier,
           npc_archetype: order.npc_archetype,
-          is_limited_time: order.is_limited_time,
+          is_limited_time: isLimitedTimeOrder,
           speed_window_seconds: speedWindowSeconds,
           base_speed_window_seconds: baseSpeedWindowSeconds
         }
@@ -11989,7 +12287,7 @@ ${lines.join("\n")}`;
         ? `${getIcon("hourglass")} expires <t:${Math.floor(expiresAt / 1000)}:R>.`
         : `${getIcon("forage")} No rush.`;
 
-      const extendedNote = order.is_limited_time && speedWindowSeconds !== baseSpeedWindowSeconds
+      const extendedNote = isLimitedTimeOrder && speedWindowSeconds !== baseSpeedWindowSeconds
         ? ` ${getIcon("sparkle")} Extended to ${Math.ceil(speedWindowSeconds / 60)} min.`
         : "";
 
@@ -12673,7 +12971,11 @@ ${lines.join("\n")}`;
         description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
-      return commitState({ content: " ", embeds: [failEmbed] });
+      const failPayload = { content: " ", embeds: [failEmbed] };
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return commitState(convertLegacyEmbedPayloadToComponentsV2(failPayload));
+      }
+      return commitState(failPayload);
     }
 
     if (servedCount > 0) {
@@ -12761,11 +13063,15 @@ ${lines.join("\n")}`;
       user: interaction.member ?? interaction.user
     });
 
-    return commitState({
+    const servePayload = {
       content: " ",
       components,
       embeds: [serveEmbed, ...embeds]
-    });
+    };
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return commitState(convertLegacyEmbedPayloadToComponentsV2(servePayload));
+    }
+    return commitState(servePayload);
   }
 
   return commitState({ content: "That subcommand exists but isn’t implemented yet.", ephemeral: true });
@@ -12954,8 +13260,35 @@ if (v2Parsed.isV2) {
       startV2LoopTracker({ serverId, userId, loop: "cook" });
       const s = ensureServer(serverId);
       const p = ensurePlayer(serverId, userId);
+      if (isTutorialStepFromRouting(p, "intro_cook")) {
+        const tutorialRecipeId = resolveTutorialCookRecipeId(p);
+        if (tutorialRecipeId) {
+          const tutorialPayload = buildCookMinigameScenePayload({
+            userId,
+            recipeId: tutorialRecipeId,
+            quantity: 1,
+            totalTurns: 6,
+            turnIndex: 0,
+            score: 0,
+            misses: 0,
+            turnMs: 18000,
+            graceMs: 3000,
+            tutorialMode: true,
+            coachingLine: "Tutorial mode: generous timing is enabled for this step. Future kitchen turns use a **10s** order window."
+          });
+          return componentCommit(interaction, tutorialPayload);
+        }
+      }
       const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
       return componentCommit(interaction, payload);
+    }
+    if (action === "fg") {
+      const p = ensurePlayer(serverId, userId);
+      const forageSub = resolveForageNavSub(p);
+      if (forageSub === "forage") {
+        return runNoodle(interaction, { sub: "forage", navSource: "forage_random" });
+      }
+      return runNoodle(interaction, { sub: forageSub });
     }
     if (action === "buy") return runNoodle(interaction, { sub: "buy" });
     if (action === "pn") return runNoodle(interaction, { sub: "pantry" });
@@ -13072,10 +13405,12 @@ if (v2Parsed.isV2) {
 
     if (action === "cfm") {
       const entries = Array.isArray(state.entries) ? state.entries : [];
+      const requestedShortId = String(v2Parsed.args?.[0] ?? "").trim();
       const selectedShortIds = Array.isArray(state.selectedShortIds)
         ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
         : [];
-      if (selectedShortIds.length <= 0) {
+      const effectiveSelectedShortIds = requestedShortId ? [requestedShortId] : selectedShortIds;
+      if (effectiveSelectedShortIds.length <= 0) {
         return componentCommit(interaction, {
           content: "Select one or more orders first.",
           ephemeral: true
@@ -13084,7 +13419,7 @@ if (v2Parsed.isV2) {
 
       const validShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
       const orderTokenByShortId = state.orderTokenByShortId ?? {};
-      const targets = selectedShortIds.filter((shortId) => validShortIds.has(shortId));
+      const targets = effectiveSelectedShortIds.filter((shortId) => validShortIds.has(shortId));
       if (targets.length <= 0) {
         return componentCommit(interaction, {
           content: "Those selections are no longer available. Reopen `/noodle orders`.",
@@ -13151,6 +13486,11 @@ if (v2Parsed.isV2) {
       }
 
       const p = ensurePlayer(serverId, userId);
+      const tutorialStepAfterAccept = resolveTutorialProgressRowKey(p);
+      if (acceptedCount > 0 && tutorialStepAfterAccept && tutorialStepAfterAccept !== "accept_only") {
+        return runNoodle(interaction, { sub: "orders" });
+      }
+
       const s = ensureServer(serverId);
       const payload = buildAcceptPickerScenePayload({
         serverId,
@@ -13432,6 +13772,37 @@ if (v2Parsed.isV2) {
       return componentCommit(interaction, payload);
     }
 
+    if (action === "cfa") {
+      const p = ensurePlayer(serverId, userId);
+      const cookAllState = buildCookAllPlanForAcceptedOrders(p);
+      if (!cookAllState.canCookAll) {
+          const message = cookAllState.totalQuantity <= 0
+          ? `${getIcon("warning")} Cook All is unavailable: all accepted orders already have ready bowls.`
+          : (cookAllState.shortages.length > 0
+            ? `${getIcon("warning")} Cook All needs more ingredients first.`
+            : `${getIcon("warning")} Cook All needs **${cookAllState.totalQuantity}** bowl slots but only **${cookAllState.remainingBowls}** are available.`);
+          return componentCommit(interaction, {
+            content: message,
+            ephemeral: true
+          });
+      }
+
+      const totalQuantity = Math.max(1, Math.min(99, cookAllState.totalQuantity));
+      const totalTurns = Math.max(8, Math.min(20, 6 + totalQuantity));
+      const payload = buildCookMinigameScenePayload({
+        userId,
+        recipeId: String(cookAllState.plan?.[0]?.recipeId || selectedRecipeId || "").trim(),
+        recipeNameOverride: "All Accepted Orders",
+        quantity: totalQuantity,
+        totalTurns,
+        turnIndex: 0,
+        score: 0,
+        misses: 0,
+        cookAllPlan: cookAllState.plan
+      });
+      return componentCommit(interaction, payload);
+    }
+
     if (action === "go") {
       if (!selectedRecipeId) {
         return componentCommit(interaction, {
@@ -13440,10 +13811,30 @@ if (v2Parsed.isV2) {
         });
       }
 
+      const selectedEntry = entries.find((entry) => String(entry?.recipeId || "") === selectedRecipeId);
+      const selectedCookable = Math.max(0, Math.floor(Number(selectedEntry?.cookable) || 0));
+      const p = ensurePlayer(serverId, userId);
+      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+      const bowlCap = getBowlCapacity(p, combinedEffects);
+      const bowlCount = getBowlCount(p);
+      const remainingBowls = Math.max(0, bowlCap - bowlCount);
+      if (remainingBowls <= 0) {
+        return componentCommit(interaction, {
+          content: `${getIcon("basket")} Your cooked bowls storage is full. Serve bowls or upgrade storage to make room.`,
+          ephemeral: true
+        });
+      }
+      if (selectedCookable <= 0) {
+        return componentCommit(interaction, {
+          content: `${getIcon("warning")} You don't have enough ingredients to cook this recipe yet.`,
+          ephemeral: true
+        });
+      }
+
       const payload = buildCookMinigameScenePayload({
         userId,
         recipeId: selectedRecipeId,
-        quantity,
+        quantity: Math.max(1, Math.min(quantity, selectedCookable, remainingBowls)),
         totalTurns: 8,
         turnIndex: 0,
         score: 0,
@@ -13468,6 +13859,18 @@ if (v2Parsed.isV2) {
     const turnStartedAt = Math.max(0, Math.floor(Number(state.turnStartedAt) || Date.now()));
     const counterCookFlow = Boolean(state.counterCook === true);
     const returnSub = String(state.returnSub || "orders").trim() || "orders";
+    const tutorialMode = Boolean(state.tutorialMode === true);
+    const coachingLine = String(state.coachingLine || "").trim();
+      const recipeNameOverride = String(state.recipeNameOverride || "").trim();
+      const cookAllPlan = Array.isArray(state.cookAllPlan)
+        ? state.cookAllPlan
+          .map((row) => ({
+            recipeId: String(row?.recipeId || "").trim(),
+            quantity: Math.max(0, Math.floor(Number(row?.quantity) || 0))
+          }))
+          .filter((row) => row.recipeId && row.quantity > 0)
+        : [];
+      const cookAllMode = cookAllPlan.length > 0;
     const targetActions = Array.isArray(state.targetActions)
       ? state.targetActions.map((entry) => String(entry || "").trim().toLowerCase()).filter(Boolean)
       : [];
@@ -13523,7 +13926,11 @@ if (v2Parsed.isV2) {
           turnStartedAt: Date.now(),
           lastTurnStatus: turnResult.status,
           counterCook: counterCookFlow,
-          returnSub
+          returnSub,
+          tutorialMode,
+            coachingLine,
+            recipeNameOverride,
+            cookAllPlan
         });
         return componentCommit(interaction, payload);
       }
@@ -13534,34 +13941,62 @@ if (v2Parsed.isV2) {
         quantity
       });
 
-      const beforePlayer = ensurePlayer(serverId, userId);
-      const beforeBowls = getTotalBowlsForRecipe(beforePlayer, recipeId);
+        const beforePlayer = ensurePlayer(serverId, userId);
+        const beforeTotalBowlCount = getBowlCount(beforePlayer);
 
-      await runNoodle(interaction, {
-        sub: "cook",
-        overrides: {
-          silentResponse: true,
-          strings: {
-            recipe: recipeId,
-            v2_quality_bias: performance.qualityBias
-          },
-          integers: {
-            quantity,
-            v2_score: performance.score,
-            v2_turns: performance.totalTurns,
-            v2_success_bowls: performance.successBowls
-          },
-          booleans: {
-            v2_minigame: true,
-            counter_cook: counterCookFlow
-          },
-          messageId: interaction.message?.id ?? null
+        if (cookAllMode) {
+          const successByRecipe = allocateSuccessBowlsAcrossPlan(cookAllPlan, performance.successBowls);
+          for (const row of cookAllPlan) {
+            const rowQty = Math.max(1, Math.floor(Number(row.quantity) || 1));
+            const rowSuccess = Math.max(0, Math.min(rowQty, Math.floor(Number(successByRecipe[row.recipeId]) || 0)));
+            await runNoodle(interaction, {
+              sub: "cook",
+              overrides: {
+                silentResponse: true,
+                strings: {
+                  recipe: row.recipeId,
+                  v2_quality_bias: performance.qualityBias
+                },
+                integers: {
+                  quantity: rowQty,
+                  v2_score: performance.score,
+                  v2_turns: performance.totalTurns,
+                  v2_success_bowls: rowSuccess
+                },
+                booleans: {
+                  v2_minigame: true,
+                  counter_cook: counterCookFlow
+                },
+                messageId: interaction.message?.id ?? null
+              }
+            });
+          }
+        } else {
+          await runNoodle(interaction, {
+            sub: "cook",
+            overrides: {
+              silentResponse: true,
+              strings: {
+                recipe: recipeId,
+                v2_quality_bias: performance.qualityBias
+              },
+              integers: {
+                quantity,
+                v2_score: performance.score,
+                v2_turns: performance.totalTurns,
+                v2_success_bowls: performance.successBowls
+              },
+              booleans: {
+                v2_minigame: true,
+                counter_cook: counterCookFlow
+              },
+              messageId: interaction.message?.id ?? null
+            }
+          });
         }
-      });
 
-      const afterPlayer = ensurePlayer(serverId, userId);
-      const afterBowls = getTotalBowlsForRecipe(afterPlayer, recipeId);
-      const produced = Math.max(0, afterBowls - beforeBowls);
+        const afterPlayer = ensurePlayer(serverId, userId);
+        const produced = Math.max(0, getBowlCount(afterPlayer) - beforeTotalBowlCount);
 
       const resultState = putSceneState({
         sceneKey: "cook.result",
@@ -13578,17 +14013,26 @@ if (v2Parsed.isV2) {
           turnMs,
           graceMs,
           counterCook: counterCookFlow,
-          returnSub
+          returnSub,
+          tutorialMode,
+          coachingLine
         }
       });
 
       const summaryLines = [
-        `${getIcon("cook")} "${displayRecipeName(recipeId)}" has been cooked.`,
+          cookAllMode
+            ? `${getIcon("cook")} Your accepted orders have been cooked!`
+            : `${getIcon("cook")} "${displayRecipeName(recipeId)}" has been cooked.`,
         `Kitchen Line score: **${performance.score}/${performance.totalTurns}** (${performance.accuracyLabel}).`,
         produced > 0
           ? `${getIcon("status_complete")} Cooked **${produced}** bowl(s).`
           : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`
       ];
+      const tutorialStepAfterCook = tutorialMode ? getCurrentTutorialStep(afterPlayer) : null;
+      if (tutorialMode && tutorialStepAfterCook) {
+        summaryLines.push(`**Tutorial — ${tutorialStepAfterCook.title}**`);
+        summaryLines.push(String(tutorialStepAfterCook.text || "").trim() || "Continue to the next tutorial step.");
+      }
 
       const cookLoop = completeV2LoopTracker({ serverId, userId, loop: "cook" });
       emitTelemetry("v2_minigame_outcome", {
@@ -13611,8 +14055,11 @@ if (v2Parsed.isV2) {
       return componentCommit(interaction, buildCookResultV2Message({
         userId,
         token: resultState.token,
-        title: "## Kitchen Line Result",
-        summaryLines
+          title: "## Cook Result",
+        summaryLines,
+        tutorialNextOnly: tutorialMode,
+          tutorialNextLabel: "Next Tutorial Step",
+          preferServe: canServeAllOrders(afterPlayer)
       }));
     }
   }
@@ -13624,6 +14071,16 @@ if (v2Parsed.isV2) {
     const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
     const counterCookFlow = Boolean(state.counterCook === true);
     const returnSub = String(state.returnSub || "orders").trim() || "orders";
+    const tutorialMode = Boolean(state.tutorialMode === true);
+
+    if (action === "nxt") {
+      if (counterCookFlow || !tutorialMode) {
+        return runNoodle(interaction, { sub: "orders" });
+      }
+      const p = ensurePlayer(serverId, userId);
+      const nextSub = resolveTutorialRecoverySub({ player: p, fallbackSub: "orders" });
+      return runNoodle(interaction, { sub: nextSub });
+    }
 
     if (action === "ord") {
       if (counterCookFlow) {
@@ -13711,6 +14168,9 @@ if (v2Parsed.isV2) {
       let expiredCount = 0;
       let unavailableCount = 0;
       let invalidCount = 0;
+      let rewardCoins = 0;
+      let rewardSxp = 0;
+      let rewardRep = 0;
 
       for (const shortId of targets) {
         const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
@@ -13723,6 +14183,9 @@ if (v2Parsed.isV2) {
         const beforePlayer = ensurePlayer(serverId, userId);
         const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
         const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
+        const beforeCoins = Math.max(0, Math.floor(Number(beforePlayer?.coins || 0) || 0));
+        const beforeSxpTotal = Math.max(0, Math.floor(Number(beforePlayer?.sxp_total || 0) || 0));
+        const beforeRep = Math.max(0, Math.floor(Number(beforePlayer?.rep || 0) || 0));
         const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
         const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
 
@@ -13738,6 +14201,9 @@ if (v2Parsed.isV2) {
         const afterPlayer = ensurePlayer(serverId, userId);
         const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
         const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
+        const afterCoins = Math.max(0, Math.floor(Number(afterPlayer?.coins || 0) || 0));
+        const afterSxpTotal = Math.max(0, Math.floor(Number(afterPlayer?.sxp_total || 0) || 0));
+        const afterRep = Math.max(0, Math.floor(Number(afterPlayer?.rep || 0) || 0));
         const outcome = deriveServeOutcome({
           targetOrderId: fullOrderId,
           beforeAcceptedOrderIds,
@@ -13747,7 +14213,12 @@ if (v2Parsed.isV2) {
           wasExpiredBefore
         });
 
-        if (outcome.code === "served") servedCount += 1;
+        if (outcome.code === "served") {
+          servedCount += 1;
+          rewardCoins += Math.max(0, afterCoins - beforeCoins);
+          rewardSxp += Math.max(0, afterSxpTotal - beforeSxpTotal);
+          rewardRep += Math.max(0, afterRep - beforeRep);
+        }
         else if (outcome.code === "missing_bowl") missingBowlCount += 1;
         else if (outcome.code === "expired") expiredCount += 1;
         else if (outcome.code === "unavailable") unavailableCount += 1;
@@ -13764,6 +14235,7 @@ if (v2Parsed.isV2) {
         if (expiredCount > 0) summaryParts.push(`${getIcon("warning")} Expired: **${expiredCount}**`);
         if (unavailableCount > 0) summaryParts.push(`${getIcon("warning")} Unavailable: **${unavailableCount}**`);
         if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} Failed: **${invalidCount}**`);
+        if (servedCount > 0) summaryParts.push(`${getIcon("coins")} Rewards: **+${rewardCoins}c**, **+${rewardSxp} SXP**, **+${rewardRep} REP**`);
         if (summaryParts.length > 0) statusLine = summaryParts.join(" • ");
       }
 
@@ -13776,6 +14248,52 @@ if (v2Parsed.isV2) {
         statusLine
       });
       return componentCommit(interaction, payload);
+    }
+
+    if (action === "sfa") {
+      const p = ensurePlayer(serverId, userId);
+      if (!canServeAllOrders(p)) {
+        const neededByRecipe = {};
+        Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+          const recipeId = String(entry?.order?.recipe_id || "").trim();
+          if (!recipeId) return;
+          neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+        });
+        const missingLines = Object.entries(neededByRecipe)
+          .map(([recipeId, need]) => {
+            const ready = getTotalBowlsForRecipe(p, recipeId);
+            if (ready >= need) return null;
+            const recipeName = displayRecipeName(recipeId);
+            const short = Math.max(0, need - ready);
+            return `${recipeName}: need **${need}**, ready **${ready}** (cook **${short}** more)`;
+          })
+          .filter(Boolean);
+
+        const statusLine = missingLines.length > 0
+          ? `${getIcon("warning")} Serve All unavailable. ${missingLines.join(" • ")}`
+          : `${getIcon("warning")} Serve All unavailable until all accepted orders are ready.`;
+        const payload = buildServePickerScenePayload({
+          userId,
+          p,
+          selectedShortIds,
+          readyOnly: stateReadyOnly,
+          statusLine
+        });
+        return componentCommit(interaction, payload);
+      }
+
+      const orderTokens = Object.keys(p.orders?.accepted ?? {})
+        .map((orderId) => shortOrderId(orderId))
+        .filter(Boolean)
+        .join(",");
+
+        return runNoodle(interaction, {
+        sub: "serve",
+        overrides: {
+          strings: { order_id: orderTokens },
+          messageId: interaction.message?.id ?? null
+        }
+      });
     }
 
     if (action === "serve") {
@@ -13799,6 +14317,9 @@ if (v2Parsed.isV2) {
       const beforePlayer = ensurePlayer(serverId, userId);
       const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
       const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
+      const beforeCoins = Math.max(0, Math.floor(Number(beforePlayer?.coins || 0) || 0));
+      const beforeSxpTotal = Math.max(0, Math.floor(Number(beforePlayer?.sxp_total || 0) || 0));
+      const beforeRep = Math.max(0, Math.floor(Number(beforePlayer?.rep || 0) || 0));
       const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
       const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
 
@@ -13814,6 +14335,9 @@ if (v2Parsed.isV2) {
       const afterPlayer = ensurePlayer(serverId, userId);
       const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
       const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
+      const rewardCoins = Math.max(0, Math.floor(Number(afterPlayer?.coins || 0) || 0) - beforeCoins);
+      const rewardSxp = Math.max(0, Math.floor(Number(afterPlayer?.sxp_total || 0) || 0) - beforeSxpTotal);
+      const rewardRep = Math.max(0, Math.floor(Number(afterPlayer?.rep || 0) || 0) - beforeRep);
       const outcome = deriveServeOutcome({
         targetOrderId: fullOrderId,
         beforeAcceptedOrderIds,
@@ -13836,7 +14360,7 @@ if (v2Parsed.isV2) {
       });
 
       const detailLine = outcome.code === "served"
-        ? `${getIcon("status_complete")} Served \`${serveShortId}\` successfully.`
+        ? `${getIcon("status_complete")} Served \`${serveShortId}\` successfully. ${getIcon("coins")} **+${rewardCoins}c**, ${getIcon("sxp")} **+${rewardSxp} SXP**, ${getIcon("rep")} **+${rewardRep} REP**.`
         : `${getIcon("warning")} ${outcome.message}`;
 
       const serveLoop = completeV2LoopTracker({ serverId, userId, loop: "serve" });
@@ -14970,8 +15494,28 @@ if (action === "cancel" || action === "serve") {
 }
 
 if (action === "cook") {
-  // select a recipe from known_recipes, then modal for qty
   const p = ensurePlayer(serverId, userId);
+  if (isTutorialStepFromRouting(p, "intro_cook")) {
+    const tutorialRecipeId = resolveTutorialCookRecipeId(p);
+    if (tutorialRecipeId) {
+      const tutorialPayload = buildCookMinigameScenePayload({
+        userId,
+        recipeId: tutorialRecipeId,
+        quantity: 1,
+        totalTurns: 6,
+        turnIndex: 0,
+        score: 0,
+        misses: 0,
+        turnMs: 18000,
+        graceMs: 3000,
+        tutorialMode: true,
+        coachingLine: "Tutorial mode: generous timing is enabled for this step. Future kitchen turns use a **10s** order window."
+      });
+      return componentCommit(interaction, tutorialPayload);
+    }
+  }
+
+  // select a recipe from known_recipes, then modal for qty
   const s = ensureServer(serverId);
   const rawPage = Number(parts[4] ?? 0);
   const payload = buildCookPickerPayload({

@@ -216,7 +216,9 @@ export function buildCookRecipePickerV2Message({
   quantity = 1,
   currentPage = 0,
   totalPages = 1,
-  needLines = []
+  needLines = [],
+  canCookAll = false,
+  cookAllQuantity = 0
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
@@ -227,6 +229,8 @@ export function buildCookRecipePickerV2Message({
   const safePage = Math.max(0, Math.floor(Number(currentPage) || 0));
   const safeTotalPages = Math.max(1, Math.floor(Number(totalPages) || 1));
   const safeNeedLines = (needLines || []).map((line) => String(line || "").trim()).filter(Boolean);
+  const safeCanCookAll = Boolean(canCookAll);
+  const safeCookAllQuantity = Math.max(0, Math.floor(Number(cookAllQuantity) || 0));
   const selectedEntry = (entries || []).find((entry) => String(entry?.recipeId || "") === selectedId) || null;
   const options = (entries || []).map((entry) => {
     const recipeId = String(entry?.recipeId || "").trim();
@@ -313,6 +317,15 @@ export function buildCookRecipePickerV2Message({
         style: 3,
         disabled: !selectedEntry
       }),
+      button({
+        sceneKey,
+        actionKey: "cfa",
+        userId: safeUserId,
+        token: safeToken,
+        label: safeCookAllQuantity > 0 ? `Cook All (${safeCookAllQuantity})` : "Cook All",
+        style: safeCanCookAll ? 3 : 2,
+        disabled: !safeCanCookAll
+      }),
       button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
     ]
   });
@@ -332,7 +345,9 @@ export function buildCookMinigameV2Message({
   targetAction = "prep",
   turnMs = 10000,
   graceMs = 0,
-  lastTurnStatus = null
+  lastTurnStatus = null,
+  tutorialMode = false,
+  coachingLine = ""
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
@@ -343,6 +358,8 @@ export function buildCookMinigameV2Message({
   const safeQuantity = clampQuantity(quantity);
   const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 10000));
   const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 0));
+  const isTutorialMode = Boolean(tutorialMode);
+  const safeCoachingLine = String(coachingLine || "").trim();
   const totalWindowSeconds = ((safeTurnMs + safeGraceMs) / 1000).toFixed(1);
   const totalRunSeconds = ((safeTurns * (safeTurnMs + safeGraceMs)) / 1000).toFixed(1);
   const actionLabelByKey = {
@@ -376,6 +393,9 @@ export function buildCookMinigameV2Message({
       text(`Turn **${turnDisplay}/${safeTurns}** • Progress: ${progressBar(turnDisplay - 1, safeTurns)}`),
       text(`Tap the **GREEN button** now: **${targetLabel}** (${guideMap[target] || "Follow station cue"})`),
       text(`You have **${totalWindowSeconds} seconds** to hit! Total time: **${totalRunSeconds} seconds**.`),
+      ...(isTutorialMode
+        ? [text(safeCoachingLine || "Tutorial mode: this cook step has a forgiving timer. Future kitchen turns use a **10s** order window.")]
+        : []),
       text(`Hits: **${safeScore}** • Misses: **${safeMisses}**`),
       ...(statusLabel ? [text(`Last turn: **${statusLabel}**`)] : []),
       {
@@ -401,12 +421,25 @@ export function buildCookResultV2Message({
   userId,
   token,
   title = "## Cook Result",
-  summaryLines = []
+  summaryLines = [],
+  tutorialNextOnly = false,
+  tutorialNextLabel = "Next Tutorial Step",
+  preferServe = false
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
   const sceneKey = "cook.result";
   const lines = (summaryLines || []).filter(Boolean).map((line) => String(line));
+  const nextOnly = Boolean(tutorialNextOnly);
+  const nextLabel = String(tutorialNextLabel || "").trim() || "Next Tutorial Step";
+  const safePreferServe = Boolean(preferServe);
+  const actionButtons = nextOnly
+    ? [button({ sceneKey, actionKey: "nxt", userId: safeUserId, token: safeToken, label: nextLabel, style: 3 })]
+    : [
+      button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
+      button({ sceneKey, actionKey: "cook", userId: safeUserId, token: safeToken, label: "Cook Again", style: safePreferServe ? 2 : 3 }),
+      button({ sceneKey, actionKey: "serve", userId: safeUserId, token: safeToken, label: "Serve", style: safePreferServe ? 3 : 2 })
+    ];
 
   return buildComponentsV2MenuPayload({
     components: [
@@ -414,11 +447,7 @@ export function buildCookResultV2Message({
       ...(lines.length ? lines.map((line) => text(line)) : [text("Cook result unavailable.")]),
       {
         type: 1,
-        components: [
-          button({ sceneKey, actionKey: "ord", userId: safeUserId, token: safeToken, label: "Orders", style: 1 }),
-          button({ sceneKey, actionKey: "cook", userId: safeUserId, token: safeToken, label: "Cook Again", style: 3 }),
-          button({ sceneKey, actionKey: "serve", userId: safeUserId, token: safeToken, label: "Serve", style: 2 })
-        ]
+        components: actionButtons
       }
     ]
   });

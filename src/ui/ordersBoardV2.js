@@ -1,4 +1,5 @@
 import { buildComponentsV2MenuPayload } from "./componentsV2.js";
+import { normalizeComponentEmoji } from "./icons.js";
 
 function asText(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
@@ -17,11 +18,8 @@ function actionButton({ label, actionKey, userId, token, arg, style = 2, disable
     disabled: Boolean(disabled)
   };
 
-  if (typeof emoji === "string" && emoji.trim()) {
-    button.emoji = { name: emoji.trim() };
-  } else if (emoji?.id || emoji?.name) {
-    button.emoji = emoji;
-  }
+  const normalizedEmoji = normalizeComponentEmoji(emoji);
+  if (normalizedEmoji) button.emoji = normalizedEmoji;
 
   return button;
 }
@@ -55,6 +53,7 @@ export function buildOrdersBoardV2Message({
   token,
   headerLines = [],
   acceptedEntries = [],
+  acceptedSummaryLines = [],
   showAcceptedSection = true,
   quickActions = []
 } = {}) {
@@ -141,6 +140,13 @@ export function buildOrdersBoardV2Message({
       }
     } else {
       components.push(asText("**Your Accepted Orders**\n_None right now._"));
+    }
+
+    const normalizedSummaryLines = (acceptedSummaryLines || [])
+      .map((line) => String(line ?? "").trim())
+      .filter(Boolean);
+    if (normalizedSummaryLines.length > 0) {
+      components.push(asText(normalizedSummaryLines.join("\n\n")));
     }
   }
 

@@ -17,6 +17,19 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
   };
 }
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  const children = Array.isArray(component.components) ? component.components : [];
+  const accessory = component.accessory && typeof component.accessory === "object" ? [component.accessory] : [];
+  return 1
+    + children.reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + accessory.reduce((sum, child) => sum + countComponentsDeep(child), 0);
+}
+
+function countListDeep(components = []) {
+  return (components || []).reduce((sum, component) => sum + countComponentsDeep(component), 0);
+}
+
 export function deriveServeOutcome({
   targetOrderId,
   beforeAcceptedOrderIds = [],
@@ -60,7 +73,8 @@ export function buildServePickerV2Message({
   entries = [],
   selectedShortIds = [],
   readyOnly = false,
-  statusLine = ""
+  statusLine = "",
+  canServeAll = false
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
@@ -72,11 +86,13 @@ export function buildServePickerV2Message({
       .filter(Boolean)
   );
   const safeStatusLine = String(statusLine || "").trim();
+  const safeCanServeAll = Boolean(canServeAll);
 
   const components = [
     text("## Serve Orders"),
     text("Select one or more orders, then tap Serve Selected.")
   ];
+  const COMPONENT_BUDGET = 35;
 
   if (safeStatusLine) components.push(text(safeStatusLine));
 
@@ -85,11 +101,39 @@ export function buildServePickerV2Message({
       ? "No ready orders are currently available to serve."
       : "No accepted orders are currently available to serve."));
   } else {
+    let overflowCount = 0;
+    const selectedCount = selectedSet.size;
+    const confirmRowBudget = countComponentsDeep({
+      type: 1,
+      components: [
+        button({
+          sceneKey,
+          actionKey: "cfm",
+          userId: safeUserId,
+          token: safeToken,
+          label: selectedCount > 0 ? `Serve Selected (${selectedCount})` : "Select Orders First",
+          style: 3,
+          disabled: selectedCount <= 0
+        }),
+        button({
+          sceneKey,
+          actionKey: "sfa",
+          userId: safeUserId,
+          token: safeToken,
+          label: "Serve All",
+          style: safeCanServeAll ? 3 : 2,
+          disabled: !safeCanServeAll
+        }),
+        button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
+      ]
+    });
+    const overflowLineBudget = countComponentsDeep(text("_...and 1 more order(s)._"));
+
     for (const entry of entries) {
       const shortId = String(entry?.shortId || "").trim();
       if (!shortId) continue;
       const isSelected = selectedSet.has(shortId);
-      components.push({
+      const section = {
         type: 9,
         components: [text(String(entry?.line || shortId))],
         accessory: button({
@@ -102,7 +146,21 @@ export function buildServePickerV2Message({
           style: isSelected ? 3 : 1,
           disabled: false
         })
-      });
+      };
+
+      const sectionBudget = countComponentsDeep(section);
+      const currentBudget = countListDeep(components);
+      const reserveBudget = confirmRowBudget + (overflowCount > 0 ? overflowLineBudget : 0);
+      if (currentBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
+        overflowCount += 1;
+        continue;
+      }
+
+      components.push(section);
+    }
+
+    if (overflowCount > 0) {
+      components.push(text(`_...and ${overflowCount} more order(s)._`));
     }
   }
 
@@ -118,6 +176,15 @@ export function buildServePickerV2Message({
         label: selectedCount > 0 ? `Serve Selected (${selectedCount})` : "Select Orders First",
         style: 3,
         disabled: selectedCount <= 0
+      }),
+      button({
+        sceneKey,
+        actionKey: "sfa",
+        userId: safeUserId,
+        token: safeToken,
+        label: "Serve All",
+        style: safeCanServeAll ? 3 : 2,
+        disabled: !safeCanServeAll
       }),
       button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 })
     ]

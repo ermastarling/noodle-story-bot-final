@@ -77,3 +77,27 @@ test("Orders board V2: second row keeps Main Menu, Buy, Pantry, then Quests", ()
   assert.equal(secondRowIds[2].includes(":pn:"), true);
   assert.equal(secondRowIds[3].includes(":qs:"), true);
 });
+
+test("Orders board V2: accepted summary lines render below accepted orders", () => {
+  const payload = buildOrdersBoardV2Message({
+    userId: "u1",
+    token: "tok-4",
+    headerLines: ["Orders"],
+    acceptedEntries: [
+      { shortId: "AB12", line: "Order AB12", serveReady: true }
+    ],
+    acceptedSummaryLines: [
+      "Bowls Ready\n• Classic Soy Ramen — 1 bowl",
+      "Ingredients Needed\n• Soy Broth — You have: 0, you need 2"
+    ],
+    quickActions: []
+  });
+
+  const components = flattenComponents(payload);
+  const textBlocks = components
+    .filter((component) => component?.type === 10)
+    .map((component) => String(component?.content || ""));
+
+  assert.equal(textBlocks.some((line) => line.includes("Bowls Ready")), true);
+  assert.equal(textBlocks.some((line) => line.includes("Ingredients Needed")), true);
+});

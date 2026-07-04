@@ -128,6 +128,23 @@ test("V2 parser: accepts orders board pantry route", () => {
   assert.equal(parsed.actionKey, "pn");
 });
 
+test("V2 parser: accepts orders board forage tutorial route", () => {
+  const parsed = parseV2CustomId("noodle:v2:orders.board:fg:123:tok");
+
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.sceneKey, "orders.board");
+  assert.equal(parsed.actionKey, "fg");
+});
+
+test("V2 parser: tutorial forage route accepts optional arg payload", () => {
+  const parsed = parseV2CustomId("noodle:v2:orders.board:fg:123:tok:intro");
+
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.sceneKey, "orders.board");
+  assert.equal(parsed.actionKey, "fg");
+  assert.deepEqual(parsed.args, ["intro"]);
+});
+
 test("V2 parser: accepts all registered scene routes", () => {
   for (const [sceneKey, actionSet] of Object.entries(V2_SCENE_REGISTRY)) {
     for (const actionKey of actionSet) {

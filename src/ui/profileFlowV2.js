@@ -1,4 +1,5 @@
 import { buildComponentsV2MenuPayload } from "./componentsV2.js";
+import { normalizeComponentEmoji } from "./icons.js";
 
 const BUTTON_STYLE_PRIMARY = 1;
 const BUTTON_STYLE_SECONDARY = 2;
@@ -6,6 +7,42 @@ const BUTTON_STYLE_SUCCESS = 3;
 
 function asText(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
+}
+
+function padRight(text, width) {
+  const value = String(text ?? "");
+  if (value.length >= width) return value;
+  return `${value}${" ".repeat(width - value.length)}`;
+}
+
+function formatProfileStatsGrid(rows = []) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const leftColWidth = Math.max(14, ...safeRows.map((row) => {
+    const labelLen = String(row?.leftLabel ?? "").length;
+    const valueLen = String(row?.leftValue ?? "").length;
+    return Math.max(labelLen, valueLen);
+  }));
+  const rightColWidth = Math.max(10, ...safeRows.map((row) => {
+    const labelLen = String(row?.rightLabel ?? "").length;
+    const valueLen = String(row?.rightValue ?? "").length;
+    return Math.max(labelLen, valueLen);
+  }));
+  const divider = "  |  ";
+  const separator = `${"-".repeat(leftColWidth)}${divider}${"-".repeat(rightColWidth)}`;
+
+  const lines = [];
+  for (let idx = 0; idx < safeRows.length; idx += 1) {
+    const row = safeRows[idx];
+    const leftLabel = padRight(row?.leftLabel ?? "-", leftColWidth);
+    const rightLabel = padRight(row?.rightLabel ?? "-", rightColWidth);
+    const leftValue = padRight(row?.leftValue ?? "-", leftColWidth);
+    const rightValue = padRight(row?.rightValue ?? "-", rightColWidth);
+    lines.push(`${leftLabel}${divider}${rightLabel}`);
+    lines.push(`${leftValue}${divider}${rightValue}`);
+    if (idx < safeRows.length - 1) lines.push(separator);
+  }
+
+  return ["```", ...lines, "```"].join("\n");
 }
 
 function normalizeFieldName(name = "") {
@@ -41,7 +78,8 @@ function button({
     custom_id: String(customId ?? "").trim() || "noodle:noop",
     disabled: Boolean(disabled)
   };
-  if (emoji) out.emoji = emoji;
+  const normalizedEmoji = normalizeComponentEmoji(emoji);
+  if (normalizedEmoji) out.emoji = normalizedEmoji;
   return out;
 }
 
@@ -211,8 +249,8 @@ export function buildProfileEditV2Message({
     asText("## Customize Profile"),
     asText([
       "- Change your shop name and tagline.",
-      "- Unlock and switch shop specializations.",
-      "- Use Store for premium specializations, coin packs, and subscriptions."
+      "- Change your shop specialization.",
+      "- Check out the Store for premium specializations, coin packs, and subscription perks."
     ].join("\n"))
   ];
 
@@ -531,12 +569,10 @@ export function buildProfileHomeV2Message({
   const components = [asText(`## ${title}`)];
   if (description) components.push(asText(description));
 
-  components.push(asText([
-    "| Stat | Value | Stat | Value |",
-    "| --- | --- | --- | --- |",
-    `| Bowls Served | ${bowlsServed} | Level | ${level} |`,
-    `| REP | ${rep} | Coins | ${coins} |`
-  ].join("\n")));
+  components.push(asText(formatProfileStatsGrid([
+    { leftLabel: "Bowls Served", leftValue: bowlsServed, rightLabel: "Level", rightValue: level },
+    { leftLabel: "REP", leftValue: rep, rightLabel: "Coins", rightValue: coins }
+  ])));
 
   for (const field of fields) {
     const name = String(field?.name ?? "").trim();

@@ -91,6 +91,49 @@ import { theme } from "./ui/theme.js";
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;
   const MAX_DESC = 4000;
+  const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
+
+  const isComponentsV2Payload = (payload = {}) => {
+    if (!payload || typeof payload !== "object") return false;
+    if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+    const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node || typeof node !== "object") continue;
+      const type = Number(node.type);
+      if (type === 9 || type === 10 || type === 12 || type === 17) return true;
+      if (Array.isArray(node.components)) stack.push(...node.components);
+    }
+    return false;
+  };
+
+  const isInvalidComponentTypeError = (error) => {
+    const message = String(error?.message ?? "");
+    return String(error?.code ?? "") === "INVALID_TYPE"
+      || message.includes("valid MessageComponentType");
+  };
+
+  const toRawWebhookPayload = (payload = {}) => {
+    const out = { ...payload };
+    const hasEphemeralFlag = (Number(out.flags) & MessageFlags.Ephemeral) !== 0;
+    if (out.ephemeral === true && !hasEphemeralFlag) {
+      out.flags = Number(out.flags || 0) | MessageFlags.Ephemeral;
+    }
+    delete out.ephemeral;
+    return out;
+  };
+
+  const rawWebhookEditOriginal = async (interaction, payload = {}) => {
+    const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+    const token = interaction?.token;
+    if (!interaction?.client?.api || !applicationId || !token) {
+      throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+    }
+    return interaction.client.api
+      .webhooks(applicationId, token)
+      .messages("@original")
+      .patch({ data: toRawWebhookPayload(payload) });
+  };
 
   const chunkTextByLength = (text, maxLen = SAFE_SLICE) => {
     if (!text) return [];
@@ -3742,9 +3785,23 @@ import { theme } from "./ui/theme.js";
               return await interaction.reply({ ...result, ephemeral: true });
             }
             if (interaction.replied || interaction.deferred) {
-              return await interaction.editReply(result);
+              try {
+                return await interaction.editReply(result);
+              } catch (e) {
+                if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                  return await rawWebhookEditOriginal(interaction, result);
+                }
+                throw e;
+              }
             }
-            return await interaction.update(result);
+            try {
+              return await interaction.update(result);
+            } catch (e) {
+              if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                return await rawWebhookEditOriginal(interaction, result);
+              }
+              throw e;
+            }
           }
         }
         if (id.startsWith("noodle-upgrades:")) {
@@ -3758,9 +3815,23 @@ import { theme } from "./ui/theme.js";
               return await interaction.reply({ ...result, ephemeral: true });
             }
             if (interaction.replied || interaction.deferred) {
-              return await interaction.editReply(result);
+              try {
+                return await interaction.editReply(result);
+              } catch (e) {
+                if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                  return await rawWebhookEditOriginal(interaction, result);
+                }
+                throw e;
+              }
             }
-            return await interaction.update(result);
+            try {
+              return await interaction.update(result);
+            } catch (e) {
+              if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                return await rawWebhookEditOriginal(interaction, result);
+              }
+              throw e;
+            }
           }
         }
       } catch (e) {

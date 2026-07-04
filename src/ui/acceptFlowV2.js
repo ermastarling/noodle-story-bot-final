@@ -17,6 +17,19 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
   };
 }
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  const children = Array.isArray(component.components) ? component.components : [];
+  const accessory = component.accessory && typeof component.accessory === "object" ? [component.accessory] : [];
+  return 1
+    + children.reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + accessory.reduce((sum, child) => sum + countComponentsDeep(child), 0);
+}
+
+function countListDeep(components = []) {
+  return (components || []).reduce((sum, component) => sum + countComponentsDeep(component), 0);
+}
+
 export function deriveAcceptOutcome({ targetOrderId, cap, beforeAcceptedOrderIds = [], afterAcceptedOrderIds = [] } = {}) {
   const target = String(targetOrderId ?? "").trim();
   const before = new Set((beforeAcceptedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
@@ -48,7 +61,9 @@ export function buildAcceptPickerV2Message({
   selectedShortIds = [],
   statusLine = "",
   currentPage = 0,
-  totalPages = 1
+  totalPages = 1,
+  directAcceptMode = false,
+  tutorialSingleAcceptMode = false
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
@@ -61,57 +76,65 @@ export function buildAcceptPickerV2Message({
   const safeStatusLine = String(statusLine || "").trim();
   const safePage = Math.max(0, Math.floor(Number(currentPage) || 0));
   const safeTotalPages = Math.max(1, Math.floor(Number(totalPages) || 1));
+  const directAccept = Boolean(directAcceptMode);
+  const MAX_VISIBLE_ENTRIES = 7;
+  const visibleEntries = (entries || []).slice(0, MAX_VISIBLE_ENTRIES);
 
   const components = [
     text("## Accept Orders"),
-    text("Select one or more orders, then tap Accept Selected.")
+    text(tutorialSingleAcceptMode
+      ? "Tutorial step: accept this order to continue."
+      : "Select one or more orders, then tap Accept Selected.")
   ];
-
   if (safeStatusLine) components.push(text(safeStatusLine));
   if (safeTotalPages > 1) {
     components.push(text(`Page **${safePage + 1}/${safeTotalPages}**`));
   }
 
-  if ((entries || []).length === 0) {
+  if (visibleEntries.length === 0) {
     components.push(text("No orders are currently available to accept."));
   } else {
-    for (const entry of entries) {
+    for (const entry of visibleEntries) {
       const shortId = String(entry?.shortId ?? "").trim();
       if (!shortId) continue;
       const isSelected = selectedSet.has(shortId);
-      components.push({
+      const section = {
         type: 9,
         components: [text(String(entry?.line ?? "").trim())],
         accessory: button({
           sceneKey,
-          actionKey: "sel",
+          actionKey: directAccept ? "cfm" : "sel",
           userId: safeUserId,
           token: safeToken,
           arg: shortId,
-          label: isSelected ? "Selected" : "Select",
-          style: isSelected ? 3 : 1
+          label: directAccept ? "Accept" : (isSelected ? "Selected" : "Select"),
+          style: directAccept ? 3 : (isSelected ? 3 : 1)
         })
-      });
+      };
+
+      components.push(section);
     }
   }
 
-  const selectedCount = selectedSet.size;
-  components.push({
-    type: 1,
-    components: [
-      button({
-        sceneKey,
-        actionKey: "cfm",
-        userId: safeUserId,
-        token: safeToken,
-        label: selectedCount > 0 ? `Accept Selected (${selectedCount})` : "Select Orders First",
-        style: 3,
-        disabled: selectedCount <= 0
-      }),
-      button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 }),
-      button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 })
-    ]
-  });
+  if (!directAccept) {
+    const selectedCount = selectedSet.size;
+    components.push({
+      type: 1,
+      components: [
+        button({
+          sceneKey,
+          actionKey: "cfm",
+          userId: safeUserId,
+          token: safeToken,
+          label: selectedCount > 0 ? `Accept Selected (${selectedCount})` : "Select Orders First",
+          style: 1,
+          disabled: selectedCount <= 0
+        }),
+        button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 3 }),
+        button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 })
+      ]
+    });
+  }
 
   if (safeTotalPages > 1) {
     components.push({
