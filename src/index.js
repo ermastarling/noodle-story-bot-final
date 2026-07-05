@@ -236,6 +236,66 @@ import { theme } from "./ui/theme.js";
   let webhookWriteFailureNotified = false;
   const origError = console.error;
 
+  const SENSITIVE_LOG_KEY_RE = /(^|_|-)(token|secret|password|authorization|auth|cookie|signature|api[-_]?key|jwt|credential|webhook)s?($|_|-)/i;
+  const LOG_REDACTED = "[REDACTED]";
+
+  function redactSensitiveString(value, keyHint = "") {
+    const text = String(value ?? "");
+    if (SENSITIVE_LOG_KEY_RE.test(String(keyHint || ""))) {
+      return LOG_REDACTED;
+    }
+
+    let out = text;
+    out = out.replace(/\b(bearer|token|apikey|api[-_ ]key|secret|password|jwt)\s+[^\s,;]+/ig, "$1 [REDACTED]");
+    out = out.replace(/\b(authorization|x-api-key|x-topgg-signature|stripe-signature)\s*[:=]\s*[^\s,;]+/ig, "$1=[REDACTED]");
+    out = out.replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, LOG_REDACTED);
+    return out;
+  }
+
+  function sanitizeForLog(value, keyHint = "", depth = 0, seen = new WeakSet()) {
+    if (value == null) return value;
+    if (depth > 4) return "[Truncated]";
+
+    if (typeof value === "string") {
+      return redactSensitiveString(value, keyHint);
+    }
+
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: redactSensitiveString(value.message || "", "message"),
+        code: value.code,
+        stack: redactSensitiveString(value.stack || "", "stack")
+      };
+    }
+
+    if (Array.isArray(value)) {
+      return value.slice(0, 50).map((item) => sanitizeForLog(item, keyHint, depth + 1, seen));
+    }
+
+    if (typeof value === "object") {
+      if (seen.has(value)) return "[Circular]";
+      seen.add(value);
+      const out = {};
+      for (const [key, nestedValue] of Object.entries(value)) {
+        out[key] = sanitizeForLog(nestedValue, key, depth + 1, seen);
+      }
+      return out;
+    }
+
+    return value;
+  }
+
+  function safeLogMessage(value) {
+    const sanitized = sanitizeForLog(value);
+    if (typeof sanitized === "string") return sanitized;
+    try {
+      return JSON.stringify(sanitized);
+    } catch {
+      return String(sanitized);
+    }
+  }
+
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
   try {
@@ -250,7 +310,7 @@ import { theme } from "./ui/theme.js";
       errorLogNeedsDrain = false;
       if (!errorLogFailureNotified) {
         errorLogFailureNotified = true;
-        origError("Command error log stream disabled:", error?.message ?? error);
+        origError("Command error log stream disabled:", safeLogMessage(error?.message ?? error));
       }
     });
   } catch (error) {
@@ -271,22 +331,22 @@ import { theme } from "./ui/theme.js";
         webhookFileLoggingEnabled = false;
         webhookLogStream = null;
         webhookLogNeedsDrain = false;
-        console.error("Webhook log stream error:", error?.message ?? error);
+        console.error("Webhook log stream error:", safeLogMessage(error?.message ?? error));
       });
     } catch (error) {
       webhookFileLoggingEnabled = false;
       webhookLogStream = null;
       webhookLogNeedsDrain = false;
-      console.error("Failed to initialize webhook log file:", error?.message ?? error);
+      console.error("Failed to initialize webhook log file:", safeLogMessage(error?.message ?? error));
     }
   }
 
   const formatErrorLogPart = (arg) => {
-    if (typeof arg === "string") return arg;
+    if (typeof arg === "string") return redactSensitiveString(arg);
     try {
-      return JSON.stringify(arg);
+      return JSON.stringify(sanitizeForLog(arg));
     } catch {
-      return String(arg);
+      return safeLogMessage(arg);
     }
   };
 
@@ -306,17 +366,17 @@ import { theme } from "./ui/theme.js";
       errorLogNeedsDrain = false;
       if (!errorLogFailureNotified) {
         errorLogFailureNotified = true;
-        origError("Command error log stream disabled:", error?.message ?? error);
+        origError("Command error log stream disabled:", safeLogMessage(error?.message ?? error));
       }
     }
   };
 
   const formatLogPart = (arg) => {
-    if (typeof arg === "string") return arg;
+    if (typeof arg === "string") return redactSensitiveString(arg);
     try {
-      return JSON.stringify(arg);
+      return JSON.stringify(sanitizeForLog(arg));
     } catch {
-      return String(arg);
+      return safeLogMessage(arg);
     }
   };
 
@@ -765,8 +825,7 @@ import { theme } from "./ui/theme.js";
       hasLeadingOrTrailingWhitespace: value.length !== trimmed.length,
       hasNewline: /[\r\n]/.test(value),
       hasTab: /\t/.test(value),
-      startsWithBearer: /^bearer\s+/i.test(trimmed),
-      sha256Prefix: hasValue ? crypto.createHash("sha256").update(trimmed).digest("hex").slice(0, 12) : null
+      startsWithBearer: /^bearer\s+/i.test(trimmed)
     };
   }
 
@@ -800,13 +859,7 @@ import { theme } from "./ui/theme.js";
         tokenStartsWithBearer: /^bearer\s+/i.test(trimmedToken),
         authHeaderLength: trimmedAuthHeader.length,
         authHeaderStartsWithBearer: /^bearer\s+/i.test(trimmedAuthHeader),
-        authHeaderSha256Prefix: trimmedAuthHeader
-          ? crypto.createHash("sha256").update(trimmedAuthHeader).digest("hex").slice(0, 12)
-          : null,
-        apiKeyHeaderLength: trimmedApiKeyHeader.length,
-        apiKeyHeaderSha256Prefix: trimmedApiKeyHeader
-          ? crypto.createHash("sha256").update(trimmedApiKeyHeader).digest("hex").slice(0, 12)
-          : null
+        apiKeyHeaderLength: trimmedApiKeyHeader.length
       })
     );
   }
