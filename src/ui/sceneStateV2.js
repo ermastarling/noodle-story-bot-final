@@ -67,7 +67,7 @@ export function createSceneStateStore({ maxEntries } = {}) {
       removed += 1;
     }
 
-    // Secondary guard in case size still exceeded due edge-case sizing.
+    // Secondary guard in case size still exceeded due to edge-case sizing.
     if (states.size > resolvedMaxEntries) {
       for (const [token] of states.entries()) {
         if (states.size <= resolvedMaxEntries) break;

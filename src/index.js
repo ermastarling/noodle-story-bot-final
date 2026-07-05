@@ -1360,7 +1360,6 @@ import { theme } from "./ui/theme.js";
       }
 
       const shouldMention = Boolean(mentionUser && devAlertUserId);
-      const ping = shouldMention ? ` <@${devAlertUserId}>` : "";
       const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
       const bodyLines = [
         mentionLine,
@@ -3868,7 +3867,11 @@ import { theme } from "./ui/theme.js";
                 return await interaction.editReply(result);
               } catch (e) {
                 if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
-                  return await rawWebhookEditOriginal(interaction, result);
+                  try {
+                    return await rawWebhookEditOriginal(interaction, result);
+                  } catch {
+                    throw e;
+                  }
                 }
                 throw e;
               }
@@ -3877,7 +3880,11 @@ import { theme } from "./ui/theme.js";
               return await interaction.update(result);
             } catch (e) {
               if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
-                return await rawWebhookEditOriginal(interaction, result);
+                try {
+                  return await rawWebhookEditOriginal(interaction, result);
+                } catch {
+                  throw e;
+                }
               }
               throw e;
             }
@@ -3898,7 +3905,11 @@ import { theme } from "./ui/theme.js";
                 return await interaction.editReply(result);
               } catch (e) {
                 if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
-                  return await rawWebhookEditOriginal(interaction, result);
+                  try {
+                    return await rawWebhookEditOriginal(interaction, result);
+                  } catch {
+                    throw e;
+                  }
                 }
                 throw e;
               }
@@ -3907,7 +3918,11 @@ import { theme } from "./ui/theme.js";
               return await interaction.update(result);
             } catch (e) {
               if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
-                return await rawWebhookEditOriginal(interaction, result);
+                try {
+                  return await rawWebhookEditOriginal(interaction, result);
+                } catch {
+                  throw e;
+                }
               }
               throw e;
             }

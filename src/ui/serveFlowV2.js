@@ -150,7 +150,7 @@ export function buildServePickerV2Message({
 
       const sectionBudget = countComponentsDeep(section);
       const currentBudget = countListDeep(components);
-      const reserveBudget = confirmRowBudget + (overflowCount > 0 ? overflowLineBudget : 0);
+      const reserveBudget = confirmRowBudget + overflowLineBudget;
       if (currentBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
         overflowCount += 1;
         continue;

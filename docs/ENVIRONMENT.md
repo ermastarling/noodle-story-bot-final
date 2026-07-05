@@ -18,7 +18,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 
 ## Optional Developer Alert Env Vars
 
-- `NOODLE_DEV_GUILD_ID` (falls back to `NOODLE_OFFICIAL_GUILD_ID`, then `DISCORD_GUILD_ID`) - guild where `/noodle-dev` is registered and allowed
+- `NOODLE_DEV_GUILD_ID` (falls back to `DISCORD_GUILD_ID`) - guild where `/noodle-dev` is registered and allowed
 - `NOODLE_COMPONENTS_V2_ENABLED` - set `1` to enable Components V2 test-path messages in the dev guild (`NOODLE_DEV_GUILD_ID`/`DISCORD_GUILD_ID`)
 - `NOODLE_COMPONENTS_V2_GUILD_ALLOWLIST` - optional comma-separated guild IDs allowed to receive V2 UI; when unset, falls back to dev guild targeting
 - `NOODLE_COMPONENTS_V2_USER_ALLOWLIST` - optional comma-separated user IDs allowed to receive V2 UI in allowed guilds
@@ -33,6 +33,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 ## Gameplay Tuning Env Vars
 
 - `NOODLE_ORDER_ACCEPT_CAP_BASE` - base max accepted orders per player (default `5`)
+- `NOODLE_ORDER_ACCEPT_CAP_HOUSE_247` - storage/pruning cap used for accepted-order persistence under 24/7 House-scale workloads (default `500`)
 
 ## Telemetry Env Vars
 

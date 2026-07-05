@@ -65,7 +65,8 @@ export function buildAcceptPickerV2Message({
   const safeTotalPages = Math.max(1, Math.floor(Number(totalPages) || 1));
   const directAccept = Boolean(directAcceptMode);
   const MAX_VISIBLE_ENTRIES = 7;
-  const visibleEntries = (entries || []).slice(0, MAX_VISIBLE_ENTRIES);
+  const pageStart = safePage * MAX_VISIBLE_ENTRIES;
+  const visibleEntries = (entries || []).slice(pageStart, pageStart + MAX_VISIBLE_ENTRIES);
 
   const components = [
     text("## Accept Orders"),

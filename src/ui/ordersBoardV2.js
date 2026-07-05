@@ -125,7 +125,7 @@ export function buildOrdersBoardV2Message({
           : asText(line);
 
         const candidateCount = countComponentsDeep(candidate);
-        const reserveForOverflow = overflowCount > 0 ? 0 : countComponentsDeep(asText("_...and 1 more accepted order(s)._"));
+        const reserveForOverflow = countComponentsDeep(asText("_...and 1 more accepted order(s)._"));
         if (runningCount + candidateCount + reserveForOverflow > COMPONENT_BUDGET) {
           overflowCount += 1;
           continue;
