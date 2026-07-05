@@ -52,12 +52,12 @@ export function deriveServeOutcome({
     return { code: "unavailable", message: "That order is no longer accepted." };
   }
 
-  if (after.has(target)) {
-    return { code: "missing_bowl", message: "No matching bowl was ready, so nothing was served." };
-  }
-
   if (wasExpiredBefore) {
     return { code: "expired", message: "That order expired before it could be served." };
+  }
+
+  if (after.has(target)) {
+    return { code: "missing_bowl", message: "No matching bowl was ready, so nothing was served." };
   }
 
   if (afterBowls < beforeBowls) {
@@ -87,6 +87,14 @@ export function buildServePickerV2Message({
   );
   const safeStatusLine = String(statusLine || "").trim();
   const safeCanServeAll = Boolean(canServeAll);
+  const validSelectedCount = (() => {
+    const validShortIds = new Set((entries || []).map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+    let count = 0;
+    for (const shortId of selectedSet) {
+      if (validShortIds.has(shortId)) count += 1;
+    }
+    return count;
+  })();
 
   const components = [
     text("## Serve Orders"),
@@ -102,7 +110,7 @@ export function buildServePickerV2Message({
       : "No accepted orders are currently available to serve."));
   } else {
     let overflowCount = 0;
-    const selectedCount = selectedSet.size;
+    const selectedCount = validSelectedCount;
     const confirmRowBudget = countComponentsDeep({
       type: 1,
       components: [
@@ -128,6 +136,7 @@ export function buildServePickerV2Message({
       ]
     });
     const overflowLineBudget = countComponentsDeep(text("_...and 1 more order(s)._"));
+    let runningBudget = countListDeep(components);
 
     for (const entry of entries) {
       const shortId = String(entry?.shortId || "").trim();
@@ -149,14 +158,14 @@ export function buildServePickerV2Message({
       };
 
       const sectionBudget = countComponentsDeep(section);
-      const currentBudget = countListDeep(components);
       const reserveBudget = confirmRowBudget + overflowLineBudget;
-      if (currentBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
+      if (runningBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
         overflowCount += 1;
         continue;
       }
 
       components.push(section);
+      runningBudget += sectionBudget;
     }
 
     if (overflowCount > 0) {
@@ -164,7 +173,7 @@ export function buildServePickerV2Message({
     }
   }
 
-  const selectedCount = selectedSet.size;
+  const selectedCount = validSelectedCount;
   components.push({
     type: 1,
     components: [

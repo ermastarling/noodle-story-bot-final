@@ -126,7 +126,6 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
   if (!guildId || !userId) return payload;
 
   const normalizedRows = normalizeComponents(payload.components);
-  const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0);
 
   const v2Payload = buildComponentsV2PayloadWithNoticeCards({
     mainComponents: [...legacyEmbedsToV2TextComponents(payload.embeds.slice(0, 1)), ...normalizedRows],
@@ -136,7 +135,7 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
       tone: "info"
     })),
     ownerId: userId,
-    ephemeral: isEphemeral
+      ephemeral: payload.ephemeral === true || ((Number(payload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0)
   });
 
   const { embeds, components, flags, ephemeral, ...rest } = payload;

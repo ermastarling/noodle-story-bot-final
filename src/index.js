@@ -87,7 +87,7 @@ import { theme } from "./ui/theme.js";
     registerVoteFromSource,
     VOTE_SOURCES
   } = await import("./game/voteRewards.js");
-  const { buildComponentsV2PayloadWithNoticeCards } = await import("./ui/componentsV2.js");
+  const { buildComponentsV2PayloadWithNoticeCards, MESSAGE_FLAG_IS_COMPONENTS_V2 } = await import("./ui/componentsV2.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
@@ -97,8 +97,6 @@ import { theme } from "./ui/theme.js";
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;
   const MAX_DESC = 4000;
-  const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
-
   const isComponentsV2Payload = (payload = {}) => {
     if (!payload || typeof payload !== "object") return false;
     if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;

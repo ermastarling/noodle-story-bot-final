@@ -261,9 +261,7 @@ import {
   resolveCookOutcomeForFlow
 } from "../ui/cookFlowV2.js";
 import {
-  buildServePickerV2Message,
-  buildServeResultV2Message,
-  deriveServeOutcome
+  buildServePickerV2Message
 } from "../ui/serveFlowV2.js";
 import {
   buildCancelPickerV2Message,
@@ -14557,7 +14555,6 @@ if (v2Parsed.isV2) {
     const state = sceneState?.value?.state ?? {};
     const action = String(v2Parsed.actionKey || "").trim();
     const entries = Array.isArray(state.entries) ? state.entries : [];
-    const orderTokenByShortId = state.orderTokenByShortId ?? {};
     const selectedShortIds = Array.isArray(state.selectedShortIds)
       ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
       : [];
@@ -14663,89 +14660,6 @@ if (v2Parsed.isV2) {
       });
     }
 
-    if (action === "serve") {
-      const serveShortId = String(v2Parsed.args?.[0] ?? "").trim() || String(selectedShortIds[0] || "").trim();
-      if (!serveShortId) {
-        return componentCommit(interaction, {
-          content: "Select an order first.",
-          ephemeral: true
-        });
-      }
-
-      const fullOrderId = String(orderTokenByShortId?.[serveShortId] ?? "").trim();
-      const selectedEntry = entries.find((entry) => String(entry?.shortId || "") === serveShortId);
-      if (!fullOrderId || !selectedEntry) {
-        return componentCommit(interaction, {
-          content: "That order is no longer available. Reopen `/noodle orders`.",
-          ephemeral: true
-        });
-      }
-
-      const beforePlayer = ensurePlayer(serverId, userId);
-      const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
-      const beforeBowlCount = getTotalBowlsForRecipe(beforePlayer, selectedEntry.recipeId);
-      const beforeCoins = Math.max(0, Math.floor(Number(beforePlayer?.coins || 0) || 0));
-      const beforeSxpTotal = Math.max(0, Math.floor(Number(beforePlayer?.sxp_total || 0) || 0));
-      const beforeRep = Math.max(0, Math.floor(Number(beforePlayer?.rep || 0) || 0));
-      const acceptedEntry = beforePlayer.orders?.accepted?.[fullOrderId] ?? null;
-      const wasExpiredBefore = Boolean(acceptedEntry?.expires_at && nowTs() > Number(acceptedEntry.expires_at));
-
-      await runNoodle(interaction, {
-        sub: "serve",
-        overrides: {
-          silentResponse: true,
-          strings: { order_id: fullOrderId },
-          messageId: interaction.message?.id ?? null
-        }
-      });
-
-      const afterPlayer = ensurePlayer(serverId, userId);
-      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
-      const afterBowlCount = getTotalBowlsForRecipe(afterPlayer, selectedEntry.recipeId);
-      const rewardCoins = Math.max(0, Math.floor(Number(afterPlayer?.coins || 0) || 0) - beforeCoins);
-      const rewardSxp = Math.max(0, Math.floor(Number(afterPlayer?.sxp_total || 0) || 0) - beforeSxpTotal);
-      const rewardRep = Math.max(0, Math.floor(Number(afterPlayer?.rep || 0) || 0) - beforeRep);
-      const outcome = deriveServeOutcome({
-        targetOrderId: fullOrderId,
-        beforeAcceptedOrderIds,
-        afterAcceptedOrderIds,
-        beforeBowlCount,
-        afterBowlCount,
-        wasExpiredBefore
-      });
-
-      const resultState = putSceneState({
-        sceneKey: "serve.result",
-        ownerId: userId,
-        state: {
-          selectedShortId: serveShortId,
-          fullOrderId,
-          recipeId: selectedEntry.recipeId ?? null,
-          outcomeCode: outcome.code,
-          readyOnly: Boolean(state.readyOnly)
-        }
-      });
-
-      const detailLine = outcome.code === "served"
-        ? `${getIcon("status_complete")} Served \`${serveShortId}\` successfully. ${getIcon("coins")} **+${rewardCoins}c**, ${getIcon("sxp")} **+${rewardSxp} SXP**, ${getIcon("rep")} **+${rewardRep} REP**.`
-        : `${getIcon("warning")} ${outcome.message}`;
-
-      const serveLoop = completeV2LoopTracker({ serverId, userId, loop: "serve" });
-      emitTelemetry("v2_loop_summary", {
-        module: "serve",
-        loop: "serve_order",
-        outcomeCode: outcome.code,
-        clickCount: serveLoop.clicks,
-        completionMs: serveLoop.elapsedMs
-      });
-
-      return componentCommit(interaction, buildServeResultV2Message({
-        userId,
-        token: resultState.token,
-        outcomeCode: outcome.code,
-        detailLine
-      }));
-    }
   }
 
   if (v2Parsed.sceneKey === "serve.result") {

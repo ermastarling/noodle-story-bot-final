@@ -80,12 +80,11 @@ test("V2 parser: accepts cook result action route", () => {
   assert.equal(parsed.actionKey, "cook");
 });
 
-test("V2 parser: accepts serve order picker route", () => {
+test("V2 parser: rejects unsupported serve order picker route", () => {
   const parsed = parseV2CustomId("noodle:v2:serve.order_picker:serve:123:tok");
 
-  assert.equal(parsed.valid, true);
-  assert.equal(parsed.sceneKey, "serve.order_picker");
-  assert.equal(parsed.actionKey, "serve");
+  assert.equal(parsed.valid, false);
+  assert.equal(parsed.error, "unknown_scene_action");
 });
 
 test("V2 parser: accepts serve order picker confirm route", () => {

@@ -97,6 +97,7 @@ export function buildCancelPickerV2Message({
       ]
     });
     const overflowLineBudget = countComponentsDeep(text("_...and 1 more order(s)._"));
+    let runningBudget = countListDeep(components);
 
     for (const entry of entries) {
       const shortId = String(entry?.shortId ?? "").trim();
@@ -117,14 +118,14 @@ export function buildCancelPickerV2Message({
       };
 
       const sectionBudget = countComponentsDeep(section);
-      const currentBudget = countListDeep(components);
       const reserveBudget = confirmRowBudget + overflowLineBudget;
-      if (currentBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
+      if (runningBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
         overflowCount += 1;
         continue;
       }
 
       components.push(section);
+      runningBudget += sectionBudget;
     }
 
     if (overflowCount > 0) {

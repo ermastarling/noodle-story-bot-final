@@ -59,6 +59,19 @@ test("Serve flow V2: expired outcome is detected", () => {
   assert.equal(outcome.code, "expired");
 });
 
+test("Serve flow V2: expired outcome takes precedence over missing bowl", () => {
+  const outcome = deriveServeOutcome({
+    targetOrderId: "ord-1",
+    beforeAcceptedOrderIds: ["ord-1"],
+    afterAcceptedOrderIds: ["ord-1"],
+    beforeBowlCount: 0,
+    afterBowlCount: 0,
+    wasExpiredBefore: true
+  });
+
+  assert.equal(outcome.code, "expired");
+});
+
 test("Serve flow V2: picker message includes serve selected action", () => {
   const payload = buildServePickerV2Message({
     userId: "123",
@@ -134,4 +147,18 @@ test("Serve flow V2: picker respects Discord 40-component limit", () => {
   });
 
   assert.equal(countPayloadComponents(payload) <= 40, true);
+});
+
+test("Serve flow V2: picker confirm count ignores stale selected IDs", () => {
+  const payload = buildServePickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [{ shortId: "AB12", line: "Order AB12" }],
+    selectedShortIds: ["AB12", "ZZ99"]
+  });
+
+  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
+  const actionRow = rows[0] ?? { components: [] };
+  const confirmButton = actionRow.components.find((component) => String(component?.custom_id || "").includes(":serve.order_picker:cfm:"));
+  assert.equal(confirmButton?.label, "Serve Selected (1)");
 });

@@ -6,7 +6,7 @@ export const V2_SCENE_REGISTRY = Object.freeze({
   "cook.recipe_picker": Object.freeze(["sel", "qty", "pg", "go", "cfa", "bk"]),
   "cook.minigame": Object.freeze(["prep", "heat", "plate", "serve", "bk"]),
   "cook.result": Object.freeze(["ord", "cook", "serve", "nxt"]),
-  "serve.order_picker": Object.freeze(["sel", "cfm", "serve", "sfa", "bk"]),
+  "serve.order_picker": Object.freeze(["sel", "cfm", "sfa", "bk"]),
   "serve.result": Object.freeze(["ord", "cook", "again"])
 });
 

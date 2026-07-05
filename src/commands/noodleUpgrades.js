@@ -196,10 +196,10 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
     mainComponents,
     notices,
     ownerId: userId,
-    ephemeral: payload.ephemeral === true
+    ephemeral: payload.ephemeral === true || ((Number(payload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0)
   });
 
-  const { embeds, components, ...rest } = payload;
+  const { embeds, components, flags, ephemeral, ...rest } = payload;
   return { ...rest, ...v2Payload };
 }
 

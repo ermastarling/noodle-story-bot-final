@@ -33,6 +33,10 @@ function formatPct(value) {
   return `${String(value)}%`;
 }
 
+function formatMs(value) {
+  return Number.isFinite(value) ? `${String(value)}ms` : safe(value);
+}
+
 function buildReportText({ summary, delta, recommendation, windowHours, issues = [] } = {}) {
   const lines = [
     `Window: last ${windowHours}h`,
@@ -41,8 +45,8 @@ function buildReportText({ summary, delta, recommendation, windowHours, issues =
     `Error rate: ${formatPct(summary.errorRatePct)}`,
     `Loops: ${safe(summary.loops, "0")}`,
     `Avg clicks/loop: ${safe(summary.clickAvg)}`,
-    `Loop p50: ${safe(summary.loopTimeP50)}ms`,
-    `Loop p95: ${safe(summary.loopTimeP95)}ms`
+    `Loop p50: ${formatMs(summary.loopTimeP50)}`,
+    `Loop p95: ${formatMs(summary.loopTimeP95)}`
   ];
 
   if (delta) {
@@ -50,8 +54,8 @@ function buildReportText({ summary, delta, recommendation, windowHours, issues =
       "",
       "Vs previous window:",
       `Clicks delta: ${safe(delta.clickAvgDelta)} (${safe(delta.clickAvgDeltaPct)}%)`,
-      `p50 delta: ${safe(delta.loopTimeP50Delta)}ms (${safe(delta.loopTimeP50DeltaPct)}%)`,
-      `p95 delta: ${safe(delta.loopTimeP95Delta)}ms (${safe(delta.loopTimeP95DeltaPct)}%)`,
+      `p50 delta: ${formatMs(delta.loopTimeP50Delta)} (${safe(delta.loopTimeP50DeltaPct)}%)`,
+      `p95 delta: ${formatMs(delta.loopTimeP95Delta)} (${safe(delta.loopTimeP95DeltaPct)}%)`,
       `Error count delta: ${safe(delta.errorCountDelta)}`,
       `Error rate delta: ${safe(delta.errorRateDeltaPct)} pts`
     );

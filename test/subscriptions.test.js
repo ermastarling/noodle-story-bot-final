@@ -313,7 +313,7 @@ test("Subscriptions: monthly grant is skipped after period end", () => {
   assert.equal(player.lifetime.coins_earned, 0);
 });
 
-test("Subscriptions: vote-granted 24/7 House increases active order cap", () => {
+test("Subscriptions: vote-granted 24/7 House keeps active order cap at base", () => {
   const player = {};
   const now = 1_700_000_000_000;
 
@@ -337,7 +337,7 @@ test("Subscriptions: vote-granted 24/7 House grants unlimited market stock behav
   assert.equal(hasUnlimitedMarketStock(player, now + HOUSE_247_VOTE_DURATION_MS + 1), false);
 });
 
-test("Subscriptions: entitlement 24/7 perk unlocks market stock and order cap", () => {
+test("Subscriptions: entitlement 24/7 perk unlocks market stock while keeping base order cap", () => {
   const player = {};
   const now = 1_700_000_000_000;
 
