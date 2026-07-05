@@ -17,19 +17,6 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
   };
 }
 
-function countComponentsDeep(component) {
-  if (!component || typeof component !== "object") return 0;
-  const children = Array.isArray(component.components) ? component.components : [];
-  const accessory = component.accessory && typeof component.accessory === "object" ? [component.accessory] : [];
-  return 1
-    + children.reduce((sum, child) => sum + countComponentsDeep(child), 0)
-    + accessory.reduce((sum, child) => sum + countComponentsDeep(child), 0);
-}
-
-function countListDeep(components = []) {
-  return (components || []).reduce((sum, component) => sum + countComponentsDeep(component), 0);
-}
-
 export function deriveAcceptOutcome({ targetOrderId, cap, beforeAcceptedOrderIds = [], afterAcceptedOrderIds = [] } = {}) {
   const target = String(targetOrderId ?? "").trim();
   const before = new Set((beforeAcceptedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));

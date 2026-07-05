@@ -28,12 +28,17 @@ function safe(v, fallback = "n/a") {
   return v == null ? fallback : String(v);
 }
 
+function formatPct(value) {
+  if (value == null) return "n/a";
+  return `${String(value)}%`;
+}
+
 function buildReportText({ summary, delta, recommendation, windowHours, issues = [] } = {}) {
   const lines = [
     `Window: last ${windowHours}h`,
     `Transitions: ${safe(summary.transitions, "0")}`,
     `Errors: ${safe(summary.errors, "0")}`,
-    `Error rate: ${safe(summary.errorRatePct)}%`,
+    `Error rate: ${formatPct(summary.errorRatePct)}`,
     `Loops: ${safe(summary.loops, "0")}`,
     `Avg clicks/loop: ${safe(summary.clickAvg)}`,
     `Loop p50: ${safe(summary.loopTimeP50)}ms`,
