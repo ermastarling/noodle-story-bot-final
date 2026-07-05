@@ -131,13 +131,6 @@ export function getDiscoveryRecipeWeight(player, recipe) {
   return baseWeight * LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT;
 }
 
-export function getTakeoutDiscoveryAttemptLimit(servingsToProcess) {
-  const served = Math.max(0, Math.floor(Number(servingsToProcess) || 0));
-  if (served <= 0) return 0;
-  // Diminishing returns for bulk takeout: discovery rolls grow sub-linearly.
-  return Math.max(1, Math.floor(Math.sqrt(served)));
-}
-
 /**
  * Roll for recipe discovery after a serve
  */
