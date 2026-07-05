@@ -4,7 +4,7 @@ import { openDb, getPlayer, getLatestServerIdForUser, upsertPlayer } from "../db
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { hasUnlimitedMarketStock } from "../game/subscriptions.js";
-import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import { getIcon } from "../ui/icons.js";
 import { emitTelemetry } from "../infra/telemetry.js";
 import {
   buildComponentsV2PayloadWithNoticeCards
@@ -91,6 +91,12 @@ function buildReminderV2Payload({ channelLine, claimLine, userId, components = [
   });
 }
 
+function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
 function normalizeNotifications(player) {
   if (!player.notifications) {
     player.notifications = {
@@ -167,12 +173,46 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
         optOut: false
       });
       const payload = buildReminderV2Payload({ channelLine, claimLine, userId, components, player, now });
+      const legacyContent = [
+        `Daily Noodle Mail ${getIcon("mail")}`,
+        hasUnlimitedMarketStock(player, now)
+          ? `Your ${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House is active. Vote again in /noodle quests_vote to extend it.`
+          : `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`,
+        "Your daily reward is also ready!",
+        channelLine || null,
+        claimLine,
+        "Disable reminders below."
+      ].filter(Boolean).join("\n\n");
 
       try {
         await user.send(payload);
         player.notifications.last_daily_reminder_day = todayKey;
         upsertPlayer(db, preferredServerId, userId, player, null, player.schema_version ?? 1);
       } catch (error) {
+        if (isInvalidComponentTypeError(error)) {
+          try {
+            await user.send({ content: legacyContent, components });
+            player.notifications.last_daily_reminder_day = todayKey;
+            upsertPlayer(db, preferredServerId, userId, player, null, player.schema_version ?? 1);
+            continue;
+          } catch (fallbackError) {
+            emitTelemetry("hard_failure_dm_send", {
+              route: "jobs:daily_reward_reminder",
+              userId,
+              guildId: lastGuildId || preferredServerId,
+              errorCode: fallbackError?.code ?? null,
+              errorName: fallbackError?.name ?? null,
+              errorMessage: String(fallbackError?.message ?? fallbackError ?? "unknown_error")
+            });
+            console.error("Daily reminder DM legacy fallback failed", {
+              userId,
+              guildId: lastGuildId || preferredServerId,
+              errorCode: fallbackError?.code ?? null,
+              errorMessage: fallbackError?.message ?? String(fallbackError)
+            });
+            continue;
+          }
+        }
         emitTelemetry("hard_failure_dm_send", {
           route: "jobs:daily_reward_reminder",
           userId,

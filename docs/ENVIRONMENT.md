@@ -25,6 +25,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED` - set `1` to allow tutorial-active users onto V2 paths; default keeps tutorial users on V1
 - `NOODLE_COMPONENTS_V2_TUTORIAL_USER_ALLOWLIST` - optional comma-separated tutorial-active user IDs allowed onto V2 while tutorial gate is off
 - `NOODLE_V2_SCENE_MAX_ENTRIES` - maximum in-memory V2 scene-state entries before eviction guardrails apply (default `2000`)
+- `NOODLE_V2_SCENE_TTL_MS` - optional global TTL override (milliseconds) for V2 scene-state entries; when unset, per-scene defaults are used
 - `NOODLE_OFFICIAL_GUILD_ID` (falls back to `DISCORD_GUILD_ID`) - guild where alerts are sent
 - `NOODLE_DEV_ALERT_CHANNEL_ID` - channel ID in the official guild for alerts
 - `NOODLE_DEV_ALERT_USER_ID` - user ID that is required for alert mention/ping behavior
@@ -34,6 +35,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 
 - `NOODLE_ORDER_ACCEPT_CAP_BASE` - base max accepted orders per player (default `5`)
 - `NOODLE_ORDER_ACCEPT_CAP_HOUSE_247` - storage/pruning cap used for accepted-order persistence under 24/7 House-scale workloads (default `500`)
+- `NOODLE_TAKEOUT_DISCOVERY_MAX_ATTEMPTS` - caps per-shift takeout discovery roll attempts processed in catch-up paths (default `12`)
 
 ## Telemetry Env Vars
 

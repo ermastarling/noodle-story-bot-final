@@ -28,7 +28,10 @@ function createToken(nowMs = Date.now()) {
 }
 
 export function getSceneTtlMs(sceneKey, env = process.env) {
-  const sceneDefault = DEFAULT_SCENE_TTL_MS[String(sceneKey || "")] ?? FALLBACK_SCENE_TTL_MS;
+  const safeSceneKey = String(sceneKey || "");
+  const sceneDefault = Object.prototype.hasOwnProperty.call(DEFAULT_SCENE_TTL_MS, safeSceneKey)
+    ? DEFAULT_SCENE_TTL_MS[safeSceneKey]
+    : FALLBACK_SCENE_TTL_MS;
   return parsePositiveInt(env?.NOODLE_V2_SCENE_TTL_MS, sceneDefault);
 }
 

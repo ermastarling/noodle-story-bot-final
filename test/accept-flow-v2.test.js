@@ -119,3 +119,30 @@ test("Accept flow V2: direct accept mode uses one-click cfm action", () => {
   assert.equal(sectionActionId.includes(":orders.accept_picker:cfm:"), true);
   assert.equal(rowActionIds.some((id) => id.includes(":orders.accept_picker:cfm:")), false);
 });
+
+test("Accept flow V2: picker clamps out-of-range page index", () => {
+  const payload = buildAcceptPickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [
+      { shortId: "A1", line: "Order A1" },
+      { shortId: "A2", line: "Order A2" },
+      { shortId: "A3", line: "Order A3" },
+      { shortId: "A4", line: "Order A4" },
+      { shortId: "A5", line: "Order A5" },
+      { shortId: "A6", line: "Order A6" },
+      { shortId: "A7", line: "Order A7" },
+      { shortId: "B1", line: "Order B1" }
+    ],
+    currentPage: 99,
+    totalPages: 2
+  });
+
+  const container = payload.components?.[0]?.components ?? [];
+  const pageLine = container.find((node) => node?.type === 10 && String(node?.content || "").includes("Page **"));
+  assert.equal(String(pageLine?.content || "").includes("Page **2/2**"), true);
+  assert.equal(
+    container.some((node) => node?.type === 9 && String(node?.components?.[0]?.content || "").includes("Order B1")),
+    true
+  );
+});

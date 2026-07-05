@@ -61,8 +61,8 @@ export function buildAcceptPickerV2Message({
       .filter(Boolean)
   );
   const safeStatusLine = String(statusLine || "").trim();
-  const safePage = Math.max(0, Math.floor(Number(currentPage) || 0));
   const safeTotalPages = Math.max(1, Math.floor(Number(totalPages) || 1));
+  const safePage = Math.max(0, Math.min(Math.floor(Number(currentPage) || 0), safeTotalPages - 1));
   const directAccept = Boolean(directAcceptMode);
   const MAX_VISIBLE_ENTRIES = 7;
   const pageStart = safePage * MAX_VISIBLE_ENTRIES;

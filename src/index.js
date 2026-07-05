@@ -570,11 +570,34 @@ import { theme } from "./ui/theme.js";
       ownerId: user?.id,
       ephemeral: false
     });
+    const legacyContent = [
+      `Access Alert ${getIcon("warning")}`,
+      description,
+      `Owner: ${user?.tag ?? user?.username ?? "Unknown"}`
+    ].filter(Boolean).join("\n\n");
 
     try {
       await user.send(dmPayload);
       return true;
     } catch (error) {
+      if (isInvalidComponentTypeError(error)) {
+        try {
+          await user.send({ content: legacyContent });
+          return true;
+        } catch (fallbackError) {
+          emitTelemetry("hard_failure_dm_send", {
+            route: "index:missing_access_dm",
+            userId: user?.id ?? null,
+            guildId: interaction?.guildId ?? null,
+            channelId: interaction?.channelId ?? null,
+            errorCode: fallbackError?.code ?? null,
+            errorName: fallbackError?.name ?? null,
+            errorMessage: String(fallbackError?.message ?? fallbackError ?? "unknown_error")
+          });
+          console.error("Missing-access DM fallback failed:", fallbackError?.message ?? fallbackError);
+          return false;
+        }
+      }
       emitTelemetry("hard_failure_dm_send", {
         route: "index:missing_access_dm",
         userId: user?.id ?? null,
@@ -1366,7 +1389,6 @@ import { theme } from "./ui/theme.js";
       const shouldMention = Boolean(mentionUser && devAlertUserId);
       const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
       const bodyLines = [
-        mentionLine,
         String(description || "").slice(0, 4096),
         footerText ? `-# ${String(footerText).slice(0, 2048)}` : ""
       ].filter(Boolean);
@@ -1380,10 +1402,40 @@ import { theme } from "./ui/theme.js";
       });
       await alertChannel.send({
         ...payload,
+        content: mentionLine || undefined,
         allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
       });
       return true;
     } catch (error) {
+      if (isInvalidComponentTypeError(error)) {
+        try {
+          const shouldMention = Boolean(mentionUser && devAlertUserId);
+          const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
+          const legacyContent = [
+            mentionLine,
+            `**${String(title || "Alert").slice(0, 200)}**`,
+            String(description || "").slice(0, 4096),
+            footerText ? String(footerText).slice(0, 2048) : ""
+          ].filter(Boolean).join("\n\n");
+          await alertChannel.send({
+            content: legacyContent,
+            allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
+          });
+          return true;
+        } catch (fallbackError) {
+          emitTelemetry("hard_failure_alert_send", {
+            route: "index:dev_alert",
+            guildId: officialGuildId || null,
+            channelId: devAlertChannelId || null,
+            mentionUserId: devAlertUserId || null,
+            errorCode: fallbackError?.code ?? null,
+            errorName: fallbackError?.name ?? null,
+            errorMessage: String(fallbackError?.message ?? fallbackError ?? "unknown_error")
+          });
+          console.error("❌ Failed to send dev alert (legacy fallback):", fallbackError?.stack ?? fallbackError);
+          return false;
+        }
+      }
       emitTelemetry("hard_failure_alert_send", {
         route: "index:dev_alert",
         guildId: officialGuildId || null,

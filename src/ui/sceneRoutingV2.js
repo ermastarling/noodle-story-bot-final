@@ -1,18 +1,26 @@
 export const V2_SCENE_REGISTRY = Object.freeze({
-  "orders.board": new Set(["acc", "ck", "sv", "fg", "qs", "rf", "nm", "buy", "pn", "cnl", "tk"]),
-  "orders.accept_picker": new Set(["sel", "cfm", "pg", "cnl", "bk"]),
-  "orders.accept_result": new Set(["cfm", "cnl", "bk", "ord", "ck"]),
-  "orders.cancel_picker": new Set(["sel", "cfm", "cnl", "bk"]),
-  "cook.recipe_picker": new Set(["sel", "qty", "pg", "go", "cfa", "bk"]),
-  "cook.minigame": new Set(["prep", "heat", "plate", "serve", "bk"]),
-  "cook.result": new Set(["ord", "cook", "serve", "nxt"]),
-  "serve.order_picker": new Set(["sel", "cfm", "serve", "sfa", "bk"]),
-  "serve.result": new Set(["ord", "cook", "again"])
+  "orders.board": Object.freeze(["acc", "ck", "sv", "fg", "qs", "rf", "nm", "buy", "pn", "cnl", "tk"]),
+  "orders.accept_picker": Object.freeze(["sel", "cfm", "pg", "cnl", "bk"]),
+  "orders.accept_result": Object.freeze(["cfm", "cnl", "bk", "ord", "ck"]),
+  "orders.cancel_picker": Object.freeze(["sel", "cfm", "cnl", "bk"]),
+  "cook.recipe_picker": Object.freeze(["sel", "qty", "pg", "go", "cfa", "bk"]),
+  "cook.minigame": Object.freeze(["prep", "heat", "plate", "serve", "bk"]),
+  "cook.result": Object.freeze(["ord", "cook", "serve", "nxt"]),
+  "serve.order_picker": Object.freeze(["sel", "cfm", "serve", "sfa", "bk"]),
+  "serve.result": Object.freeze(["ord", "cook", "again"])
 });
 
+const V2_SCENE_ACTION_SET = Object.freeze(
+  Object.fromEntries(
+    Object.entries(V2_SCENE_REGISTRY).map(([sceneKey, actions]) => [sceneKey, new Set(actions)])
+  )
+);
+
 function routeExists(sceneKey, actionKey) {
-  const actions = V2_SCENE_REGISTRY[sceneKey];
-  if (!actions) return false;
+  const safeSceneKey = String(sceneKey || "");
+  if (!Object.prototype.hasOwnProperty.call(V2_SCENE_ACTION_SET, safeSceneKey)) return false;
+  const actions = V2_SCENE_ACTION_SET[safeSceneKey];
+  if (!(actions instanceof Set)) return false;
   return actions.has(actionKey);
 }
 

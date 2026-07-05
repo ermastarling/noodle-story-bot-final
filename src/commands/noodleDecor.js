@@ -7,7 +7,7 @@ import {
   getOwnedDecorItems
 } from "../game/decor.js";
 import { theme } from "../ui/theme.js";
-import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import { getIcon } from "../ui/icons.js";
 import { buildComponentsV2PayloadWithNoticeCards } from "../ui/componentsV2.js";
 
 function ownerFooterText(userOrMember) {

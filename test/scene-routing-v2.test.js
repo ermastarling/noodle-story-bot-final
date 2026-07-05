@@ -156,3 +156,10 @@ test("V2 parser: accepts all registered scene routes", () => {
     }
   }
 });
+
+test("V2 parser: rejects prototype scene keys without throwing", () => {
+  const parsed = parseV2CustomId("noodle:v2:__proto__:has:123:tok");
+  assert.equal(parsed.isV2, true);
+  assert.equal(parsed.valid, false);
+  assert.equal(parsed.error, "unknown_scene_action");
+});
