@@ -184,16 +184,25 @@ export const noodleDevCommand = {
 
     const customId = String(interaction.customId || "");
     const parts = customId.split(":");
+    if (parts[0] === "noodle-dev" && parts[1] === "status" && parts[2] === "refresh") {
+      const ownerUserId = parts[3] ?? "";
+      if (ownerUserId && ownerUserId !== interaction.user.id) {
+        return denyOwnerMismatch("That status panel isn’t for you.");
+      }
+      return runNoodle(interaction, { sub: "status", group: "dev" });
+    }
+
     // Legacy: noodle-dev:dashboard:page:<ownerUserId>:<tabPage>
     // New:    noodle-dev:dashboard:nav:<ownerUserId>:<tabPage>:<serverPage>
+    // Also:   noodle-dev:dashboard:refresh:<ownerUserId>:<tabPage>:<serverPage>
     if (parts[0] !== "noodle-dev" || parts[1] !== "dashboard") return null;
 
     const mode = parts[2] ?? "";
-    if (mode !== "page" && mode !== "nav") return null;
+    if (mode !== "page" && mode !== "nav" && mode !== "refresh") return null;
 
     const ownerUserId = parts[3] ?? "";
     const page = Number(parts[4] ?? 0);
-    const serverPage = mode === "nav" ? Number(parts[5] ?? 0) : 0;
+    const serverPage = mode === "nav" || mode === "refresh" ? Number(parts[5] ?? 0) : 0;
     if (ownerUserId && ownerUserId !== interaction.user.id) {
       return denyOwnerMismatch("That dashboard isn’t for you.");
     }

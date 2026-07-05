@@ -131,10 +131,27 @@ export function getDiscoveryRecipeWeight(player, recipe) {
   return baseWeight * LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT;
 }
 
+export function getTakeoutDiscoveryAttemptLimit(servingsToProcess) {
+  const served = Math.max(0, Math.floor(Number(servingsToProcess) || 0));
+  if (served <= 0) return 0;
+  // Diminishing returns for bulk takeout: discovery rolls grow sub-linearly.
+  return Math.max(1, Math.floor(Math.sqrt(served)));
+}
+
 /**
  * Roll for recipe discovery after a serve
  */
-export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, activeSeason = null, activeEventId = null }) {
+export function rollRecipeDiscovery({
+  player,
+  content,
+  npcArchetype,
+  tier,
+  rng,
+  activeSeason = null,
+  activeEventId = null,
+  allowPity = true,
+  trackPityStreak = true
+}) {
   if (!DISCOVERY_HOOKS.on_serve) return [];
 
   const discoveries = [];
@@ -206,10 +223,13 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
     }
   }
 
+  const shouldTrackPityStreak = trackPityStreak !== false;
+  const shouldAllowPity = allowPity !== false;
+
   // Pity safety net: force a clue after a long no-drop streak.
-  if (!discoveries.length) {
+  if (!discoveries.length && shouldTrackPityStreak) {
     const nextNoDropStreak = currentNoDropStreak + 1;
-    if (nextNoDropStreak >= pityThreshold) {
+    if (shouldAllowPity && nextNoDropStreak >= pityThreshold) {
       const pityClue = rollClue(player, content, rng, activeSeason, activeEventId);
       if (pityClue) {
         pityClue.pityGranted = true;
@@ -224,7 +244,7 @@ export function rollRecipeDiscovery({ player, content, npcArchetype, tier, rng, 
     }
   }
 
-  if (discoveries.length > 0) {
+  if (discoveries.length > 0 && shouldTrackPityStreak) {
     player.discovery = player.discovery || {};
     player.discovery.no_drop_serve_streak = 0;
     for (const d of discoveries) {
@@ -410,7 +430,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
         unlockedRecipeId: discovery.recipeId,
         unlockedRecipeName: discovery.recipeName,
         reward: null,
-        message: `${discovery.pityGranted ? `${getIcon("rescue")} Pity clue granted!\n` : ""}${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}${badgeLine ? `\n${badgeLine}` : ""}`
+        message: `${getIcon("search")}${getIcon("sparkle")} Collected ${CLUES_TO_UNLOCK_RECIPE} clues - learned **${discovery.recipeName}**!${ingredientMsg}${badgeLine ? `\n${badgeLine}` : ""}`
       };
     }
     
@@ -420,7 +440,7 @@ export function applyDiscovery(player, discovery, content, rng = Math.random, op
       isDuplicate: false,
       recipeUnlocked: false,
       reward: null,
-      message: `${discovery.pityGranted ? `${getIcon("rescue")} Pity clue granted! ` : ""}${getIcon("search")} Clue ${clueCount}/${CLUES_TO_UNLOCK_RECIPE} for **${discovery.recipeName}** (${remaining} more)${ingredientMsg}`
+      message: `${getIcon("search")} Clue ${clueCount}/${CLUES_TO_UNLOCK_RECIPE} for **${discovery.recipeName}** (${remaining} more)${ingredientMsg}`
     };
   }
   

@@ -4,6 +4,7 @@ import {
   canDiscoverTier,
   getDiscoverableRecipes,
   getDiscoveryRecipeWeight,
+  getTakeoutDiscoveryAttemptLimit,
   rollRecipeDiscovery,
   applyDiscovery,
   applyNpcDiscoveryBuff
@@ -201,6 +202,15 @@ test("Discovery: getDiscoverableRecipes excludes event recipes without active ev
 
   assert.ok(discoverable.includes("normal_recipe"));
   assert.ok(!discoverable.includes("event_recipe"));
+});
+
+test("Discovery: takeout discovery attempt limit uses diminishing returns", () => {
+  assert.equal(getTakeoutDiscoveryAttemptLimit(0), 0);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(1), 1);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(4), 2);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(9), 3);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(25), 5);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(100), 10);
 });
 
 test("Discovery: applyDiscovery - new clue is added", () => {
@@ -791,4 +801,48 @@ test("Discovery: no-drop streak increments before pity threshold", () => {
   }
 
   assert.equal(player.discovery?.no_drop_serve_streak ?? 0, attempts);
+});
+
+test("Discovery: no pity/streak tracking mode does not increment streak", () => {
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: [],
+    clues_owned: {},
+    scrolls_owned: {},
+    discovery: { no_drop_serve_streak: 7 }
+  };
+
+  const discoveries = rollRecipeDiscovery({
+    player,
+    content: mockContent,
+    npcArchetype: null,
+    tier: "common",
+    rng: () => 0.999,
+    allowPity: false,
+    trackPityStreak: false
+  });
+
+  assert.equal(discoveries.length, 0);
+  assert.equal(player.discovery?.no_drop_serve_streak ?? 0, 7);
+});
+
+test("Discovery: pity clue uses normal clue wording", () => {
+  const player = {
+    shop_level: 99,
+    rep: 999,
+    known_recipes: [],
+    clues_owned: {},
+    scrolls_owned: {}
+  };
+
+  const result = applyDiscovery(player, {
+    type: "clue",
+    recipeId: "classic_soy_ramen",
+    recipeName: "Classic Soy Ramen",
+    pityGranted: true
+  }, mockContent, () => 0);
+
+  assert.equal(typeof result.message, "string");
+  assert.equal(result.message.includes("Pity clue granted"), false);
 });

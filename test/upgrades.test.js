@@ -216,10 +216,12 @@ test("Upgrades: applyMarketDiscount reduces price", () => {
 test("Upgrades: storage upgrades increase capacity significantly", () => {
   const player = makeTestPlayer();
   player.upgrades.u_pantry = 10; // 10 levels
+  player.upgrades.u_secure_crates = 10; // 10 levels
   
   const effects = calculateUpgradeEffects(player, upgradesContent);
   
-  assert.strictEqual(effects.ingredient_capacity, 50); // 10 * 5
+  assert.strictEqual(effects.ingredient_capacity, 120); // 10 * 12
+  assert.strictEqual(effects.bowl_storage_capacity, 120); // 10 * 12
 });
 
 test("Upgrades: staff upgrades affect multipliers", () => {

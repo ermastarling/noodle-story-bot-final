@@ -3,6 +3,7 @@ import discordPkg from "discord.js";
 import { openDb, getPlayer, getLatestServerIdForUser, upsertPlayer } from "../db/index.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
+import { hasUnlimitedMarketStock } from "../game/subscriptions.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
 import { emitTelemetry } from "../infra/telemetry.js";
 import {
@@ -49,7 +50,6 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-
 function normalizeComponents(rows = []) {
   if (!Array.isArray(rows)) return [];
   const normalized = [];
@@ -66,10 +66,14 @@ function normalizeComponents(rows = []) {
   return normalized;
 }
 
-function buildReminderV2Payload({ channelLine, claimLine, userId, components = [] }) {
+function buildReminderV2Payload({ channelLine, claimLine, userId, components = [], player = null, now = Date.now() }) {
+  const hasHouse247Active = hasUnlimitedMarketStock(player, now);
+  const openerLine = hasHouse247Active
+    ? `Your ${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House is active. Vote again in **/noodle quests_vote** to extend it.`
+    : `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`;
   const lines = [
     `Daily Noodle Mail ${getIcon("mail")}`,
-    `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`,
+    openerLine,
     "Your daily reward is also ready!",
     channelLine || null,
     claimLine,
@@ -162,7 +166,7 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
         channelUrl,
         optOut: false
       });
-      const payload = buildReminderV2Payload({ channelLine, claimLine, userId, components });
+      const payload = buildReminderV2Payload({ channelLine, claimLine, userId, components, player, now });
 
       try {
         await user.send(payload);

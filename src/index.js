@@ -7,6 +7,7 @@ import zlib from "zlib";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "url";
 import { REST } from "@discordjs/rest";
+import { jwtVerify } from "jose";
 import { getIcon } from "./ui/icons.js";
 import { theme } from "./ui/theme.js";
 
@@ -296,6 +297,12 @@ import { theme } from "./ui/theme.js";
     }
   }
 
+  function sanitizeLogArgs(args) {
+    return (args || []).map((arg) => {
+      if (typeof arg === "string") return redactSensitiveString(arg);
+      return sanitizeForLog(arg);
+    });
+  }
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
   try {
@@ -351,7 +358,7 @@ import { theme } from "./ui/theme.js";
   };
 
   console.error = (...args) => {
-    origError(...args);
+    origError(...sanitizeLogArgs(args));
     if (!errorLogEnabled || !errorLog) return;
     if (errorLogNeedsDrain) return;
     try {
@@ -381,15 +388,16 @@ import { theme } from "./ui/theme.js";
   };
 
   const writeWebhookConsole = (level, args) => {
+    const safeArgs = sanitizeLogArgs(args);
     if (level === "error") {
-      console.error(...args);
+      console.error(...safeArgs);
       return;
     }
     if (level === "warn") {
-      console.warn(...args);
+      console.warn(...safeArgs);
       return;
     }
-    console.log(...args);
+    console.log(...safeArgs);
   };
 
   function writeWebhookLog(level, args) {
@@ -415,7 +423,7 @@ import { theme } from "./ui/theme.js";
       webhookLogNeedsDrain = false;
       if (!webhookWriteFailureNotified) {
         webhookWriteFailureNotified = true;
-        console.error("Webhook log file disabled after write failure:", error?.message ?? error);
+        console.error("Webhook log file disabled after write failure:", safeLogMessage(error?.message ?? error));
       }
       writeWebhookConsole(level, args);
       return;
@@ -847,19 +855,21 @@ import { theme } from "./ui/theme.js";
 
   function logRankTopRequestDiagnostics(kind, tokenValue, targetUrl, authHeaderValue, apiKeyHeaderValue = "") {
     if (!rankTopAuthDebugEnabled) return;
-    const trimmedToken = String(tokenValue || "").trim();
-    const trimmedAuthHeader = String(authHeaderValue || "").trim();
-    const trimmedApiKeyHeader = String(apiKeyHeaderValue || "").trim();
+    void tokenValue;
+    void authHeaderValue;
+    void apiKeyHeaderValue;
+    const parsedTarget = (() => {
+      try {
+        return new URL(String(targetUrl || ""));
+      } catch {
+        return null;
+      }
+    })();
     console.log(
       `DEBUG Rank.top ${kind} auth diagnostics:`,
       JSON.stringify({
-        targetUrl,
-        tokenLength: trimmedToken.length,
-        tokenHasNewline: /[\r\n]/.test(String(tokenValue || "")),
-        tokenStartsWithBearer: /^bearer\s+/i.test(trimmedToken),
-        authHeaderLength: trimmedAuthHeader.length,
-        authHeaderStartsWithBearer: /^bearer\s+/i.test(trimmedAuthHeader),
-        apiKeyHeaderLength: trimmedApiKeyHeader.length
+        targetHost: parsedTarget?.host || null,
+        targetPath: parsedTarget?.pathname || null
       })
     );
   }
@@ -1195,38 +1205,6 @@ import { theme } from "./ui/theme.js";
     }
   }
 
-  function toBase64Url(buffer) {
-    return Buffer.from(buffer)
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/g, "");
-  }
-
-  function decodeBase64Url(input) {
-    const value = String(input || "").trim();
-    if (!value) return null;
-    const normalized = value
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
-    const padding = normalized.length % 4;
-    const padded = padding ? normalized + "=".repeat(4 - padding) : normalized;
-    try {
-      return Buffer.from(padded, "base64");
-    } catch {
-      return null;
-    }
-  }
-
-  function parseJsonBuffer(buffer) {
-    if (!buffer) return null;
-    try {
-      return JSON.parse(buffer.toString("utf8"));
-    } catch {
-      return null;
-    }
-  }
-
   function verifyTopggWebhookSignature({ secret, signatureHeader, rawBody }) {
     if (!secret || !signatureHeader || !rawBody) return false;
     try {
@@ -1292,32 +1270,18 @@ import { theme } from "./ui/theme.js";
     return stripBearerPrefix(token);
   }
 
-  function verifyDiscordListWebhookJwt({ secret, payload, tokenCandidate }) {
+  async function verifyDiscordListWebhookJwt({ secret, payload, tokenCandidate }) {
     const token = normalizeAuthToken(tokenCandidate) || extractDiscordListJwtFromPayload(payload);
     const signingSecret = normalizeAuthToken(secret);
     if (!signingSecret || !token) return { ok: false, claims: null };
 
     try {
-      const [headerSegment, payloadSegment, signatureSegment] = token.split(".");
-      if (!headerSegment || !payloadSegment || !signatureSegment) {
-        return { ok: false, claims: null };
-      }
-
-      const header = parseJsonBuffer(decodeBase64Url(headerSegment));
-      if (!header || String(header.alg || "").toUpperCase() !== "HS256") {
-        return { ok: false, claims: null };
-      }
-
-      const signedPayload = `${headerSegment}.${payloadSegment}`;
-      const expectedSignature = toBase64Url(
-        crypto.createHmac("sha256", signingSecret).update(signedPayload).digest()
-      );
-
-      if (!timingSafeEqual(expectedSignature, signatureSegment)) {
-        return { ok: false, claims: null };
-      }
-
-      const claims = parseJsonBuffer(decodeBase64Url(payloadSegment));
+      const secretBytes = new TextEncoder().encode(signingSecret);
+      const result = await jwtVerify(token, secretBytes, {
+        algorithms: ["HS256"],
+        clockTolerance: 5
+      });
+      const claims = result?.payload;
       if (!claims || typeof claims !== "object") {
         return { ok: false, claims: null };
       }
@@ -2990,7 +2954,7 @@ import { theme } from "./ui/theme.js";
             webhookWarn("Top.gg: Rejected webhook without x-topgg-signature because NOODLE_TOPGG_REQUIRE_SIGNATURE=1.");
           }
         } else if (voteConfig.source === VOTE_SOURCES.DISCORDLIST_GG) {
-          const jwtResult = verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload, tokenCandidate: providedToken });
+            const jwtResult = await verifyDiscordListWebhookJwt({ secret: voteConfig.auth, payload, tokenCandidate: providedToken });
           if (jwtResult.ok) {
             authValid = true;
             effectiveVotePayload = jwtResult.claims;

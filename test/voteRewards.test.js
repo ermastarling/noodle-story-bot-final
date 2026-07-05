@@ -9,7 +9,11 @@ import {
   registerVoteFromSource,
   VOTE_SOURCES
 } from "../src/game/voteRewards.js";
-import { HOUSE_247_VOTE_DURATION_MS } from "../src/game/subscriptions.js";
+import {
+  applySubscriptionEntitlementEvent,
+  HOUSE_247_VOTE_DURATION_MS,
+  SUBSCRIPTION_PERKS
+} from "../src/game/subscriptions.js";
 
 function mockPlayer() {
   return {
@@ -267,5 +271,44 @@ test("Vote rewards: duplicate retries do not extend 24/7 House timer", () => {
   assert.equal(first.duplicate, false);
   assert.equal(duplicate.duplicate, true);
   assert.equal(duplicate.house247ExpiresAt, first.house247ExpiresAt);
+});
+
+test("Vote rewards: 24/7 status is active when subscription perk is active without votes", () => {
+  const now = 1_700_000_000_000;
+  const player = mockPlayer();
+  const grantExpiry = now + 86_400_000;
+
+  applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    eventType: "ENTITLEMENT_UPDATE",
+    periodStartAt: now - 1_000,
+    periodEndAt: grantExpiry,
+    now
+  });
+
+  const status = getVoteRewardStatus(player, now);
+  assert.equal(status.house247Active, true);
+  assert.equal(status.house247ExpiresAt, grantExpiry);
+});
+
+test("Vote rewards: active granted 24/7 window takes precedence over vote timer", () => {
+  const now = 1_700_000_000_000;
+  const player = mockPlayer();
+
+  const voteExpiry = now + HOUSE_247_VOTE_DURATION_MS;
+  player.vote_rewards.house_247_expires_at = voteExpiry;
+
+  const grantExpiry = now + (7 * 24 * 60 * 60 * 1000);
+  applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    eventType: "ENTITLEMENT_UPDATE",
+    periodStartAt: now - 1_000,
+    periodEndAt: grantExpiry,
+    now
+  });
+
+  const status = getVoteRewardStatus(player, now);
+  assert.equal(status.house247Active, true);
+  assert.equal(status.house247ExpiresAt, grantExpiry);
 });
 

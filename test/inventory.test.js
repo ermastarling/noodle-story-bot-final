@@ -37,13 +37,13 @@ function makeTestPlayer(pantryLevel = 0) {
 test("Inventory: getIngredientStackCapacity with no upgrades", () => {
   const player = makeTestPlayer(0);
   const capacity = getIngredientStackCapacity(player);
-  assert.strictEqual(capacity, 40, "Base capacity should be 40");
+  assert.strictEqual(capacity, 50, "Base capacity should be 50");
 });
 
 test("Inventory: getIngredientStackCapacity with pantry upgrades", () => {
   const player = makeTestPlayer(5);
   const capacity = getIngredientStackCapacity(player);
-  assert.strictEqual(capacity, 40 + (5 * 5), "Capacity should increase by 5 per upgrade");
+  assert.strictEqual(capacity, 50 + (12 * 5), "Capacity should increase by 12 per upgrade");
 });
 
 test("Inventory: getBowlStackCapacity returns base capacity", () => {
@@ -60,13 +60,13 @@ test("Inventory: checkIngredientCapacity with empty inventory", () => {
   
   assert.strictEqual(check.canAdd, true, "Should be able to add items");
   assert.strictEqual(check.currentQty, 0, "Current quantity should be 0");
-  assert.strictEqual(check.maxCapacity, 40, "Max capacity should be 40");
+  assert.strictEqual(check.maxCapacity, 50, "Max capacity should be 50");
   assert.strictEqual(check.overflow, 0, "No overflow");
 });
 
 test("Inventory: checkIngredientCapacity at capacity limit", () => {
   const player = makeTestPlayer(0);
-  player.inv_ingredients["scallions"] = 40;
+  player.inv_ingredients["scallions"] = 50;
   
   const check = checkIngredientCapacity(player, "scallions", 1);
   assert.strictEqual(check.canAdd, false, "Should not be able to add more");
@@ -74,12 +74,12 @@ test("Inventory: checkIngredientCapacity at capacity limit", () => {
 });
 
 test("Inventory: checkIngredientCapacity with pantry upgrade", () => {
-  const player = makeTestPlayer(2); // +10 capacity
-  player.inv_ingredients["scallions"] = 45;
+  const player = makeTestPlayer(2); // +24 capacity
+  player.inv_ingredients["scallions"] = 69;
   
   const check = checkIngredientCapacity(player, "scallions", 5);
   assert.strictEqual(check.canAdd, true, "Should be able to add with upgrade");
-  assert.strictEqual(check.maxCapacity, 50, "Capacity should be 50");
+  assert.strictEqual(check.maxCapacity, 74, "Capacity should be 74");
 });
 
 // ========== Add Ingredients Tests ==========
@@ -98,25 +98,25 @@ test("Inventory: addIngredientsToInventory in block mode", () => {
 
 test("Inventory: addIngredientsToInventory blocks overflow", () => {
   const player = makeTestPlayer(0);
-  player.inv_ingredients["scallions"] = 38;
+  player.inv_ingredients["scallions"] = 48;
   
-  const drops = { scallions: 5 }; // Would exceed capacity of 40
+  const drops = { scallions: 5 }; // Would exceed capacity of 50
   const result = addIngredientsToInventory(player, drops, "block");
   
   assert.strictEqual(result.success, false, "Should fail");
-  assert.strictEqual(player.inv_ingredients.scallions, 38, "Quantity unchanged");
+  assert.strictEqual(player.inv_ingredients.scallions, 48, "Quantity unchanged");
   assert.strictEqual(result.blocked.scallions, 5, "All 5 blocked");
 });
 
 test("Inventory: addIngredientsToInventory truncate mode", () => {
   const player = makeTestPlayer(0);
-  player.inv_ingredients["scallions"] = 38;
+  player.inv_ingredients["scallions"] = 48;
   
-  const drops = { scallions: 5 }; // Would exceed capacity of 40
+  const drops = { scallions: 5 }; // Would exceed capacity of 50
   const result = addIngredientsToInventory(player, drops, "truncate");
   
   assert.strictEqual(result.success, false, "Should fail (partial)");
-  assert.strictEqual(player.inv_ingredients.scallions, 40, "Should add 2, reaching capacity");
+  assert.strictEqual(player.inv_ingredients.scallions, 50, "Should add 2, reaching capacity");
   assert.strictEqual(result.added.scallions, 2, "Added 2");
   assert.strictEqual(result.blocked.scallions, 3, "Blocked 3");
 });
@@ -302,17 +302,17 @@ test("Inventory: getTotalBowlCount", () => {
 // ========== Status Tests ==========
 
 test("Inventory: getInventoryStatus", () => {
-  const player = makeTestPlayer(2); // pantry level 2 = 50 capacity
-  player.inv_ingredients = { scallions: 50, carrots: 30, mushrooms: 10 };
+  const player = makeTestPlayer(2); // pantry level 2 = 74 capacity
+  player.inv_ingredients = { scallions: 74, carrots: 30, mushrooms: 10 };
   player.inv_bowls = {
     bowl_1: { recipe_id: "r1", tier: "common", quality: 85, qty: 10, cooked_at: 0 }
   };
   
   const status = getInventoryStatus(player);
   
-  assert.strictEqual(status.ingredients.stackCapacity, 50);
+  assert.strictEqual(status.ingredients.stackCapacity, 74);
   assert.strictEqual(status.ingredients.uniqueTypes, 3);
-  assert.strictEqual(status.ingredients.totalItems, 90);
+  assert.strictEqual(status.ingredients.totalItems, 114);
   assert.strictEqual(status.ingredients.atCapacity.length, 1);
   assert.strictEqual(status.ingredients.atCapacity[0], "scallions");
   
