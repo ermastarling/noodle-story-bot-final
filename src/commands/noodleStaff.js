@@ -381,7 +381,7 @@ export async function noodleStaffHandler(interaction) {
   return sendStaffPayload(interaction, lockedResult);
 }
 
-export function buildStaffOverviewEmbed(player, server, user) {
+export function buildStaffOverviewComponents(player, server, user) {
   void server;
   void user;
 
@@ -474,14 +474,15 @@ function buildStaffOverviewTextComponents(player) {
   ];
 }
 
-function buildStaffOverviewPayload({ player, ownerId, actionRows = [], ephemeral = false, content = " " } = {}) {
+function buildStaffOverviewPayload({ player, ownerId, actionRows = [], ephemeral = false, statusLine = "" } = {}) {
+  const safeStatusLine = String(statusLine || "").trim();
   const mainComponents = [
     ...buildStaffOverviewTextComponents(player),
+    ...(safeStatusLine ? [{ type: 10, content: safeStatusLine }] : []),
     ...normalizeComponents(actionRows)
   ];
 
   return buildComponentsV2PayloadWithNoticeCards({
-    content,
     mainComponents,
     notices: [],
     ownerId: String(ownerId || "").trim() || undefined,
@@ -596,7 +597,7 @@ export async function noodleStaffInteractionHandler(interaction) {
         player: p,
         ownerId: userId,
         actionRows,
-        content: result.message,
+        statusLine: result.message,
         ephemeral: !result.success
       });
     }
@@ -608,7 +609,7 @@ export async function noodleStaffInteractionHandler(interaction) {
         player: p,
         ownerId: userId,
         actionRows,
-        content: " ",
+        statusLine: "",
         ephemeral: false
       });
     }

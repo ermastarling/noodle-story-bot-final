@@ -11,6 +11,19 @@ function flattenContainer(payload) {
   return container?.components ?? [];
 }
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  const children = Array.isArray(component.components) ? component.components : [];
+  const accessory = component.accessory && typeof component.accessory === "object" ? [component.accessory] : [];
+  return 1
+    + children.reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + accessory.reduce((sum, child) => sum + countComponentsDeep(child), 0);
+}
+
+function countListDeep(components = []) {
+  return (components || []).reduce((sum, component) => sum + countComponentsDeep(component), 0);
+}
+
 test("Cancel flow V2: picker includes Cancel Selected action", () => {
   const payload = buildCancelPickerV2Message({
     userId: "u1",
@@ -47,4 +60,27 @@ test("Cancel flow V2: outcome detects missing order", () => {
   });
 
   assert.equal(outcome.code, "missing");
+});
+
+test("Cancel flow V2: picker respects component budget with overflow line", () => {
+  const entries = Array.from({ length: 40 }, (_, idx) => ({
+    shortId: `ID${String(idx + 1).padStart(2, "0")}`,
+    line: `Order ${idx + 1}`
+  }));
+
+  const payload = buildCancelPickerV2Message({
+    userId: "u1",
+    token: "tok-1",
+    entries,
+    selectedShortIds: []
+  });
+
+  const components = flattenContainer(payload);
+  const totalComponentCount = countListDeep(components);
+  assert.ok(totalComponentCount <= 40);
+
+  const overflowLine = components.find((component) =>
+    component?.type === 10 && String(component?.content || "").includes("...and")
+  );
+  assert.ok(Boolean(overflowLine));
 });

@@ -6,7 +6,7 @@ import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "..
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
 import { noodleMainMenuRow } from "./noodle.js";
-import { buildStaffOverviewEmbed } from "./noodleStaff.js";
+import { buildStaffOverviewComponents } from "./noodleStaff.js";
 import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../game/kitchen.js";
 import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "../game/garden.js";
 import { isFishingUnlocked, FISHING_UNLOCK_LEVEL } from "../game/fishing.js";
@@ -660,7 +660,7 @@ function buildUpgradesCategoryComponents(player, categoryId, { staffRarity = "co
 
   if (categoryId === "staff") {
     if (staffRarity === "overview") {
-      return buildStaffOverviewEmbed(player, null, null);
+      return buildStaffOverviewComponents(player, null, null);
     }
     if (staffRarity === "upgrades") {
       const staffUpgrades = ["u_staff_quarters", "u_manuals"]

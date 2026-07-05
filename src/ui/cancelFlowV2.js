@@ -17,6 +17,19 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
   };
 }
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  const children = Array.isArray(component.components) ? component.components : [];
+  const accessory = component.accessory && typeof component.accessory === "object" ? [component.accessory] : [];
+  return 1
+    + children.reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + accessory.reduce((sum, child) => sum + countComponentsDeep(child), 0);
+}
+
+function countListDeep(components = []) {
+  return (components || []).reduce((sum, component) => sum + countComponentsDeep(component), 0);
+}
+
 export function deriveCancelOutcome({ targetOrderId, beforeAcceptedOrderIds = [], afterAcceptedOrderIds = [] } = {}) {
   const target = String(targetOrderId ?? "").trim();
   const before = new Set((beforeAcceptedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
@@ -58,17 +71,38 @@ export function buildCancelPickerV2Message({
     text("## Cancel Orders"),
     text("Select one or more accepted orders, then tap Cancel Selected.")
   ];
+  const COMPONENT_BUDGET = 35;
 
   if (safeStatusLine) components.push(text(safeStatusLine));
 
   if ((entries || []).length === 0) {
     components.push(text("No accepted orders are available to cancel."));
   } else {
+    let overflowCount = 0;
+    const selectedCount = selectedSet.size;
+    const confirmRowBudget = countComponentsDeep({
+      type: 1,
+      components: [
+        button({
+          sceneKey,
+          actionKey: "cfm",
+          userId: safeUserId,
+          token: safeToken,
+          label: selectedCount > 0 ? `Cancel Selected (${selectedCount})` : "Select Orders First",
+          style: 4,
+          disabled: selectedCount <= 0
+        }),
+        button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 2 }),
+        button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Orders", style: 2 })
+      ]
+    });
+    const overflowLineBudget = countComponentsDeep(text("_...and 1 more order(s)._"));
+
     for (const entry of entries) {
       const shortId = String(entry?.shortId ?? "").trim();
       if (!shortId) continue;
       const isSelected = selectedSet.has(shortId);
-      components.push({
+      const section = {
         type: 9,
         components: [text(String(entry?.line ?? "").trim())],
         accessory: button({
@@ -80,7 +114,21 @@ export function buildCancelPickerV2Message({
           label: isSelected ? "Selected" : "Select",
           style: isSelected ? 4 : 2
         })
-      });
+      };
+
+      const sectionBudget = countComponentsDeep(section);
+      const currentBudget = countListDeep(components);
+      const reserveBudget = confirmRowBudget + overflowLineBudget;
+      if (currentBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
+        overflowCount += 1;
+        continue;
+      }
+
+      components.push(section);
+    }
+
+    if (overflowCount > 0) {
+      components.push(text(`_...and ${overflowCount} more order(s)._`));
     }
   }
 

@@ -18,6 +18,10 @@ import { theme } from "./ui/theme.js";
   const Client = Discord.Client;
   const Intents = Discord.Intents;
   const MessageFlags = Discord.MessageFlags;
+  const MESSAGE_FLAG_EPHEMERAL = Discord?.Constants?.MessageFlags?.EPHEMERAL
+    ?? MessageFlags?.EPHEMERAL
+    ?? MessageFlags?.Ephemeral
+    ?? (1 << 6);
 
   if (!Client || !Intents) {
     console.error("❌ Failed to load discord.js properly");
@@ -117,9 +121,9 @@ import { theme } from "./ui/theme.js";
 
   const toRawWebhookPayload = (payload = {}) => {
     const out = { ...payload };
-    const hasEphemeralFlag = (Number(out.flags) & MessageFlags.Ephemeral) !== 0;
+    const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
     if (out.ephemeral === true && !hasEphemeralFlag) {
-      out.flags = Number(out.flags || 0) | MessageFlags.Ephemeral;
+      out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
     }
     delete out.ephemeral;
     return out;
