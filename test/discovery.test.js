@@ -204,13 +204,13 @@ test("Discovery: getDiscoverableRecipes excludes event recipes without active ev
   assert.ok(!discoverable.includes("event_recipe"));
 });
 
-test("Discovery: takeout discovery attempt limit uses diminishing returns", () => {
+test("Discovery: takeout discovery attempt limit applies hard cap", () => {
   assert.equal(getTakeoutDiscoveryAttemptLimit(0), 0);
   assert.equal(getTakeoutDiscoveryAttemptLimit(1), 1);
-  assert.equal(getTakeoutDiscoveryAttemptLimit(4), 2);
-  assert.equal(getTakeoutDiscoveryAttemptLimit(9), 3);
-  assert.equal(getTakeoutDiscoveryAttemptLimit(25), 5);
-  assert.equal(getTakeoutDiscoveryAttemptLimit(100), 10);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(4), 4);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(9), 9);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(25), 12);
+  assert.equal(getTakeoutDiscoveryAttemptLimit(100), 12);
 });
 
 test("Discovery: applyDiscovery - new clue is added", () => {
