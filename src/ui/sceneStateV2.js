@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 const DEFAULT_SCENE_TTL_MS = Object.freeze({
   "orders.board": 10 * 60 * 1000,
   "orders.accept_picker": 5 * 60 * 1000,
@@ -21,7 +23,8 @@ function parsePositiveInt(value, fallback) {
 }
 
 function createToken(nowMs = Date.now()) {
-  return `${nowMs.toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  const entropy = randomBytes(8).toString("hex");
+  return `${nowMs.toString(36)}${entropy}`;
 }
 
 export function getSceneTtlMs(sceneKey, env = process.env) {

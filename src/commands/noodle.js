@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import {
   canForage,
@@ -310,7 +311,7 @@ const ACCEPT_ORDER_SELECTION_CACHE_TTL_MS = 15 * 60 * 1000;
 const CANCEL_ORDER_SELECTION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 function makeSelectionToken() {
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `${Date.now().toString(36)}${randomBytes(6).toString("hex")}`;
 }
 
 function purgeExpiredSelectionCache(cache) {
