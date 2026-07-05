@@ -27,6 +27,7 @@ function defaultPerkState() {
     entitlement_id: null,
     period_start_at: null,
     period_end_at: null,
+    vote_house_247_credited_until: null,
     last_coin_grant_period: null,
     last_coin_grant_at: null,
     last_event_type: null,
@@ -242,6 +243,26 @@ export function applySubscriptionEntitlementEvent(player, {
     if (entitlementId) perkState.entitlement_id = String(entitlementId);
     if (Number.isFinite(normalizedStartAt)) perkState.period_start_at = normalizedStartAt;
     if (Number.isFinite(normalizedEndAt)) perkState.period_end_at = normalizedEndAt;
+
+    // Keep 24/7 time additive by crediting new entitlement duration into vote-based expiry.
+    if (perkKey === SUBSCRIPTION_PERKS.HOUSE_247 && Number.isFinite(normalizedEndAt)) {
+      const nowTs = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+      const creditedUntilRaw = normalizeTimestamp(perkState.vote_house_247_credited_until);
+      const creditedUntil = Number.isFinite(creditedUntilRaw) ? Math.floor(creditedUntilRaw) : 0;
+      const creditStartAt = Math.max(
+        nowTs,
+        Number.isFinite(normalizedStartAt) ? normalizedStartAt : nowTs,
+        creditedUntil
+      );
+      const creditDurationMs = Math.max(0, Math.floor(normalizedEndAt - creditStartAt));
+      if (creditDurationMs > 0) {
+        grantHouse247VoteAccess(player, {
+          now: nowTs,
+          durationMs: creditDurationMs
+        });
+      }
+      perkState.vote_house_247_credited_until = Math.max(creditedUntil, normalizedEndAt);
+    }
   } else if (type === "ENTITLEMENT_DELETE") {
     perkState.active = false;
     if (Number.isFinite(normalizedEndAt)) {

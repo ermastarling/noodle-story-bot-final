@@ -179,7 +179,11 @@ function normalizeDuplicateWindowMode(mode) {
 
 export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now = nowTs(), options = {}) {
   const { state, sourceState, sourceKey } = ensureVoteSourceState(player, source);
-  const claimMultiplier = getVoteSourceClaimMultiplier(sourceKey);
+  const defaultClaimMultiplier = getVoteSourceClaimMultiplier(sourceKey);
+  const overrideClaimMultiplier = Number(options?.claimMultiplier);
+  const claimMultiplier = Number.isFinite(overrideClaimMultiplier) && overrideClaimMultiplier > 0
+    ? Math.floor(overrideClaimMultiplier)
+    : defaultClaimMultiplier;
   const duplicateWindowMode = normalizeDuplicateWindowMode(options?.duplicateWindowMode);
   const lastWebhookAt = Number(sourceState.last_webhook_at || 0);
   const duplicateWindowMs = 5 * 60 * 1000;
@@ -200,6 +204,7 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
       ok: true,
       source: sourceKey,
       duplicate: true,
+      claimsAwarded: 0,
       lifetimeLimited: false,
       shouldPersistDuplicate,
       pendingClaims: state.pending_claims,
@@ -223,6 +228,7 @@ export function registerVoteFromSource(player, source = VOTE_SOURCES.TOPGG, now 
     ok: true,
     source: sourceKey,
     duplicate: false,
+    claimsAwarded: claimMultiplier,
     lifetimeLimited: false,
     shouldPersistDuplicate: true,
     pendingClaims: state.pending_claims,

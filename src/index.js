@@ -1566,6 +1566,43 @@ import { theme } from "./ui/theme.js";
     return match == null ? "" : String(match).trim();
   }
 
+  function parseStrictBoolean(value) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (value === 1) return true;
+      if (value === 0) return false;
+      return null;
+    }
+    if (typeof value !== "string") return null;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+    return null;
+  }
+
+  function isRankTopPowerVotePayload(payload) {
+    // Rank.top dashboard exposes a boolean power vote flag, so only trust explicit true/false fields.
+    const candidates = [
+      payload?.isPowerVote,
+      payload?.powerVote,
+      payload?.power_vote,
+      payload?.is_power_vote,
+      payload?.vote?.isPowerVote,
+      payload?.vote?.powerVote,
+      payload?.vote?.power_vote,
+      payload?.data?.isPowerVote,
+      payload?.data?.powerVote,
+      payload?.data?.power_vote
+    ];
+
+    for (const candidate of candidates) {
+      const parsed = parseStrictBoolean(candidate);
+      if (parsed !== null) return parsed;
+    }
+    return false;
+  }
+
   function hasAnyConfiguredBotListStatsSync() {
     return botListStatsConfigs.some((config) => {
       if (config?.enabled === false) return false;
@@ -3001,8 +3038,11 @@ import { theme } from "./ui/theme.js";
         let player = getPlayer(db, serverId, votedUserId);
         if (!player) player = newPlayerProfile(votedUserId);
 
+        const rankTopPowerVote = voteConfig.source === VOTE_SOURCES.RANKTOP
+          && isRankTopPowerVotePayload(effectiveVotePayload);
         const voteResult = registerVoteFromSource(player, voteConfig.source, Date.now(), {
-          duplicateWindowMode: voteDuplicateWindowMode
+          duplicateWindowMode: voteDuplicateWindowMode,
+          claimMultiplier: rankTopPowerVote ? 4 : undefined
         });
         if (!voteResult.duplicate || voteResult.shouldPersistDuplicate) {
           upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
@@ -3015,7 +3055,9 @@ import { theme } from "./ui/theme.js";
             source: voteResult.source,
             serverId,
             pendingClaims: voteResult.pendingClaims,
-            duplicate: voteResult.duplicate
+            duplicate: voteResult.duplicate,
+            claimsAwarded: voteResult.claimsAwarded,
+            powerVote: rankTopPowerVote
           })
         );
 
@@ -3025,7 +3067,9 @@ import { theme } from "./ui/theme.js";
             ok: true,
             source: voteResult.source,
             pending_claims: voteResult.pendingClaims,
-            duplicate: voteResult.duplicate
+            duplicate: voteResult.duplicate,
+            claims_awarded: voteResult.claimsAwarded,
+            power_vote: rankTopPowerVote
           })
         );
         return;

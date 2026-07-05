@@ -11,6 +11,7 @@ import {
   createDefaultSubscriptionState,
   ensureSubscriptionState,
   grantHouse247VoteAccess,
+  getHouse247VoteExpiry,
   getOrderAcceptCap,
   hasUnlimitedMarketStock,
   hasActivePerk
@@ -176,6 +177,54 @@ test("Subscriptions: 24/7 House does not grant monthly coins", () => {
   assert.equal(houseGrant.amount, 0);
   assert.equal(player.coins, 0);
   assert.equal(player.lifetime.coins_earned, 0);
+});
+
+test("Subscriptions: awarded 24/7 House time stacks with existing vote-earned 24/7 time", () => {
+  const now = 1_700_000_000_000;
+  const player = {};
+
+  const voteExpiry = grantHouse247VoteAccess(player, {
+    now,
+    durationMs: HOUSE_247_VOTE_DURATION_MS
+  });
+  assert.equal(voteExpiry, now + HOUSE_247_VOTE_DURATION_MS);
+
+  const entitlementEnd = now + (2 * 60 * 60 * 1000);
+  const granted = applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    eventType: "ENTITLEMENT_CREATE",
+    entitlementId: "ent_house_247",
+    periodStartAt: now,
+    periodEndAt: entitlementEnd,
+    now
+  });
+
+  assert.equal(granted.ok, true);
+  assert.equal(getHouse247VoteExpiry(player), now + HOUSE_247_VOTE_DURATION_MS + (2 * 60 * 60 * 1000));
+
+  const idempotentUpdate = applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    eventType: "ENTITLEMENT_UPDATE",
+    entitlementId: "ent_house_247",
+    periodStartAt: now,
+    periodEndAt: entitlementEnd,
+    now: now + 60_000
+  });
+
+  assert.equal(idempotentUpdate.ok, true);
+  assert.equal(getHouse247VoteExpiry(player), now + HOUSE_247_VOTE_DURATION_MS + (2 * 60 * 60 * 1000));
+
+  const extendedUpdate = applySubscriptionEntitlementEvent(player, {
+    perkId: SUBSCRIPTION_PERKS.HOUSE_247,
+    eventType: "ENTITLEMENT_UPDATE",
+    entitlementId: "ent_house_247",
+    periodStartAt: now,
+    periodEndAt: entitlementEnd + (60 * 60 * 1000),
+    now: now + 120_000
+  });
+
+  assert.equal(extendedUpdate.ok, true);
+  assert.equal(getHouse247VoteExpiry(player), now + HOUSE_247_VOTE_DURATION_MS + (3 * 60 * 60 * 1000));
 });
 
 test("Subscriptions: Take Out Counter still grants monthly coins", () => {

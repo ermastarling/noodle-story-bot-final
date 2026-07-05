@@ -1244,7 +1244,22 @@ function composeV2FromLegacyEmbeds(embeds = []) {
 }
 
 function normalizePayloadForReply(interaction, payload = {}) {
-  const converted = convertPayloadToComponentsV2(interaction, payload);
+  const serverId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  let sourcePayload = payload;
+
+  if (db && serverId && userId) {
+    const player = ensurePlayer(serverId, userId);
+    const { notices, changed } = resolvePersistentV2NoticeCards(player, resolveSocialMenuKey(interaction));
+    if (notices.length > 0) {
+      sourcePayload = applyPersistentNoticeCards(sourcePayload, notices);
+    }
+    if (changed) {
+      upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+    }
+  }
+
+  const converted = convertPayloadToComponentsV2(interaction, sourcePayload);
   if (converted?.embeds) {
     converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
   }
@@ -1537,6 +1552,155 @@ function ensurePlayer(serverId, userId) {
   clearExpiredBlessings(p);
   grantEventBadgesForKnownRecipes(p, content, badgesContent);
   return p;
+}
+
+const MAX_PENDING_V2_NOTICE_CARDS = 10;
+
+function ensurePersistentV2NoticeQueue(player) {
+  if (!player || typeof player !== "object") return [];
+  if (!player.notifications || typeof player.notifications !== "object" || Array.isArray(player.notifications)) {
+    player.notifications = {
+      pending_pantry_messages: [],
+      pending_v2_notice_cards: [],
+      active_v2_notice_cards: [],
+      active_v2_notice_menu_key: null,
+      dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
+    };
+  }
+  if (!Array.isArray(player.notifications.pending_v2_notice_cards)) {
+    player.notifications.pending_v2_notice_cards = [];
+  }
+  return player.notifications.pending_v2_notice_cards;
+}
+
+function queuePersistentV2NoticeCard(player, { title, details, tone = "info" } = {}) {
+  const queue = ensurePersistentV2NoticeQueue(player);
+  const heading = String(title || "Notification").trim() || "Notification";
+  const lines = (Array.isArray(details) ? details : [details])
+    .map((line) => String(line ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!lines.length) return;
+  const normalizedTone = ["info", "success", "warning", "error"].includes(String(tone || "").toLowerCase())
+    ? String(tone).toLowerCase()
+    : "info";
+
+  queue.push({ title: heading, details: lines, tone: normalizedTone });
+  if (queue.length > MAX_PENDING_V2_NOTICE_CARDS) {
+    queue.splice(0, queue.length - MAX_PENDING_V2_NOTICE_CARDS);
+  }
+}
+
+function normalizePersistentV2NoticeCard(card) {
+  if (!card || typeof card !== "object") return null;
+  const title = String(card.title || "Notification").trim() || "Notification";
+  const toneRaw = String(card.tone || "info").trim().toLowerCase();
+  const tone = ["info", "success", "warning", "error"].includes(toneRaw) ? toneRaw : "info";
+  const details = (Array.isArray(card.details) ? card.details : [card.details])
+    .map((line) => String(line ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!details.length) return null;
+  return { title, details, tone };
+}
+
+function resolveSocialMenuKey(interaction) {
+  const sub = String(interaction?.options?.getSubcommand?.() || "").trim();
+  if (sub) {
+    const action = String(interaction?.options?.getString?.("action") || "").trim();
+    return `social:${sub}:${action || "main"}`;
+  }
+
+  const customId = String(interaction?.customId || "").trim();
+  const parts = customId.split(":");
+  if (parts[0] === "noodle-social") {
+    return `social:${String(parts[1] || "component").trim()}:${String(parts[2] || "main").trim()}`;
+  }
+
+  return "social:unknown";
+}
+
+function resolvePersistentV2NoticeCards(player, menuKey) {
+  const queue = ensurePersistentV2NoticeQueue(player);
+  const notifications = player.notifications;
+  const normalizedMenuKey = String(menuKey || "social:unknown").trim() || "social:unknown";
+  let changed = false;
+
+  if (!Array.isArray(notifications.active_v2_notice_cards)) {
+    notifications.active_v2_notice_cards = [];
+    changed = true;
+  }
+  if (typeof notifications.active_v2_notice_menu_key !== "string") {
+    notifications.active_v2_notice_menu_key = null;
+  }
+
+  const normalizedPending = queue
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter(Boolean)
+    .slice(0, MAX_PENDING_V2_NOTICE_CARDS);
+  if (normalizedPending.length !== queue.length) changed = true;
+  notifications.pending_v2_notice_cards = normalizedPending;
+
+  const normalizedActive = notifications.active_v2_notice_cards
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter(Boolean)
+    .slice(0, MAX_PENDING_V2_NOTICE_CARDS);
+  if (normalizedActive.length !== notifications.active_v2_notice_cards.length) changed = true;
+  notifications.active_v2_notice_cards = normalizedActive;
+
+  if (
+    notifications.active_v2_notice_cards.length > 0
+    && notifications.active_v2_notice_menu_key
+    && notifications.active_v2_notice_menu_key !== normalizedMenuKey
+  ) {
+    notifications.active_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = null;
+    changed = true;
+  }
+
+  if (notifications.active_v2_notice_cards.length <= 0 && notifications.pending_v2_notice_cards.length > 0) {
+    notifications.active_v2_notice_cards = notifications.pending_v2_notice_cards.slice(0, MAX_PENDING_V2_NOTICE_CARDS);
+    notifications.pending_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = normalizedMenuKey;
+    changed = true;
+  }
+
+  return {
+    notices: notifications.active_v2_notice_cards,
+    changed
+  };
+}
+
+function applyPersistentNoticeCards(payload = {}, notices = []) {
+  const cards = (notices || []).map((notice) => normalizePersistentV2NoticeCard(notice)).filter(Boolean);
+  if (!cards.length) return payload;
+
+  let updated = { ...(payload ?? {}) };
+  const hasSourceNativeNoticeShape = Array.isArray(updated.mainComponents) || Array.isArray(updated.notices);
+
+  if (hasSourceNativeNoticeShape) {
+    const existing = Array.isArray(updated.notices) ? [...updated.notices] : [];
+    updated.notices = [...existing, ...cards];
+    return updated;
+  }
+
+  if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
+    const composed = composeV2FromLegacyEmbeds(updated.embeds);
+    const { embeds, ...rest } = updated;
+    updated = {
+      ...rest,
+      ...composed,
+      notices: [...(Array.isArray(composed.notices) ? composed.notices : []), ...cards]
+    };
+    return updated;
+  }
+
+  updated.notices = cards;
+  if (updated.content === undefined) updated.content = " ";
+  return updated;
 }
 
 function touchLastKitchen(player, serverId, channelId, userId) {
@@ -1971,6 +2135,15 @@ async function handleTip(interaction) {
       try {
         const result = transferTip(db, serverId, sender, receiver, amount, message);
 
+        queuePersistentV2NoticeCard(result.receiver, {
+          title: `${getIcon("tips")} Tip Received`,
+          details: [
+            `<@${userId}> tipped you **${amount}c**.`,
+            message ? `Message: ${message}` : "Open your social menu to send a tip back."
+          ],
+          tone: "success"
+        });
+
         applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
 
         // Save both players
@@ -2055,6 +2228,23 @@ async function handleVisit(interaction) {
         // Grant a random blessing
         const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
         targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+
+        const blessingLabels = {
+          discovery_chance_add: "Enhanced Discovery",
+          limited_time_window_add: "Extended Time Window",
+          quality_shift: "Quality Boost",
+          npc_weight_mult: "Customer Favor",
+          coin_bonus: "Coin Bonus",
+          rep_bonus: "Reputation Bonus"
+        };
+        queuePersistentV2NoticeCard(targetPlayer, {
+          title: `${getIcon("bless")} Blessing Received`,
+          details: [
+            `<@${userId}> blessed your shop.`,
+            `Effect: **${blessingLabels[blessingType] || blessingType}** for **${BLESSING_DURATION_HOURS}h**.`
+          ],
+          tone: "success"
+        });
 
         // Log visit for analytics (D6)
         serverState = logVisitActivity(serverState, userId, targetUser.id);
@@ -2510,6 +2700,15 @@ async function handleComponent(interaction) {
           try {
             const result = transferTip(db, serverId, sender, receiver, amount, null);
 
+            queuePersistentV2NoticeCard(result.receiver, {
+              title: `${getIcon("tips")} Tip Received`,
+              details: [
+                `<@${userId}> tipped you **${amount}c**.`,
+                "Open your social menu to send a tip back."
+              ],
+              tone: "success"
+            });
+
             applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
 
             if (db) {
@@ -2590,6 +2789,15 @@ async function handleComponent(interaction) {
 
           try {
             const result = transferTip(db, serverId, sender, receiver, amount, null);
+
+            queuePersistentV2NoticeCard(result.receiver, {
+              title: `${getIcon("tips")} Tip Received`,
+              details: [
+                `<@${userId}> tipped you **${amount}c**.`,
+                "Open your social menu to send a tip back."
+              ],
+              tone: "success"
+            });
             applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
 
             if (db) {
@@ -2665,6 +2873,23 @@ async function handleComponent(interaction) {
           try {
             const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
             targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+
+            const blessingLabels = {
+              discovery_chance_add: "Enhanced Discovery",
+              limited_time_window_add: "Extended Time Window",
+              quality_shift: "Quality Boost",
+              npc_weight_mult: "Customer Favor",
+              coin_bonus: "Coin Bonus",
+              rep_bonus: "Reputation Bonus"
+            };
+            queuePersistentV2NoticeCard(targetPlayer, {
+              title: `${getIcon("bless")} Blessing Received`,
+              details: [
+                `<@${userId}> blessed your shop.`,
+                `Effect: **${blessingLabels[blessingType] || blessingType}** for **${BLESSING_DURATION_HOURS}h**.`
+              ],
+              tone: "success"
+            });
 
             serverState = logVisitActivity(serverState, userId, targetId);
 
@@ -3014,6 +3239,24 @@ async function handleComponent(interaction) {
             try {
               const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
               targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+
+              const blessingLabels = {
+                discovery_chance_add: "Enhanced Discovery",
+                limited_time_window_add: "Extended Time Window",
+                quality_shift: "Quality Boost",
+                npc_weight_mult: "Customer Favor",
+                coin_bonus: "Coin Bonus",
+                rep_bonus: "Reputation Bonus"
+              };
+              queuePersistentV2NoticeCard(targetPlayer, {
+                title: `${getIcon("bless")} Blessing Received`,
+                details: [
+                  `<@${userId}> blessed your shop.`,
+                  `Effect: **${blessingLabels[blessingType] || blessingType}** for **${BLESSING_DURATION_HOURS}h**.`
+                ],
+                tone: "success"
+              });
+
               serverState = logVisitActivity(serverState, userId, targetId);
               applyQuestProgress(visitor, questsContent, userId, { type: "bless_player", amount: 1 }, nowTs());
 
@@ -3250,6 +3493,23 @@ async function handleComponent(interaction) {
           // Create the shared order
           const result = createSharedOrder(db, party.party_id, recipeId, serverId, servings);
           const viewer = ensurePlayer(serverId, userId);
+
+          for (const member of party.members ?? []) {
+            const memberId = String(member?.user_id || "").trim();
+            if (!memberId || memberId === String(userId)) continue;
+            const memberPlayer = ensurePlayer(serverId, memberId);
+            queuePersistentV2NoticeCard(memberPlayer, {
+              title: `${getIcon("serve")} Party Shared Order Started`,
+              details: [
+                `Your party started **${recipe.name}** (${servings} servings).`,
+                "Open Party > Shared Order and contribute ingredients to help complete it."
+              ],
+              tone: "info"
+            });
+            if (db) {
+              upsertPlayer(db, serverId, memberId, memberPlayer, null, memberPlayer.schema_version);
+            }
+          }
 
           const ingredientList = getSharedOrderVisibleIngredients(viewer, recipe)
             .map(ing => `• ${content.items[ing.item_id]?.name || ing.item_id} × ${ing.qty * servings}`)
@@ -4302,6 +4562,15 @@ async function handleComponent(interaction) {
               player.coins = (player.coins || 0) + coinsReward;
               player.rep = (player.rep || 0) + repReward;
               player.sxp_progress = (player.sxp_progress || 0) + sxpReward;
+
+              queuePersistentV2NoticeCard(player, {
+                title: `${getIcon("serve")} Party Shared Order Completed`,
+                details: [
+                  `**${recipe.name}** (${servings} servings) was completed by your party.`,
+                  `Your rewards: ${coinsReward}c, ${repReward} REP, ${sxpReward} SXP.`
+                ],
+                tone: "success"
+              });
 
               applyQuestProgress(player, questsContent, contributorId, { type: "shared_order_complete", amount: 1 }, nowTs());
 

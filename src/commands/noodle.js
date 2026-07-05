@@ -524,6 +524,7 @@ function getTakeoutCounterLabel() {
 
 function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false, consumeSubscriptionNotice = false } = {}) {
   if (!player) return payload;
+  void user;
 
   const garden = getGardenUnlockState(player);
   const kitchen = getKitchenUnlockState(player);
@@ -531,31 +532,25 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
 
   const notices = [];
   if (garden?.justUnlocked) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("garden")} Garden Unlocked`,
-        description: "Plant seeds and harvest ingredients with `/noodle garden` (or find it through your Pantry).",
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("garden")} Garden Unlocked`,
+      details: ["Plant seeds and harvest ingredients with `/noodle garden` (or find it through your Pantry)."],
+      tone: "success"
+    });
   }
   if (kitchen?.justUnlocked) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("kitchen")} Kitchen Unlocked`,
-        description: "Simmer gold-star broths with `/noodle kitchen` (or find it through your Pantry).",
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("kitchen")} Kitchen Unlocked`,
+      details: ["Simmer gold-star broths with `/noodle kitchen` (or find it through your Pantry)."],
+      tone: "success"
+    });
   }
   if (fishing?.justUnlocked) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("fishing")} Fishing Unlocked`,
-        description: "Catch fish and seafood with `/noodle fishing` (or find it through your Pantry).",
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("fishing")} Fishing Unlocked`,
+      details: ["Catch fish and seafood with `/noodle fishing` (or find it through your Pantry)."],
+      tone: "success"
+    });
   }
 
   const seatingUpgrade = upgradesContent?.upgrades?.u_seating;
@@ -574,23 +569,16 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
     && !seatingNoticeAlreadySeen;
 
   if (shouldShowSeatingNotice) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("orders")} More Orders Available`,
-        description: `${getIcon("rep")} You have enough REP to unlock more seating & **Daily Orders**.\nOpen **/noodle-upgrades** and unlock **Seating** in the **Service** category using your earned REP.`,
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("orders")} More Orders Available`,
+      details: [
+        `${getIcon("rep")} You have enough REP to unlock more seating & **Daily Orders**.`,
+        "Open **/noodle-upgrades** and unlock **Seating** in the **Service** category using your earned REP."
+      ],
+      tone: "info"
+    });
     if (consumeSeatingNotice) {
-      if (!player.notifications) {
-        player.notifications = {
-          pending_pantry_messages: [],
-          dm_reminders_opt_out: false,
-          last_daily_reminder_day: null,
-          last_noodle_channel_id: null,
-          last_noodle_guild_id: null
-        };
-      }
+      ensurePersistentV2NoticeState(player);
       player.notifications.seating_unlock_notice_seen = true;
     }
   }
@@ -673,40 +661,151 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
     const coinLine = sawCoinGrant
       ? `${getIcon("coins")} Subscription coin reward credited: **${totalCoinReward}c**`
       : `${getIcon("coins")} Subscription coin reward credited this cycle: **0c**`;
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("sparkle")} Subscription Perks Unlocked`,
-        description: [
-          ...grantedPerkLines,
-          "",
-          coinLine
-        ].join("\n"),
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("sparkle")} Subscription Perks Unlocked`,
+      details: [...grantedPerkLines, coinLine],
+      tone: "success"
+    });
   }
 
   if (!notices.length) return payload;
 
   const updated = { ...(payload ?? {}) };
-  const existingEmbeds = Array.isArray(updated.embeds) ? [...updated.embeds] : [];
+  const existingNotices = Array.isArray(updated.notices) ? [...updated.notices] : [];
 
   for (const notice of notices) {
-    if (!notice) continue;
-    const title = notice?.title ?? notice?.data?.title ?? "";
-    const alreadyPresent = existingEmbeds.some((e) => {
-      const t = e?.title ?? e?.data?.title ?? "";
-      return title && t === title;
+    if (!notice || typeof notice !== "object") continue;
+    const signature = JSON.stringify({
+      title: String(notice.title || "").trim(),
+      details: Array.isArray(notice.details) ? notice.details : [],
+      tone: String(notice.tone || "info").trim()
     });
-    if (!alreadyPresent) existingEmbeds.push(notice);
+    const alreadyPresent = existingNotices.some((entry) => {
+      const existingSignature = JSON.stringify({
+        title: String(entry?.title || "").trim(),
+        details: Array.isArray(entry?.details) ? entry.details : [],
+        tone: String(entry?.tone || "info").trim()
+      });
+      return signature === existingSignature;
+    });
+    if (!alreadyPresent) existingNotices.push(notice);
   }
 
-  if (existingEmbeds.length) {
-    updated.embeds = existingEmbeds;
+  if (existingNotices.length) {
+    updated.notices = existingNotices;
     if (updated.content === undefined) updated.content = " ";
   }
 
   Object.defineProperty(updated, "__unlockNoticeApplied", { value: true, enumerable: false });
+  return updated;
+}
+
+const MAX_PERSISTENT_V2_NOTICE_CARDS = 10;
+
+function ensurePersistentV2NoticeState(player) {
+  if (!player || typeof player !== "object") return null;
+  if (!player.notifications || typeof player.notifications !== "object" || Array.isArray(player.notifications)) {
+    player.notifications = {
+      pending_pantry_messages: [],
+      pending_v2_notice_cards: [],
+      active_v2_notice_cards: [],
+      active_v2_notice_menu_key: null,
+      dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
+    };
+  }
+  if (!Array.isArray(player.notifications.pending_v2_notice_cards)) {
+    player.notifications.pending_v2_notice_cards = [];
+  }
+  if (!Array.isArray(player.notifications.active_v2_notice_cards)) {
+    player.notifications.active_v2_notice_cards = [];
+  }
+  if (typeof player.notifications.active_v2_notice_menu_key !== "string") {
+    player.notifications.active_v2_notice_menu_key = null;
+  }
+  return player.notifications;
+}
+
+function normalizePersistentV2NoticeCard(card) {
+  if (!card || typeof card !== "object") return null;
+  const title = String(card.title || "Notification").trim() || "Notification";
+  const toneRaw = String(card.tone || "info").trim().toLowerCase();
+  const tone = ["info", "success", "warning", "error"].includes(toneRaw) ? toneRaw : "info";
+  const details = (Array.isArray(card.details) ? card.details : [card.details])
+    .map((line) => String(line ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!details.length) return null;
+  return { title, details, tone };
+}
+
+function resolvePersistentV2NoticeCards(player, menuKey) {
+  const notifications = ensurePersistentV2NoticeState(player);
+  if (!notifications) return { notices: [], changed: false };
+
+  let changed = false;
+  const normalizedMenuKey = String(menuKey || "menu:unknown").trim() || "menu:unknown";
+  const pending = notifications.pending_v2_notice_cards
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter(Boolean)
+    .slice(0, MAX_PERSISTENT_V2_NOTICE_CARDS);
+  if (pending.length !== notifications.pending_v2_notice_cards.length) changed = true;
+  notifications.pending_v2_notice_cards = pending;
+
+  const active = notifications.active_v2_notice_cards
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter(Boolean)
+    .slice(0, MAX_PERSISTENT_V2_NOTICE_CARDS);
+  if (active.length !== notifications.active_v2_notice_cards.length) changed = true;
+  notifications.active_v2_notice_cards = active;
+
+  if (active.length > 0 && notifications.active_v2_notice_menu_key && notifications.active_v2_notice_menu_key !== normalizedMenuKey) {
+    notifications.active_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = null;
+    changed = true;
+  }
+
+  if (notifications.active_v2_notice_cards.length <= 0 && notifications.pending_v2_notice_cards.length > 0) {
+    notifications.active_v2_notice_cards = notifications.pending_v2_notice_cards.slice(0, MAX_PERSISTENT_V2_NOTICE_CARDS);
+    notifications.pending_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = normalizedMenuKey;
+    changed = true;
+  }
+
+  return {
+    notices: notifications.active_v2_notice_cards,
+    changed
+  };
+}
+
+function applyPersistentNoticeCards(payload = {}, notices = []) {
+  const cards = (notices || []).map((notice) => normalizePersistentV2NoticeCard(notice)).filter(Boolean);
+  if (!cards.length) return payload;
+
+  let updated = { ...(payload ?? {}) };
+  const hasSourceNativeNoticeShape = Array.isArray(updated.mainComponents) || Array.isArray(updated.notices);
+
+  if (hasSourceNativeNoticeShape) {
+    const existing = Array.isArray(updated.notices) ? [...updated.notices] : [];
+    updated.notices = [...existing, ...cards];
+    return updated;
+  }
+
+  if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
+    const composed = composeV2FromLegacyEmbeds(updated.embeds);
+    const { embeds, ...rest } = updated;
+    updated = {
+      ...rest,
+      ...composed,
+      notices: [...(Array.isArray(composed.notices) ? composed.notices : []), ...cards]
+    };
+    return updated;
+  }
+
+  updated.notices = cards;
+  if (updated.content === undefined) updated.content = " ";
   return updated;
 }
 
@@ -4805,15 +4904,19 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
   const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
   const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
   const marketRestockTs = Math.floor(marketRestockMs / 1000);
-  const marketRestockLine = `\n${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
+  const marketRestockLine = unlimitedMarketStock
+    ? ""
+    : `\n${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
 
   if (!opts.length) {
     const emptyEmbed = buildMenuEmbed({
       title: `${getIcon("cart")} Multi-buy`,
-      description: `${getIcon("cart")} No market items are available for your unlocked recipes right now.\n\n${marketRestockLine}`,
+      description: `${getIcon("cart")} No market items are available for your unlocked recipes right now.${marketRestockLine ? `\n\n${marketRestockLine}` : ""}`,
       user: ownerUser
     });
-    emptyEmbed.setTimestamp(new Date(marketRestockMs));
+    if (marketRestockLine) {
+      emptyEmbed.setTimestamp(new Date(marketRestockMs));
+    }
     return {
       content: " ",
       ...composeV2FromLegacyEmbeds([emptyEmbed]),
@@ -4870,8 +4973,8 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
     unlimitedMarketStock ? `${getHouse247Label()} active: market stock is **unlimited**.` : null,
     shoppingList ? "" : null,
     shoppingList,
-    "",
-    marketRestockLine
+    marketRestockLine ? "" : null,
+    marketRestockLine || null
   ].filter(Boolean);
 
   const buyEmbed = buildMenuEmbed({
@@ -6902,6 +7005,15 @@ const commit = async (payload) => {
   }
   payload = withSeasonNotice(payload);
 
+  const persistentNoticePlayer = ensurePlayer(serverId, userId);
+  const persistentNoticeState = resolvePersistentV2NoticeCards(persistentNoticePlayer, `noodle:${sub}`);
+  if (persistentNoticeState.notices.length > 0) {
+    payload = applyPersistentNoticeCards(payload, persistentNoticeState.notices);
+  }
+  if (persistentNoticeState.changed && db) {
+    upsertPlayer(db, serverId, userId, persistentNoticePlayer, null, persistentNoticePlayer.schema_version);
+  }
+
   const rolloutEnabledForUser = isComponentsV2Enabled({
     guildId: serverId,
     userId,
@@ -6916,7 +7028,8 @@ const commit = async (payload) => {
     sourceMessageIsV2
   });
   const forceContainerForDev = String(group || "").trim() === "dev";
-  if (shouldUseV2ContainerPayload || forceContainerForDev) {
+  const hasSourceNativeNoticeShape = Array.isArray(payload?.mainComponents) || Array.isArray(payload?.notices);
+  if (shouldUseV2ContainerPayload || forceContainerForDev || hasSourceNativeNoticeShape) {
     payload = convertLegacyEmbedPayloadToComponentsV2(payload);
   }
 
@@ -10400,6 +10513,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         voteLinks,
         "",
         `Per vote reward: ${rewardLine}`,
+        "Power vote bonus: **Rank.top power votes grant 4x rewards.**",
         `Per vote bonus: ${getHouse247Label()} **+12h** (unlimited orders + market stock)`,
         "",
         house247Label,
@@ -13168,15 +13282,20 @@ ${lines.join("\n")}`;
       if (!req || bowlsServedAfter < req) return false;
       return !state.unlocked_spec_ids.includes(spec.spec_id);
     });
+    const hiddenSpecUnlockNotices = [];
     if (newlyUnlockedSpecs.length) {
       for (const spec of newlyUnlockedSpecs) {
         state.unlocked_spec_ids.push(spec.spec_id);
+        hiddenSpecUnlockNotices.push({
+          title: `${getIcon("sparkle")} Hidden Specialization Unlocked`,
+          details: [
+            `**${spec.name}** is now unlocked.`,
+            "Open **/noodle specialize** to view and switch your specialization."
+          ],
+          tone: "success",
+          thumbnailUrl: getSpecializationThumbnailUrl(spec)
+        });
       }
-      const unlockLines = newlyUnlockedSpecs.map((spec) => {
-        const icon = resolveIcon(spec.icon, getIcon("sparkle"));
-        return `${icon} **Specialization unlocked:** ${spec.name}`;
-      });
-      results.push(...unlockLines);
     }
     
     // If a recipe was unlocked, refresh order pool and let regulars know they can order it now
@@ -13223,7 +13342,8 @@ ${lines.join("\n")}`;
     const servePayload = {
       content: " ",
       components,
-      ...composeV2FromLegacyEmbeds([serveEmbed, ...embeds])
+      ...composeV2FromLegacyEmbeds([serveEmbed, ...embeds]),
+      notices: hiddenSpecUnlockNotices
     };
     if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
       return commitState(convertLegacyEmbedPayloadToComponentsV2(servePayload));
