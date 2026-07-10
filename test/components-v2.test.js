@@ -138,6 +138,23 @@ test("Components V2: owner/tip footer is inserted below media and before action 
   assert.equal(rowIdx > footerIdx, true);
 });
 
+test("Components V2: splits oversized menu payload into <=40-child containers", () => {
+  const components = Array.from({ length: 41 }, (_, idx) => ({
+    type: 10,
+    content: `Line ${idx + 1}`
+  }));
+
+  const payload = buildComponentsV2MenuPayload({ components });
+  const containers = Array.isArray(payload.components) ? payload.components : [];
+
+  assert.equal(containers.length, 2);
+  assert.equal(containers[0]?.type, 17);
+  assert.equal(containers[1]?.type, 17);
+  assert.equal((containers[0]?.components ?? []).length <= 40, true);
+  assert.equal((containers[1]?.components ?? []).length <= 40, true);
+  assert.equal((containers[0]?.components ?? []).length + (containers[1]?.components ?? []).length, 41);
+});
+
 test("Components V2: configured scene banner replaces heading text", () => {
   const payload = buildComponentsV2MenuPayload({
     components: [{ type: 10, content: "## about_profile\n\nBanner should replace this heading." }]

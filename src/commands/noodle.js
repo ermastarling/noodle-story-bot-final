@@ -4737,32 +4737,34 @@ if (shouldBeEphemeral) {
 
 // Modal submits: deferred in index.js, so use editReply unless ephemeral
 if (interaction.isModalSubmit?.()) {
-  if (shouldBeEphemeral) {
-    if (interaction.deferred || interaction.replied) {
-      try {
-        return await interaction.followUp(normalizePayloadContent({ ...rest, ephemeral: true }));
-      } catch (e) {
-        console.log(`⚠️ Modal followUp failed:`, e?.message);
-        return;
-      }
-    }
-    try {
-      return await interaction.reply(normalizePayloadContent({ ...rest, ephemeral: true }));
-    } catch (e) {
-      console.log(`⚠️ Modal reply failed:`, e?.message);
-      return;
-    }
-  }
-
   if (interaction.deferred || interaction.replied) {
+    const modalPayload = normalizeComponentsV2Payload(normalizePayloadContent(options));
     try {
-      return await interaction.editReply(rest);
+      if (isComponentsV2Payload(modalPayload)) {
+        return await rawWebhookEditOriginal(interaction, modalPayload);
+      }
+      return await interaction.editReply(modalPayload);
     } catch (e) {
       console.log(`⚠️ Modal editReply failed:`, e?.message);
+      if (isComponentsV2Payload(modalPayload) && isInvalidComponentTypeError(e)) {
+        try {
+          return await rawWebhookEditOriginal(interaction, modalPayload);
+        } catch (rawError) {
+          console.log(`⚠️ Modal raw webhook edit fallback failed:`, rawError?.message);
+        }
+      }
       // If edit fails, try followUp as last resort
+      const followUpPayload = normalizeComponentsV2Payload(normalizePayloadContent({ ...modalPayload, ephemeral: true }));
       try {
-        return await interaction.followUp(normalizePayloadContent({ ...rest, ephemeral: true }));
+        return await interaction.followUp(followUpPayload);
       } catch (e2) {
+        if (isComponentsV2Payload(followUpPayload) && isInvalidComponentTypeError(e2)) {
+          try {
+            return await rawWebhookFollowUp(interaction, followUpPayload);
+          } catch (rawFollowUpError) {
+            console.log(`⚠️ Modal raw webhook followUp fallback failed:`, rawFollowUpError?.message);
+          }
+        }
         console.log(`⚠️ Modal followUp also failed:`, e2?.message);
         return;
       }
@@ -7867,10 +7869,10 @@ if (inDevPath && sub === "giveaway_winner") {
 
     upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
 
-    const conciseSummary = rewardSummaryLines.length > 0 ? rewardSummaryLines[0].replace(/^•\s*/, "") : "";
+    const detailedSummary = rewardSummaryLines.join("\n");
     const messageLines = [
       publicWinnerLine,
-      conciseSummary ? `\n${conciseSummary}` : null
+      detailedSummary ? `\n${detailedSummary}` : null
     ].filter(Boolean);
 
     return commit({
@@ -16388,6 +16390,9 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       counterCook: true,
       returnSub: "takeout"
     });
+    if (messageId) {
+      payload.targetMessageId = messageId;
+    }
     return componentCommit(interaction, payload);
   }
 

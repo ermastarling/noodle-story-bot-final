@@ -100,7 +100,7 @@ export function buildAcceptPickerV2Message({
         userId: safeUserId,
         token: safeToken,
         label: selectedCount > 0 ? `Accept Selected (${selectedCount})` : "Select Orders First",
-        style: 1,
+        style: selectedCount > 0 ? 3 : 1,
         disabled: selectedCount <= 0
       }),
       button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 3 }),

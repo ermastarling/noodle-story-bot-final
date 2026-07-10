@@ -5,6 +5,7 @@ const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 export const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
 const DEFAULT_MENU_ACCENT_COLOR = Number(theme?.colors?.primary ?? 0xE2B86B);
 const DEFAULT_MENU_DIVIDER_TEXT = "━━━━━━━━━━━━━━━━━━━━━━━━";
+const MAX_COMPONENTS_V2_CONTAINER_CHILDREN = 40;
 
 function parseMenuColor(value, fallback = DEFAULT_MENU_ACCENT_COLOR) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -457,13 +458,21 @@ export function buildComponentsV2MenuPayload({
     footerComponents = withGreenButtonFooterTip(footerComponents);
   }
 
-  const container = {
-    type: 17,
-    components: applyMenuGuideToComponents(footerComponents, menuGuide)
-  };
-
-  if (Number.isInteger(menuGuide.accentColor) && menuGuide.accentColor >= 0) {
-    container.accent_color = menuGuide.accentColor;
+  const guidedComponents = applyMenuGuideToComponents(footerComponents, menuGuide);
+  const safeGuidedComponents = guidedComponents.length > 0
+    ? guidedComponents
+    : [{ type: 10, content: "Status unavailable." }];
+  const containers = [];
+  for (let idx = 0; idx < safeGuidedComponents.length; idx += MAX_COMPONENTS_V2_CONTAINER_CHILDREN) {
+    const chunk = safeGuidedComponents.slice(idx, idx + MAX_COMPONENTS_V2_CONTAINER_CHILDREN);
+    const container = {
+      type: 17,
+      components: chunk
+    };
+    if (Number.isInteger(menuGuide.accentColor) && menuGuide.accentColor >= 0) {
+      container.accent_color = menuGuide.accentColor;
+    }
+    containers.push(container);
   }
 
   const flags = ephemeral
@@ -472,7 +481,7 @@ export function buildComponentsV2MenuPayload({
 
   return {
     flags,
-    components: [container]
+    components: containers
   };
 }
 

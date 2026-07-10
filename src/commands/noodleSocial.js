@@ -1365,6 +1365,16 @@ async function rawWebhookEditOriginal(interaction, payload) {
     .patch({ data: toRawWebhookPayload(payload) });
 }
 
+async function rawChannelEditMessage(interaction, channelId, messageId, payload) {
+  if (!interaction?.client?.api || !channelId || !messageId) {
+    throw new Error("Raw channel message edit unavailable: missing client api/channelId/messageId");
+  }
+  return interaction.client.api
+    .channels(channelId)
+    .messages(messageId)
+    .patch({ data: toRawWebhookPayload(payload) });
+}
+
 async function sendSocialPayload(interaction, payload = {}) {
   const finalPayload = payload ?? {};
   const isV2 = isComponentsV2Payload(finalPayload);
@@ -1454,6 +1464,7 @@ async function componentCommit(interaction, opts) {
 
   if (targetMessageId) {
     try {
+      const targetPayload = normalizePayloadForReply(interaction, rest);
       let target = null;
 
       if (interaction.channel?.messages?.fetch) {
@@ -1476,7 +1487,15 @@ async function componentCommit(interaction, opts) {
       }
 
       if (target) {
-        const result = await target.edit(normalizePayloadForReply(interaction, rest));
+        const isV2TargetPayload = isComponentsV2Payload(targetPayload);
+        const result = isV2TargetPayload
+          ? await rawChannelEditMessage(
+              interaction,
+              target.channelId ?? targetChannelId ?? interaction.channelId,
+              target.id,
+              targetPayload
+            )
+          : await target.edit(targetPayload);
         if (interaction.deferred || interaction.replied) {
           if (!isMessageComponent) {
             try {
