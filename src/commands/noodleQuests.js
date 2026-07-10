@@ -10,7 +10,10 @@ import { claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { getIcon } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
-  MESSAGE_FLAG_IS_COMPONENTS_V2
+  isComponentsV2Payload,
+  isInvalidComponentTypeError,
+  MESSAGE_FLAG_IS_COMPONENTS_V2,
+  rawWebhookEditOriginal
 } from "../ui/componentsV2.js";
 
 const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
@@ -32,20 +35,6 @@ function buildMenuContainerReply({ title, description, ownerId, ephemeral = fals
     ownerId: String(ownerId || "").trim() || undefined,
     ephemeral: Boolean(ephemeral)
   });
-}
-
-function isComponentsV2Payload(payload = {}) {
-  if (!payload || typeof payload !== "object") return false;
-  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
-  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
-  while (stack.length > 0) {
-    const node = stack.pop();
-    if (!node || typeof node !== "object") continue;
-    const type = Number(node.type);
-    if (type === 9 || type === 10 || type === 12 || type === 17) return true;
-    if (Array.isArray(node.components)) stack.push(...node.components);
-  }
-  return false;
 }
 
 function normalizeComponents(rows = []) {
@@ -144,34 +133,6 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
 
 function normalizePayloadForReply(interaction, payload = {}, player = null) {
   return convertPayloadToComponentsV2(interaction, payload, player);
-}
-
-function isInvalidComponentTypeError(error) {
-  const message = String(error?.message ?? "");
-  return String(error?.code ?? "") === "INVALID_TYPE"
-    || message.includes("valid MessageComponentType");
-}
-
-function toRawWebhookPayload(payload = {}) {
-  const out = { ...payload };
-  const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
-  if (out.ephemeral === true && !hasEphemeralFlag) {
-    out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
-  }
-  delete out.ephemeral;
-  return out;
-}
-
-async function rawWebhookEditOriginal(interaction, payload) {
-  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
-  const token = interaction?.token;
-  if (!interaction?.client?.api || !applicationId || !token) {
-    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
-  }
-  return interaction.client.api
-    .webhooks(applicationId, token)
-    .messages("@original")
-    .patch({ data: toRawWebhookPayload(payload) });
 }
 
 async function sendQuestsPayload(interaction, payload = {}) {

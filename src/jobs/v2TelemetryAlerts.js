@@ -124,8 +124,16 @@ export function startV2TelemetryAlertScheduler({ sendAlert, env = process.env, l
 
       const issueCheck = detectHighTelemetryIssues(candidateSummary, thresholds);
       const issues = [...issueCheck.issues];
-      if (delta && Number.isFinite(delta.loopTimeP95DeltaPct) && delta.loopTimeP95DeltaPct > p95RegressionPctThreshold) {
+      if (
+        issueCheck.hasEnoughData
+        && delta
+        && Number.isFinite(delta.loopTimeP95DeltaPct)
+        && delta.loopTimeP95DeltaPct > p95RegressionPctThreshold
+      ) {
         issues.push(`Loop p95 regression ${delta.loopTimeP95DeltaPct}% exceeds ${p95RegressionPctThreshold}% threshold.`);
+      }
+      if (!issueCheck.hasEnoughData && issueCheck.note) {
+        issues.push(issueCheck.note);
       }
 
       const highIssue = issueCheck.hasEnoughData && issues.length > 0;

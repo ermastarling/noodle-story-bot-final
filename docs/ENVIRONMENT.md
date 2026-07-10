@@ -22,7 +22,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_COMPONENTS_V2_ENABLED` - set `1` to enable Components V2 test-path messages in the dev guild (`NOODLE_DEV_GUILD_ID`/`DISCORD_GUILD_ID`)
 - `NOODLE_COMPONENTS_V2_GUILD_ALLOWLIST` - optional comma-separated guild IDs allowed to receive V2 UI; when unset, falls back to dev guild targeting
 - `NOODLE_COMPONENTS_V2_USER_ALLOWLIST` - optional comma-separated user IDs allowed to receive V2 UI in allowed guilds
-- `NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED` - set `1` to allow tutorial-active users onto V2 paths; default keeps tutorial users on V1
+- `NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED` - set `0` to keep tutorial-active users on V1; default allows tutorial users onto V2 paths unless explicitly disabled
 - `NOODLE_COMPONENTS_V2_TUTORIAL_USER_ALLOWLIST` - optional comma-separated tutorial-active user IDs allowed onto V2 while tutorial gate is off
 - `NOODLE_V2_SCENE_MAX_ENTRIES` - maximum in-memory V2 scene-state entries before eviction guardrails apply (default `2000`)
 - `NOODLE_V2_SCENE_TTL_MS` - optional global TTL override (milliseconds) for V2 scene-state entries; when unset, per-scene defaults are used

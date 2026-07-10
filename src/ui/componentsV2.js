@@ -64,7 +64,10 @@ export function resolveComponentsV2MenuGuide(env = process.env, overrides = {}) 
 function applyMenuGuideToComponents(components = [], menuGuide = {}) {
   const out = Array.isArray(components) ? [...components] : [];
   if (menuGuide.imageUrl) {
-    out.unshift({ type: 10, content: `Menu image: ${menuGuide.imageUrl}` });
+    out.unshift({
+      type: 12,
+      items: [{ media: { url: menuGuide.imageUrl } }]
+    });
   }
 
   if (menuGuide.addDivider) {
@@ -658,56 +661,56 @@ export function buildComponentsV2ContainerMessage({ title, lines = [], accentCol
   });
 }
 
+export function isComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const type = Number(node.type);
+    if (type === 9 || type === 10 || type === 12 || type === 17) return true;
+    if (Array.isArray(node.components)) stack.push(...node.components);
+  }
+  return false;
+}
+
+export function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
+export function toRawWebhookPayload(payload = {}) {
+  const out = { ...payload };
+  const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
+  if (out.ephemeral === true && !hasEphemeralFlag) {
+    out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
+  }
+  delete out.ephemeral;
+  return out;
+}
+
+export async function rawWebhookEditOriginal(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .messages("@original")
+    .patch({ data: toRawWebhookPayload(payload) });
+}
+
 export async function replyOrEditInteraction(interaction, payload) {
   if (!interaction) throw new Error("interaction is required");
-
-  const isV2Payload = (() => {
-    if (!payload || typeof payload !== "object") return false;
-    if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
-    const stack = Array.isArray(payload.components) ? [...payload.components] : [];
-    while (stack.length > 0) {
-      const node = stack.pop();
-      if (!node || typeof node !== "object") continue;
-      const type = Number(node.type);
-      if (type === 9 || type === 10 || type === 12 || type === 17) return true;
-      if (Array.isArray(node.components)) stack.push(...node.components);
-    }
-    return false;
-  })();
-
-  const isInvalidComponentTypeError = (error) => {
-    const message = String(error?.message ?? "");
-    return String(error?.code ?? "") === "INVALID_TYPE"
-      || message.includes("valid MessageComponentType");
-  };
-
-  const toRawWebhookPayload = (input = {}) => {
-    const out = { ...input };
-    const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
-    const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
-    if (out.ephemeral === true && !hasEphemeralFlag) {
-      out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
-    }
-    delete out.ephemeral;
-    return out;
-  };
-
-  const rawWebhookEditOriginal = async () => {
-    const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
-    const token = interaction?.token;
-    if (!interaction?.client?.api || !applicationId || !token) {
-      throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
-    }
-    return interaction.client.api
-      .webhooks(applicationId, token)
-      .messages("@original")
-      .patch({ data: toRawWebhookPayload(payload) });
-  };
+  const isV2Payload = isComponentsV2Payload(payload);
 
   if (interaction.deferred || interaction.replied) {
     if (isV2Payload) {
       try {
-        return await rawWebhookEditOriginal();
+        return await rawWebhookEditOriginal(interaction, payload);
       } catch {
         // Fall through to discord.js editReply fallback.
       }
@@ -717,7 +720,7 @@ export async function replyOrEditInteraction(interaction, payload) {
       return await interaction.editReply(payload);
     } catch (error) {
       if (isV2Payload && isInvalidComponentTypeError(error)) {
-        return rawWebhookEditOriginal();
+        return rawWebhookEditOriginal(interaction, payload);
       }
       throw error;
     }

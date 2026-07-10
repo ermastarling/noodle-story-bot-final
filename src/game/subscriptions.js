@@ -257,7 +257,7 @@ export function applySubscriptionEntitlementEvent(player, {
       const creditDurationMs = Math.max(0, Math.floor(normalizedEndAt - creditStartAt));
       if (creditDurationMs > 0) {
         grantHouse247VoteAccess(player, {
-          now: nowTs,
+          now: creditStartAt,
           durationMs: creditDurationMs
         });
       }

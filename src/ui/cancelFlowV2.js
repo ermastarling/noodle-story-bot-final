@@ -66,6 +66,11 @@ export function buildCancelPickerV2Message({
       .filter(Boolean)
   );
   const safeStatusLine = String(statusLine || "").trim();
+  const selectedCount = (entries || []).reduce((count, entry) => {
+    const shortId = String(entry?.shortId ?? "").trim();
+    if (!shortId) return count;
+    return selectedSet.has(shortId) ? count + 1 : count;
+  }, 0);
 
   const components = [
     text("## Cancel Orders"),
@@ -79,7 +84,6 @@ export function buildCancelPickerV2Message({
     components.push(text("No accepted orders are available to cancel."));
   } else {
     let overflowCount = 0;
-    const selectedCount = selectedSet.size;
     const confirmRowBudget = countComponentsDeep({
       type: 1,
       components: [
@@ -133,7 +137,6 @@ export function buildCancelPickerV2Message({
     }
   }
 
-  const selectedCount = selectedSet.size;
   components.push({
     type: 1,
     components: [

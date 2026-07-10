@@ -1396,6 +1396,7 @@ import { theme } from "./ui/theme.js";
           { type: 10, content: bodyLines.join("\n\n") }
         ],
         ownerId: devAlertUserId || undefined,
+        accentColor: color,
         ephemeral: false
       });
       await alertChannel.send({

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildQualityCountsForBias,
   buildCookMinigameTargetActions,
   buildCookMinigameV2Message,
   buildCookRecipePickerV2Message,
@@ -192,6 +193,28 @@ test("Cook flow V2: outcome resolver bypasses random roll callback for minigame 
 
   assert.equal(outcome.success, 10);
   assert.equal(outcome.failed, 0);
+});
+
+test("Cook flow V2: quality bias maps to known quality keys and preserves success sum", () => {
+  const allowedKeys = new Set(["standard", "good", "excellent", "salvage"]);
+  const cases = [
+    { bias: "excellent", success: 5 },
+    { bias: "great", success: 7 },
+    { bias: "good", success: 9 },
+    { bias: "salvage", success: 6 }
+  ];
+
+  for (const row of cases) {
+    const counts = buildQualityCountsForBias({ success: row.success, bias: row.bias });
+    const keys = Object.keys(counts);
+    const total = Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0);
+
+    assert.ok(keys.length > 0, `expected counts for bias ${row.bias}`);
+    for (const key of keys) {
+      assert.ok(allowedKeys.has(key), `unexpected quality key ${key} for bias ${row.bias}`);
+    }
+    assert.equal(total, row.success, `quality counts must sum to success for bias ${row.bias}`);
+  }
 });
 
 test("Cook flow V2: tutorial mode includes forgiving timer guidance and future 10s note", () => {

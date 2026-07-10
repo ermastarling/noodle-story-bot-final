@@ -24,7 +24,7 @@ Define the production-ready architecture for migrating from legacy embed + butto
 
 ## Tutorial Rollout Rules
 
-- Phase 1: tutorial users remain on V1 by default behind feature flag.
+- Phase 1: tutorial users are eligible for V2 by default when Components V2 is enabled, unless explicitly disabled with `NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED=0`.
 - Phase 2: enable V2 tutorial for internal testers only after parity tests pass.
 - Phase 3: enable V2 tutorial for test guild after monitored validation window.
 - Production tutorial cutover requires explicit signoff with tutorial regression suite green.
@@ -220,7 +220,8 @@ This replaces RNG failure with player-driven failure.
 
 Rules:
 
-- `sceneKey` and `actionKey` are short stable keys.
+- `sceneKey` uses full scene keys (for example `orders.board`, `cook.recipe_picker`, `serve.order_picker`).
+- `actionKey` is a short stable key for the scene.
 - `ownerId` required for owner lock.
 - `token` required for scene-state lookup.
 - max length must remain under Discord custom ID limits.
@@ -228,21 +229,19 @@ Rules:
 
 ## Exact Scene Keys
 
-- `ob` = `orders.board`
-- `oa` = `orders.accept_picker`
-- `ox` = `orders.accept_result`
-- `cr` = `cook.recipe_picker`
-- `cm` = `cook.minigame`
-- `cx` = `cook.result`
-- `sv` = `serve.order_picker`
-- `sx` = `serve.result`
-- `mb` = `market.buy`
-- `pv` = `pantry.view`
-- `pf` = `profile.view`
+- `orders.board`
+- `orders.accept_picker`
+- `orders.accept_result`
+- `orders.cancel_picker`
+- `cook.recipe_picker`
+- `cook.minigame`
+- `cook.result`
+- `serve.order_picker`
+- `serve.result`
 
 ## Exact Action Keys
 
-### Orders Board (`ob`)
+### Orders Board (`orders.board`)
 
 - `acc` open accept picker
 - `ck` open cook picker
@@ -251,14 +250,14 @@ Rules:
 - `rf` refresh
 - `nm` nav main
 
-### Accept Picker (`oa`)
+### Accept Picker (`orders.accept_picker`)
 
 - `pick` select order(s)
 - `ok` confirm accept
 - `cn` cancel
 - `bk` back
 
-### Cook Recipe Picker (`cr`)
+### Cook Recipe Picker (`cook.recipe_picker`)
 
 - `rpk` pick recipe
 - `qty` set quantity
@@ -266,7 +265,7 @@ Rules:
 - `cn` cancel
 - `bk` back
 
-### Cook Minigame (`cm`)
+### Cook Minigame (`cook.minigame`)
 
 - `st` choose Stir
 - `ht` choose Heat
@@ -275,20 +274,20 @@ Rules:
 - `fn` finish game
 - `ab` abort game
 
-### Cook Result (`cx`)
+### Cook Result (`cook.result`)
 
 - `rs` retry same recipe
 - `sv` open serve picker
 - `bk` back to orders board
 
-### Serve Picker (`sv`)
+### Serve Picker (`serve.order_picker`)
 
 - `pick` select accepted order(s)
 - `ok` confirm serve
 - `cn` cancel
 - `bk` back
 
-### Serve Result (`sx`)
+### Serve Result (`serve.result`)
 
 - `acc` open accept picker
 - `ck` open cook picker
@@ -296,10 +295,10 @@ Rules:
 
 ## Custom ID Examples
 
-- `noodle:v2:ob:ck:123456789012345678:tA91f2`
-- `noodle:v2:cr:qty:123456789012345678:tA91f2:5`
-- `noodle:v2:cm:ht:123456789012345678:tCook77`
-- `noodle:v2:sv:ok:123456789012345678:tServe45`
+- `noodle:v2:orders.board:ck:123456789012345678:tA91f2`
+- `noodle:v2:cook.recipe_picker:qty:123456789012345678:tA91f2:5`
+- `noodle:v2:cook.minigame:heat:123456789012345678:tCook77`
+- `noodle:v2:serve.order_picker:cfm:123456789012345678:tServe45`
 
 ## Scene State Store Contract
 

@@ -156,18 +156,18 @@ export function buildQualityCountsForBias({ success = 0, bias = "good" } = {}) {
   const safeBias = normalizeBias(bias);
   if (safeBias === "excellent") {
     const excellent = Math.max(1, Math.ceil(safeSuccess * 0.7));
-    return { excellent, great: Math.max(0, safeSuccess - excellent) };
+    return { excellent, good: Math.max(0, safeSuccess - excellent) };
   }
   if (safeBias === "great") {
-    const great = Math.max(1, Math.ceil(safeSuccess * 0.65));
-    return { great, good: Math.max(0, safeSuccess - great) };
+    const excellent = Math.max(1, Math.ceil(safeSuccess * 0.2));
+    return { excellent, good: Math.max(0, safeSuccess - excellent) };
   }
   if (safeBias === "salvage") {
-    const good = Math.max(1, Math.ceil(safeSuccess * 0.45));
-    return { good, common: Math.max(0, safeSuccess - good) };
+    const salvage = Math.max(1, Math.ceil(safeSuccess * 0.55));
+    return { salvage, standard: Math.max(0, safeSuccess - salvage) };
   }
   const good = Math.max(1, Math.ceil(safeSuccess * 0.7));
-  return { good, common: Math.max(0, safeSuccess - good) };
+  return { good, standard: Math.max(0, safeSuccess - good) };
 }
 
 export function resolveCookOutcomeForFlow({
