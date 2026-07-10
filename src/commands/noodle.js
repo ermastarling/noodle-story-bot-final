@@ -5537,9 +5537,21 @@ function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageS
   return { entries, orderTokenByShortId, page: safePage, totalPages };
 }
 
+export function normalizeAcceptPickerSelectedShortIds({ selectedShortIds = [], orderTokenByShortId = {} } = {}) {
+  const selectableShortIds = new Set(
+    Object.keys(orderTokenByShortId || {})
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  );
+  return (selectedShortIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => Boolean(id) && selectableShortIds.has(id) && arr.indexOf(id) === index);
+}
+
 function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortIds = [], statusLine = "", page = 0 }) {
   const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
   const { entries, orderTokenByShortId, page: safePage, totalPages } = buildAcceptPickerSceneEntries({ serverId, userId, p, s, page });
+  const allSelectableShortIds = new Set(Object.keys(orderTokenByShortId).map((id) => String(id || "").trim()).filter(Boolean));
 
   const scopedEntries = (() => {
     if (!tutorialSingleAcceptMode) return entries;
@@ -5555,10 +5567,10 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
     return acc;
   }, {});
 
-  const entryShortIds = new Set(Object.keys(scopedOrderTokenByShortId));
-  const normalizedSelected = (selectedShortIds || [])
-    .map((id) => String(id || "").trim())
-    .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
+  const normalizedSelected = normalizeAcceptPickerSelectedShortIds({
+    selectedShortIds,
+    orderTokenByShortId: tutorialSingleAcceptMode ? scopedOrderTokenByShortId : orderTokenByShortId
+  });
 
   const sceneState = putSceneState({
     sceneKey: "orders.accept_picker",
@@ -5566,6 +5578,7 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
     state: {
       entries,
       orderTokenByShortId: scopedOrderTokenByShortId,
+      selectableOrderTokenByShortId: tutorialSingleAcceptMode ? scopedOrderTokenByShortId : orderTokenByShortId,
       selectedShortIds: normalizedSelected,
       page: safePage,
       totalPages,
@@ -13843,8 +13856,9 @@ if (v2Parsed.isV2) {
         });
       }
 
-      const validShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
       const orderTokenByShortId = state.orderTokenByShortId ?? {};
+      const selectableOrderTokenByShortId = state.selectableOrderTokenByShortId ?? orderTokenByShortId;
+      const validShortIds = new Set(Object.keys(selectableOrderTokenByShortId).map((id) => String(id || "").trim()).filter(Boolean));
       const targets = effectiveSelectedShortIds.filter((shortId) => validShortIds.has(shortId));
       if (targets.length <= 0) {
         return componentCommit(interaction, {
@@ -13860,7 +13874,7 @@ if (v2Parsed.isV2) {
       const prepChefMessages = [];
 
       for (const shortId of targets) {
-        const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
+        const fullOrderId = String(selectableOrderTokenByShortId?.[shortId] ?? "").trim();
         if (!fullOrderId) {
           invalidCount += 1;
           continue;
