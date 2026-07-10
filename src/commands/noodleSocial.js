@@ -66,6 +66,8 @@ const {
   MessageActionRow,
   MessageSelectMenu,
   MessageButton,
+  MessageEmbed,
+  EmbedBuilder,
   MessageFlags,
   Modal,
   TextInputComponent,
@@ -143,6 +145,65 @@ const GLOBAL_LEADERBOARD_MAX_PLAYERS = 100;
 const CONTRIBUTOR_LOCK_CONCURRENCY = 3;
 const CONTRIBUTOR_LOCK_RETRY_DELAYS_MS = [25, 75, 150];
 const GLOBAL_LEADERBOARD_PROBE_SERVER_ID = "__leaderboard_probe__";
+
+const LegacyEmbedCtor = MessageEmbed ?? EmbedBuilder ?? null;
+
+function createCard() {
+  if (typeof LegacyEmbedCtor === "function") {
+    return new LegacyEmbedCtor();
+  }
+
+  const embed = {
+    title: "",
+    description: "",
+    color: theme.colors.info,
+    fields: []
+  };
+
+  embed.setTitle = function setTitle(title = "") {
+    this.title = String(title ?? "").trim();
+    return this;
+  };
+  embed.setDescription = function setDescription(description = "") {
+    this.description = String(description ?? "").trim();
+    return this;
+  };
+  embed.setColor = function setColor(color = theme.colors.info) {
+    this.color = color;
+    return this;
+  };
+  embed.addFields = function addFields(...fields) {
+    this.fields = [...(Array.isArray(this.fields) ? this.fields : []), ...fields.flat().filter(Boolean)];
+    return this;
+  };
+  embed.setFields = function setFields(...fields) {
+    this.fields = fields.flat().filter(Boolean);
+    return this;
+  };
+  embed.setFooter = function setFooter(footer = {}) {
+    this.footer = { ...(this.footer ?? {}), ...(footer ?? {}) };
+    return this;
+  };
+  embed.setImage = function setImage(url = "") {
+    this.image = { ...(this.image ?? {}), url: String(url ?? "").trim() };
+    return this;
+  };
+  embed.setThumbnail = function setThumbnail(url = "") {
+    this.thumbnail = { ...(this.thumbnail ?? {}), url: String(url ?? "").trim() };
+    return this;
+  };
+  embed.setURL = function setURL(url = "") {
+    this.url = String(url ?? "").trim();
+    return this;
+  };
+  embed.setTimestamp = function setTimestamp(timestamp = Date.now()) {
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    this.timestamp = date.toISOString();
+    return this;
+  };
+
+  return embed;
+}
 
 function getLeaderboardTypeIndex(typeId) {
   const idx = LEADERBOARD_TYPES.findIndex((type) => type.id === typeId);
@@ -2448,7 +2509,7 @@ async function handleStats(interaction) {
     }));
   } catch (err) {
     console.error("Stats error:", err);
-    return errorReply(interaction, `${getIcon("error")} Error loading stats: ${err.message}`);
+    return errorReply(interaction, `${getIcon("error")} Couldn't load your social stats right now. Please try again.`);
   }
 }
 
