@@ -1455,14 +1455,26 @@ async function componentCommit(interaction, opts) {
   if (targetMessageId) {
     try {
       let target = null;
+
       if (interaction.channel?.messages?.fetch) {
-        target = await interaction.channel.messages.fetch(targetMessageId);
-      } else if (targetChannelId && interaction.client?.channels?.fetch) {
-        const targetChannel = await interaction.client.channels.fetch(targetChannelId);
-        if (targetChannel?.messages?.fetch) {
-          target = await targetChannel.messages.fetch(targetMessageId);
+        try {
+          target = await interaction.channel.messages.fetch(targetMessageId);
+        } catch {
+          target = null;
         }
       }
+
+      if (!target && targetChannelId && interaction.client?.channels?.fetch) {
+        try {
+          const targetChannel = await interaction.client.channels.fetch(targetChannelId);
+          if (targetChannel?.messages?.fetch) {
+            target = await targetChannel.messages.fetch(targetMessageId);
+          }
+        } catch {
+          target = null;
+        }
+      }
+
       if (target) {
         const result = await target.edit(normalizePayloadForReply(interaction, rest));
         if (interaction.deferred || interaction.replied) {
@@ -1476,6 +1488,7 @@ async function componentCommit(interaction, opts) {
         }
         return result;
       }
+      throw new Error("target_message_not_found");
     } catch (e) {
       if (interaction.deferred || interaction.replied) {
         if (!isMessageComponent) {
@@ -2561,7 +2574,7 @@ async function handleComponent(interaction) {
   if (interaction.isModalSubmit?.()) {
     if (!interaction.deferred && !interaction.replied) {
       try {
-        await interaction.deferReply({ ephemeral: false });
+        await interaction.deferReply({ ephemeral: true });
       } catch (err) {
         // If defer fails, fall through and let reply errors surface
       }
