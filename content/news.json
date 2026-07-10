@@ -26,15 +26,27 @@
   },
   "pinned": {
     "label": "Latest Update",
-    "version": "0.4.0",
-    "date": "2026-06-02",
+    "version": "0.5.0",
+    "date": "2026-07-10",
     "classification": "player_update",
-    "summary": "Big upgrade for your noodle shop: new premium perks, instant coin packs, and smoother takeout + discovery gameplay so you can earn more with less friction."
+    "summary": "A fresh chapter for your noodle shop: cozy new banner menus, one-tap Cook All, and a brand-new Kitchen Line minigame with friendly pacing, plus beautifully refreshed specialization looks that invite you to restyle your space and visit the Store for premium specializations."
   },
   "sections": [
     {
       "title": "June 2026",
       "entries": [
+        {
+          "version": "0.5.0",
+          "date": "2026-07-10",
+          "classification": "player_update",
+          "changes": [
+            "Every major menu now feels more magical, with fresh banners that bring extra charm to your daily shop routine.",
+            "One-tap **Cook All** is here to help you prep accepted orders in a breeze when the board gets busy.",
+            "Brand-new **Kitchen Line Minigame** is now live: keep the rhythm, manage the line, and serve better bowls.",
+            "All **Specializations** got a visual glow-up with richer mood and personality, from warm inn comfort to moonlit elegance.",
+            "If you are ready for a new shop story, revisit your specialization and stop by the Store to explore premium specializations."
+          ]
+        },
         {
           "version": "0.4.0",
           "date": "2026-06-02",
@@ -86,11 +98,10 @@
     {
       "title": "Upcoming Updates",
       "items": [
-        "**Daily Menu Customization** is coming soon so you can set your shop's lineup your way.",
-        "A one-tap **Cook All** button is on the way to prep bowls for your accepted orders faster.",
-        "**Achievements** are coming: track milestones, show off your progress, and earn rewards as your shop grows.",
-        "**Noodle A Day** is on the way: a cozy daily noodle image posted in your channel of choice.",
-        "A polished UI refresh is coming soon with cleaner menus, clearer actions, and smoother navigation."
+        "**Daily Menu Customization** - set your shop's lineup your way.",
+        "**Recipe Creation** - design your own recipes and share them with your party.",
+        "**Achievements** - track milestones, show off your progress, and earn rewards as your shop grows.",
+        "**Noodle A Day** - a cozy daily noodle image posted in your channel of choice."
       ]
     }
   ]

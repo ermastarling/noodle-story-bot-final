@@ -24,6 +24,11 @@ function clampQuantity(quantity) {
   return Math.max(1, Math.min(99, rounded));
 }
 
+export function deriveCookMinigameTotalTurns(quantity = 1) {
+  const safeQuantity = clampQuantity(quantity);
+  return Math.max(4, Math.min(20, 3 + safeQuantity));
+}
+
 function clampScore(score, totalTurns) {
   const parsedScore = Math.floor(Number(score) || 0);
   const parsedTurns = Math.max(1, Math.floor(Number(totalTurns) || 1));

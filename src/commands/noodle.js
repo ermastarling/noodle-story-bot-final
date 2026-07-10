@@ -257,6 +257,7 @@ import {
   evaluateCookMinigameTurn,
   buildCookRecipePickerV2Message,
   buildCookResultV2Message,
+  deriveCookMinigameTotalTurns,
   deriveCookMinigamePerformance,
   resolveCookOutcomeForFlow
 } from "../ui/cookFlowV2.js";
@@ -14243,7 +14244,7 @@ if (v2Parsed.isV2) {
       }
 
       const totalQuantity = Math.max(1, Math.min(99, cookAllState.totalQuantity));
-      const totalTurns = Math.max(8, Math.min(20, 6 + totalQuantity));
+      const totalTurns = deriveCookMinigameTotalTurns(totalQuantity);
       const payload = buildCookMinigameScenePayload({
         userId,
         recipeId: String(cookAllState.plan?.[0]?.recipeId || selectedRecipeId || "").trim(),
@@ -14286,11 +14287,12 @@ if (v2Parsed.isV2) {
         });
       }
 
+      const effectiveQuantity = Math.max(1, Math.min(quantity, selectedCookable, remainingBowls));
       const payload = buildCookMinigameScenePayload({
         userId,
         recipeId: selectedRecipeId,
-        quantity: Math.max(1, Math.min(quantity, selectedCookable, remainingBowls)),
-        totalTurns: 8,
+        quantity: effectiveQuantity,
+        totalTurns: deriveCookMinigameTotalTurns(effectiveQuantity),
         turnIndex: 0,
         score: 0,
         misses: 0

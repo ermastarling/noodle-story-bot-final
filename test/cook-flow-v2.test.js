@@ -9,6 +9,7 @@ import {
   buildCookResultV2Message,
   createCookRunToken,
   deriveCookMinigamePerformance,
+  deriveCookMinigameTotalTurns,
   evaluateCookMinigameTurn,
   resolveCookOutcomeForFlow
 } from "../src/ui/cookFlowV2.js";
@@ -152,6 +153,13 @@ test("Cook flow V2: target pattern varies across run tokens", () => {
   const seqA = buildCookMinigameTargetActions({ recipeId: "ramen", runToken: "tokA", totalTurns: 8 });
   const seqB = buildCookMinigameTargetActions({ recipeId: "ramen", runToken: "tokB", totalTurns: 8 });
   assert.notDeepEqual(seqA, seqB);
+});
+
+test("Cook flow V2: minigame turns decrease for low bowl counts and increase with quantity", () => {
+  assert.equal(deriveCookMinigameTotalTurns(1), 4);
+  assert.equal(deriveCookMinigameTotalTurns(2), 5);
+  assert.equal(deriveCookMinigameTotalTurns(5), 8);
+  assert.equal(deriveCookMinigameTotalTurns(20), 20);
 });
 
 test("Cook flow V2: turn evaluation allows grace window", () => {

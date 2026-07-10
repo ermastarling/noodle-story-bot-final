@@ -96,6 +96,9 @@ function normalizeNotifications(player) {
   if (!player.notifications) {
     player.notifications = {
       pending_pantry_messages: [],
+      pending_v2_notice_cards: [],
+      active_v2_notice_cards: [],
+      active_v2_notice_menu_key: null,
       dm_reminders_opt_out: false,
       last_daily_reminder_day: null,
       last_noodle_channel_id: null,
@@ -104,6 +107,18 @@ function normalizeNotifications(player) {
   }
   if (!Array.isArray(player.notifications.pending_pantry_messages)) {
     player.notifications.pending_pantry_messages = [];
+  }
+  if (!Array.isArray(player.notifications.pending_v2_notice_cards)) {
+    player.notifications.pending_v2_notice_cards = [];
+  }
+  if (!Array.isArray(player.notifications.active_v2_notice_cards)) {
+    player.notifications.active_v2_notice_cards = [];
+  }
+  if (
+    player.notifications.active_v2_notice_menu_key !== null
+    && typeof player.notifications.active_v2_notice_menu_key !== "string"
+  ) {
+    player.notifications.active_v2_notice_menu_key = null;
   }
   if (!Object.prototype.hasOwnProperty.call(player.notifications, "last_daily_reminder_day")) {
     player.notifications.last_daily_reminder_day = null;
