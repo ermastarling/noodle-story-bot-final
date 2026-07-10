@@ -8115,16 +8115,23 @@ if (sub === "about") {
   }
 
   const aboutProfileImageUrl = getIconUrl("about_profile");
+  const aboutBodyText =
+    "**Creator:** *Erma Starling*\n\n" +
+    "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
+    "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
+    "And yes, she's obsessed with noodles... it's a problem.";
   const aboutMainComponents = [
     { type: 10, content: `## ${getIcon("sparkle")} About` },
-    {
-      type: 10,
-      content:
-        "**Creator:** *Erma Starling*\n\n" +
-        "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
-        "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
-        "And yes, she's obsessed with noodles... it's a problem."
-    },
+    ...(aboutProfileImageUrl
+      ? [{
+          type: 9,
+          components: [{ type: 10, content: aboutBodyText }],
+          accessory: {
+            type: 11,
+            media: { url: aboutProfileImageUrl }
+          }
+        }]
+      : [{ type: 10, content: aboutBodyText }]),
     {
       type: 10,
       content: [
@@ -8136,13 +8143,6 @@ if (sub === "about") {
       ].join("\n")
     }
   ];
-
-  if (aboutProfileImageUrl) {
-    aboutMainComponents.push({
-      type: 12,
-      items: [{ media: { url: aboutProfileImageUrl } }]
-    });
-  }
 
   const aboutSupportRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
