@@ -65,7 +65,7 @@ export function buildOrdersBoardV2Message({
 
   const components = [];
   const uniqueQuickActions = dedupeQuickActions(quickActions);
-  const COMPONENT_BUDGET = 38;
+  const COMPONENT_BUDGET = 35;
   const QUICK_ACTIONS_PER_ROW = 4;
 
   components.push(asText("## Orders Board"));

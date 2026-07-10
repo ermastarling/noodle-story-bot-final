@@ -7,7 +7,8 @@ import { hasUnlimitedMarketStock } from "../game/subscriptions.js";
 import { getIcon } from "../ui/icons.js";
 import { emitTelemetry } from "../infra/telemetry.js";
 import {
-  buildComponentsV2PayloadWithNoticeCards
+  buildComponentsV2PayloadWithNoticeCards,
+  isInvalidComponentTypeError
 } from "../ui/componentsV2.js";
 
 const {
@@ -89,12 +90,6 @@ function buildReminderV2Payload({ channelLine, claimLine, userId, components = [
     ownerId: userId,
     ephemeral: false
   });
-}
-
-function isInvalidComponentTypeError(error) {
-  const message = String(error?.message ?? "");
-  return String(error?.code ?? "") === "INVALID_TYPE"
-    || message.includes("valid MessageComponentType");
 }
 
 function normalizeNotifications(player) {
