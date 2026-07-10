@@ -6,6 +6,7 @@ import {
   buildComponentsV2MenuPayload,
   isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
+  replyOrEditInteraction,
   resolveComponentsV2TargetGuild
 } from "../src/ui/componentsV2.js";
 
@@ -193,5 +194,118 @@ test("Components V2: serve and take-out heading aliases resolve to correct scene
   assert.equal(takeOutUrl.length > 0, true);
   assert.equal(serveOrdersUrl, ordersServedUrl);
   assert.equal(takeOutUrl, takeoutUrl);
+});
+
+test("Components V2: replyOrEditInteraction prefers raw webhook edit for deferred V2 payloads", async () => {
+  let editReplyCalls = 0;
+  let patchCalls = 0;
+
+  const interaction = {
+    deferred: true,
+    replied: false,
+    applicationId: "app-1",
+    token: "tok-1",
+    client: {
+      api: {
+        webhooks: (applicationId, token) => ({
+          messages: (messageId) => ({
+            patch: async ({ data }) => {
+              patchCalls += 1;
+              assert.equal(applicationId, "app-1");
+              assert.equal(token, "tok-1");
+              assert.equal(messageId, "@original");
+              return { ok: true, data };
+            }
+          })
+        })
+      }
+    },
+    editReply: async () => {
+      editReplyCalls += 1;
+      return { ok: false };
+    },
+    reply: async () => ({ ok: false })
+  };
+
+  const payload = buildComponentsV2ContainerMessage({ title: "Status", lines: ["Ready"] });
+  const result = await replyOrEditInteraction(interaction, payload);
+
+  assert.equal(patchCalls, 1);
+  assert.equal(editReplyCalls, 0);
+  assert.equal(result?.ok, true);
+});
+
+test("Components V2: replyOrEditInteraction falls back to editReply when raw webhook edit fails", async () => {
+  let editReplyCalls = 0;
+  let patchCalls = 0;
+
+  const interaction = {
+    deferred: true,
+    replied: false,
+    applicationId: "app-2",
+    token: "tok-2",
+    client: {
+      api: {
+        webhooks: () => ({
+          messages: () => ({
+            patch: async () => {
+              patchCalls += 1;
+              throw new Error("network");
+            }
+          })
+        })
+      }
+    },
+    editReply: async () => {
+      editReplyCalls += 1;
+      return { ok: true, mode: "editReply" };
+    },
+    reply: async () => ({ ok: false })
+  };
+
+  const payload = buildComponentsV2ContainerMessage({ title: "Status", lines: ["Retry"] });
+  const result = await replyOrEditInteraction(interaction, payload);
+
+  assert.equal(patchCalls, 1);
+  assert.equal(editReplyCalls, 1);
+  assert.equal(result?.mode, "editReply");
+});
+
+test("Components V2: replyOrEditInteraction retries raw webhook edit on INVALID_TYPE editReply error", async () => {
+  let patchCalls = 0;
+
+  const interaction = {
+    deferred: true,
+    replied: false,
+    applicationId: "app-3",
+    token: "tok-3",
+    client: {
+      api: {
+        webhooks: () => ({
+          messages: () => ({
+            patch: async () => {
+              patchCalls += 1;
+              if (patchCalls === 1) {
+                throw new Error("first raw webhook attempt fails");
+              }
+              return { ok: true, mode: "rawRetry" };
+            }
+          })
+        })
+      }
+    },
+    editReply: async () => {
+      const error = new Error("value is not a valid MessageComponentType");
+      error.code = "INVALID_TYPE";
+      throw error;
+    },
+    reply: async () => ({ ok: false })
+  };
+
+  const payload = buildComponentsV2ContainerMessage({ title: "Status", lines: ["Fallback"] });
+  const result = await replyOrEditInteraction(interaction, payload);
+
+  assert.equal(patchCalls, 2);
+  assert.equal(result?.mode, "rawRetry");
 });
 

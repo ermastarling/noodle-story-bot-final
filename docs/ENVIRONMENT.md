@@ -24,6 +24,10 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_COMPONENTS_V2_USER_ALLOWLIST` - optional comma-separated user IDs allowed to receive V2 UI in allowed guilds
 - `NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED` - set `0` to keep tutorial-active users on V1; default allows tutorial users onto V2 paths unless explicitly disabled
 - `NOODLE_COMPONENTS_V2_TUTORIAL_USER_ALLOWLIST` - optional comma-separated tutorial-active user IDs allowed onto V2 while tutorial gate is off
+- `NOODLE_COMPONENTS_V2_MENU_ACCENT_COLOR` - optional menu accent color used in V2 container messages; accepts decimal (`14858347`) or hex (`#E2B86B`), defaults to theme primary
+- `NOODLE_COMPONENTS_V2_MENU_DIVIDER_TEXT` - optional divider text for V2 menu guide blocks (legacy alias: `NOODLE_COMPONENTS_V2_MENU_DIVIDER_LABEL`)
+- `NOODLE_COMPONENTS_V2_MENU_IMAGE_URL` - optional HTTPS image URL prepended to V2 menu guide containers
+- `NOODLE_COMPONENTS_V2_MENU_SHOW_DIVIDER` - set `0`/`false` to disable automatic divider insertion before first action row (default enabled)
 - `NOODLE_V2_SCENE_MAX_ENTRIES` - maximum in-memory V2 scene-state entries before eviction guardrails apply (default `2000`)
 - `NOODLE_V2_SCENE_TTL_MS` - optional global TTL override (milliseconds) for V2 scene-state entries; when unset, per-scene defaults are used
 - `NOODLE_OFFICIAL_GUILD_ID` (falls back to `DISCORD_GUILD_ID`) - guild where alerts are sent
