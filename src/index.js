@@ -17,11 +17,6 @@ import { theme } from "./ui/theme.js";
   
   const Client = Discord.Client;
   const Intents = Discord.Intents;
-  const MessageFlags = Discord.MessageFlags;
-  const MESSAGE_FLAG_EPHEMERAL = Discord?.Constants?.MessageFlags?.EPHEMERAL
-    ?? MessageFlags?.EPHEMERAL
-    ?? MessageFlags?.Ephemeral
-    ?? (1 << 6);
 
   if (!Client || !Intents) {
     console.error("❌ Failed to load discord.js properly");
@@ -87,7 +82,13 @@ import { theme } from "./ui/theme.js";
     registerVoteFromSource,
     VOTE_SOURCES
   } = await import("./game/voteRewards.js");
-  const { buildComponentsV2PayloadWithNoticeCards, MESSAGE_FLAG_IS_COMPONENTS_V2 } = await import("./ui/componentsV2.js");
+  const {
+    buildComponentsV2PayloadWithNoticeCards,
+    isComponentsV2Payload,
+    isInvalidComponentTypeError,
+    rawWebhookEditOriginal,
+    toRawWebhookPayload
+  } = await import("./ui/componentsV2.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
@@ -97,48 +98,6 @@ import { theme } from "./ui/theme.js";
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;
   const MAX_DESC = 4000;
-  const isComponentsV2Payload = (payload = {}) => {
-    if (!payload || typeof payload !== "object") return false;
-    if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
-    const stack = Array.isArray(payload.components) ? [...payload.components] : [];
-    while (stack.length > 0) {
-      const node = stack.pop();
-      if (!node || typeof node !== "object") continue;
-      const type = Number(node.type);
-      if (type === 9 || type === 10 || type === 12 || type === 17) return true;
-      if (Array.isArray(node.components)) stack.push(...node.components);
-    }
-    return false;
-  };
-
-  const isInvalidComponentTypeError = (error) => {
-    const message = String(error?.message ?? "");
-    return String(error?.code ?? "") === "INVALID_TYPE"
-      || message.includes("valid MessageComponentType");
-  };
-
-  const toRawWebhookPayload = (payload = {}) => {
-    const out = { ...payload };
-    const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
-    if (out.ephemeral === true && !hasEphemeralFlag) {
-      out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
-    }
-    delete out.ephemeral;
-    return out;
-  };
-
-  const rawWebhookEditOriginal = async (interaction, payload = {}) => {
-    const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
-    const token = interaction?.token;
-    if (!interaction?.client?.api || !applicationId || !token) {
-      throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
-    }
-    return interaction.client.api
-      .webhooks(applicationId, token)
-      .messages("@original")
-      .patch({ data: toRawWebhookPayload(payload) });
-  };
-
   const chunkTextByLength = (text, maxLen = SAFE_SLICE) => {
     if (!text) return [];
     const lines = String(text).split("\n");

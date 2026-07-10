@@ -17,6 +17,19 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
   };
 }
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  const children = Array.isArray(component.components) ? component.components : [];
+  const accessory = component.accessory && typeof component.accessory === "object" ? [component.accessory] : [];
+  return 1
+    + children.reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + accessory.reduce((sum, child) => sum + countComponentsDeep(child), 0);
+}
+
+function countListDeep(components = []) {
+  return (components || []).reduce((sum, component) => sum + countComponentsDeep(component), 0);
+}
+
 export function deriveAcceptOutcome({ targetOrderId, cap, beforeAcceptedOrderIds = [], afterAcceptedOrderIds = [] } = {}) {
   const target = String(targetOrderId ?? "").trim();
   const before = new Set((beforeAcceptedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
@@ -64,10 +77,7 @@ export function buildAcceptPickerV2Message({
   const safeTotalPages = Math.max(1, Math.floor(Number(totalPages) || 1));
   const safePage = Math.max(0, Math.min(Math.floor(Number(currentPage) || 0), safeTotalPages - 1));
   const directAccept = Boolean(directAcceptMode);
-  const MAX_VISIBLE_ENTRIES = 7;
-  const pageStart = safePage * MAX_VISIBLE_ENTRIES;
-  const visibleEntries = (entries || []).slice(pageStart, pageStart + MAX_VISIBLE_ENTRIES);
-
+  const visibleEntries = Array.isArray(entries) ? entries : [];
   const components = [
     text("## Accept Orders"),
     text(tutorialSingleAcceptMode
@@ -78,6 +88,42 @@ export function buildAcceptPickerV2Message({
   if (safeTotalPages > 1) {
     components.push(text(`Page **${safePage + 1}/${safeTotalPages}**`));
   }
+
+  const selectedCount = visibleEntries.reduce((count, entry) => {
+    const shortId = String(entry?.shortId ?? "").trim();
+    if (!shortId) return count;
+    return selectedSet.has(shortId) ? count + 1 : count;
+  }, 0);
+  const COMPONENT_BUDGET = 35;
+  const confirmRowTemplate = {
+    type: 1,
+    components: [
+      button({
+        sceneKey,
+        actionKey: "cfm",
+        userId: safeUserId,
+        token: safeToken,
+        label: selectedCount > 0 ? `Accept Selected (${selectedCount})` : "Select Orders First",
+        style: 1,
+        disabled: selectedCount <= 0
+      }),
+      button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 3 }),
+      button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 })
+    ]
+  };
+  const paginationRowTemplate = {
+    type: 1,
+    components: [
+      button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2 }),
+      button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2 })
+    ]
+  };
+  const overflowLineTemplate = text("_...and 1 more order(s)._");
+  const confirmRowBudget = directAccept ? 0 : countComponentsDeep(confirmRowTemplate);
+  const paginationRowBudget = safeTotalPages > 1 ? countComponentsDeep(paginationRowTemplate) : 0;
+  const overflowLineBudget = countComponentsDeep(overflowLineTemplate);
+  let runningBudget = countListDeep(components);
+  let overflowCount = 0;
 
   if (visibleEntries.length === 0) {
     components.push(text("No orders are currently available to accept."));
@@ -99,39 +145,27 @@ export function buildAcceptPickerV2Message({
           style: directAccept ? 3 : (isSelected ? 3 : 1)
         })
       };
-
+      const sectionBudget = countComponentsDeep(section);
+      const reserveBudget = confirmRowBudget + paginationRowBudget + overflowLineBudget;
+      if (runningBudget + sectionBudget + reserveBudget > COMPONENT_BUDGET) {
+        overflowCount += 1;
+        continue;
+      }
       components.push(section);
+      runningBudget += sectionBudget;
+    }
+
+    if (overflowCount > 0) {
+      components.push(text(`_...and ${overflowCount} more order(s)._`));
     }
   }
 
   if (!directAccept) {
-    const selectedCount = selectedSet.size;
-    components.push({
-      type: 1,
-      components: [
-        button({
-          sceneKey,
-          actionKey: "cfm",
-          userId: safeUserId,
-          token: safeToken,
-          label: selectedCount > 0 ? `Accept Selected (${selectedCount})` : "Select Orders First",
-          style: 1,
-          disabled: selectedCount <= 0
-        }),
-        button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 3 }),
-        button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 })
-      ]
-    });
+    components.push(confirmRowTemplate);
   }
 
   if (safeTotalPages > 1) {
-    components.push({
-      type: 1,
-      components: [
-        button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2 }),
-        button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2 })
-      ]
-    });
+    components.push(paginationRowTemplate);
   }
 
   return buildComponentsV2MenuPayload({ components });

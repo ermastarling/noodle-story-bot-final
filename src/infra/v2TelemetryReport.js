@@ -17,7 +17,8 @@ function mean(values) {
 function percentile(values, p) {
   const nums = values.filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
   if (!nums.length) return null;
-  const idx = Math.floor((p / 100) * (nums.length - 1));
+  const boundedP = Math.max(0, Math.min(100, Number(p) || 0));
+  const idx = Math.max(0, Math.min(nums.length - 1, Math.ceil((boundedP / 100) * nums.length) - 1));
   return nums[idx];
 }
 

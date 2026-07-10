@@ -124,16 +124,7 @@ test("Accept flow V2: picker clamps out-of-range page index", () => {
   const payload = buildAcceptPickerV2Message({
     userId: "123",
     token: "tok",
-    entries: [
-      { shortId: "A1", line: "Order A1" },
-      { shortId: "A2", line: "Order A2" },
-      { shortId: "A3", line: "Order A3" },
-      { shortId: "A4", line: "Order A4" },
-      { shortId: "A5", line: "Order A5" },
-      { shortId: "A6", line: "Order A6" },
-      { shortId: "A7", line: "Order A7" },
-      { shortId: "B1", line: "Order B1" }
-    ],
+    entries: [{ shortId: "B1", line: "Order B1" }],
     currentPage: 99,
     totalPages: 2
   });
@@ -145,4 +136,18 @@ test("Accept flow V2: picker clamps out-of-range page index", () => {
     container.some((node) => node?.type === 9 && String(node?.components?.[0]?.content || "").includes("Order B1")),
     true
   );
+});
+
+test("Accept flow V2: confirm count ignores stale selected IDs not present in current entries", () => {
+  const payload = buildAcceptPickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [{ shortId: "A1", line: "Order A1" }],
+    selectedShortIds: ["A1", "STALE"]
+  });
+
+  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
+  const confirm = rows[0]?.components?.find((component) => String(component?.custom_id || "").includes(":orders.accept_picker:cfm:"));
+  assert.equal(String(confirm?.label || ""), "Accept Selected (1)");
+  assert.equal(Boolean(confirm?.disabled), false);
 });

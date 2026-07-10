@@ -25,7 +25,7 @@ test("V2 telemetry report: summarizes core loop, error, and minigame metrics", (
   assert.equal(summary.errorRatePct, 75);
   assert.equal(summary.loops, 3);
   assert.equal(summary.clickAvg, 4);
-  assert.equal(summary.loopTimeP95, 1800);
+  assert.equal(summary.loopTimeP95, 2200);
   assert.equal(summary.moduleRows[0].module, "orders");
   assert.equal(summary.errorsByReason[0].reason, "expired");
   assert.equal(summary.minigameDistribution[0].outcome, "90%");
@@ -93,4 +93,19 @@ test("V2 telemetry report: high issue detection triggers only with enough data",
 
   assert.equal(highIssues.hasEnoughData, true);
   assert.equal(highIssues.issues.length, 3);
+});
+
+test("V2 telemetry report: p95 uses nearest-rank behavior on small samples", () => {
+  const summary = summarizeTelemetryEvents({
+    transitions: [{}, {}, {}],
+    errors: [],
+    loops: [
+      { module: "orders", clickCount: 2, completionMs: 1000 },
+      { module: "orders", clickCount: 2, completionMs: 2000 },
+      { module: "orders", clickCount: 2, completionMs: 3000 }
+    ],
+    minigame: []
+  });
+
+  assert.equal(summary.loopTimeP95, 3000);
 });

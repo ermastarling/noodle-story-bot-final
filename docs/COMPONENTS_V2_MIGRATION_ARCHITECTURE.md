@@ -246,52 +246,59 @@ Rules:
 - `acc` open accept picker
 - `ck` open cook picker
 - `sv` open serve picker
-- `qs` quick serve a serveable accepted order from inline row action
+- `fg` open forage action
+- `qs` open quests action
 - `rf` refresh
 - `nm` nav main
+- `buy` open market buy
+- `pn` open pantry
+- `cnl` open cancel picker
+- `tk` open takeout
 
 ### Accept Picker (`orders.accept_picker`)
 
-- `pick` select order(s)
-- `ok` confirm accept
-- `cn` cancel
+- `sel` select order(s)
+- `cfm` confirm accept
+- `pg` paginate
+- `cnl` cancel
 - `bk` back
 
 ### Cook Recipe Picker (`cook.recipe_picker`)
 
-- `rpk` pick recipe
+- `sel` pick recipe
 - `qty` set quantity
+- `pg` paginate
 - `go` start minigame
-- `cn` cancel
+- `cfa` cook all
 - `bk` back
 
 ### Cook Minigame (`cook.minigame`)
 
-- `st` choose Stir
-- `ht` choose Heat
-- `se` choose Season
-- `ct` commit turn
-- `fn` finish game
-- `ab` abort game
+- `prep` choose prep action
+- `heat` choose heat action
+- `plate` choose plate action
+- `serve` commit turn
+- `bk` abort/back
 
 ### Cook Result (`cook.result`)
 
-- `rs` retry same recipe
-- `sv` open serve picker
-- `bk` back to orders board
+- `ord` open orders board
+- `cook` retry cook flow
+- `serve` open serve picker
+- `nxt` tutorial next
 
 ### Serve Picker (`serve.order_picker`)
 
-- `pick` select accepted order(s)
-- `ok` confirm serve
-- `cn` cancel
+- `sel` select accepted order(s)
+- `cfm` confirm serve
+- `sfa` serve all
 - `bk` back
 
 ### Serve Result (`serve.result`)
 
-- `acc` open accept picker
-- `ck` open cook picker
-- `bk` back to orders board
+- `ord` open orders board
+- `cook` open cook picker
+- `again` repeat serve loop
 
 ## Custom ID Examples
 

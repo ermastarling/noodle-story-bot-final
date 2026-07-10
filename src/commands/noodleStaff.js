@@ -262,11 +262,14 @@ async function sendStaffPayload(interaction, payload = {}) {
     await interaction.deferReply({ ephemeral: isEphemeral });
     return await rawWebhookEditOriginal(interaction, finalPayload);
   } catch {
+    const canEditReply = interaction.deferred || interaction.replied;
     try {
-      return await interaction.reply(finalPayload);
+      return canEditReply
+        ? await interaction.editReply(finalPayload)
+        : await interaction.reply(finalPayload);
     } catch (e) {
       if (isInvalidComponentTypeError(e)) {
-        if (!interaction.deferred && !interaction.replied) {
+        if (!canEditReply) {
           await interaction.deferReply({ ephemeral: isEphemeral });
         }
         return rawWebhookEditOriginal(interaction, finalPayload);
