@@ -5129,6 +5129,30 @@ function buildSellQuantityRow(userId, selectedIds, page, selectionToken = null) 
   );
 }
 
+function buildSellMenuPayload({
+  title = `${getIcon("coins")} Sell Items`,
+  description = "",
+  userId,
+  components = [],
+  ephemeral = false,
+  notices = []
+} = {}) {
+  const mainComponents = [];
+  const safeTitle = String(title ?? "").trim();
+  const safeDescription = String(description ?? "").trim();
+  if (safeTitle) mainComponents.push({ type: 10, content: `## ${safeTitle}` });
+  if (safeDescription) mainComponents.push({ type: 10, content: safeDescription });
+
+  return {
+    content: " ",
+    ownerId: userId,
+    mainComponents,
+    notices: Array.isArray(notices) ? notices : [],
+    components,
+    ephemeral
+  };
+}
+
 function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const ownedItems = Object.entries(p.inv_ingredients ?? {})
     .filter(([id, q]) => q > 0 && SELLABLE_ITEM_IDS.has(id))
@@ -5145,10 +5169,12 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   if (!ownedItems.length) {
-    return {
-      content: `${getIcon("coins")} You don't have any sellable items right now.`,
+    return buildSellMenuPayload({
+      title: `${getIcon("coins")} Sell Items`,
+      description: `${getIcon("coins")} You don't have any sellable items right now.`,
+      userId,
       ephemeral: true
-    };
+    });
   }
 
   const pageSize = 25;
@@ -5164,10 +5190,12 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   }).filter(Boolean);
 
   if (!opts.length) {
-    return {
-      content: `${getIcon("coins")} You don't have any sellable items right now.`,
+    return buildSellMenuPayload({
+      title: `${getIcon("coins")} Sell Items`,
+      description: `${getIcon("coins")} You don't have any sellable items right now.`,
+      userId,
       ephemeral: true
-    };
+    });
   }
 
   const menu = new StringSelectMenuBuilder()
@@ -5199,30 +5227,24 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
       )
     : null;
 
-  const sellEmbed = buildMenuEmbed({
-    title: `${getIcon("coins")} Sell Items`,
-    description:
-      "Select up to **5** sellable items (market or fresh catches)\n" +
-      "When you’re done selecting, if on Desktop, press **Esc** to continue",
-    user: ownerUser
-  });
-
   const footerBase = `Coins: ${p.coins || 0}c`;
-  const footerOwner = ownerFooterText(ownerUser);
   const pageLabel = totalPages > 1 ? `Page ${safePage + 1}/${totalPages}` : null;
   const footerParts = [footerBase, pageLabel].filter(Boolean).join(" • ");
-  const footerText = footerOwner ? `${footerParts}\n${footerOwner}` : footerParts;
-  sellEmbed.setFooter({ text: footerText });
 
-  return {
-    content: " ",
-    ...composeV2FromLegacyEmbeds([sellEmbed]),
+  return buildSellMenuPayload({
+    title: `${getIcon("coins")} Sell Items`,
+    description: [
+      "Select up to **5** sellable items (market or fresh catches).",
+      "When you’re done selecting, if on Desktop, press **Esc** to continue.",
+      footerParts ? `-# ${footerParts}` : ""
+    ].filter(Boolean).join("\n"),
+    userId,
     components: [
       new ActionRowBuilder().addComponents(menu),
       ...(navRow ? [navRow] : []),
       new ActionRowBuilder().addComponents(cancelButton)
     ]
-  };
+  });
 }
 
 function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 }) {
@@ -17032,16 +17054,13 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     });
     const btnRow = buildSellQuantityRow(interaction.user.id, picked, page, selectionToken);
 
-    const sellEmbed = buildMenuEmbed({
-      title: `${getIcon("coins")} Sell Items`,
-      description: `**Selected:** ${selectedNames}\nChoose how you want to sell:`,
-      user: interaction.member ?? interaction.user
-    });
-
     return componentCommit(interaction, {
-      content: " ",
-      ...composeV2FromLegacyEmbeds([sellEmbed]),
-      components: [btnRow],
+      ...buildSellMenuPayload({
+        title: `${getIcon("coins")} Sell Items`,
+        description: `**Selected:** ${selectedNames}\nChoose how you want to sell:`,
+        userId: interaction.user.id,
+        components: [btnRow]
+      }),
       targetMessageId: interaction.message?.id ?? null
     });
   }
@@ -17099,16 +17118,13 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       const selectedNames = formatSelectedItemNames(selectedIds);
       const btnRow = buildSellQuantityRow(interaction.user.id, selectedIds, page, selectionToken);
 
-      const sellEmbed = buildMenuEmbed({
-        title: `${getIcon("coins")} Sell Items`,
-        description: `**Selected:** ${selectedNames}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
-        user: interaction.member ?? interaction.user
-      });
-
       return componentCommit(interaction, {
-        content: " ",
-        ...composeV2FromLegacyEmbeds([sellEmbed]),
-        components: [btnRow],
+        ...buildSellMenuPayload({
+          title: `${getIcon("coins")} Sell Items`,
+          description: `**Selected:** ${selectedNames}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
+          userId: interaction.user.id,
+          components: [btnRow]
+        }),
         targetMessageId: interaction.message?.id ?? null
       });
     }
