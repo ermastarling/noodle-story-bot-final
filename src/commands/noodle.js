@@ -4559,6 +4559,11 @@ async function componentCommit(interaction, payload) {
 let sourcePayload = payload ?? {};
 const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
 const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+const hasSourceNativeNoticeShape = Array.isArray(sourcePayload?.mainComponents) || Array.isArray(sourcePayload?.notices);
+
+if (hasSourceNativeNoticeShape) {
+  sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
+}
 
 if (sourceMessageIsV2 && Array.isArray(sourcePayload?.embeds) && sourcePayload.embeds.length > 0) {
   sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
