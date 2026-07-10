@@ -1061,6 +1061,59 @@ function applyOwnerFooter(embed, user) {
   return embed;
 }
 
+function attachLegacyEmbedCompatMethods(embed) {
+  if (!embed || typeof embed !== "object") return embed;
+
+  if (typeof embed.setFooter !== "function") {
+    Object.defineProperty(embed, "setFooter", {
+      enumerable: false,
+      value(footer = {}) {
+        const text = String(footer?.text ?? "").trim();
+        if (this.data && typeof this.data === "object") {
+          this.data.footer = { ...(this.data.footer ?? {}), ...(footer ?? {}), text };
+        } else {
+          this.footer = { ...(this.footer ?? {}), ...(footer ?? {}), text };
+        }
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.addFields !== "function") {
+    Object.defineProperty(embed, "addFields", {
+      enumerable: false,
+      value(...fields) {
+        const flat = fields.flat().filter(Boolean);
+        this.fields = [...(Array.isArray(this.fields) ? this.fields : []), ...flat];
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setFields !== "function") {
+    Object.defineProperty(embed, "setFields", {
+      enumerable: false,
+      value(...fields) {
+        const flat = fields.flat().filter(Boolean);
+        this.fields = flat;
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setURL !== "function") {
+    Object.defineProperty(embed, "setURL", {
+      enumerable: false,
+      value(url = "") {
+        this.url = String(url ?? "").trim();
+        return this;
+      }
+    });
+  }
+
+  return embed;
+}
+
 function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
   const embed = {
     title: String(title ?? ""),
@@ -1068,7 +1121,8 @@ function buildMenuEmbed({ title, description, user, color = theme.colors.primary
     color,
     fields: []
   };
-  return applyOwnerFooter(embed, user);
+  applyOwnerFooter(embed, user);
+  return attachLegacyEmbedCompatMethods(embed);
 }
 
 function chunkLinesIntoEmbedFields(lines, {
