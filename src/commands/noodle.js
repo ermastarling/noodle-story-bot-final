@@ -1044,9 +1044,20 @@ function getCachedDistinctShopCount(dbHandle) {
 }
 
 function applyOwnerFooter(embed, user) {
-  if (embed && user) {
-    embed.setFooter({ text: ownerFooterText(user) });
+  if (!embed || !user) return embed;
+  const text = ownerFooterText(user);
+
+  if (typeof embed.setFooter === "function") {
+    embed.setFooter({ text });
+    return embed;
   }
+
+  if (embed.data && typeof embed.data === "object") {
+    embed.data.footer = { ...(embed.data.footer ?? {}), text };
+    return embed;
+  }
+
+  embed.footer = { ...(embed.footer ?? {}), text };
   return embed;
 }
 
