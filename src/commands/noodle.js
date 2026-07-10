@@ -1111,6 +1111,46 @@ function attachLegacyEmbedCompatMethods(embed) {
     });
   }
 
+  if (typeof embed.setThumbnail !== "function") {
+    Object.defineProperty(embed, "setThumbnail", {
+      enumerable: false,
+      value(url = "") {
+        this.thumbnail = { ...(this.thumbnail ?? {}), url: String(url ?? "").trim() };
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setImage !== "function") {
+    Object.defineProperty(embed, "setImage", {
+      enumerable: false,
+      value(url = "") {
+        this.image = { ...(this.image ?? {}), url: String(url ?? "").trim() };
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setTitle !== "function") {
+    Object.defineProperty(embed, "setTitle", {
+      enumerable: false,
+      value(title = "") {
+        this.title = String(title ?? "").trim();
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setDescription !== "function") {
+    Object.defineProperty(embed, "setDescription", {
+      enumerable: false,
+      value(description = "") {
+        this.description = String(description ?? "").trim();
+        return this;
+      }
+    });
+  }
+
   return embed;
 }
 
@@ -2287,6 +2327,27 @@ function noodleAboutNewsBackRow(userId) {
       .setCustomId(`noodle:nav:profile:${userId}`)
       .setLabel("Back")
       .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function noodleNewsPageRow(userId, page = 0, totalPages = 1) {
+  if (!Number.isFinite(totalPages) || totalPages <= 1) return null;
+  const safeTotal = Math.max(1, Math.floor(totalPages));
+  const safePage = Math.min(Math.max(Math.floor(page), 0), safeTotal - 1);
+  const prevPage = safePage <= 0 ? safeTotal - 1 : safePage - 1;
+  const nextPage = safePage >= safeTotal - 1 ? 0 : safePage + 1;
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}:${prevPage}`)
+      .setLabel("Prev Update")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}:${nextPage}`)
+      .setLabel("Next Update")
+      .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -8054,32 +8115,33 @@ if (sub === "about") {
   }
 
   const aboutProfileImageUrl = getIconUrl("about_profile");
-  const aboutEmbed = buildMenuEmbed({
-    title: `${getIcon("sparkle")} About`,
-    description:
-      "**Creator:** *Erma Starling*\n\n" +
-      "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
-      "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
-      "And yes, she's obsessed with noodles... it's a problem.",
-    user: interaction.member ?? interaction.user,
-    color: theme.colors.info
-  });
-
-  aboutEmbed.addFields(
+  const aboutMainComponents = [
+    { type: 10, content: `## ${getIcon("sparkle")} About` },
     {
-      name: `${getIcon("group")} Servers`,
-      value: `\`\`${liveServerCount.toLocaleString("en-US")}\`\``,
-      inline: true
+      type: 10,
+      content:
+        "**Creator:** *Erma Starling*\n\n" +
+        "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
+        "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
+        "And yes, she's obsessed with noodles... it's a problem."
     },
     {
-      name: `${getIcon("profile")} Noodle Shops`,
-      value: `\`\`${liveShopCount === null ? "Unknown" : liveShopCount.toLocaleString("en-US")}\`\``,
-      inline: true
+      type: 10,
+      content: [
+        `### ${getIcon("group")} Servers`,
+        `\`\`${liveServerCount.toLocaleString("en-US")}\`\``,
+        "",
+        `### ${getIcon("profile")} Noodle Shops`,
+        `\`\`${liveShopCount === null ? "Unknown" : liveShopCount.toLocaleString("en-US")}\`\``
+      ].join("\n")
     }
-  );
+  ];
 
   if (aboutProfileImageUrl) {
-    aboutEmbed.setThumbnail(aboutProfileImageUrl);
+    aboutMainComponents.push({
+      type: 12,
+      items: [{ media: { url: aboutProfileImageUrl } }]
+    });
   }
 
   const aboutSupportRow = new ActionRowBuilder().addComponents(
@@ -8096,7 +8158,8 @@ if (sub === "about") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([aboutEmbed]),
+    ownerId: userId,
+    mainComponents: aboutMainComponents,
     components: [noodleAboutNewsNavRow(userId, { active: "about" }), aboutSupportRow]
   });
 }
@@ -8124,58 +8187,39 @@ if (sub === "news") {
 
   const visibleEntries = getVisibleSortedNewsEntries(newsContent, { includeInternal: showInternalUpdates });
 
-  const latest = visibleEntries[0] ?? null;
-  const previous = visibleEntries[1] ?? null;
-
-  const latestVersion = latest
-    ? formatNewsVersion(latest.entry?.version, "v0.0.0")
-    : (includePinned ? formatNewsVersion(pinned?.version, "v0.0.0") : "v0.0.0");
-  const latestDate = latest
-    ? (String(latest.entry?.date ?? "TBD").trim() || "TBD")
-    : (includePinned ? (String(pinned?.date ?? "TBD").trim() || "TBD") : "TBD");
-  const latestClassLabel = latest
-    ? classificationLabel(normalizeNewsClassification(latest.entry?.classification))
-    : classificationLabel(includePinned ? pinnedClassification : "player_update");
-  const latestChanges = latest
-    ? (Array.isArray(latest.entry?.changes) ? latest.entry.changes : [])
+  const rawPage = opt.getInteger("page") ?? overrides?.integers?.page ?? 0;
+  const updatesPerPage = 1;
+  const updatesTotal = Math.max(1, visibleEntries.length || (includePinned ? 1 : 0));
+  const totalPages = Math.max(1, Math.ceil(updatesTotal / updatesPerPage));
+  const safePage = Math.min(Math.max(Number(rawPage) || 0, 0), totalPages - 1);
+  const pageUpdates = visibleEntries.length
+    ? visibleEntries.slice(safePage * updatesPerPage, (safePage + 1) * updatesPerPage)
     : [];
-  const latestSummary = latest
-    ? (latestChanges.length
-      ? latestChanges.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
-      : "• No changes listed.")
+
+  const updatesText = pageUpdates.length
+    ? pageUpdates.map(({ entry }) => {
+        const version = formatNewsVersion(entry?.version, "v0.0.0");
+        const date = String(entry?.date ?? "TBD").trim() || "TBD";
+        const classLabel = classificationLabel(normalizeNewsClassification(entry?.classification));
+        const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+        const changeText = changes.length
+          ? changes.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
+          : "• No changes listed.";
+        return [
+          `### ${version}`,
+          `*${date} · ${classLabel}*`,
+          changeText
+        ].join("\n");
+      }).join("\n\n")
     : (includePinned
-      ? (String(pinned?.summary ?? "No update summary yet.").trim() || "No update summary yet.")
+      ? [
+          `### ${formatNewsVersion(pinned?.version, "v0.0.0")}`,
+          `*${String(pinned?.date ?? "TBD").trim() || "TBD"} · ${classificationLabel(pinnedClassification)}*`,
+          String(pinned?.summary ?? "No update summary yet.").trim() || "No update summary yet."
+        ].join("\n")
       : "No player-facing updates yet.");
+
   const introText = String(newsContent?.intro ?? "*This feed is updated so players can quickly see what's changed.*").trim();
-  const clampFieldValue = (text, maxLen = 1024) => {
-    const value = String(text ?? "").trim();
-    if (!value) return "-";
-    if (value.length <= maxLen) return value;
-    return `${value.slice(0, Math.max(1, maxLen - 3))}...`;
-  };
-
-  const newsEmbed = buildMenuEmbed({
-    title: `${getIcon("new")} News`,
-    description: `${getIcon("idea")} ${introText}`,
-    user: interaction.member ?? interaction.user,
-    color: theme.colors.success
-  });
-
-  let previousSectionText = "**Previous Update**\nNo previous update yet.";
-  if (previous) {
-    const previousVersion = formatNewsVersion(previous.entry?.version, "v0.0.0");
-    const previousDate = String(previous.entry?.date ?? "TBD").trim() || "TBD";
-    const previousClassLabel = classificationLabel(normalizeNewsClassification(previous.entry?.classification));
-    const previousChanges = Array.isArray(previous.entry?.changes) ? previous.entry.changes : [];
-    const previousText = previousChanges.length
-      ? previousChanges.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
-      : "• No changes listed.";
-    previousSectionText = [
-      "**Previous Update**",
-      `*${previousVersion} · ${previousDate} · ${previousClassLabel}*`,
-      previousText
-    ].join("\n");
-  }
 
   let upcomingSectionText = "**Upcoming**\nNo upcoming notes yet.";
   const upcomingSection = sections.find((section) => {
@@ -8231,38 +8275,31 @@ if (sub === "news") {
     `**${activeEventLabel}** ends: ${activeEndText}, **${nextEventLabel}** begins: ${nextStartText}`,
     "*Try to discover one or all of this season's event recipes before the season ends so you can earn the event badge!*"
   ].join("\n");
-  const dotColumnDivider = "· · · · · · ·";
 
-  newsEmbed.addFields({
-    name: `${getIcon("new")} Updates`,
-    value: clampFieldValue([
-      dotColumnDivider,
-      "**Latest Update**",
-      `*${latestVersion} · ${latestDate} · ${latestClassLabel}*`,
-      latestSummary,
-      "",
-      previousSectionText
-    ].join("\n")),
-    inline: true
-  });
+  const updatesChunks = splitTextToV2Chunks(updatesText);
+  const mainComponents = [
+    { type: 10, content: `## ${getIcon("new")} News` },
+    { type: 10, content: `${getIcon("idea")} ${introText}` },
+    { type: 10, content: `### ${getIcon("new")} Updates (${safePage + 1}/${totalPages})` },
+    ...(updatesChunks.length ? updatesChunks.map((chunk) => ({ type: 10, content: chunk })) : [{ type: 10, content: "No player-facing updates yet." }]),
+    { type: 10, content: `### ${getIcon("calendar")} Upcoming` },
+    { type: 10, content: upcomingSectionText.replace(/^\*\*Upcoming\*\*\n?/i, "") },
+    { type: 10, content: `### ${getIcon("event")} Seasonal Event Reminder` },
+    { type: 10, content: seasonalNotice }
+  ];
 
-  newsEmbed.addFields({
-    name: `${getIcon("calendar")} Upcoming & Seasonal`,
-    value: clampFieldValue([
-      "\u200b",
-      dotColumnDivider,
-      upcomingSectionText,
-      "",
-      `**${getIcon("event")} Seasonal Event Reminder**`,
-      seasonalNotice
-    ].join("\n")),
-    inline: true
-  });
+  const pageRow = noodleNewsPageRow(userId, safePage, totalPages);
+  const components = [
+    noodleAboutNewsNavRow(userId, { active: "news" }),
+    ...(pageRow ? [pageRow] : []),
+    noodleAboutNewsBackRow(userId)
+  ];
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([newsEmbed]),
-    components: [noodleAboutNewsNavRow(userId, { active: "news" }), noodleAboutNewsBackRow(userId)]
+    ownerId: userId,
+    mainComponents,
+    components
   });
 }
 
