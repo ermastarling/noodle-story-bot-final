@@ -309,7 +309,7 @@ Rules:
 
 ## Scene State Store Contract
 
-State key: `<ownerId>:<token>`
+State key: `<token>` (owner is stored with each entry and validated on reads)
 
 Stored payload:
 

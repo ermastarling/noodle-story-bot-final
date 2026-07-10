@@ -86,8 +86,7 @@ import { theme } from "./ui/theme.js";
     buildComponentsV2PayloadWithNoticeCards,
     isComponentsV2Payload,
     isInvalidComponentTypeError,
-    rawWebhookEditOriginal,
-    toRawWebhookPayload
+    rawWebhookEditOriginal
   } = await import("./ui/componentsV2.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");

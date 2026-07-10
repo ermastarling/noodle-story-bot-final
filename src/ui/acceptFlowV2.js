@@ -89,11 +89,7 @@ export function buildAcceptPickerV2Message({
     components.push(text(`Page **${safePage + 1}/${safeTotalPages}**`));
   }
 
-  const selectedCount = visibleEntries.reduce((count, entry) => {
-    const shortId = String(entry?.shortId ?? "").trim();
-    if (!shortId) return count;
-    return selectedSet.has(shortId) ? count + 1 : count;
-  }, 0);
+  const selectedCount = selectedSet.size;
   const COMPONENT_BUDGET = 35;
   const confirmRowTemplate = {
     type: 1,

@@ -70,3 +70,28 @@ test("Scene state V2: enforces max entries with eviction guardrail", () => {
   assert.equal(oldest.ok, false);
   assert.equal(oldest.stale, true);
 });
+
+test("Scene state V2: missing ownerId is rejected", () => {
+  const store = createSceneStateStore({ maxEntries: 10 });
+  const now = 3_000;
+
+  store.putState({
+    sceneKey: "orders.accept_picker",
+    ownerId: "u3",
+    token: "tok-owner",
+    state: { selected: ["A1"] },
+    ttlMs: 5_000,
+    nowMs: now
+  });
+
+  const got = store.getState({
+    sceneKey: "orders.accept_picker",
+    token: "tok-owner",
+    ownerId: "",
+    nowMs: now + 100
+  });
+
+  assert.equal(got.ok, false);
+  assert.equal(got.stale, false);
+  assert.equal(got.reason, "missing_owner_id");
+});

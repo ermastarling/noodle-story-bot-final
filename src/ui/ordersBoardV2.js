@@ -97,13 +97,16 @@ export function buildOrdersBoardV2Message({
   }
 
   if (showAcceptedSection) {
+    const reserveForOverflow = countComponentsDeep(asText("_...and 1 more accepted order(s)._"));
+    let runningCount = countListDeep(components);
+
     if ((acceptedEntries || []).length > 0) {
       const acceptedList = Array.isArray(acceptedEntries) ? acceptedEntries : [];
       components.push(asText("**Your Accepted Orders**"));
+      runningCount += countComponentsDeep(components[components.length - 1]);
 
       let overflowCount = 0;
-      const baseCount = countListDeep(components) + countListDeep(buttonRows);
-      let runningCount = baseCount;
+      const reserveForRows = countListDeep(buttonRows);
 
       for (const entry of acceptedList) {
         const line = String(entry?.line ?? "").trim();
@@ -125,8 +128,7 @@ export function buildOrdersBoardV2Message({
           : asText(line);
 
         const candidateCount = countComponentsDeep(candidate);
-        const reserveForOverflow = countComponentsDeep(asText("_...and 1 more accepted order(s)._"));
-        if (runningCount + candidateCount + reserveForOverflow > COMPONENT_BUDGET) {
+        if (runningCount + candidateCount + reserveForOverflow + reserveForRows > COMPONENT_BUDGET) {
           overflowCount += 1;
           continue;
         }
@@ -137,16 +139,35 @@ export function buildOrdersBoardV2Message({
 
       if (overflowCount > 0) {
         components.push(asText(`_...and ${overflowCount} more accepted order(s)._`));
+        runningCount += countComponentsDeep(components[components.length - 1]);
       }
     } else {
       components.push(asText("**Your Accepted Orders**\n_None right now._"));
+      runningCount += countComponentsDeep(components[components.length - 1]);
     }
 
     const normalizedSummaryLines = (acceptedSummaryLines || [])
       .map((line) => String(line ?? "").trim())
       .filter(Boolean);
-    if (normalizedSummaryLines.length > 0) {
-      components.push(asText(normalizedSummaryLines.join("\n\n")));
+    const reserveForRows = countListDeep(buttonRows);
+    let summaryOverflowCount = 0;
+    for (const summaryLine of normalizedSummaryLines) {
+      const summaryNode = asText(summaryLine);
+      const summaryCount = countComponentsDeep(summaryNode);
+      if (runningCount + summaryCount + reserveForRows > COMPONENT_BUDGET) {
+        summaryOverflowCount += 1;
+        continue;
+      }
+      components.push(summaryNode);
+      runningCount += summaryCount;
+    }
+
+    if (summaryOverflowCount > 0) {
+      const overflowNode = asText(`_...and ${summaryOverflowCount} more summary line(s)._`);
+      const overflowCount = countComponentsDeep(overflowNode);
+      if (runningCount + overflowCount + reserveForRows <= COMPONENT_BUDGET) {
+        components.push(overflowNode);
+      }
     }
   }
 

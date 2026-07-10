@@ -3,6 +3,19 @@ import assert from "node:assert/strict";
 
 import { buildOrdersBoardV2Message } from "../src/ui/ordersBoardV2.js";
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  const children = Array.isArray(component.components) ? component.components : [];
+  const accessory = component.accessory && typeof component.accessory === "object" ? [component.accessory] : [];
+  return 1
+    + children.reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + accessory.reduce((sum, child) => sum + countComponentsDeep(child), 0);
+}
+
+function countPayloadComponents(payload) {
+  return (payload.components || []).reduce((sum, component) => sum + countComponentsDeep(component), 0);
+}
+
 function flattenComponents(payload) {
   const container = payload.components?.[0];
   return container?.components ?? [];
@@ -100,4 +113,30 @@ test("Orders board V2: accepted summary lines render below accepted orders", () 
 
   assert.equal(textBlocks.some((line) => line.includes("Bowls Ready")), true);
   assert.equal(textBlocks.some((line) => line.includes("Ingredients Needed")), true);
+});
+
+test("Orders board V2: accepted summary lines are budgeted to keep payload within Discord limit", () => {
+  const acceptedEntries = Array.from({ length: 20 }, (_, idx) => ({
+    shortId: `ID${idx + 1}`,
+    line: `Order ${idx + 1}`,
+    serveReady: idx % 2 === 0
+  }));
+
+  const acceptedSummaryLines = Array.from({ length: 10 }, (_, idx) => `Summary ${idx + 1}\n• detail`);
+
+  const payload = buildOrdersBoardV2Message({
+    userId: "u1",
+    token: "tok-5",
+    headerLines: ["Orders"],
+    acceptedEntries,
+    acceptedSummaryLines,
+    quickActions: [
+      { label: "Accept", actionKey: "acc", style: 1, disabled: false },
+      { label: "Cook", actionKey: "ck", style: 2, disabled: false },
+      { label: "Serve", actionKey: "sv", style: 1, disabled: false },
+      { label: "Cancel", actionKey: "cnl", style: 2, disabled: false }
+    ]
+  });
+
+  assert.equal(countPayloadComponents(payload) <= 40, true);
 });

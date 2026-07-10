@@ -123,6 +123,7 @@ export function createSceneStateStore({ maxEntries } = {}) {
     const safeOwnerId = ownerId == null ? "" : String(ownerId).trim();
     if (!safeToken) return { ok: false, stale: true, reason: "missing_token" };
     if (!safeSceneKey) return { ok: false, stale: true, reason: "missing_scene_key" };
+    if (!safeOwnerId) return { ok: false, stale: false, reason: "missing_owner_id" };
 
     const entry = states.get(safeToken);
     if (!entry) return { ok: false, stale: true, reason: "missing_state" };
@@ -136,7 +137,7 @@ export function createSceneStateStore({ maxEntries } = {}) {
       return { ok: false, stale: true, reason: "scene_mismatch" };
     }
 
-    if (safeOwnerId && entry.ownerId !== safeOwnerId) {
+    if (entry.ownerId !== safeOwnerId) {
       return { ok: false, stale: false, reason: "owner_mismatch" };
     }
 

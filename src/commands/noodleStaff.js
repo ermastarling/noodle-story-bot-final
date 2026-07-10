@@ -21,7 +21,6 @@ import {
   buildComponentsV2PayloadWithNoticeCards,
   isComponentsV2Payload,
   isInvalidComponentTypeError,
-  MESSAGE_FLAG_IS_COMPONENTS_V2,
   rawWebhookEditOriginal
 } from "../ui/componentsV2.js";
 
