@@ -1416,7 +1416,7 @@ async function sendSocialPayload(interaction, payload = {}) {
  */
 async function componentCommit(interaction, opts) {
   const normalizedPayload = normalizePayloadForReply(interaction, opts ?? {});
-  const { ephemeral, targetMessageId, ...rest } = normalizedPayload ?? {};
+  const { ephemeral, targetMessageId, targetChannelId, ...rest } = normalizedPayload ?? {};
   const isMessageComponent = (
     (typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent())
       || Boolean(interaction?.message)
@@ -1454,7 +1454,15 @@ async function componentCommit(interaction, opts) {
 
   if (targetMessageId) {
     try {
-      const target = await interaction.channel?.messages?.fetch(targetMessageId);
+      let target = null;
+      if (interaction.channel?.messages?.fetch) {
+        target = await interaction.channel.messages.fetch(targetMessageId);
+      } else if (targetChannelId && interaction.client?.channels?.fetch) {
+        const targetChannel = await interaction.client.channels.fetch(targetChannelId);
+        if (targetChannel?.messages?.fetch) {
+          target = await targetChannel.messages.fetch(targetMessageId);
+        }
+      }
       if (target) {
         const result = await target.edit(normalizePayloadForReply(interaction, rest));
         if (interaction.deferred || interaction.replied) {
@@ -1469,7 +1477,25 @@ async function componentCommit(interaction, opts) {
         return result;
       }
     } catch (e) {
-      // fall through to default reply flow
+      if (interaction.deferred || interaction.replied) {
+        if (!isMessageComponent) {
+          try {
+            await interaction.deleteReply();
+          } catch {
+            // ignore if already deleted
+          }
+        }
+        return interaction.followUp({
+          content: `${getIcon("warning")} Couldn't update the shared-order message. Please reopen Party > Shared Order and try again.`,
+          flags: MessageFlags.Ephemeral,
+          ephemeral: true
+        });
+      }
+      return interaction.reply({
+        content: `${getIcon("warning")} Couldn't update the shared-order message. Please reopen Party > Shared Order and try again.`,
+        flags: MessageFlags.Ephemeral,
+        ephemeral: true
+      });
     }
   }
 
@@ -3038,6 +3064,7 @@ async function handleComponent(interaction) {
 
       const ownerId = modalState.ownerId;
       const sourceMessageId = modalState.sourceMessageId ?? null;
+      const sourceChannelId = modalState.sourceChannelId ?? interaction.channelId ?? interaction.channel?.id ?? null;
       const ingredientId = modalState.ingredientId;
 
       if (!ingredientId) {
@@ -3155,7 +3182,8 @@ async function handleComponent(interaction) {
             payload: {
               ...composeV2FromLegacyEmbeds([embed]),
               components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)],
-              targetMessageId: sourceMessageId
+              targetMessageId: sourceMessageId,
+              targetChannelId: sourceChannelId
             }
           };
         } catch (err) {
@@ -3164,10 +3192,13 @@ async function handleComponent(interaction) {
       });
 
       if (!lockedResult?.ok) {
-        return errorReply(
-          interaction,
-          String(lockedResult?.payload?.content || `${getIcon("error")} Unable to record contribution.`)
-        );
+        const errorText = String(lockedResult?.payload?.content || `${getIcon("error")} Unable to record contribution.`);
+        return componentCommit(interaction, {
+          content: errorText,
+          ephemeral: true,
+          targetMessageId: sourceMessageId,
+          targetChannelId: sourceChannelId
+        });
       }
       return componentCommit(interaction, lockedResult.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
     }
@@ -3663,6 +3694,7 @@ async function handleComponent(interaction) {
       sharedOrderModalState.set(modalToken, {
         ownerId: userId,
         sourceMessageId,
+        sourceChannelId: interaction.channelId ?? interaction.channel?.id ?? null,
         ingredientId
       });
       const cleanupTimer = setTimeout(() => sharedOrderModalState.delete(modalToken), SHARED_ORDER_MODAL_TTL_MS);
