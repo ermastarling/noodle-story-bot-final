@@ -9,6 +9,7 @@ import {
   getStaffUnlockStatus
 } from "../src/game/staff.js";
 import { loadStaffContent } from "../src/content/index.js";
+import { noodleStaffHandler } from "../src/commands/noodleStaff.js";
 
 const staffContent = loadStaffContent();
 
@@ -296,4 +297,44 @@ test("Staff: Common/Rare staff max levels match design", () => {
   assert.strictEqual(prepChef.max_level, 10);
   assert.strictEqual(sousChef.max_level, 20);
   assert.strictEqual(forager.max_level, 20);
+});
+
+test("Staff command wrapper: acknowledged V2 payload falls back to editReply when raw webhook edit fails", async () => {
+  let patchCalls = 0;
+  let editReplyCalls = 0;
+
+  const interaction = {
+    id: `staff-wrap-${Date.now()}`,
+    guildId: "g-staff",
+    guild: { id: "g-staff" },
+    channelId: "c-staff",
+    user: { id: "u-staff-wrap" },
+    token: "tok-staff",
+    applicationId: "app-staff",
+    deferred: false,
+    replied: true,
+    client: {
+      api: {
+        webhooks: () => ({
+          messages: () => ({
+            patch: async () => {
+              patchCalls += 1;
+              throw new Error("raw webhook unavailable");
+            }
+          })
+        })
+      }
+    },
+    editReply: async () => {
+      editReplyCalls += 1;
+      return { ok: true, mode: "editReplyFallback" };
+    },
+    reply: async () => ({ ok: false }),
+    deferReply: async () => ({ ok: false })
+  };
+
+  const result = await noodleStaffHandler(interaction);
+  assert.strictEqual(patchCalls, 1);
+  assert.strictEqual(editReplyCalls, 1);
+  assert.strictEqual(result?.mode, "editReplyFallback");
 });
