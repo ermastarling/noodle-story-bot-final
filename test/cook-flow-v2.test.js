@@ -126,13 +126,13 @@ test("Cook flow V2: result scene prefers serve action when all bowls are ready",
   assert.equal(Number(serveButton?.style || 0), 3);
 });
 
-test("Cook flow V2: tutorial result scene shows only next tutorial step action", () => {
+test("Cook flow V2: tutorial result scene shows only serve action", () => {
   const payload = buildCookResultV2Message({
     userId: "123",
     token: "tok",
     summaryLines: ["line"],
     tutorialNextOnly: true,
-    tutorialNextLabel: "Next Tutorial Step"
+    tutorialNextLabel: "Serve"
   });
 
   const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
@@ -140,6 +140,7 @@ test("Cook flow V2: tutorial result scene shows only next tutorial step action",
   const customIds = actionRow.components.map((component) => component.custom_id);
   assert.equal(customIds.length, 1);
   assert.ok(String(customIds[0] || "").includes(":cook.result:nxt:"));
+  assert.equal(String(actionRow.components[0]?.label || ""), "Serve");
 });
 
 test("Cook flow V2: target pattern is deterministic per run token", () => {

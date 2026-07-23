@@ -5,7 +5,8 @@ import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
-import { noodleMainMenuRow } from "./noodle.js";
+import { noodleMainMenuRow, runNoodle } from "./noodle.js";
+import { shouldForceTutorialCommand } from "../game/tutorialRouting.js";
 import { buildStaffOverviewComponents } from "./noodleStaff.js";
 import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../game/kitchen.js";
 import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "../game/garden.js";
@@ -18,6 +19,7 @@ import {
 } from "../game/upgrades.js";
 import { calculateStaffCost, levelUpStaff, getStaffUnlockStatus, filterUnlockedStaffEffects } from "../game/staff.js";
 import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
+import { normalizeRawContainerPayload } from "../util/rawPayload.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
   MESSAGE_FLAG_IS_COMPONENTS_V2
@@ -213,16 +215,6 @@ function isInvalidComponentTypeError(error) {
     || message.includes("valid MessageComponentType");
 }
 
-function toRawWebhookPayload(payload = {}) {
-  const out = { ...payload };
-  const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
-  if (out.ephemeral === true && !hasEphemeralFlag) {
-    out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
-  }
-  delete out.ephemeral;
-  return out;
-}
-
 async function rawWebhookEditOriginal(interaction, payload) {
   const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
   const token = interaction?.token;
@@ -232,7 +224,7 @@ async function rawWebhookEditOriginal(interaction, payload) {
   return interaction.client.api
     .webhooks(applicationId, token)
     .messages("@original")
-    .patch({ data: toRawWebhookPayload(payload) });
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MESSAGE_FLAG_EPHEMERAL }) });
 }
 
 async function sendUpgradesPayload(interaction, payload = {}) {
@@ -476,6 +468,30 @@ export const noodleUpgradesCommand = {
 export async function noodleUpgradesHandler(interaction) {
   const userId = interaction.user.id;
   const serverId = interaction.guild?.id ?? "DM";
+  const isSlashLikeInvocation = !(
+    interaction.isButton?.()
+    || interaction.isSelectMenu?.()
+    || interaction.isModalSubmit?.()
+    || interaction.isAutocomplete?.()
+  );
+
+  if (interaction.guildId) {
+    let tutorialPlayer = getPlayer(db, serverId, userId);
+    if (!tutorialPlayer) {
+      tutorialPlayer = newPlayerProfile(userId);
+      const rev = upsertPlayer(db, serverId, userId, tutorialPlayer, null);
+      tutorialPlayer.state_rev = rev;
+    }
+
+    if (shouldForceTutorialCommand({
+      player: tutorialPlayer,
+      sub: "profile",
+      isChatInput: isSlashLikeInvocation,
+      inDevPath: false
+    })) {
+      return runNoodle(interaction, { sub: "profile" });
+    }
+  }
 
   const idempKey = makeIdempotencyKey({
     serverId,

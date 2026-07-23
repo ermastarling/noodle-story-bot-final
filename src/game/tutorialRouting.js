@@ -158,3 +158,17 @@ export function resolveTutorialRecoverySub({ player, fallbackSub = "orders" } = 
   if (!stepId) return fallbackSub;
   return TUTORIAL_RECOVERY_SUB_RULES[stepId] ?? fallbackSub;
 }
+
+export function shouldForceTutorialCommand({
+  player,
+  sub,
+  isChatInput = false,
+  inDevPath = false
+} = {}) {
+  if (!isChatInput || inDevPath) return false;
+  const stepId = getTutorialStepId(player);
+  if (!stepId) return false;
+
+  const normalizedSub = String(sub || "").trim();
+  return normalizedSub !== "start";
+}

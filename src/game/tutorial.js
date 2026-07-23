@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getIcon } from "../ui/icons.js";
+import { TUTORIAL_QUESTS } from "../constants.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,16 +15,36 @@ function loadTutorial() {
 export function ensureTutorial(player) {
   // If player has no tutorial state (older saves), initialize it.
   if (!player.tutorial) {
-    const t = loadTutorial();
     player.tutorial = {
       active: true,
-      queue: t.steps.map(s => s.id),
+      queue: [...TUTORIAL_QUESTS],
       completed: []
     };
   }
   if (player.tutorial.active === undefined) player.tutorial.active = true;
   if (!Array.isArray(player.tutorial.queue)) player.tutorial.queue = [];
   if (!Array.isArray(player.tutorial.completed)) player.tutorial.completed = [];
+
+  const requiredStepIds = [...TUTORIAL_QUESTS];
+  const completedSet = new Set(
+    player.tutorial.completed.filter(stepId => requiredStepIds.includes(stepId))
+  );
+  const missingStepIds = requiredStepIds.filter(stepId => !completedSet.has(stepId));
+
+  if (missingStepIds.length === 0) {
+    player.tutorial.active = false;
+    player.tutorial.queue = [];
+    player.tutorial.completed = requiredStepIds;
+    return;
+  }
+
+  const queuedSet = new Set(player.tutorial.queue.filter(stepId => missingStepIds.includes(stepId)));
+  player.tutorial.queue = missingStepIds.filter(stepId => queuedSet.has(stepId));
+  if (player.tutorial.queue.length === 0) {
+    player.tutorial.queue = [...missingStepIds];
+  }
+  player.tutorial.completed = requiredStepIds.filter(stepId => completedSet.has(stepId));
+  player.tutorial.active = true;
 }
 
 export function getCurrentTutorialStep(player) {

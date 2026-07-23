@@ -27,7 +27,7 @@
   "pinned": {
     "label": "Latest Update",
     "version": "0.5.0",
-    "date": "2026-07-10",
+    "date": "2026-07-24",
     "classification": "player_update",
     "summary": "A fresh chapter for your noodle shop: cozy new banner menus, one-tap Cook All, and a brand-new Kitchen Line minigame with friendly pacing, plus beautifully refreshed specialization looks that invite you to restyle your space and visit the Store for premium specializations."
   },
@@ -37,14 +37,14 @@
       "entries": [
         {
           "version": "0.5.0",
-          "date": "2026-07-10",
+          "date": "2026-07-24",
           "classification": "player_update",
           "changes": [
-            "Every major menu now feels more magical, with fresh banners that bring extra charm to your daily shop routine.",
-            "One-tap **Cook All** is here to help you prep accepted orders in a breeze when the board gets busy.",
-            "Brand-new **Kitchen Line Minigame** is now live: keep the rhythm, manage the line, and serve better bowls.",
-            "All **Specializations** got a visual glow-up with richer mood and personality, from warm inn comfort to moonlit elegance.",
-            "If you are ready for a new shop story, revisit your specialization and stop by the Store to explore premium specializations."
+            "Every major menu now feels more magical, with handmade banners that bring extra charm to your daily shop routine.",
+            "One-tap **Cook All** button is here to help you prep accepted orders in a breeze when the board gets busy.",
+            "Brand-new **Kitchen Line Minigame** is changing how you cook: keep the rhythm, manage the line, and serve better bowls to take control of your cooking quality.",
+            "Every **Shop Specializations** got a visual glow-up to show a richer mood and personality, from warm inn comfort to moonlit elegance.",
+            "If you are ready for a new shop story, revisit your specializations or stop by the Store to explore **premium specializations.**"
           ]
         },
         {

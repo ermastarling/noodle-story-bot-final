@@ -5,6 +5,18 @@ const noodleDevData = new SlashCommandBuilder()
   .setName("noodle-dev")
   .setDescription("Developer tools for Noodle Story.")
   .addSubcommand((sc) => sc.setName("status").setDescription("Dev only."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("reminder_test")
+      .setDescription("Dev only.")
+      .addUserOption((o) => o.setName("user").setDescription("User to DM (defaults to you)").setRequired(false))
+      .addBooleanOption((o) =>
+        o
+          .setName("force")
+          .setDescription("Send even if daily is unavailable or already sent today")
+          .setRequired(false)
+      )
+  )
   .addSubcommand((sc) => sc.setName("dashboard").setDescription("Dev only."))
   .addSubcommand((sc) =>
     sc

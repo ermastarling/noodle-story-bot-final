@@ -93,6 +93,7 @@ import { theme } from "./ui/theme.js";
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
   const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
+  const { sendRawDm } = await import("./util/rawDm.js");
 
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;
@@ -533,7 +534,7 @@ import { theme } from "./ui/theme.js";
     ].filter(Boolean).join("\n\n");
 
     try {
-      await user.send(dmPayload);
+      await sendRawDm(client, user.id, dmPayload);
       return true;
     } catch (error) {
       if (isInvalidComponentTypeError(error)) {

@@ -1,5 +1,6 @@
 import { theme } from "./theme.js";
 import { getSceneBannerUrl } from "./icons.js";
+import { normalizeRawContainerPayload } from "../util/rawPayload.js";
 
 const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 export const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
@@ -115,6 +116,8 @@ function resolveSceneBannerFromHeading(heading = "") {
   const aliases = {
     noodle_story_store: ["store"],
     customize_profile: ["customize"],
+    server_leaderboard: ["leaderboard"],
+    global_leaderboard: ["leaderboard"],
     orders_served: ["serve"],
     serve_orders: ["serve"],
     accept_orders: ["orders"],
@@ -150,6 +153,7 @@ function resolveSceneBannerFromHeading(heading = "") {
     orders: ["orders"],
     pantry: ["pantry"],
     party: ["party"],
+    leaderboard: ["leaderboard"],
     profile: ["profile"],
     quests: ["quests"],
     recipes: ["recipes"],
@@ -690,16 +694,6 @@ export function isInvalidComponentTypeError(error) {
     || message.includes("valid MessageComponentType");
 }
 
-export function toRawWebhookPayload(payload = {}) {
-  const out = { ...payload };
-  const hasEphemeralFlag = (Number(out.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0;
-  if (out.ephemeral === true && !hasEphemeralFlag) {
-    out.flags = Number(out.flags || 0) | MESSAGE_FLAG_EPHEMERAL;
-  }
-  delete out.ephemeral;
-  return out;
-}
-
 export async function rawWebhookEditOriginal(interaction, payload) {
   const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
   const token = interaction?.token;
@@ -709,7 +703,7 @@ export async function rawWebhookEditOriginal(interaction, payload) {
   return interaction.client.api
     .webhooks(applicationId, token)
     .messages("@original")
-    .patch({ data: toRawWebhookPayload(payload) });
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MESSAGE_FLAG_EPHEMERAL }) });
 }
 
 export async function replyOrEditInteraction(interaction, payload) {

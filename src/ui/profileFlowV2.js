@@ -89,6 +89,7 @@ function buildProfileActionRows({
   newsAvailable = false,
   questsAvailable = false,
   specializationsAvailable = false,
+  partyHasActiveOrder = false,
   buttonEmoji = {}
 } = {}) {
   const safeUserId = String(userId ?? "").trim();
@@ -137,7 +138,7 @@ function buildProfileActionRows({
     button({
       label: "Party",
       customId: `noodle-social:nav:party:${safeUserId}`,
-      style: BUTTON_STYLE_PRIMARY,
+      style: partyHasActiveOrder ? BUTTON_STYLE_SUCCESS : BUTTON_STYLE_PRIMARY,
       emoji: buttonEmoji.party
     }),
     button({
@@ -552,6 +553,7 @@ export function buildProfileHomeV2Message({
   newsAvailable = false,
   questsAvailable = false,
   specializationsAvailable = false,
+  partyHasActiveOrder = false,
   buttonEmoji = {},
   ownerId
 } = {}) {
@@ -605,6 +607,7 @@ export function buildProfileHomeV2Message({
       newsAvailable,
       questsAvailable,
       specializationsAvailable,
+      partyHasActiveOrder,
       buttonEmoji
     }));
   }

@@ -23,6 +23,8 @@ import {
   isInvalidComponentTypeError,
   rawWebhookEditOriginal
 } from "../ui/componentsV2.js";
+import { runNoodle } from "./noodle.js";
+import { shouldForceTutorialCommand } from "../game/tutorialRouting.js";
 
 const {
   MessageActionRow,
@@ -293,6 +295,30 @@ export const noodleStaffCommand = {
 export async function noodleStaffHandler(interaction) {
   const userId = interaction.user.id;
   const serverId = interaction.guild?.id ?? "DM";
+  const isSlashLikeInvocation = !(
+    interaction.isButton?.()
+    || interaction.isSelectMenu?.()
+    || interaction.isModalSubmit?.()
+    || interaction.isAutocomplete?.()
+  );
+
+  if (interaction.guildId) {
+    let tutorialPlayer = getPlayer(db, serverId, userId);
+    if (!tutorialPlayer) {
+      tutorialPlayer = newPlayerProfile(userId);
+      const rev = upsertPlayer(db, serverId, userId, tutorialPlayer, null);
+      tutorialPlayer.state_rev = rev;
+    }
+
+    if (shouldForceTutorialCommand({
+      player: tutorialPlayer,
+      sub: "profile",
+      isChatInput: isSlashLikeInvocation,
+      inDevPath: false
+    })) {
+      return runNoodle(interaction, { sub: "profile" });
+    }
+  }
 
   const idempKey = makeIdempotencyKey({
     serverId,

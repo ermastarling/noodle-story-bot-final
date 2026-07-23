@@ -25,6 +25,7 @@ import {
   isTutorialStep as isTutorialStepFromRouting,
   resolveTutorialProgressRowKey,
   resolveTutorialRecoverySub,
+  shouldForceTutorialCommand,
   resolveForageNavSub,
   resolveTutorialOrdersActionKey
 } from "../game/tutorialRouting.js";
@@ -83,6 +84,7 @@ import {
   PROFILE_COLLECTIONS_SHOWN
 } from "../constants.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
+import { normalizeRawContainerPayload } from "../util/rawPayload.js";
 import { containsProfanity } from "../util/profanity.js";
 import {
   formatNewsVersion,
@@ -92,7 +94,14 @@ import {
   normalizeNewsClassification,
 } from "../util/news.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
-import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS, repairPartyRecord } from "../game/social.js";
+import {
+  getUserActiveParty,
+  getActiveBlessing,
+  clearExpiredBlessings,
+  BLESSING_EFFECTS,
+  repairPartyRecord,
+  getActiveSharedOrderByParty
+} from "../game/social.js";
 import {
   applySubscriptionEntitlementEvent,
   applyMonthlySubscriptionCoinGrant,
@@ -132,6 +141,7 @@ import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff, getTakeoutD
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
+import { triggerDailyRewardReminderTest } from "../jobs/dailyRewardReminders.js";
 import { getVoteRewardStatus, claimVoteRewards, getVotePlatformStatusLines, getDisplayVotePlatformPages } from "../game/voteRewards.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge, grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import {
@@ -800,6 +810,29 @@ function applyPersistentNoticeCards(payload = {}, notices = []) {
       ...rest,
       ...composed,
       notices: [...(Array.isArray(composed.notices) ? composed.notices : []), ...cards]
+    };
+    return updated;
+  }
+
+  if (isComponentsV2Payload(updated) && Array.isArray(updated.components) && updated.components.length > 0) {
+    const extractedMain = [];
+    for (const entry of updated.components) {
+      const type = Number(entry?.type);
+      if (type === 17 && Array.isArray(entry?.components)) {
+        extractedMain.push(...entry.components);
+      } else if (Number.isFinite(type)) {
+        extractedMain.push(entry);
+      }
+    }
+
+    const { components, flags, ...rest } = updated;
+    const ephemeralFromFlags = (Number(flags) & MessageFlags.Ephemeral) !== 0;
+    updated = {
+      ...rest,
+      mainComponents: extractedMain,
+      notices: cards,
+      ownerId: updated.ownerId || detectOwnerIdFromComponents(extractedMain),
+      ephemeral: updated.ephemeral === true || ephemeralFromFlags
     };
     return updated;
   }
@@ -4391,12 +4424,27 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
     const normalizedComponentRows = normalizeComponents(payload.components, payload.flags);
     const normalizedRows = (Array.isArray(normalizedComponentRows) ? normalizedComponentRows : [])
       .filter((row) => Number(row?.type) === 1);
+    const extractedMainComponents = [];
+    if (Array.isArray(payload.components)) {
+      for (const entry of payload.components) {
+        const type = Number(entry?.type);
+        if (type === 17 && Array.isArray(entry?.components)) {
+          extractedMainComponents.push(...entry.components);
+        } else if (Number.isFinite(type)) {
+          extractedMainComponents.push(entry);
+        }
+      }
+    }
+    const explicitMainComponents = Array.isArray(payload.mainComponents) ? payload.mainComponents : [];
+    const effectiveMainComponents = explicitMainComponents.length > 0
+      ? explicitMainComponents
+      : extractedMainComponents;
     const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
-    const ownerId = payload.ownerId || detectOwnerIdFromComponents(normalizedRows);
+    const ownerId = payload.ownerId || detectOwnerIdFromComponents(effectiveMainComponents) || detectOwnerIdFromComponents(normalizedRows);
 
     const v2Payload = buildComponentsV2PayloadWithNoticeCards({
       mainComponents: [
-        ...(Array.isArray(payload.mainComponents) ? payload.mainComponents : []),
+        ...effectiveMainComponents,
         ...normalizedRows
       ],
       notices: Array.isArray(payload.notices) ? payload.notices : [],
@@ -4573,16 +4621,6 @@ function isV2EmbedConflictError(error) {
     && message.includes("embeds: The 'embeds' field cannot be used when using MessageFlags.IS_COMPONENTS_V2");
 }
 
-function toRawWebhookPayload(payload = {}) {
-  const out = { ...payload };
-  const hasEphemeralFlag = (Number(out.flags) & MessageFlags.Ephemeral) !== 0;
-  if (out.ephemeral === true && !hasEphemeralFlag) {
-    out.flags = Number(out.flags || 0) | MessageFlags.Ephemeral;
-  }
-  delete out.ephemeral;
-  return out;
-}
-
 async function rawWebhookEditOriginal(interaction, payload) {
   const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
   const token = interaction?.token;
@@ -4592,7 +4630,7 @@ async function rawWebhookEditOriginal(interaction, payload) {
   return interaction.client.api
     .webhooks(applicationId, token)
     .messages("@original")
-    .patch({ data: toRawWebhookPayload(payload) });
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
 }
 
 async function rawWebhookFollowUp(interaction, payload) {
@@ -4603,7 +4641,7 @@ async function rawWebhookFollowUp(interaction, payload) {
   }
   return interaction.client.api
     .webhooks(applicationId, token)
-    .post({ data: toRawWebhookPayload(payload) });
+    .post({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
 }
 
 async function rawChannelEditMessage(interaction, channelId, messageId, payload) {
@@ -4613,7 +4651,7 @@ async function rawChannelEditMessage(interaction, channelId, messageId, payload)
   return interaction.client.api
     .channels(channelId)
     .messages(messageId)
-    .patch({ data: toRawWebhookPayload(payload) });
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
 }
 
 async function componentCommit(interaction, payload) {
@@ -7229,10 +7267,19 @@ if (ephemeral && (interaction.deferred || interaction.replied)) {
 }
 const options = ephemeral ? { ...base, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...base };
 if (options.components) {
-  options.components = normalizeComponents(options.components);
+  options.components = normalizeComponents(options.components, options.flags);
 }
 // If deferred, use editReply. Otherwise use reply (shouldn't happen but safety)
-if (interaction.deferred || interaction.replied) return interaction.editReply(options);
+if (interaction.deferred || interaction.replied) {
+  if (isComponentsV2Payload(options)) {
+    try {
+      return await rawWebhookEditOriginal(interaction, options);
+    } catch {
+      // Fall through to discord.js editReply fallback.
+    }
+  }
+  return interaction.editReply(options);
+}
 return interaction.reply(options);
 }
 
@@ -7291,7 +7338,7 @@ return componentCommit(interaction, payload);
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "repair_party" || sub === "subscriptions" || sub === "giveaway_winner" || sub === "dashboard";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "repair_party" || sub === "subscriptions" || sub === "giveaway_winner" || sub === "dashboard" || sub === "reminder_test";
 const inDevPath = group === "dev" || isDevSubcommand;
 
 const buildDevStatusEmbed = () => {
@@ -7731,6 +7778,42 @@ if (inDevPath && sub === "subscriptions") {
   });
 }
 
+if (inDevPath && sub === "reminder_test") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || userId;
+  const force = opt.getBoolean("force") !== false;
+
+  const result = await triggerDailyRewardReminderTest(interaction.client, targetUserId, { force });
+  if (!result?.ok) {
+    const reason = String(result?.reason || "unknown_error");
+    return commit({
+      content: " ",
+      ...composeV2FromLegacyEmbeds([
+        buildDevMessageEmbed({
+          message: `${getIcon("error")} Reminder test failed for <@${targetUserId}>: ${reason}.`,
+          isError: true
+        })
+      ]),
+      ephemeral: true
+    });
+  }
+
+  return commit({
+    content: " ",
+    ...composeV2FromLegacyEmbeds([
+      buildDevMessageEmbed({
+        message: [
+          `${getIcon("status_complete")} Reminder DM test sent to <@${targetUserId}>.`,
+          `Mode: ${force ? "force" : "normal"}.`,
+          `Day key: ${result.todayKey}.`,
+          `Profile server: ${result.serverId}.`
+        ].join("\n")
+      })
+    ]),
+    ephemeral: true
+  });
+}
+
 if (inDevPath && sub === "giveaway_winner") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
@@ -7819,14 +7902,14 @@ if (inDevPath && sub === "giveaway_winner") {
           totalGrant += Math.max(0, Math.floor(Number(grantResult.amount || 0) || 0));
         }
 
-        rewardSummaryLines.push(`• Granted perk: ${perkNames[perkId]} for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
+        rewardSummaryLines.push(`• ${perkNames[perkId]} for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
       }
 
-      rewardSummaryLines.push(`• Monthly subscription coins credited now: **${totalGrant}c**.`);
+      rewardSummaryLines.push(`• Coins credited: **${totalGrant}c**.`);
       const perkRewardIcon = selectedPerkIds.length === 1
         ? (selectedPerkIds[0] === SUBSCRIPTION_PERKS.HOUSE_247 ? getIcon("perk_house_247", getIcon("sparkle")) : getIcon("perk_takeout_counter", getIcon("orders")))
         : `${getIcon("perk_house_247", getIcon("sparkle"))} ${getIcon("perk_takeout_counter", getIcon("orders"))}`;
-      publicWinnerLine = `${perkRewardIcon} Giveaway winner reward sent to <@${targetUserId}>: **${selectedPerkIds.length > 1 ? "Perks" : "Perk"}** (${durationDays} day${durationDays === 1 ? "" : "s"}).`;
+      publicWinnerLine = `${perkRewardIcon} Reward sent to <@${targetUserId}>!`;
     } else if (rewardType === "coin_pack") {
       const pack = getStoreCoinPack(coinPackId);
       if (!pack) {
@@ -7847,7 +7930,7 @@ if (inDevPath && sub === "giveaway_winner") {
       }
 
       rewardSummaryLines.push(`• Granted coin pack: ${pack.priceLabel} (${pack.coins.toLocaleString()}c).`);
-      publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${pack.coins.toLocaleString()}c** (${pack.priceLabel} pack).`;
+      publicWinnerLine = `${getIcon("coins")} Reward sent to <@${targetUserId}>!`;
     } else {
       if (coinAmount <= 0) {
         return commit({
@@ -7863,8 +7946,8 @@ if (inDevPath && sub === "giveaway_winner") {
       }
       targetPlayer.lifetime.coins_earned = (Number(targetPlayer.lifetime.coins_earned) || 0) + coinAmount;
 
-      rewardSummaryLines.push(`• Granted direct coins: **${coinAmount.toLocaleString()}c**.`);
-      publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${coinAmount.toLocaleString()}c**.`;
+      rewardSummaryLines.push(`• Coins credited: **${coinAmount.toLocaleString()}c**.`);
+      publicWinnerLine = `${getIcon("coins")} Reward sent to <@${targetUserId}>!`;
     }
 
     upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
@@ -7999,6 +8082,37 @@ if (player) {
   }
 }
 
+const tutorialPlayer = inDevPath ? null : (player ?? ensurePlayer(serverId, userId));
+const isSlashLikeInvocation = !(
+  interaction.isButton?.()
+  || interaction.isSelectMenu?.()
+  || interaction.isModalSubmit?.()
+  || interaction.isAutocomplete?.()
+);
+if (shouldForceTutorialCommand({
+  player: tutorialPlayer,
+  sub,
+  isChatInput: isSlashLikeInvocation,
+  inDevPath
+})) {
+  const step = getCurrentTutorialStep(tutorialPlayer);
+  const tutorialEmbed = buildMenuEmbed({
+    title: `${getIcon("orders")} Tutorial`,
+    description: formatTutorialMessage(step) ?? "Welcome to your Noodle Story.",
+    user: interaction.member ?? interaction.user
+  });
+  const tutorialRows = getTutorialProgressRows(tutorialPlayer, userId, {
+    highlightAccept: true,
+    disableAccept: false
+  }) ?? [noodleTutorialMenuRow(userId)];
+
+  return commit({
+    content: " ",
+    ...composeV2FromLegacyEmbeds([tutorialEmbed]),
+    components: tutorialRows
+  });
+}
+
 seasonRolloverNotice = player
   ? applySeasonRolloverReward(player, server.season, {
       eventRecipeSeasonIndex,
@@ -8066,6 +8180,10 @@ if (sub === "profile") {
   const newsAvailable = viewingSelf && hasUnreadNewsUpdate(selfPlayer, newsContent);
   const showTakeoutProfileButton = viewingSelf && hasActivePerk(selfPlayer, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
   const party = getUserActiveParty(db, u.id);
+  const activeSharedOrder = (viewingSelf && party?.party_id && db)
+    ? getActiveSharedOrderByParty(db, party.party_id)
+    : null;
+  const partyHasActiveOrder = Boolean(activeSharedOrder);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
   const marketStockKnown = p.market_stock && Object.keys(p.market_stock).length > 0;
@@ -8081,7 +8199,10 @@ if (sub === "profile") {
     embed.setFooter({ text: footerText });
   }
   const profileComponents = viewingSelf
-    ? [noodleMainMenuRowNoProfile(userId, { newsAvailable, showTakeout: showTakeoutProfileButton }), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
+    ? [
+      noodleMainMenuRowNoProfile(userId, { newsAvailable, showTakeout: showTakeoutProfileButton }),
+      socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable, partyHasActiveOrder })
+    ]
     : [];
 
   if (isComponentsV2Enabled({ guildId: serverId, userId, player: selfPlayer })) {
@@ -8093,6 +8214,7 @@ if (sub === "profile") {
       newsAvailable,
       questsAvailable,
       specializationsAvailable,
+      partyHasActiveOrder,
       ownerId: userId,
       buttonEmoji: getProfileV2ButtonEmoji()
     }));
@@ -8677,6 +8799,7 @@ if (sub === "pantry") {
         noodleForageGardenRow(userId, {
           active: "forage",
           gardenLocked: !gardenUnlocked,
+          gardenStyleOverride: ButtonStyle.Secondary,
           includeFishingButton: true,
           fishingUnlocked,
           fishingJustUnlocked,
@@ -10599,8 +10722,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         : "Active")
       : "Not active";
     const house247Label = status.house247ExpiresAt
-      ? `${getHouse247Label()} remaining: expires **${house247Line}**`
-      : `${getHouse247Label()} remaining: **${house247Line}**`;
+      ? `${getHouse247Label()} expires **${house247Line}**`
+      : `${getHouse247Label()} **${house247Line}**`;
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
     const maxButtonsPerRow = 5;
     const maxLinkRows = 3;
@@ -14646,7 +14769,7 @@ if (v2Parsed.isV2) {
           title: "## Cook Result",
         summaryLines,
         tutorialNextOnly: tutorialMode,
-          tutorialNextLabel: "Next Tutorial Step",
+          tutorialNextLabel: "Serve",
           preferServe: canServeAllOrders(afterPlayer)
       }));
     }
@@ -14924,7 +15047,8 @@ if (kind === "dm" && action === "reminders_toggle") {
   const legacyPayload = {
     content: " ",
     ...composeV2FromLegacyEmbeds([reminderEmbed]),
-    components
+    components,
+    targetMessageId: interaction.message?.id
   };
 
   if (isComponentsV2Enabled({ guildId: targetServerId, userId, player: p })) {
@@ -17443,5 +17567,7 @@ export {
   noodleMainMenuRowNoProfile,
   displayItemName,
   renderProfileEmbed,
-  resolveComponentNavSub
+  resolveComponentNavSub,
+  applyPersistentNoticeCards as applyPersistentNoticeCardsForTest,
+  convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest
 };
