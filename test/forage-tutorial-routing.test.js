@@ -186,9 +186,9 @@ test("Tutorial progress row key is centralized by step", () => {
   assert.equal(resolveTutorialProgressRowKey(makePlayer("intro_serve")), "serve");
 });
 
-test("Tutorial progress row key handles inactive and unknown steps", () => {
-  assert.equal(resolveTutorialProgressRowKey({ tutorial: { active: false, queue: ["intro_order"], completed: [] } }), null);
-  assert.equal(resolveTutorialProgressRowKey({ tutorial: { active: true, queue: ["unknown_step"], completed: [] } }), null);
+test("Tutorial progress row key heals incomplete tutorial state", () => {
+  assert.equal(resolveTutorialProgressRowKey({ tutorial: { active: false, queue: ["intro_order"], completed: [] } }), "accept_only");
+  assert.equal(resolveTutorialProgressRowKey({ tutorial: { active: true, queue: ["unknown_step"], completed: [] } }), "accept_only");
   assert.equal(resolveTutorialProgressRowKey(null), null);
 });
 
