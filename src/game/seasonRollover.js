@@ -2,20 +2,29 @@ import { nowTs } from "../util/time.js";
 import { applySxpLevelUp } from "./serve.js";
 import { getIcon } from "../ui/icons.js";
 
+function normalizeSeasonTag(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized || null;
+}
+
 export function applySeasonRolloverReward(player, currentSeason, options = {}) {
   if (!player || !currentSeason) return null;
   if (!player.seasons) {
     player.seasons = { last_seen: null, last_rewarded_from: null, last_rewarded_at: null };
   }
 
-  const previousSeason = player.seasons.last_seen ?? null;
-  const seasonChanged = previousSeason && previousSeason !== currentSeason;
-  player.seasons.last_seen = currentSeason;
+  const normalizedCurrentSeason = normalizeSeasonTag(currentSeason);
+  if (!normalizedCurrentSeason) return null;
+
+  const previousSeason = normalizeSeasonTag(player.seasons.last_seen);
+  const seasonChanged = Boolean(previousSeason && previousSeason !== normalizedCurrentSeason);
+  player.seasons.last_seen = normalizedCurrentSeason;
+  if (!seasonChanged) return null;
 
   const invBowls = player.inv_bowls ?? {};
   const eventSeasonIndex = options?.eventRecipeSeasonIndex ?? {};
   const recipes = options?.recipes ?? {};
-  const getRecipeSeason = (recipeId) => eventSeasonIndex?.[recipeId] ?? recipes?.[recipeId]?.season ?? null;
+  const getRecipeSeason = (recipeId) => normalizeSeasonTag(eventSeasonIndex?.[recipeId] ?? recipes?.[recipeId]?.season ?? null);
 
   let bowlCount = 0;
   const clearedKeys = [];
@@ -25,7 +34,7 @@ export function applySeasonRolloverReward(player, currentSeason, options = {}) {
   for (const [key, bowl] of Object.entries(invBowls)) {
     const recipeSeason = getRecipeSeason(bowl?.recipe_id);
     if (!recipeSeason) continue;
-    if (recipeSeason === currentSeason) continue;
+    if (recipeSeason === normalizedCurrentSeason) continue;
 
     const qty = Math.max(0, Number(bowl?.qty || 0));
     if (!qty) continue;
@@ -64,9 +73,9 @@ export function applySeasonRolloverReward(player, currentSeason, options = {}) {
   const friendlyFrom = rewardFromSeason
     ? rewardFromSeason.charAt(0).toUpperCase() + rewardFromSeason.slice(1)
     : "Last season";
-  const friendlyCurrent = currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1);
+  const friendlyCurrent = normalizedCurrentSeason.charAt(0).toUpperCase() + normalizedCurrentSeason.slice(1);
   const bowlLabel = `Cleared ${bowlCount} bowl${bowlCount === 1 ? "" : "s"}.`;
-  const message = `${getIcon("season")} As ${friendlyFrom} hands the ladle to ${friendlyCurrent}, your event bowls found cozy homes. ${bowlLabel} Reward: **${coins}c**, **${rep} REP**, **${sxp} SXP**.`;
+  const message = `${getIcon("season")} As ${friendlyFrom} hands the ladle to ${friendlyCurrent}, your seasonal event bowls found cozy homes. ${bowlLabel} Reward: **${coins}c**, **${rep} REP**, **${sxp} SXP**.`;
 
   return { message, leveled, cleared: clearedKeys.length, bowlsCleared: bowlCount };
 }

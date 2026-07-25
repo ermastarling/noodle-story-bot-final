@@ -501,6 +501,7 @@ export function buildComponentsV2NoticeCardPayload({
   title = "Notice",
   details = [],
   tone = "info",
+  imageUrl = "",
   thumbnailUrl = "",
   ownerId,
   ephemeral = false,
@@ -511,9 +512,20 @@ export function buildComponentsV2NoticeCardPayload({
   const detailLines = Array.isArray(details)
     ? details.map((line) => String(line ?? "").trim()).filter(Boolean)
     : [];
+  const safeImageUrl = String(imageUrl || "").trim();
   const safeThumbnailUrl = String(thumbnailUrl || "").trim();
 
-  const components = [{ type: 10, content: `### ${heading}` }];
+  const components = [];
+  if (safeImageUrl) {
+    components.push({
+      type: 12,
+      items: [{ media: { url: safeImageUrl } }]
+    });
+    components.push({ type: 10, content: heading });
+  } else {
+    components.push({ type: 10, content: `### ${heading}` });
+  }
+
   if (safeThumbnailUrl && detailLines.length > 0) {
     components.push({
       type: 9,
@@ -574,6 +586,7 @@ export function buildComponentsV2PayloadWithNoticeCards({
       title: notice.title,
       details: notice.details,
       tone: notice.tone,
+      imageUrl: notice.imageUrl,
       thumbnailUrl: notice.thumbnailUrl,
       ownerId,
       ephemeral,

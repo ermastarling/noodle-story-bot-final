@@ -121,3 +121,37 @@ test("season rollover does not reward non-seasonal bowls", () => {
   assert.strictEqual(player.sxp_total, 3);
   assert.strictEqual(player.inv_bowls.normal.qty, 4);
 });
+
+test("season rollover does not convert seasonal bowls when season is unchanged", () => {
+  const player = {
+    coins: 50,
+    rep: 10,
+    sxp_total: 20,
+    sxp_progress: 5,
+    inv_bowls: {
+      offSeason: { recipe_id: "harvest_festival_hearth_stock", qty: 3 }
+    },
+    seasons: {
+      last_seen: "summer",
+      last_rewarded_from: null,
+      last_rewarded_at: null
+    },
+    lifetime: {
+      coins_earned: 0
+    },
+    shop_level: 1
+  };
+
+  const result = applySeasonRolloverReward(player, "summer", {
+    recipes: {
+      harvest_festival_hearth_stock: { season: "autumn" }
+    }
+  });
+
+  assert.strictEqual(result, null);
+  assert.strictEqual(player.coins, 50);
+  assert.strictEqual(player.rep, 10);
+  assert.strictEqual(player.sxp_total, 20);
+  assert.strictEqual(player.sxp_progress, 5);
+  assert.strictEqual(player.inv_bowls.offSeason.qty, 3);
+});

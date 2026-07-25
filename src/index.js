@@ -3643,6 +3643,14 @@ import { theme } from "./ui/theme.js";
     if (interaction.isAutocomplete()) {
       telemetryRoute = "autocomplete";
       try {
+        if (interaction.commandName === "noodle-dev") {
+          telemetryRoute = "autocomplete:noodle-dev";
+          if (typeof noodleDevCommand.autocomplete === "function") {
+            return await noodleDevCommand.autocomplete(interaction);
+          }
+          return interaction.respond([]);
+        }
+
         if (interaction.commandName !== "noodle") return;
 
         const sub = interaction.options.getSubcommand(false);

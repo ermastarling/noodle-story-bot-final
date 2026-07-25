@@ -63,7 +63,9 @@ export function buildAcceptPickerV2Message({
   currentPage = 0,
   totalPages = 1,
   directAcceptMode = false,
-  tutorialSingleAcceptMode = false
+  tutorialSingleAcceptMode = false,
+  maxSelectable = null,
+  hasAcceptedOrders = false
 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
@@ -90,6 +92,10 @@ export function buildAcceptPickerV2Message({
   }
 
   const selectedCount = selectedSet.size;
+  const safeMaxSelectable = Number.isFinite(maxSelectable)
+    ? Math.max(0, Math.floor(Number(maxSelectable) || 0))
+    : null;
+  const selectionCapReached = safeMaxSelectable !== null && selectedCount >= safeMaxSelectable;
   const COMPONENT_BUDGET = 35;
   const confirmRowTemplate = {
     type: 1,
@@ -103,7 +109,7 @@ export function buildAcceptPickerV2Message({
         style: selectedCount > 0 ? 3 : 1,
         disabled: selectedCount <= 0
       }),
-      button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: 3 }),
+      button({ sceneKey, actionKey: "bk", userId: safeUserId, token: safeToken, label: "Back", style: hasAcceptedOrders ? 3 : 2 }),
       button({ sceneKey, actionKey: "cnl", userId: safeUserId, token: safeToken, label: "Cancel", style: 2 })
     ]
   };
@@ -138,7 +144,8 @@ export function buildAcceptPickerV2Message({
           token: safeToken,
           arg: shortId,
           label: directAccept ? "Accept" : (isSelected ? "Selected" : "Select"),
-          style: directAccept ? 3 : (isSelected ? 3 : 1)
+          style: directAccept ? 3 : (isSelected ? 3 : 1),
+          disabled: !directAccept && !isSelected && selectionCapReached
         })
       };
       const sectionBudget = countComponentsDeep(section);

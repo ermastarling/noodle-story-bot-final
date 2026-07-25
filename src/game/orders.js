@@ -296,8 +296,16 @@ export function getOrdersMeta(playerState) {
   const consumed = Array.isArray(playerState.orders_consumed_indices) ? playerState.orders_consumed_indices : [];
   const consumedSet = new Set(consumed);
   const totalCount = Math.max(0, Number(playerState.orders_total_count ?? 0));
+  const currentDay = String(playerState.orders_day ?? "");
+  const depletedDay = String(playerState.orders_depleted_day ?? "");
+  const depletedForCurrentDay = currentDay.length > 0 && depletedDay === currentDay;
+
+  if (depletedForCurrentDay) {
+    return { totalCount, consumedSet, availableCount: 0, depletedForCurrentDay: true };
+  }
+
   const availableCount = Math.max(0, totalCount - consumedSet.size);
-  return { totalCount, consumedSet, availableCount };
+  return { totalCount, consumedSet, availableCount, depletedForCurrentDay: false };
 }
 
 export function generateOrderPageForPlayer({
@@ -312,7 +320,15 @@ export function generateOrderPageForPlayer({
   pageSize = 25
 }) {
   const playerRecipePool = getPlayerRecipePool(playerState);
-  const { totalCount, consumedSet } = getOrdersMeta(playerState);
+  const { totalCount, consumedSet, availableCount, depletedForCurrentDay } = getOrdersMeta(playerState);
+  if (depletedForCurrentDay) {
+    return {
+      orders: [],
+      totalCount,
+      availableCount: 0
+    };
+  }
+
   const offset = Math.max(0, page) * pageSize;
   const { orders } = generateOrdersStream({
     serverId: playerState.orders_seed || `${serverId}-${userId}`,
@@ -332,7 +348,7 @@ export function generateOrderPageForPlayer({
   return {
     orders,
     totalCount,
-    availableCount: Math.max(0, totalCount - consumedSet.size)
+    availableCount
   };
 }
 
@@ -348,7 +364,8 @@ export function findOrderByToken({
 }) {
   if (!token) return null;
   const playerRecipePool = getPlayerRecipePool(playerState);
-  const { totalCount, consumedSet } = getOrdersMeta(playerState);
+  const { totalCount, consumedSet, depletedForCurrentDay } = getOrdersMeta(playerState);
+  if (depletedForCurrentDay) return null;
   const target = token.toUpperCase();
 
   const { orders } = generateOrdersStream({
@@ -386,4 +403,49 @@ export function markOrderConsumed(playerState, orderIndex) {
   if (playerState.orders_day && playerState.orders_consumed_indices.length >= totalCount) {
     playerState.orders_depleted_day = playerState.orders_day;
   }
+}
+
+export function ensureUnlimitedOrdersBuffer(playerState, { minVisibleOrders = 250 } = {}) {
+  if (!playerState || typeof playerState !== "object") {
+    return { changed: false, totalCount: 0, availableCount: 0, minVisibleOrders: 0 };
+  }
+
+  const safeMinVisibleOrders = Math.max(1, Math.floor(Number(minVisibleOrders) || 1));
+  const totalCount = Math.max(0, Math.floor(Number(playerState.orders_total_count || 0) || 0));
+  const consumedSet = new Set(
+    Array.isArray(playerState.orders_consumed_indices)
+      ? playerState.orders_consumed_indices.map((idx) => Math.floor(Number(idx))).filter((idx) => Number.isFinite(idx) && idx >= 0)
+      : []
+  );
+  const consumedCount = consumedSet.size;
+  const availableCount = Math.max(0, totalCount - consumedCount);
+
+  if (availableCount >= safeMinVisibleOrders) {
+    return {
+      changed: false,
+      totalCount,
+      availableCount,
+      minVisibleOrders: safeMinVisibleOrders
+    };
+  }
+
+  const desiredTotal = consumedCount + safeMinVisibleOrders;
+  if (desiredTotal <= totalCount) {
+    return {
+      changed: false,
+      totalCount,
+      availableCount,
+      minVisibleOrders: safeMinVisibleOrders
+    };
+  }
+
+  playerState.orders_total_count = desiredTotal;
+  playerState.orders_depleted_day = null;
+
+  return {
+    changed: true,
+    totalCount: desiredTotal,
+    availableCount: Math.max(0, desiredTotal - consumedCount),
+    minVisibleOrders: safeMinVisibleOrders
+  };
 }

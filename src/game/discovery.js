@@ -35,6 +35,39 @@ function isRecipeActiveForEvent(recipe, activeEventId) {
   if (!activeEventId) return false;
   return String(recipe.event_id) === String(activeEventId);
 }
+export function unlockRecipeForPlayer(player, content, recipeId) {
+  if (!player) return { ok: false, reason: "Missing player." };
+  const normalizedRecipeId = String(recipeId ?? "").trim();
+  if (!normalizedRecipeId) return { ok: false, reason: "Missing recipe id." };
+
+  const recipe = content?.recipes?.[normalizedRecipeId] ?? null;
+  if (!recipe) return { ok: false, reason: "Recipe not found." };
+
+  if (!Array.isArray(player.known_recipes)) {
+    player.known_recipes = [];
+  }
+
+  if (player.known_recipes.includes(normalizedRecipeId)) {
+    return {
+      ok: true,
+      added: false,
+      recipeId: normalizedRecipeId,
+      recipe
+    };
+  }
+
+  player.known_recipes.push(normalizedRecipeId);
+  if (player.clues_owned?.[normalizedRecipeId]) {
+    delete player.clues_owned[normalizedRecipeId];
+  }
+
+  return {
+    ok: true,
+    added: true,
+    recipeId: normalizedRecipeId,
+    recipe
+  };
+}
 
 /**
  * Check if player can discover recipes of a given tier

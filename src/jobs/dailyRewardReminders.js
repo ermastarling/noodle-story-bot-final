@@ -72,7 +72,7 @@ function normalizeComponents(rows = []) {
 function buildReminderV2Payload({ channelLine, claimLine, userId, components = [], player = null, now = Date.now() }) {
   const hasHouse247Active = hasUnlimitedMarketStock(player, now);
   const openerLine = hasHouse247Active
-    ? `Your ${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House is active. Vote again in **/noodle quests_vote** to extend it.`
+    ? `Your ${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House is active. Vote again using \`/noodle quests_vote\` to extend it.`
     : `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`;
   const compactReminderBlock = [
     channelLine || null,

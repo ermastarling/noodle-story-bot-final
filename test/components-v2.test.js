@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildComponentsV2ContainerMessage,
   buildComponentsV2MenuPayload,
+  buildComponentsV2NoticeCardPayload,
   isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
   replyOrEditInteraction,
@@ -211,6 +212,24 @@ test("Components V2: serve and take-out heading aliases resolve to correct scene
   assert.equal(takeOutUrl.length > 0, true);
   assert.equal(serveOrdersUrl, ordersServedUrl);
   assert.equal(takeOutUrl, takeoutUrl);
+});
+
+test("Components V2: explicit notice image keeps unlock title below the banner", () => {
+  const payload = buildComponentsV2NoticeCardPayload({
+    title: "Kitchen Unlocked",
+    imageUrl: "https://example.com/kitchen.png",
+    details: ["Simmer gold-star broths with /noodle kitchen."],
+    tone: "success"
+  });
+
+  const nodes = payload.components?.[0]?.components ?? [];
+  assert.equal(nodes[0]?.type, 12);
+  assert.equal(String(nodes[0]?.items?.[0]?.media?.url ?? ""), "https://example.com/kitchen.png");
+  assert.equal(nodes[1]?.type, 10);
+  assert.equal(String(nodes[1]?.content ?? "").includes("Kitchen Unlocked"), true);
+  assert.equal(String(nodes[1]?.content ?? "").includes("##"), false);
+  assert.equal(nodes[2]?.type, 10);
+  assert.equal(String(nodes[2]?.content ?? "").includes("Simmer gold-star broths"), true);
 });
 
 test("Components V2: replyOrEditInteraction prefers raw webhook edit for deferred V2 payloads", async () => {

@@ -153,3 +153,40 @@ test("Accept flow V2: confirm count reflects stored selected IDs across pages", 
   assert.equal(String(confirm?.label || ""), "Accept Selected (2)");
   assert.equal(Boolean(confirm?.disabled), false);
 });
+
+test("Accept flow V2: back button is neutral before any accepted orders", () => {
+  const payload = buildAcceptPickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [{ shortId: "A1", line: "Order A1" }],
+    hasAcceptedOrders: false
+  });
+
+  const rows = payload.components?.[0]?.components?.filter((component) => component?.type === 1) ?? [];
+  const back = rows[0]?.components?.find((component) => String(component?.custom_id || "").includes(":orders.accept_picker:bk:"));
+  assert.equal(String(back?.label || ""), "Back");
+  assert.equal(Number(back?.style || 0), 2);
+});
+
+test("Accept flow V2: unselected buttons are disabled when selection cap is reached", () => {
+  const payload = buildAcceptPickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [
+      { shortId: "A1", line: "Order A1" },
+      { shortId: "A2", line: "Order A2" }
+    ],
+    selectedShortIds: ["A1"],
+    maxSelectable: 1,
+    hasAcceptedOrders: true
+  });
+
+  const sections = payload.components?.[0]?.components?.filter((component) => component?.type === 9) ?? [];
+  const selectedButton = sections[0]?.accessory;
+  const unselectedButton = sections[1]?.accessory;
+
+  assert.equal(String(selectedButton?.label || ""), "Selected");
+  assert.equal(Boolean(selectedButton?.disabled), false);
+  assert.equal(String(unselectedButton?.label || ""), "Select");
+  assert.equal(Boolean(unselectedButton?.disabled), true);
+});

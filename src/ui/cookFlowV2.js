@@ -397,9 +397,9 @@ export function buildCookMinigameV2Message({
       text(`Recipe: **${String(recipeName || "Unknown Dish")}** • Quantity: **${safeQuantity}**`),
       text(`Turn **${turnDisplay}/${safeTurns}** • Progress: ${progressBar(turnDisplay - 1, safeTurns)}`),
       text(`Tap the **GREEN button** now: **${targetLabel}** (${guideMap[target] || "Follow station cue"})`),
-      text(`You have **${totalWindowSeconds} seconds** to hit! Total time: **${totalRunSeconds} seconds**.`),
+      text(`You have **${totalWindowSeconds} seconds** to hit!`),
       ...(isTutorialMode
-        ? [text(safeCoachingLine || "Tutorial mode: this cook step has a forgiving timer. Future kitchen turns use a **10s** order window.")]
+        ? [text(safeCoachingLine || "Tutorial mode: this step has a forgiving timer. Future kitchen turns use a **10s** window.")]
         : []),
       text(`Hits: **${safeScore}** • Misses: **${safeMisses}**`),
       ...(statusLabel ? [text(`Last turn: **${statusLabel}**`)] : []),

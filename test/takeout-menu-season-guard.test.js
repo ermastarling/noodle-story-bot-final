@@ -15,6 +15,11 @@ function sliceBetween(source, startToken, endToken) {
 }
 
 test("Takeout menu season guard: filter excludes out-of-season recipes", () => {
+  const normalizeSeasonTagSource = sliceBetween(
+    noodleSource,
+    "function normalizeSeasonTag(",
+    "function syncServerSeasonFromSettings("
+  );
   const filterFnSource = sliceBetween(
     noodleSource,
     "function filterRecipeIdsByActiveSeasonEvent(",
@@ -29,7 +34,10 @@ test("Takeout menu season guard: filter excludes out-of-season recipes", () => {
     }
   };
 
-  const createFilter = new Function("content", `${filterFnSource}; return filterRecipeIdsByActiveSeasonEvent;`);
+  const createFilter = new Function(
+    "content",
+    `${normalizeSeasonTagSource}; ${filterFnSource}; return filterRecipeIdsByActiveSeasonEvent;`
+  );
   const filterRecipeIdsByActiveSeasonEvent = createFilter(content);
 
   const filtered = filterRecipeIdsByActiveSeasonEvent(
@@ -42,6 +50,39 @@ test("Takeout menu season guard: filter excludes out-of-season recipes", () => {
     ["summer_seasonal", "always_common"],
     "Out-of-season seasonal recipes should be excluded from takeout-eligible options"
   );
+});
+
+test("Takeout menu season guard: filter normalizes season tags", () => {
+  const normalizeSeasonTagSource = sliceBetween(
+    noodleSource,
+    "function normalizeSeasonTag(",
+    "function syncServerSeasonFromSettings("
+  );
+  const filterFnSource = sliceBetween(
+    noodleSource,
+    "function filterRecipeIdsByActiveSeasonEvent(",
+    "function migrateLegacyRecipeIds("
+  );
+
+  const content = {
+    recipes: {
+      summer_seasonal: { tier: "seasonal", season: "summer" },
+      always_common: { tier: "common" }
+    }
+  };
+
+  const createFilter = new Function(
+    "content",
+    `${normalizeSeasonTagSource}; ${filterFnSource}; return filterRecipeIdsByActiveSeasonEvent;`
+  );
+  const filterRecipeIdsByActiveSeasonEvent = createFilter(content);
+
+  const filtered = filterRecipeIdsByActiveSeasonEvent(
+    ["summer_seasonal", "always_common"],
+    { season: " Summer ", active_event_id: null }
+  );
+
+  assert.deepEqual(filtered, ["summer_seasonal", "always_common"]);
 });
 
 test("Takeout menu season guard: takeout flow uses filtered recipe ids", () => {

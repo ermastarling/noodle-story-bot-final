@@ -71,7 +71,8 @@ import {
   generateOrderPageForPlayer,
   findOrderByToken,
   getOrdersMeta,
-  markOrderConsumed
+  markOrderConsumed,
+  ensureUnlimitedOrdersBuffer
 } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import {
@@ -136,8 +137,13 @@ import {
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { applySeasonRolloverReward } from "../game/seasonRollover.js";
-import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
-import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff, getTakeoutDiscoveryAttemptLimit } from "../game/discovery.js";
+import {
+  rollRecipeDiscovery,
+  applyDiscovery,
+  applyNpcDiscoveryBuff,
+  getTakeoutDiscoveryAttemptLimit,
+  unlockRecipeForPlayer
+} from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
@@ -163,7 +169,8 @@ import {
   getUnseenHiddenSpecializations,
   markSpecializationShopLevelSeen,
   meetsSpecializationRequirements,
-  selectSpecialization
+  selectSpecialization,
+  unlockSpecialization
 } from "../game/specialization.js";
 import {
   ensureDecorState,
@@ -185,11 +192,14 @@ import {
   rollIngredientSave,
   rollDoubleCraft
 } from "../game/upgrades.js";
+import { setPlayerShopLevel } from "../game/serve.js";
+import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap, getEventById } from "../game/events.js";
 import { calculateStaffEffects } from "../game/staff.js";
 import {
   ensureGardenState,
   isGardenUnlocked,
   getGardenUnlockState,
+  acknowledgeGardenUnlock,
   addSeeds,
   getGardenPlotCount,
   ensureGardenPlots,
@@ -217,6 +227,7 @@ import {
   setFishingCooldown,
   ensureFishingState,
   getFishingUnlockState,
+  acknowledgeFishingUnlock,
   applyFishingDrops,
   FISHING_RECIPE_IDS,
   unlockFishingRecipesFromDrops,
@@ -233,6 +244,7 @@ import {
   getKitchenBatches,
   getKitchenCapacity,
   getKitchenUnlockState,
+  acknowledgeKitchenUnlock,
   getKitchenForagePool,
   getCraftableCountForBroth,
   getBrothRecipe,
@@ -243,10 +255,11 @@ import {
   KITCHEN_UNLOCK_LEVEL
 } from "../game/kitchen.js";
 import { theme } from "../ui/theme.js";
-import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js";
+import { getIcon, getIconUrl, getButtonEmoji, resolveIcon, getSceneBannerUrl } from "../ui/icons.js";
 import {
   buildComponentsV2MenuPayload,
   buildComponentsV2PayloadWithNoticeCards,
+  buildComponentsV2NoticeCardPayload,
   isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
   replyOrEditInteraction
@@ -289,19 +302,20 @@ import {
 } from "../ui/profileFlowV2.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
-
 const {
-MessageActionRow,
-MessageSelectMenu,
-MessageButton,
-MessageFlags,
-Modal,
-TextInputComponent,
-Constants
+  MessageActionRow,
+  MessageSelectMenu,
+  MessageButton,
+  MessageEmbed,
+  MessageFlags,
+  Modal,
+  TextInputComponent,
+  Constants
 } = discordPkg;
 
 // Temporary cache for multibuy selections to avoid custom ID length limits
 const multibuyCacheV2 = new Map();
+
 // Temporary cache for sell selections to avoid custom ID length limits
 const sellSelectionCacheV2 = new Map();
 // Temporary cache for compost selections keyed by message id
@@ -532,6 +546,20 @@ function getTakeoutCounterLabel() {
   return `${getIcon("perk_takeout_counter", getIcon("orders"))} Take Out Counter`;
 }
 
+function normalizeSeasonTag(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized || null;
+}
+
+function syncServerSeasonFromSettings(serverState, settings) {
+  const computedSeason = normalizeSeasonTag(computeActiveSeason(settings));
+  const activeEvent = getActiveEvent(eventsContent, serverState);
+  const eventSeason = normalizeSeasonTag(activeEvent?.season);
+  const effectiveSeason = eventSeason || computedSeason;
+  serverState.season = effectiveSeason;
+  return effectiveSeason;
+}
+
 function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false, consumeSubscriptionNotice = false } = {}) {
   if (!player) return payload;
   void user;
@@ -543,24 +571,30 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
   const notices = [];
   if (garden?.justUnlocked) {
     notices.push({
-      title: `${getIcon("garden")} Garden Unlocked`,
+      title: `${getIcon("garden")} Garden Unlocked!`,
+      imageUrl: getSceneBannerUrl("garden"),
       details: ["Plant seeds and harvest ingredients with `/noodle garden` (or find it through your Pantry)."],
       tone: "success"
     });
+    acknowledgeGardenUnlock(player);
   }
   if (kitchen?.justUnlocked) {
     notices.push({
-      title: `${getIcon("kitchen")} Kitchen Unlocked`,
+      title: `${getIcon("kitchen")} Kitchen Unlocked!`,
+      imageUrl: getSceneBannerUrl("kitchen"),
       details: ["Simmer gold-star broths with `/noodle kitchen` (or find it through your Pantry)."],
       tone: "success"
     });
+    acknowledgeKitchenUnlock(player);
   }
   if (fishing?.justUnlocked) {
     notices.push({
-      title: `${getIcon("fishing")} Fishing Unlocked`,
+      title: `${getIcon("fishing")} Fishing Unlocked!`,
+      imageUrl: getSceneBannerUrl("fishing"),
       details: ["Catch fish and seafood with `/noodle fishing` (or find it through your Pantry)."],
       tone: "success"
     });
+    acknowledgeFishingUnlock(player);
   }
 
   const seatingUpgrade = upgradesContent?.upgrades?.u_seating;
@@ -749,6 +783,37 @@ function normalizePersistentV2NoticeCard(card) {
     .slice(0, 8);
   if (!details.length) return null;
   return { title, details, tone };
+}
+
+function enqueuePersistentV2NoticeCards(player, notices = []) {
+  const notifications = ensurePersistentV2NoticeState(player);
+  if (!notifications) return false;
+
+  const normalized = (Array.isArray(notices) ? notices : [])
+    .map((notice) => normalizePersistentV2NoticeCard(notice))
+    .filter(Boolean);
+  if (!normalized.length) return false;
+
+  const pending = Array.isArray(notifications.pending_v2_notice_cards)
+    ? notifications.pending_v2_notice_cards.map((notice) => normalizePersistentV2NoticeCard(notice)).filter(Boolean)
+    : [];
+  const existingSignatures = new Set(
+    pending.map((notice) => JSON.stringify({ title: notice.title, details: notice.details, tone: notice.tone }))
+  );
+
+  let changed = false;
+  for (const notice of normalized) {
+    const signature = JSON.stringify({ title: notice.title, details: notice.details, tone: notice.tone });
+    if (existingSignatures.has(signature)) continue;
+    existingSignatures.add(signature);
+    pending.push(notice);
+    changed = true;
+  }
+
+  if (!changed) return false;
+
+  notifications.pending_v2_notice_cards = pending.slice(-MAX_PERSISTENT_V2_NOTICE_CARDS);
+  return true;
 }
 
 function resolvePersistentV2NoticeCards(player, menuKey) {
@@ -1320,23 +1385,8 @@ function applyHouse247OrderBoardOverride(player) {
   if (!hasHouse247Perk(player)) return;
 
   const orderCap = Math.max(0, Math.floor(Number(getOrderAcceptCap(player, nowTs()) || 0) || 0));
-  const currentTotal = Math.max(0, Math.floor(Number(player?.orders_total_count || 0) || 0));
-  const consumedCount = Array.isArray(player?.orders_consumed_indices)
-    ? player.orders_consumed_indices.length
-    : 0;
-
-  // Keep a rolling board chunk available while preserving stable order IDs within a day.
-  // This makes 24/7 House effectively unlimited without allocating a giant board upfront.
-  const boardChunk = Math.max(1, orderCap || 500);
-  const minimumTotal = Math.max(currentTotal, boardChunk);
-  const consumedChunks = Math.floor(consumedCount / boardChunk);
-  const desiredTotal = Math.max(minimumTotal, (consumedChunks + 1) * boardChunk);
-  if (desiredTotal <= currentTotal) return;
-
-  player.orders_total_count = desiredTotal;
-  if (consumedCount < desiredTotal) {
-    player.orders_depleted_day = null;
-  }
+  const minimumVisibleOrders = Math.max(orderCap || 0, 25 * 10);
+  ensureUnlimitedOrdersBuffer(player, { minVisibleOrders: minimumVisibleOrders });
 }
 
 function buildHelpPage({ page, userId, user }) {
@@ -1396,7 +1446,7 @@ function buildHelpPage({ page, userId, user }) {
             "• `/noodle-staff` — Hire, level, and manage your staff.",
             "• `/noodle specialize` — Choose a shop specialization.",
             "• Shop Name & Tagline buttons — Edit shop name/tagline.",
-            "• Store button — Opens the decor/cosmetics store."
+            "• Store button — Open the premium store."
           ].join("\n"),
           inline: true
         },
@@ -2667,6 +2717,23 @@ function formatBonusLabel(key) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function formatPrepChefPurchasedItems(purchasedItems) {
+  const entries = purchasedItems instanceof Map
+    ? [...purchasedItems.entries()]
+    : Object.entries(purchasedItems ?? {});
+
+  return entries
+    .map(([idOrName, qty]) => {
+      const safeQty = Math.max(0, Math.floor(Number(qty) || 0));
+      if (!safeQty) return null;
+      const label = purchasedItems instanceof Map ? String(idOrName || "").trim() : displayItemName(idOrName);
+      if (!label) return null;
+      return `**${label} x${safeQty}**`;
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function normalizeIngredientType(itemId) {
   const raw = String(content.items?.[itemId]?.category ?? "").toLowerCase();
   const tags = Array.isArray(content.items?.[itemId]?.tags) ? content.items[itemId].tags.map((t) => String(t).toLowerCase()) : [];
@@ -2873,9 +2940,7 @@ function runPrepChefAutoBuy({
     ordersCovered += 1;
   }
 
-  const purchasedItems = Object.entries(purchasedByItem)
-    .map(([id, qty]) => `**${qty}× ${displayItemName(id)}**`)
-    .join(" · ");
+  const purchasedItems = formatPrepChefPurchasedItems(purchasedByItem);
 
   if (totalAutoCost > 0) {
     if (!p.inv_ingredients) p.inv_ingredients = {};
@@ -3534,17 +3599,39 @@ function getValidAvailableRecipeIds(player) {
 }
 
 function filterRecipeIdsByActiveSeasonEvent(recipeIds, server) {
-  const activeSeason = server?.season ?? null;
-  const activeEventId = server?.active_event_id ?? null;
+  const activeSeason = normalizeSeasonTag(server?.season ?? null);
+  const activeEventId = String(server?.active_event_id ?? "").trim() || null;
   return (recipeIds ?? []).filter((rid) => {
     const recipe = content.recipes?.[rid];
     if (!recipe) return false;
     if (recipe.is_event_recipe) {
-      return !!activeEventId && recipe.event_id === activeEventId;
+      const recipeEventId = String(recipe.event_id ?? "").trim();
+      return !!activeEventId && recipeEventId === activeEventId;
     }
     if (recipe.tier !== "seasonal") return true;
-    return !!activeSeason && recipe.season === activeSeason;
+    const recipeSeason = normalizeSeasonTag(recipe.season ?? null);
+    return !!activeSeason && !!recipeSeason && recipeSeason === activeSeason;
   });
+}
+
+function isRecipeCookAvailableForCurrentSeasonEvent(recipe, server) {
+  if (!recipe || typeof recipe !== "object") return false;
+  const activeSeason = normalizeSeasonTag(server?.season ?? null);
+  const activeEventId = String(server?.active_event_id ?? "").trim() || null;
+  const recipeSeason = normalizeSeasonTag(recipe?.season ?? null);
+
+  if (recipe.is_event_recipe) {
+    const recipeEventId = String(recipe?.event_id ?? "").trim() || null;
+    const eventMatches = Boolean(activeEventId && recipeEventId && recipeEventId === activeEventId);
+    const seasonMatches = Boolean(activeSeason && recipeSeason && recipeSeason === activeSeason);
+    return eventMatches || seasonMatches;
+  }
+
+  if (recipe.tier === "seasonal") {
+    return Boolean(activeSeason && recipeSeason && recipeSeason === activeSeason);
+  }
+
+  return true;
 }
 
 function migrateLegacyRecipeIds(player) {
@@ -3819,6 +3906,21 @@ function getSpecializationThumbnailUrl(spec = null) {
     ?? getIconUrl(`decor_set_${spec.spec_id}`)
     ?? getIconUrl(`decor_set_${spec.icon}`)
     ?? getIconUrl("decor_set_placeholder");
+}
+
+function buildSpecializationUnlockNoticeCard(spec = null, { hidden = false } = {}) {
+  const name = String(spec?.name || spec?.spec_id || "Specialization").trim() || "Specialization";
+  return {
+    title: hidden
+      ? `${getIcon("sparkle")} Hidden Specialization Unlocked!`
+      : `${getIcon("sparkle")} Specialization Unlocked!`,
+    details: [
+      `**${name}** is now unlocked!`,
+      "Open **/noodle specialize** to view and switch your specialization."
+    ],
+    tone: "success",
+    thumbnailUrl: getSpecializationThumbnailUrl(spec)
+  };
 }
 
 function buildSpecializationListData(player, now = nowTs(), page = 0, pageSize = 5) {
@@ -5355,7 +5457,7 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
 function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 }) {
   const set = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(set);
+  syncServerSeasonFromSettings(s, set);
   const activeEventEffects = getActiveEventEffects(eventsContent, s);
   const activeEventId = s.active_event_id ?? null;
   rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
@@ -5674,7 +5776,7 @@ function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser,
 
 function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageSize = 7 }) {
   const set = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(set);
+  syncServerSeasonFromSettings(s, set);
   const activeEventEffects = getActiveEventEffects(eventsContent, s);
   const activeEventId = s.active_event_id ?? null;
   rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
@@ -5746,6 +5848,9 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
   const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
   const { entries, orderTokenByShortId, page: safePage, totalPages } = buildAcceptPickerSceneEntries({ serverId, userId, p, s, page });
   const allSelectableShortIds = new Set(Object.keys(orderTokenByShortId).map((id) => String(id || "").trim()).filter(Boolean));
+  const acceptedCount = Object.keys(p.orders?.accepted ?? {}).length;
+  const cap = getOrderAcceptCap(p, nowTs());
+  const remainingSlots = Math.max(0, cap - acceptedCount);
 
   const scopedEntries = (() => {
     if (!tutorialSingleAcceptMode) return entries;
@@ -5764,7 +5869,7 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
   const normalizedSelected = normalizeAcceptPickerSelectedShortIds({
     selectedShortIds,
     orderTokenByShortId: tutorialSingleAcceptMode ? scopedOrderTokenByShortId : orderTokenByShortId
-  });
+  }).slice(0, Math.max(0, remainingSlots));
 
   const sceneState = putSceneState({
     sceneKey: "orders.accept_picker",
@@ -5789,7 +5894,9 @@ function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortId
     currentPage: safePage,
     totalPages: tutorialSingleAcceptMode ? 1 : totalPages,
     directAcceptMode: tutorialSingleAcceptMode,
-    tutorialSingleAcceptMode
+    tutorialSingleAcceptMode,
+    maxSelectable: remainingSlots,
+    hasAcceptedOrders: acceptedCount > 0
   });
 }
 
@@ -5810,7 +5917,10 @@ function resolveTutorialCookRecipeId(player) {
 
 function buildCookRecipePickerSceneEntries({ p, s }) {
   const available = getValidAvailableRecipeIds(p);
-  const seasonFiltered = filterRecipeIdsByActiveSeasonEvent(available, s);
+  const seasonFiltered = available.filter((rid) => {
+    const recipe = content.recipes?.[rid] ?? null;
+    return isRecipeCookAvailableForCurrentSeasonEvent(recipe, s);
+  });
 
   const sortKey = (rid) => {
     const r = content.recipes?.[rid];
@@ -6261,7 +6371,10 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const disableAccept = remainingOrders === 0;
   const highlightAccept = !hasAcceptedOrders && !disableAccept;
   const available = getValidAvailableRecipeIds(p);
-  const seasonFiltered = filterRecipeIdsByActiveSeasonEvent(available, s);
+  const seasonFiltered = available.filter((rid) => {
+    const recipe = content.recipes?.[rid] ?? null;
+    return isRecipeCookAvailableForCurrentSeasonEvent(recipe, s);
+  });
 
   const sortKey = (rid) => {
     const r = content.recipes?.[rid];
@@ -7118,8 +7231,6 @@ let unlockNoticePlayer = null;
 
 let seasonRolloverNotice = null;
 
-// Check commands that should defer ephemerally before heavy work/permission gates
-const subCmd = interaction.options?.getSubcommand?.();
 const shouldDeferEphemeral = group === "dev" && !isDevAdmin(userId);
 
 // Defer immediately for slash commands (chat input) to prevent timeout
@@ -7202,22 +7313,27 @@ const withSeasonNotice = (payload = {}) => {
 };
 
 const commit = async (payload) => {
+  const isDevResponse = String(group || "").trim() === "dev";
   const unlockApplied = payload?.__unlockNoticeApplied;
-  if (!unlockApplied) {
+  if (!isDevResponse && !unlockApplied) {
     payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user, {
       consumeSeatingNotice: false,
       consumeSubscriptionNotice: false
     });
   }
-  payload = withSeasonNotice(payload);
-
-  const persistentNoticePlayer = ensurePlayer(serverId, userId);
-  const persistentNoticeState = resolvePersistentV2NoticeCards(persistentNoticePlayer, `noodle:${sub}`);
-  if (persistentNoticeState.notices.length > 0) {
-    payload = applyPersistentNoticeCards(payload, persistentNoticeState.notices);
+  if (!isDevResponse) {
+    payload = withSeasonNotice(payload);
   }
-  if (persistentNoticeState.changed && db) {
-    upsertPlayer(db, serverId, userId, persistentNoticePlayer, null, persistentNoticePlayer.schema_version);
+
+  if (!isDevResponse) {
+    const persistentNoticePlayer = ensurePlayer(serverId, userId);
+    const persistentNoticeState = resolvePersistentV2NoticeCards(persistentNoticePlayer, `noodle:${sub}`);
+    if (persistentNoticeState.notices.length > 0) {
+      payload = applyPersistentNoticeCards(payload, persistentNoticeState.notices);
+    }
+    if (persistentNoticeState.changed && db) {
+      upsertPlayer(db, serverId, userId, persistentNoticePlayer, null, persistentNoticePlayer.schema_version);
+    }
   }
 
   const rolloutEnabledForUser = isComponentsV2Enabled({
@@ -7429,6 +7545,14 @@ const buildDevMessageEmbed = ({ message, isError = false, title = null }) =>
     user: interaction.member ?? interaction.user
   });
 
+const buildDevAdminNoticePayload = ({ message, isError = false } = {}) => buildComponentsV2NoticeCardPayload({
+  title: isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`,
+  details: [message],
+  tone: isError ? "error" : "success",
+  ownerId: userId,
+  ephemeral: true
+});
+
 if (inDevPath) {
   if (!isDevAdmin(userId)) {
     return commit({
@@ -7453,7 +7577,7 @@ if (inDevPath) {
 
   const server = ensureServer(serverId);
   const settings = buildSettingsMap(settingsCatalog, server.settings);
-  server.season = computeActiveSeason(settings);
+  syncServerSeasonFromSettings(server, settings);
   const activeEventEffects = getActiveEventEffects(eventsContent, server);
   rollMarket({ serverId, content, serverState: server, eventEffects: activeEventEffects });
 
@@ -7510,6 +7634,214 @@ if (inDevPath && sub === "reset_tutorial") {
         })
       ]),
       ephemeral: true
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_stat") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const field = String(opt.getString("field") || "").trim();
+  const value = Math.max(0, Math.floor(Number(opt.getInteger("value") || 0)));
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!targetUserId) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Provide a user or user ID to update.", isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
+    const p = ensurePlayer(targetServerId, targetUserId);
+    let message;
+
+    if (field === "bowls_served") {
+      if (!p.lifetime) p.lifetime = {};
+      p.lifetime.bowls_served_total = value;
+      message = `${getIcon("status_complete")} Set bowls served for <@${targetUserId}> to **${value}**.`;
+    } else if (field === "level") {
+      const result = setPlayerShopLevel(p, value);
+      message = `${getIcon("status_complete")} Set level for <@${targetUserId}> to **${result.targetLevel}** (${result.totalRequiredSxp} SXP total).`;
+    } else if (field === "rep") {
+      p.rep = value;
+      message = `${getIcon("status_complete")} Set REP for <@${targetUserId}> to **${value}**.`;
+    } else {
+      return commit({
+        ...buildDevAdminNoticePayload({ message: `Unknown stat field: ${field}.`, isError: true })
+      });
+    }
+
+    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_spec") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const specId = opt.getString("spec_id")?.trim();
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!targetUserId || !specId) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Provide a user and specialization ID to unlock.", isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
+    const p = ensurePlayer(targetServerId, targetUserId);
+    const spec = getSpecializationById(specializationsContent, specId) ?? { spec_id: specId, name: specId };
+    const result = unlockSpecialization(p, specId);
+    if (result.added) {
+      enqueuePersistentV2NoticeCards(p, [buildSpecializationUnlockNoticeCard(spec, { hidden: Boolean(spec?.hidden_until_unlocked) })]);
+    }
+    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+
+    const message = result.added
+      ? `${getIcon("status_complete")} Unlocked specialization **${specId}** for <@${targetUserId}>.`
+      : `${getIcon("status_complete")} Specialization **${specId}** was already unlocked for <@${targetUserId}>.`;
+
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_recipe") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const requestedRecipeId = opt.getString("recipe_id")?.trim();
+  const recipeId = resolveCanonicalRecipeId(requestedRecipeId);
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!targetUserId || !recipeId) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Provide a user and recipe ID to unlock.", isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
+    const p = ensurePlayer(targetServerId, targetUserId);
+    const result = unlockRecipeForPlayer(p, content, recipeId);
+    if (!result.ok) {
+      return commit({
+        ...buildDevAdminNoticePayload({
+          message: `Could not unlock recipe **${recipeId}**: ${result.reason ?? "Unknown error."}`,
+          isError: true
+        })
+      });
+    }
+
+    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+    const recipeName = result.recipe?.name || displayRecipeName(result.recipeId);
+    const message = result.added
+      ? `${getIcon("status_complete")} Unlocked recipe **${recipeName}** (${result.recipeId}) for <@${targetUserId}>.`
+      : `${getIcon("status_complete")} Recipe **${recipeName}** (${result.recipeId}) was already unlocked for <@${targetUserId}>.`;
+
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_season_event") {
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const eventId = opt.getString("event_id")?.trim();
+  const event = getEventById(eventsContent, eventId);
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!event) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: `Unknown event ID: ${eventId}.`, isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+    const normalizeSeasonTag = (value) => {
+      const normalized = String(value ?? "").trim().toLowerCase();
+      return normalized || null;
+    };
+
+    const serverState = ensureServer(targetServerId);
+    const previousEventId = serverState.active_event_id ?? null;
+    const previousSeason = serverState.season ?? null;
+    serverState.active_event_id = event.event_id;
+    if (event.season) {
+      serverState.season = event.season;
+    }
+
+    let rolloverNotice = null;
+    const seasonLabel = String(serverState.season ?? "unknown");
+    const fromLabel = String(previousSeason ?? "unknown");
+    const normalizedPreviousSeason = normalizeSeasonTag(previousSeason);
+    const normalizedCurrentSeason = normalizeSeasonTag(serverState.season);
+    const seasonActuallyChanged = Boolean(
+      normalizedPreviousSeason
+      && normalizedCurrentSeason
+      && normalizedPreviousSeason !== normalizedCurrentSeason
+    );
+
+    if (event.season && seasonActuallyChanged) {
+      const adminPlayer = ensurePlayer(targetServerId, userId);
+      rolloverNotice = applySeasonRolloverReward(adminPlayer, serverState.season, {
+        eventRecipeSeasonIndex,
+        recipes: content?.recipes
+      });
+
+      enqueuePersistentV2NoticeCards(adminPlayer, [{
+        title: `${getIcon("season")} Season Update`,
+        details: [
+          `Season changed from **${fromLabel}** to **${seasonLabel}**.`,
+          rolloverNotice?.message ?? "Seasonal bowls found cozy homes."
+        ],
+        tone: "info"
+      }]);
+
+      upsertPlayer(db, targetServerId, userId, adminPlayer, null, adminPlayer.schema_version);
+    }
+
+    serverState.audit_log.push({
+      ts: nowTs(),
+      actor_id: userId,
+      action: "dev_set_season_event",
+      details: {
+        previous: previousEventId,
+        next: event.event_id,
+        season: serverState.season ?? null,
+        previousSeason
+      }
+    });
+    upsertServer(db, targetServerId, serverState, null);
+
+    const message = `${getIcon("status_complete")} Activated event **${event.event_id}** on ${targetServerId}. Current season: **${seasonLabel}**.`;
+
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
     });
   });
 }
@@ -8196,7 +8528,13 @@ if (sub === "profile") {
     const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
     const existingFooter = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
     const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
-    embed.setFooter({ text: footerText });
+    if (typeof embed?.setFooter === "function") {
+      embed.setFooter({ text: footerText });
+    } else if (embed?.data && typeof embed.data === "object") {
+      embed.data.footer = { ...(embed.data.footer ?? {}), text: footerText };
+    } else if (embed && typeof embed === "object") {
+      embed.footer = { ...(embed.footer ?? {}), text: footerText };
+    }
   }
   const profileComponents = viewingSelf
     ? [
@@ -8553,7 +8891,7 @@ if (sub === "pantry") {
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
 
     const set = buildSettingsMap(settingsCatalog, s.settings);
-    s.season = computeActiveSeason(set);
+    syncServerSeasonFromSettings(s, set);
 
     const elapsedMs = Math.max(0, now - lastActiveAt);
     const spoilageTickHours = Number(set.SPOILAGE_TICK_HOURS ?? 1);
@@ -8833,7 +9171,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
 
     const set = buildSettingsMap(settingsCatalog, s.settings);
-    s.season = computeActiveSeason(set);
+    syncServerSeasonFromSettings(s, set);
 
     const elapsedMs = Math.max(0, now - lastActiveAt);
     const spoilageTickHours = Number(set.SPOILAGE_TICK_HOURS ?? 1);
@@ -9169,7 +9507,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
     const buildAndStoreTakeoutQuote = ({ nowMs }) => {
       const set = buildSettingsMap(settingsCatalog, s.settings);
-      s.season = computeActiveSeason(set);
+      syncServerSeasonFromSettings(s, set);
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, s.active_event_id ?? null);
       applyHouse247OrderBoardOverride(p);
 
@@ -9509,7 +9847,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
 
       const set = buildSettingsMap(settingsCatalog, s.settings);
-      s.season = computeActiveSeason(set);
+      syncServerSeasonFromSettings(s, set);
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, s.active_event_id ?? null);
       applyHouse247OrderBoardOverride(p);
 
@@ -10334,7 +10672,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   const now = nowTs();
   const set = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(set);
+  syncServerSeasonFromSettings(s, set);
   const activeEventId = s.active_event_id ?? null;
   const storyAnchor = activeEventId ? `story:${activeEventId}` : "story:default";
   const seasonAnchor = s.season ?? "seasonal:default";
@@ -10416,7 +10754,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     // If resilience granted temporary recipes, regenerate order board to include them
     if (resilience.applied && p.resilience?.temp_recipes?.length > 0) {
-      p.orders_day = null; // Force regeneration
+      // Refresh order metadata without resetting consumed progress for the current day.
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
       applyHouse247OrderBoardOverride(p);
     }
@@ -10463,8 +10801,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     clearTemporaryRecipes(p);
     const clearedTempRecipes = hadTempRecipes && (p.resilience?.temp_recipes?.length || 0) === 0;
     if (clearedTempRecipes) {
-      // Regenerate orders for normal play after recovery
-      p.orders_day = null;
+      // Refresh order metadata after recovery without resetting consumed progress.
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
       applyHouse247OrderBoardOverride(p);
     }
@@ -12338,7 +12675,11 @@ ${lines.join("\n")}`;
     }
     if (r.is_event_recipe) {
       const activeEventId = s?.active_event_id ?? null;
-      if (!activeEventId || r.event_id !== activeEventId) {
+      const recipeSeason = normalizeSeasonTag(r?.season ?? null);
+      const activeSeason = normalizeSeasonTag(s?.season ?? null);
+      const eventMatches = Boolean(activeEventId && r.event_id === activeEventId);
+      const seasonMatches = Boolean(activeSeason && recipeSeason && recipeSeason === activeSeason);
+      if (!eventMatches && !seasonMatches) {
         return commitState({
           content: "That recipe is only available during the active event.",
           ephemeral: true
@@ -12346,10 +12687,11 @@ ${lines.join("\n")}`;
       }
     }
     if (r.tier === "seasonal") {
-      const activeSeason = s?.season ?? null;
-      if (!activeSeason || r.season !== activeSeason) {
+      const activeSeason = normalizeSeasonTag(s?.season ?? null);
+      const recipeSeason = normalizeSeasonTag(r.season ?? null);
+      if (!activeSeason || !recipeSeason || recipeSeason !== activeSeason) {
         return commitState({
-          content: `That recipe can only be cooked during **${r.season ?? "its season"}**. The current season is **${activeSeason ?? "unknown"}**.`,
+          content: `That recipe can only be cooked during **${recipeSeason ?? "its season"}**. The current season is **${activeSeason ?? "unknown"}**.`,
           ephemeral: true
         });
       }
@@ -12705,8 +13047,8 @@ ${lines.join("\n")}`;
       );
     } else {
       parts.push(
-        `${getIcon("confetti")} You’ve completed all of today’s orders! New orders arrive ${nextOrdersResetText}.`,
-        `${getIcon("vote")} Want unlimited orders before reset? Vote in **/noodle quests_vote** to activate **${getHouse247Label()}** for **12 hours per vote**.`
+        `${getIcon("confetti")} You’ve completed all of today’s orders! Come back tomorrow for more.`,
+        `${getIcon("vote")} Want more orders now? Vote in **/noodle quests_vote** to activate **${getHouse247Label()}** for **12 hours per vote**.`
       );
     }
 
@@ -12749,10 +13091,17 @@ ${lines.join("\n")}`;
       const headerLines = [
         takeoutShiftActive
           ? `${getTakeoutCounterLabel()} Your shop is idle on the main **Order Board** while your Take Out Counter shift is active. Serve orders from **${getTakeoutCounterLabel()}** until the shift ends.`
-          : (remaining > 0
+          : (hasHouse247Perk(p)
+            ? `**${getHouse247Label()} active: unlimited orders.**`
+            : remaining > 0
             ? `Open orders: **${remaining}**`
-            : "No new orders left right now.")
+            : "You’ve completed all of today’s orders! Come back tomorrow for more.")
       ];
+      if (!takeoutShiftActive && remaining <= 0 && acceptedDisplayEntries.length === 0) {
+        headerLines.push(
+          `Want more orders now? Vote in **/noodle quests_vote** to activate **${getHouse247Label()}** for **12 hours per vote**.`
+        );
+      }
       if (!takeoutShiftActive) {
         headerLines.push(
           acceptedDisplayEntries.length > 0
@@ -13251,6 +13600,24 @@ ${lines.join("\n")}`;
         activeEventId,
         token: fullOrderId
       });
+
+      // Backfill legacy accepted snapshots that predate order_index storage.
+      if (order && !Number.isFinite(order.order_index)) {
+        const canonical = findOrderByToken({
+          playerState: p,
+          settings: set,
+          content,
+          activeSeason: s.season,
+          serverId,
+          userId,
+          activeEventId,
+          token: fullOrderId
+        });
+        if (Number.isFinite(canonical?.order_index)) {
+          order.order_index = canonical.order_index;
+        }
+      }
+
       if (!order) {
         delete acceptedMap[fullOrderId];
         results.push(`${getIcon("warning")} Order \`${shortOrderId(fullOrderId)}\` can't be found anymore.`);
@@ -13553,15 +13920,7 @@ ${lines.join("\n")}`;
     if (newlyUnlockedSpecs.length) {
       for (const spec of newlyUnlockedSpecs) {
         state.unlocked_spec_ids.push(spec.spec_id);
-        hiddenSpecUnlockNotices.push({
-          title: `${getIcon("sparkle")} Hidden Specialization Unlocked`,
-          details: [
-            `**${spec.name}** is now unlocked.`,
-            "Open **/noodle specialize** to view and switch your specialization."
-          ],
-          tone: "success",
-          thumbnailUrl: getSpecializationThumbnailUrl(spec)
-        });
+        hiddenSpecUnlockNotices.push(buildSpecializationUnlockNoticeCard(spec, { hidden: true }));
       }
     }
     
@@ -13750,9 +14109,14 @@ function summarizePrepChefMessages(messages, { includeFailureMessages = true } =
         for (const token of purchasedItems.split(/\s*·\s*/)) {
           const entry = String(token || "").trim();
           if (!entry) continue;
-          const itemMatch = entry.match(/^(\d+)x\s+(.+)$/i);
-          const qty = Number(itemMatch?.[1] || 1);
-          const itemName = String(itemMatch?.[2] || entry).trim();
+          const normalizedEntry = entry.replace(/\*\*/g, "").trim();
+          const leadingQtyMatch = normalizedEntry.match(/^(\d+)\s*[x×]\s+(.+)$/i);
+          const trailingQtyMatch = normalizedEntry.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+          const qty = Math.max(
+            0,
+            Number(leadingQtyMatch?.[1] || trailingQtyMatch?.[2] || 1)
+          );
+          const itemName = String(leadingQtyMatch?.[2] || trailingQtyMatch?.[1] || normalizedEntry).trim();
           if (!itemName) continue;
           purchasedByItem.set(itemName, (purchasedByItem.get(itemName) ?? 0) + Math.max(0, qty));
         }
@@ -13788,10 +14152,9 @@ function summarizePrepChefMessages(messages, { includeFailureMessages = true } =
   }
 
   if (purchasedByItem.size > 0) {
-    const purchasedItems = [...purchasedByItem.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([itemName, qty]) => `${qty}x ${itemName}`)
-      .join(" · ");
+    const purchasedItems = formatPrepChefPurchasedItems(
+      new Map([...purchasedByItem.entries()].sort((a, b) => a[0].localeCompare(b[0])))
+    ).replace(/\*\*/g, "");
     return [`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`];
   }
 
@@ -16154,7 +16517,7 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
   const p = ensurePlayer(serverId, interaction.user.id);
   const s = ensureServer(serverId);
   const settings = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(settings);
+  syncServerSeasonFromSettings(s, settings);
   const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
   const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
   const currentDraftSelection = readTakeoutMenuDraftSelection({
@@ -16191,7 +16554,7 @@ if (cid.startsWith("noodle:pick:accept_select:")) {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
   const set = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(set);
+  syncServerSeasonFromSettings(s, set);
   const activeEventEffects = getActiveEventEffects(eventsContent, s);
   const activeEventId = s.active_event_id ?? null;
   rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
@@ -16974,7 +17337,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     // All other button modes need DB queries first
     const serverState = ensureServer(serverId);
     const settings = buildSettingsMap(settingsCatalog, serverState.settings);
-    serverState.season = computeActiveSeason(settings);
+    syncServerSeasonFromSettings(serverState, settings);
     const activeEventEffects = getActiveEventEffects(eventsContent, serverState);
     rollMarket({ serverId, content, serverState, eventEffects: activeEventEffects });
 
