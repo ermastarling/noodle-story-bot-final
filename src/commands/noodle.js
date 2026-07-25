@@ -7867,7 +7867,7 @@ if (inDevPath && sub === "wipe_user") {
 
   const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const deleted = deletePlayerProfiles(db, targetUserId, { allServers: true });
+    const deleted = deletePlayerProfiles(db, targetUserId, { serverId: targetServerId });
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
       return commit({
