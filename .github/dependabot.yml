@@ -17,6 +17,13 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
+    ignore:
+      - dependency-name: "discord.js"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "better-sqlite3"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
