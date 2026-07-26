@@ -5048,9 +5048,7 @@ if (interaction.deferred || interaction.replied) {
       errorCode: e?.code ?? null,
       errorMessage: e?.message ?? String(e)
     });
-    if (isComponentsV2Payload(finalOptions)) {
-      return;
-    }
+    // Fall through to followUp fallback (including raw webhook followUp recovery) even for Components V2 payloads.
     // Try followUp as fallback
     try {
       return await interaction.followUp(normalizePayloadContent({ ...finalOptions, ephemeral: true }));
