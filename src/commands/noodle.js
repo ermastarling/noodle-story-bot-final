@@ -4658,10 +4658,10 @@ const LEGACY_TO_V2_SUBS = new Set([
 
 function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
   if (sourceMessageIsV2) return true;
+  if (!rolloutEnabled) return false;
   const normalizedSub = String(sub || "").trim();
   const normalizedNavSource = String(navSource || "").trim();
-  void rolloutEnabled;
-  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource) || true;
+  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource);
 }
 
 function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
@@ -14166,12 +14166,16 @@ function summarizePrepChefMessages(messages, { includeFailureMessages = true } =
 
 async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
+const idParts = customId.split(":"); // noodle:<kind>:<action>:<ownerId>:...
+const idKind = idParts[1] ?? "";
+const idAction = idParts[2] ?? "";
 
 // Note: deferUpdate is already called in index.js for most components
 // We don't need to defer again here, just route to the appropriate handler
 const userId = interaction.user.id;
 const serverId = interaction.guildId;
-if (!serverId) {
+const isDmReminderToggle = idKind === "dm" && idAction === "reminders_toggle";
+if (!serverId && !isDmReminderToggle) {
   return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
 }
 const v2Parsed = parseV2CustomId(customId);
