@@ -42,6 +42,7 @@ function buildReportText({ summary, delta, recommendation, windowHours, issues =
     `Window: last ${windowHours}h`,
     `Transitions: ${safe(summary.transitions, "0")}`,
     `Errors: ${safe(summary.errors, "0")}`,
+    `Gate bypasses: ${safe(summary.bypasses, "0")}`,
     `Error rate: ${formatPct(summary.errorRatePct)}`,
     `Loops: ${safe(summary.loops, "0")}`,
     `Avg clicks/loop: ${safe(summary.clickAvg)}`,
@@ -66,6 +67,13 @@ function buildReportText({ summary, delta, recommendation, windowHours, issues =
       .map((row) => `${row.reason}(${row.count})`)
       .join(", ");
     lines.push("", `Top error reasons: ${topReasons}`);
+  }
+
+  if (summary?.bypassByReason?.length) {
+    const topBypassReasons = summary.bypassByReason.slice(0, 3)
+      .map((row) => `${row.reason}(${row.count})`)
+      .join(", ");
+    lines.push("", `Top bypass reasons: ${topBypassReasons}`);
   }
 
   lines.push("", `Recommendation: ${recommendation}`);

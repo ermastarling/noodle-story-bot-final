@@ -25,7 +25,7 @@ const ButtonStyle = {
   Link: Constants?.MessageButtonStyles?.LINK ?? 5
 };
 
-const DEFAULT_CRON = "15 * * * *";
+const DEFAULT_CRON = "15 0 * * *";
 const DEFAULT_MAX_INACTIVE_DAYS = 30;
 const db = openDb();
 let isRunning = false;
@@ -241,6 +241,10 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
   }
 }
 
+export function getDailyRewardReminderCronExpr(env = process.env) {
+  return String(env?.NOODLE_DAILY_REMINDER_CRON || DEFAULT_CRON).trim() || DEFAULT_CRON;
+}
+
 export async function triggerDailyRewardReminderTest(client, userId, { force = true } = {}) {
   if (!db) return { ok: false, reason: "db_unavailable" };
   const normalizedUserId = String(userId || "").trim();
@@ -266,7 +270,7 @@ export async function triggerDailyRewardReminderTest(client, userId, { force = t
 
 export function startDailyRewardReminderScheduler(client, getKnownServerIds) {
   if (!db) return;
-  const cronExpr = process.env.NOODLE_DAILY_REMINDER_CRON || DEFAULT_CRON;
+  const cronExpr = getDailyRewardReminderCronExpr();
 
   cron.schedule(cronExpr, async () => {
     await sendDailyRewardReminders(client, getKnownServerIds);

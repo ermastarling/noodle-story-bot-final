@@ -12,6 +12,7 @@ test("V2 telemetry report: summarizes core loop, error, and minigame metrics", (
   const summary = summarizeTelemetryEvents({
     transitions: [{}, {}, {}, {}],
     errors: [{ reason: "expired" }, { reason: "expired" }, { reason: "owner_mismatch" }],
+    bypasses: [{ reason: "rollout_disabled" }, { reason: "rollout_disabled" }],
     loops: [
       { module: "orders", clickCount: 3, completionMs: 1400 },
       { module: "orders", clickCount: 4, completionMs: 1800 },
@@ -22,12 +23,14 @@ test("V2 telemetry report: summarizes core loop, error, and minigame metrics", (
 
   assert.equal(summary.transitions, 4);
   assert.equal(summary.errors, 3);
+  assert.equal(summary.bypasses, 2);
   assert.equal(summary.errorRatePct, 75);
   assert.equal(summary.loops, 3);
   assert.equal(summary.clickAvg, 4);
   assert.equal(summary.loopTimeP95, 2200);
   assert.equal(summary.moduleRows[0].module, "orders");
   assert.equal(summary.errorsByReason[0].reason, "expired");
+  assert.equal(summary.bypassByReason[0].reason, "rollout_disabled");
   assert.equal(summary.minigameDistribution[0].outcome, "90%");
 });
 

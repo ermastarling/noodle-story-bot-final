@@ -57,6 +57,7 @@ function printSummary(label, summary) {
   process.stdout.write(`\n${label}\n`);
   process.stdout.write(`- transitions: ${summary.transitions}\n`);
   process.stdout.write(`- errors: ${summary.errors}\n`);
+  process.stdout.write(`- gate bypasses: ${summary.bypasses ?? 0}\n`);
   process.stdout.write(`- loops: ${summary.loops}\n`);
   process.stdout.write(`- minigame events: ${summary.minigameEvents}\n`);
   process.stdout.write(`- avg clicks/loop: ${summary.clickAvg ?? "n/a"}\n`);
@@ -74,6 +75,13 @@ function printSummary(label, summary) {
     process.stdout.write("- minigame outcomes:\n");
     for (const row of summary.minigameDistribution) {
       process.stdout.write(`  - ${row.outcome}: ${row.count}\n`);
+    }
+  }
+
+  if (summary.bypassByReason?.length) {
+    process.stdout.write("- bypass reasons:\n");
+    for (const row of summary.bypassByReason) {
+      process.stdout.write(`  - ${row.reason}: ${row.count}\n`);
     }
   }
 }

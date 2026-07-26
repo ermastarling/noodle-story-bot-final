@@ -311,6 +311,10 @@ test("Staff command wrapper: acknowledged V2 payload falls back to editReply whe
     user: { id: "u-staff-wrap" },
     token: "tok-staff",
     applicationId: "app-staff",
+    isButton: () => true,
+    isSelectMenu: () => false,
+    isModalSubmit: () => false,
+    isAutocomplete: () => false,
     deferred: false,
     replied: true,
     client: {

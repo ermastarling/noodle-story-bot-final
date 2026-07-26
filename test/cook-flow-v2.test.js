@@ -63,6 +63,47 @@ test("Cook flow V2: disables cook action when no recipe entries exist", () => {
   assert.equal(cookButton.disabled, true);
 });
 
+test("Cook flow V2: cook all button reflects availability and quantity", () => {
+  const enabledPayload = buildCookRecipePickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [
+      { recipeId: "ramen", line: "Ramen line" }
+    ],
+    selectedRecipeId: "ramen",
+    quantity: 1,
+    canCookAll: true,
+    cookAllQuantity: 7
+  });
+
+  const enabledContainer = enabledPayload.components?.[0]?.components ?? [];
+  const enabledRows = enabledContainer.filter((c) => c?.type === 1);
+  const enabledActionRow = enabledRows.find((row) => row.components?.some((btn) => String(btn?.custom_id || "").includes(":cfa:")));
+  assert.ok(enabledActionRow, "expected cook all action row");
+  const enabledCookAllButton = enabledActionRow.components.find((btn) => String(btn?.custom_id || "").includes(":cfa:"));
+  assert.equal(enabledCookAllButton.disabled, false);
+  assert.equal(String(enabledCookAllButton.label || ""), "Cook All (7)");
+
+  const disabledPayload = buildCookRecipePickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [
+      { recipeId: "ramen", line: "Ramen line" }
+    ],
+    selectedRecipeId: "ramen",
+    quantity: 1,
+    canCookAll: false,
+    cookAllQuantity: 0
+  });
+
+  const disabledContainer = disabledPayload.components?.[0]?.components ?? [];
+  const disabledRows = disabledContainer.filter((c) => c?.type === 1);
+  const disabledActionRow = disabledRows.find((row) => row.components?.some((btn) => String(btn?.custom_id || "").includes(":cfa:")));
+  assert.ok(disabledActionRow, "expected cook all action row");
+  const disabledCookAllButton = disabledActionRow.components.find((btn) => String(btn?.custom_id || "").includes(":cfa:"));
+  assert.equal(disabledCookAllButton.disabled, true);
+});
+
 test("Cook flow V2: performance mapping perfect boundary", () => {
   const perf = deriveCookMinigamePerformance({ score: 9, totalTurns: 10, quantity: 10 });
   assert.equal(perf.bucket, "perfect");

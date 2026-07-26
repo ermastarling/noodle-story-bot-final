@@ -59,6 +59,11 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_V2_TELEMETRY_ALERT_ERROR_RATE_PCT` - high-issue threshold for scene error rate percent (default `8`)
 - `NOODLE_V2_TELEMETRY_ALERT_P95_REGRESSION_PCT` - high-issue threshold for p95 regression vs prior window (default `20`)
 
+## Reminder Env Vars
+
+- `NOODLE_DAILY_REMINDER_CRON` - cron expression for the daily reward reminder DM job; default is `15 0 * * *` (UTC daily at 00:15)
+- `NOODLE_DAILY_REMINDER_MAX_INACTIVE_DAYS` - skips reminder sends for players inactive longer than this many days (default `30`)
+
 ## Official Stats Counter Env Vars
 
 - `NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED` - set `0` to disable official stats counter updates

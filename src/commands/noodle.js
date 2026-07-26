@@ -4725,6 +4725,65 @@ function isWebhookTokenUnavailableError(error) {
     && message.includes("unavailable to the client");
 }
 
+function isUnknownWebhookError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 10015 || message.includes("Unknown Webhook");
+}
+
+function isUnknownInteractionError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 10062 || message.includes("Unknown interaction");
+}
+
+async function tryRecoverUnavailableInteractionResponse(interaction, payload, error, sourceLabel = "component") {
+  const unavailable =
+    isWebhookTokenUnavailableError(error)
+    || isUnknownWebhookError(error)
+    || isUnknownInteractionError(error);
+  if (!unavailable) return { handled: false, result: null };
+
+  if (interaction?.message?.id) {
+    try {
+      const result = await rawChannelEditMessage(
+        interaction,
+        interaction.message.channelId ?? interaction.channelId,
+        interaction.message.id,
+        payload
+      );
+      return { handled: true, result };
+    } catch (channelEditError) {
+      console.error(`${sourceLabel} raw channel edit fallback failed`, {
+        ...buildInteractionFailureContext(interaction),
+        errorCode: channelEditError?.code ?? null,
+        errorMessage: channelEditError?.message ?? String(channelEditError)
+      });
+    }
+  }
+
+  const fallbackChannelId = interaction?.channelId ?? interaction?.channel?.id ?? null;
+  if (fallbackChannelId) {
+    try {
+      const result = await rawChannelSendMessage(interaction?.client, fallbackChannelId, payload, {
+        botToken: process.env.DISCORD_TOKEN || ""
+      });
+      return { handled: true, result };
+    } catch (channelSendError) {
+      console.error(`${sourceLabel} raw channel send fallback failed`, {
+        ...buildInteractionFailureContext(interaction),
+        errorCode: channelSendError?.code ?? null,
+        errorMessage: channelSendError?.message ?? String(channelSendError)
+      });
+    }
+  }
+
+  console.warn(`${sourceLabel} response skipped: interaction webhook unavailable and no channel fallback succeeded`, {
+    ...buildInteractionFailureContext(interaction),
+    errorCode: error?.code ?? null,
+    errorMessage: error?.message ?? String(error)
+  });
+  return { handled: true, result: null };
+}
+
 function isV2EmbedConflictError(error) {
   const message = String(error?.message ?? "");
   return Number(error?.code) === 50035
@@ -4887,20 +4946,31 @@ if (shouldBeEphemeral) {
 if (interaction.isModalSubmit?.()) {
   if (interaction.deferred || interaction.replied) {
     const modalPayload = normalizeComponentsV2Payload(normalizePayloadContent(options));
+    const isV2ModalPayload = isComponentsV2Payload(modalPayload);
     try {
-      if (isComponentsV2Payload(modalPayload)) {
+      if (isV2ModalPayload) {
         return await rawWebhookEditOriginal(interaction, modalPayload);
       }
       return await interaction.editReply(modalPayload);
     } catch (e) {
       console.log(`⚠️ Modal editReply failed:`, e?.message);
-      if (isComponentsV2Payload(modalPayload) && isInvalidComponentTypeError(e)) {
-        try {
-          return await rawWebhookEditOriginal(interaction, modalPayload);
-        } catch (rawError) {
-          console.log(`⚠️ Modal raw webhook edit fallback failed:`, rawError?.message);
-        }
+      if (isV2ModalPayload) {
+        const recovered = await tryRecoverUnavailableInteractionResponse(
+          interaction,
+          modalPayload,
+          e,
+          "Modal V2"
+        );
+        if (recovered.handled) return recovered.result;
+
+        console.error("Modal V2 response failed", {
+          ...buildInteractionFailureContext(interaction),
+          errorCode: e?.code ?? null,
+          errorMessage: e?.message ?? String(e)
+        });
+        return;
       }
+
       // If edit fails, try followUp as last resort
       const followUpPayload = normalizeComponentsV2Payload(normalizePayloadContent({ ...modalPayload, ephemeral: true }));
       try {
@@ -4975,54 +5045,28 @@ if ((Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && finalO
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
-  if (isComponentsV2Payload(finalOptions)) {
+  const isV2FinalPayload = isComponentsV2Payload(finalOptions);
+  if (isV2FinalPayload) {
     try {
       return await rawWebhookEditOriginal(interaction, finalOptions);
     } catch (rawEditError) {
-      if (isWebhookTokenUnavailableError(rawEditError) && interaction?.message?.id) {
-        try {
-          return await rawChannelEditMessage(
-            interaction,
-            interaction.message.channelId ?? interaction.channelId,
-            interaction.message.id,
-            finalOptions
-          );
-        } catch (channelEditError) {
-          console.error("Component raw channel edit fallback failed", {
-            ...buildInteractionFailureContext(interaction),
-            errorCode: channelEditError?.code ?? null,
-            errorMessage: channelEditError?.message ?? String(channelEditError)
-          });
-        }
-      } else if (isWebhookTokenUnavailableError(rawEditError)) {
-        const fallbackChannelId = interaction?.channelId ?? interaction?.channel?.id ?? null;
-        if (fallbackChannelId) {
-          try {
-            return await rawChannelSendMessage(interaction?.client, fallbackChannelId, finalOptions, {
-              botToken: process.env.DISCORD_TOKEN || ""
-            });
-          } catch (channelSendError) {
-            console.error("Component raw channel send fallback failed", {
-              ...buildInteractionFailureContext(interaction),
-              errorCode: channelSendError?.code ?? null,
-              errorMessage: channelSendError?.message ?? String(channelSendError)
-            });
-          }
-        }
-        console.warn("Component V2 response skipped: interaction webhook token unavailable and no channel fallback succeeded", {
-          ...buildInteractionFailureContext(interaction),
-          errorCode: rawEditError?.code ?? null,
-          errorMessage: rawEditError?.message ?? String(rawEditError)
-        });
-        return;
-      }
+      const recovered = await tryRecoverUnavailableInteractionResponse(
+        interaction,
+        finalOptions,
+        rawEditError,
+        "Component V2"
+      );
+      if (recovered.handled) return recovered.result;
+
       console.error("Component raw webhook edit failed", {
         ...buildInteractionFailureContext(interaction),
         errorCode: rawEditError?.code ?? null,
         errorMessage: rawEditError?.message ?? String(rawEditError)
       });
+      return;
     }
   }
+
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
@@ -5038,56 +5082,15 @@ if (interaction.deferred || interaction.replied) {
         });
       }
     }
-    if (isComponentsV2Payload(finalOptions) && isWebhookTokenUnavailableError(e) && interaction?.message?.id) {
-      try {
-        return await rawChannelEditMessage(
-          interaction,
-          interaction.message.channelId ?? interaction.channelId,
-          interaction.message.id,
-          finalOptions
-        );
-      } catch (channelEditError) {
-        console.error("Component channel edit fallback after editReply failed", {
-          ...buildInteractionFailureContext(interaction),
-          errorCode: channelEditError?.code ?? null,
-          errorMessage: channelEditError?.message ?? String(channelEditError)
-        });
-      }
-    }
-    if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e)) {
-      try {
-        return await rawWebhookEditOriginal(interaction, finalOptions);
-      } catch (rawError) {
-        console.error("Component raw webhook edit fallback failed", {
-          ...buildInteractionFailureContext(interaction),
-          errorCode: rawError?.code ?? null,
-          errorMessage: rawError?.message ?? String(rawError)
-        });
-      }
-    }
     console.error("Component editReply failed", {
       ...buildInteractionFailureContext(interaction),
       errorCode: e?.code ?? null,
       errorMessage: e?.message ?? String(e)
     });
-    if (isComponentsV2Payload(finalOptions)) {
-      return;
-    }
     // Try followUp as fallback
     try {
       return await interaction.followUp(normalizePayloadContent({ ...finalOptions, ephemeral: true }));
     } catch (e2) {
-      if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e2)) {
-        try {
-          return await rawWebhookFollowUp(interaction, normalizePayloadContent({ ...finalOptions, ephemeral: true }));
-        } catch (rawError2) {
-          console.error("Component raw webhook followUp fallback failed", {
-            ...buildInteractionFailureContext(interaction),
-            errorCode: rawError2?.code ?? null,
-            errorMessage: rawError2?.message ?? String(rawError2)
-          });
-        }
-      }
       console.error("Component followUp fallback also failed", {
         ...buildInteractionFailureContext(interaction),
         errorCode: e2?.code ?? null,
@@ -14246,13 +14249,6 @@ const v2Parsed = parseV2CustomId(customId);
 if (v2Parsed.isV2) {
   const rolloutPlayer = ensurePlayer(serverId, userId);
   const rolloutEnabled = isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer });
-  if (!rolloutEnabled) {
-    emitTelemetry("v2_scene_gate_bypass", {
-      module: "gate",
-      sceneKey: String(v2Parsed.sceneKey || ""),
-      actionKey: String(v2Parsed.actionKey || "")
-    });
-  }
   if (!v2Parsed.valid) {
     emitTelemetry("v2_scene_error", {
       module: getV2SceneModule(v2Parsed.sceneKey),
@@ -14275,6 +14271,14 @@ if (v2Parsed.isV2) {
     return componentCommit(interaction, {
       content: "That menu isn’t for you.",
       ephemeral: true
+    });
+  }
+  if (!rolloutEnabled) {
+    emitTelemetry("v2_scene_gate_bypass", {
+      module: getV2SceneModule(v2Parsed.sceneKey),
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: "rollout_disabled"
     });
   }
 

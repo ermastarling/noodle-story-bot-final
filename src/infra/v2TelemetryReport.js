@@ -54,6 +54,7 @@ export async function readTelemetryEvents({ filePath, startMs = null, endMs = nu
   const events = {
     transitions: [],
     errors: [],
+    bypasses: [],
     loops: [],
     minigame: []
   };
@@ -80,6 +81,8 @@ export async function readTelemetryEvents({ filePath, startMs = null, endMs = nu
       events.transitions.push(payload);
     } else if (event === "v2_scene_error") {
       events.errors.push(payload);
+    } else if (event === "v2_scene_gate_bypass") {
+      events.bypasses.push(payload);
     } else if (event === "v2_loop_summary") {
       events.loops.push(payload);
     } else if (event === "v2_minigame_outcome") {
@@ -93,6 +96,7 @@ export async function readTelemetryEvents({ filePath, startMs = null, endMs = nu
 export function summarizeTelemetryEvents(events = {}) {
   const transitions = Array.isArray(events.transitions) ? events.transitions : [];
   const errors = Array.isArray(events.errors) ? events.errors : [];
+  const bypasses = Array.isArray(events.bypasses) ? events.bypasses : [];
   const loops = Array.isArray(events.loops) ? events.loops : [];
   const minigame = Array.isArray(events.minigame) ? events.minigame : [];
 
@@ -130,12 +134,19 @@ export function summarizeTelemetryEvents(events = {}) {
     errorsByReason.set(reason, (errorsByReason.get(reason) || 0) + 1);
   }
 
+  const bypassByReason = new Map();
+  for (const row of bypasses) {
+    const reason = String(row.reason || "unknown").toLowerCase();
+    bypassByReason.set(reason, (bypassByReason.get(reason) || 0) + 1);
+  }
+
   const transitionCount = transitions.length;
   const errorCount = errors.length;
 
   return {
     transitions: transitionCount,
     errors: errorCount,
+    bypasses: bypasses.length,
     loops: loops.length,
     minigameEvents: minigame.length,
     clickAvg: round(mean(clickCounts)),
@@ -147,6 +158,9 @@ export function summarizeTelemetryEvents(events = {}) {
       .map(([outcome, count]) => ({ outcome, count }))
       .sort((a, b) => b.count - a.count),
     errorsByReason: [...errorsByReason.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count),
+    bypassByReason: [...bypassByReason.entries()]
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count)
   };
