@@ -28,7 +28,7 @@
     "mobile:bootstrap": "bash scripts/mobile/bootstrap-mobile-repo.sh"
   },
   "dependencies": {
-    "@discordjs/rest": "^2.6.0",
+    "@discordjs/rest": "^2.6.3",
     "better-sqlite3": "^11.3.0",
     "discord.js": "^13.17.1",
     "dotenv": "^16.4.5",
