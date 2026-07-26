@@ -922,8 +922,7 @@ import { theme } from "./ui/theme.js";
   }
 
   const client = new Client({ intents: clientIntents });
-  let readyAtMs = 0;
-  const guildDeleteAlertStartupGraceMs = 3 * 60 * 1000;
+  const trackedGuildIds = new Set();
 
   function ensureClientTokenHydrated(reason = "runtime") {
     if (client?.token) return true;
@@ -3434,7 +3433,10 @@ import { theme } from "./ui/theme.js";
 
 
   client.once("ready", async (c) => {
-    readyAtMs = Date.now();
+    trackedGuildIds.clear();
+    for (const guildId of c.guilds.cache.keys()) {
+      trackedGuildIds.add(String(guildId));
+    }
     ensureClientTokenHydrated("ready");
     console.log(`✅ Logged in as ${c.user.tag}`);
     logRankTopEnvDiagnostics({ clientUserId: c.user?.id || "" });
@@ -3526,6 +3528,7 @@ import { theme } from "./ui/theme.js";
 
   client.on("guildCreate", async (guild) => {
     try {
+      if (guild?.id) trackedGuildIds.add(String(guild.id));
       const currentCounts = getCurrentBotListCounts();
       await updateAllBotListServerCounts(currentCounts, { reason: "guildCreate" });
       await updateOfficialStatsChannels(currentCounts, { reason: "guildCreate" });
@@ -3550,7 +3553,9 @@ import { theme } from "./ui/theme.js";
 
   client.on("guildDelete", async (guild) => {
     try {
-      const withinStartupGrace = readyAtMs > 0 && (Date.now() - readyAtMs) < guildDeleteAlertStartupGraceMs;
+      const guildId = String(guild?.id || "").trim();
+      const wasTracked = guildId ? trackedGuildIds.has(guildId) : false;
+      if (guildId) trackedGuildIds.delete(guildId);
       const guildName = String(guild?.name || "").trim();
       const memberCount = Number(guild?.memberCount ?? 0);
       const isLikelyAvailabilityTransition = guild?.unavailable === true || (!guildName && memberCount <= 0);
@@ -3561,9 +3566,10 @@ import { theme } from "./ui/theme.js";
       await refreshShardHealth({ reason: "guildDelete" });
 
       if (guild?.id === officialGuildId) return;
-      if (withinStartupGrace && isLikelyAvailabilityTransition) {
-        console.warn("⚠️ Skipping startup guildDelete dev alert for unavailable/unknown guild state", {
+      if (!wasTracked || isLikelyAvailabilityTransition) {
+        console.warn("⚠️ Skipping guildDelete dev alert for untracked or unavailable/unknown guild state", {
           guildId: guild?.id ?? null,
+          wasTracked,
           guildName: guildName || null,
           memberCount,
           unavailable: guild?.unavailable === true
