@@ -14245,7 +14245,10 @@ if (!serverId && !isDmReminderToggle) {
 const v2Parsed = parseV2CustomId(customId);
 if (v2Parsed.isV2) {
   const rolloutPlayer = ensurePlayer(serverId, userId);
-  if (!isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer })) {
+  const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  const rolloutEnabled = isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer });
+  if (!rolloutEnabled && !sourceMessageIsV2) {
     emitTelemetry("v2_scene_error", {
       module: "gate",
       sceneKey: String(v2Parsed.sceneKey || ""),

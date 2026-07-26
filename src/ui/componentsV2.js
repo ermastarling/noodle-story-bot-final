@@ -441,6 +441,7 @@ export function buildComponentsV2MenuPayload({
   ephemeral = false,
   ownerId,
   includeGreenButtonTip = true,
+  disableSceneBanner = false,
   accentColor,
   dividerText,
   imageUrl,
@@ -455,7 +456,9 @@ export function buildComponentsV2MenuPayload({
   });
 
   const normalizedComponents = normalizeContainerHeading(components);
-  const sceneBannerComponents = replaceHeadingWithSceneBanner(normalizedComponents);
+  const sceneBannerComponents = disableSceneBanner
+    ? normalizedComponents
+    : replaceHeadingWithSceneBanner(normalizedComponents);
   const ownerSanitizedComponents = stripLegacyOwnerFromFooterLines(sceneBannerComponents);
   const resolvedOwnerId = String(ownerId ?? "").trim() || detectOwnerIdInComponents(ownerSanitizedComponents);
   let footerComponents = withOwnerFooter(ownerSanitizedComponents, resolvedOwnerId);
@@ -507,6 +510,7 @@ export function buildComponentsV2NoticeCardPayload({
   ownerId,
   ephemeral = false,
   includeGreenButtonTip = true,
+  disableSceneBanner = false,
   env = process.env
 } = {}) {
   const heading = String(title || "").trim() || "Notice";
@@ -550,6 +554,7 @@ export function buildComponentsV2NoticeCardPayload({
     ownerId,
     ephemeral,
     includeGreenButtonTip,
+    disableSceneBanner,
     accentColor: resolveNoticeAccentColor(tone),
     addDivider: false,
     env
@@ -562,6 +567,7 @@ export function buildComponentsV2PayloadWithNoticeCards({
   ownerId,
   ephemeral = false,
   includeGreenButtonTip = true,
+  disableSceneBanner = false,
   accentColor,
   dividerText,
   imageUrl,
@@ -573,6 +579,7 @@ export function buildComponentsV2PayloadWithNoticeCards({
     ownerId,
     ephemeral,
     includeGreenButtonTip,
+    disableSceneBanner,
     accentColor,
     dividerText,
     imageUrl,
@@ -592,6 +599,7 @@ export function buildComponentsV2PayloadWithNoticeCards({
       ownerId,
       ephemeral,
       includeGreenButtonTip,
+      disableSceneBanner,
       env
     });
     const container = noticePayload.components?.[0];
