@@ -4717,6 +4717,13 @@ function isInvalidComponentTypeError(error) {
     || message.includes("valid MessageComponentType");
 }
 
+function isWebhookTokenUnavailableError(error) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return Number(error?.code) === 500
+    && message.includes("token")
+    && message.includes("unavailable to the client");
+}
+
 function isV2EmbedConflictError(error) {
   const message = String(error?.message ?? "");
   return Number(error?.code) === 50035
@@ -4971,6 +4978,22 @@ if (interaction.deferred || interaction.replied) {
     try {
       return await rawWebhookEditOriginal(interaction, finalOptions);
     } catch (rawEditError) {
+      if (isWebhookTokenUnavailableError(rawEditError) && interaction?.message?.id) {
+        try {
+          return await rawChannelEditMessage(
+            interaction,
+            interaction.message.channelId ?? interaction.channelId,
+            interaction.message.id,
+            finalOptions
+          );
+        } catch (channelEditError) {
+          console.error("Component raw channel edit fallback failed", {
+            ...buildInteractionFailureContext(interaction),
+            errorCode: channelEditError?.code ?? null,
+            errorMessage: channelEditError?.message ?? String(channelEditError)
+          });
+        }
+      }
       console.error("Component raw webhook edit failed", {
         ...buildInteractionFailureContext(interaction),
         errorCode: rawEditError?.code ?? null,
@@ -4993,6 +5016,22 @@ if (interaction.deferred || interaction.replied) {
         });
       }
     }
+    if (isComponentsV2Payload(finalOptions) && isWebhookTokenUnavailableError(e) && interaction?.message?.id) {
+      try {
+        return await rawChannelEditMessage(
+          interaction,
+          interaction.message.channelId ?? interaction.channelId,
+          interaction.message.id,
+          finalOptions
+        );
+      } catch (channelEditError) {
+        console.error("Component channel edit fallback after editReply failed", {
+          ...buildInteractionFailureContext(interaction),
+          errorCode: channelEditError?.code ?? null,
+          errorMessage: channelEditError?.message ?? String(channelEditError)
+        });
+      }
+    }
     if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e)) {
       try {
         return await rawWebhookEditOriginal(interaction, finalOptions);
@@ -5009,6 +5048,9 @@ if (interaction.deferred || interaction.replied) {
       errorCode: e?.code ?? null,
       errorMessage: e?.message ?? String(e)
     });
+    if (isComponentsV2Payload(finalOptions)) {
+      return;
+    }
     // Try followUp as fallback
     try {
       return await interaction.followUp(normalizePayloadContent({ ...finalOptions, ephemeral: true }));
