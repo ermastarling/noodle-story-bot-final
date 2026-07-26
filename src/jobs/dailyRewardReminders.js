@@ -268,10 +268,6 @@ export function startDailyRewardReminderScheduler(client, getKnownServerIds) {
   if (!db) return;
   const cronExpr = process.env.NOODLE_DAILY_REMINDER_CRON || DEFAULT_CRON;
 
-  setTimeout(() => {
-    sendDailyRewardReminders(client, getKnownServerIds).catch(() => {});
-  }, 20_000);
-
   cron.schedule(cronExpr, async () => {
     await sendDailyRewardReminders(client, getKnownServerIds);
   }, { timezone: "UTC" });

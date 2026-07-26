@@ -262,7 +262,8 @@ import {
   buildComponentsV2NoticeCardPayload,
   isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
-  replyOrEditInteraction
+  replyOrEditInteraction,
+  rawChannelSendMessage
 } from "../ui/componentsV2.js";
 import { isV2OwnerMismatch, parseV2CustomId } from "../ui/sceneRoutingV2.js";
 import { getSceneState, putSceneState } from "../ui/sceneStateV2.js";
@@ -4993,6 +4994,27 @@ if (interaction.deferred || interaction.replied) {
             errorMessage: channelEditError?.message ?? String(channelEditError)
           });
         }
+      } else if (isWebhookTokenUnavailableError(rawEditError)) {
+        const fallbackChannelId = interaction?.channelId ?? interaction?.channel?.id ?? null;
+        if (fallbackChannelId) {
+          try {
+            return await rawChannelSendMessage(interaction?.client, fallbackChannelId, finalOptions, {
+              botToken: process.env.DISCORD_TOKEN || ""
+            });
+          } catch (channelSendError) {
+            console.error("Component raw channel send fallback failed", {
+              ...buildInteractionFailureContext(interaction),
+              errorCode: channelSendError?.code ?? null,
+              errorMessage: channelSendError?.message ?? String(channelSendError)
+            });
+          }
+        }
+        console.warn("Component V2 response skipped: interaction webhook token unavailable and no channel fallback succeeded", {
+          ...buildInteractionFailureContext(interaction),
+          errorCode: rawEditError?.code ?? null,
+          errorMessage: rawEditError?.message ?? String(rawEditError)
+        });
+        return;
       }
       console.error("Component raw webhook edit failed", {
         ...buildInteractionFailureContext(interaction),
@@ -5048,7 +5070,9 @@ if (interaction.deferred || interaction.replied) {
       errorCode: e?.code ?? null,
       errorMessage: e?.message ?? String(e)
     });
-    // Fall through to followUp fallback (including raw webhook followUp recovery) even for Components V2 payloads.
+    if (isComponentsV2Payload(finalOptions)) {
+      return;
+    }
     // Try followUp as fallback
     try {
       return await interaction.followUp(normalizePayloadContent({ ...finalOptions, ephemeral: true }));
