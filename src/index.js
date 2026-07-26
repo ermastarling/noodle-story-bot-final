@@ -1330,6 +1330,7 @@ import { theme } from "./ui/theme.js";
       console.error("⚠️ Dev alert skipped: NOODLE_DEV_ALERT_USER_ID is required for mention.");
       return false;
     }
+    let alertChannel = null;
     try {
       const officialGuild = client.guilds.cache.get(officialGuildId)
         || await client.guilds.fetch(officialGuildId).catch(() => null);
@@ -1338,7 +1339,7 @@ import { theme } from "./ui/theme.js";
         return false;
       }
 
-      const alertChannel = officialGuild.channels.cache.get(devAlertChannelId)
+      alertChannel = officialGuild.channels.cache.get(devAlertChannelId)
         || await officialGuild.channels.fetch(devAlertChannelId).catch(() => null);
       if (!alertChannel || typeof alertChannel.send !== "function") {
         console.error("⚠️ Dev alert skipped: alert channel not sendable.");
@@ -2322,6 +2323,16 @@ import { theme } from "./ui/theme.js";
   async function buildRankTopCommandsPayload() {
     const includeDevCommands = String(process.env.NOODLE_RANKTOP_INCLUDE_DEV_COMMANDS || "0") === "1";
 
+    const toRankTopCommandId = (value, fallbackKey = "") => {
+      const direct = String(value || "").trim();
+      if (/^\d{1,24}$/.test(direct)) return direct;
+
+      // Rank.top requires numeric command IDs; use a deterministic hash when a real ID is unavailable.
+      const seed = String(fallbackKey || direct || "noodle");
+      const hex = crypto.createHash("sha256").update(seed).digest("hex").slice(0, 15);
+      return BigInt(`0x${hex}`).toString(10);
+    };
+
     try {
       const fetchedCommands = await client.application?.commands?.fetch?.();
       const commandItems = fetchedCommands?.map
@@ -2332,7 +2343,7 @@ import { theme } from "./ui/theme.js";
         return commandItems
           .filter((command) => includeDevCommands || String(command?.name || "").trim() !== "noodle-dev")
           .map((command) => ({
-            id: String(command?.id || "").trim(),
+            id: toRankTopCommandId(command?.id, command?.name),
             name: String(command?.name || "").trim(),
             description: String(command?.description || "").trim()
           }))
@@ -2349,7 +2360,7 @@ import { theme } from "./ui/theme.js";
     });
     return fallbackCommands
       .map((command) => ({
-        id: String(command?.name || "").trim(),
+        id: toRankTopCommandId(command?.id, command?.name),
         name: String(command?.name || "").trim(),
         description: String(command?.description || "").trim()
       }))
