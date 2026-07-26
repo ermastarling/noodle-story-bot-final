@@ -4659,10 +4659,10 @@ const LEGACY_TO_V2_SUBS = new Set([
 
 function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
   if (sourceMessageIsV2) return true;
+  if (!rolloutEnabled) return false;
   const normalizedSub = String(sub || "").trim();
   const normalizedNavSource = String(navSource || "").trim();
-  if (LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource)) return true;
-  return Boolean(rolloutEnabled);
+  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource);
 }
 
 function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
