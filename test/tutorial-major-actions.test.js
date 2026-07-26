@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { ensureTutorial, getCurrentTutorialStep, advanceTutorial } from "../src/game/tutorial.js";
-import { resolveTutorialGateValue, resolveTutorialProgressRowKey } from "../src/game/tutorialRouting.js";
+import { resolveTutorialGateValue, resolveTutorialProgressRowKey, shouldForceTutorialCommand } from "../src/game/tutorialRouting.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -173,5 +173,55 @@ test("Out-of-order action matrix: tutorial step only progresses on its matching 
       assert.equal(after, before, `Step changed for ${step.id} on ${action}`);
     }
   }
+});
+
+test("Tutorial command gate: active tutorial forces non-start slash subcommands", () => {
+  const player = freshPlayer();
+  ensureTutorial(player);
+
+  assert.equal(
+    shouldForceTutorialCommand({ player, sub: "profile", isChatInput: true, inDevPath: false }),
+    true
+  );
+  assert.equal(
+    shouldForceTutorialCommand({ player, sub: "start", isChatInput: true, inDevPath: false }),
+    false
+  );
+  assert.equal(
+    shouldForceTutorialCommand({ player, sub: "profile", isChatInput: false, inDevPath: false }),
+    false
+  );
+});
+
+test("Tutorial command gate: inactive tutorial does not force redirects", () => {
+  const player = {
+    tutorial: {
+      active: false,
+      queue: ["intro_order"],
+      completed: ["intro_order", "intro_market", "intro_forage", "intro_cook", "intro_serve"]
+    }
+  };
+
+  assert.equal(
+    shouldForceTutorialCommand({ player, sub: "profile", isChatInput: true, inDevPath: false }),
+    false
+  );
+});
+
+test("Tutorial command gate: incomplete inactive tutorial is healed and forced", () => {
+  const player = {
+    tutorial: {
+      active: false,
+      queue: [],
+      completed: ["intro_order"]
+    }
+  };
+
+  assert.equal(
+    shouldForceTutorialCommand({ player, sub: "profile", isChatInput: true, inDevPath: false }),
+    true
+  );
+  assert.equal(player.tutorial?.active, true);
+  assert.equal(getCurrentTutorialStep(player)?.id, "intro_market");
 });
 

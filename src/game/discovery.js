@@ -22,10 +22,51 @@ import { getIcon } from "../ui/icons.js";
 
 const LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT = 0.25;
 
+export function getTakeoutDiscoveryAttemptLimit(servingsToProcess = 0, env = process.env) {
+  const requested = Math.max(0, Math.floor(Number(servingsToProcess) || 0));
+  const parsedCap = Number(env?.NOODLE_TAKEOUT_DISCOVERY_MAX_ATTEMPTS);
+  const envCap = Number.isFinite(parsedCap) ? Math.floor(parsedCap) : 12;
+  const cap = Math.max(0, envCap);
+  return Math.min(requested, cap);
+}
+
 function isRecipeActiveForEvent(recipe, activeEventId) {
   if (!recipe?.event_id) return true;
   if (!activeEventId) return false;
   return String(recipe.event_id) === String(activeEventId);
+}
+export function unlockRecipeForPlayer(player, content, recipeId) {
+  if (!player) return { ok: false, reason: "Missing player." };
+  const normalizedRecipeId = String(recipeId ?? "").trim();
+  if (!normalizedRecipeId) return { ok: false, reason: "Missing recipe id." };
+
+  const recipe = content?.recipes?.[normalizedRecipeId] ?? null;
+  if (!recipe) return { ok: false, reason: "Recipe not found." };
+
+  if (!Array.isArray(player.known_recipes)) {
+    player.known_recipes = [];
+  }
+
+  if (player.known_recipes.includes(normalizedRecipeId)) {
+    return {
+      ok: true,
+      added: false,
+      recipeId: normalizedRecipeId,
+      recipe
+    };
+  }
+
+  player.known_recipes.push(normalizedRecipeId);
+  if (player.clues_owned?.[normalizedRecipeId]) {
+    delete player.clues_owned[normalizedRecipeId];
+  }
+
+  return {
+    ok: true,
+    added: true,
+    recipeId: normalizedRecipeId,
+    recipe
+  };
 }
 
 /**
@@ -122,13 +163,6 @@ export function getDiscoveryRecipeWeight(player, recipe) {
   const hasLockedFishingIngredient = ingredients.some((ing) => isFishingIngredientLocked(player, ing?.item_id));
   if (!hasLockedFishingIngredient) return baseWeight;
   return baseWeight * LOCKED_FISHING_RECIPE_DISCOVERY_WEIGHT_MULT;
-}
-
-export function getTakeoutDiscoveryAttemptLimit(servingsToProcess) {
-  const served = Math.max(0, Math.floor(Number(servingsToProcess) || 0));
-  if (served <= 0) return 0;
-  // Diminishing returns for bulk takeout: discovery rolls grow sub-linearly.
-  return Math.max(1, Math.floor(Math.sqrt(served)));
 }
 
 /**

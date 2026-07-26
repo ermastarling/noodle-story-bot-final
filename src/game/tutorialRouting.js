@@ -91,6 +91,14 @@ const TUTORIAL_PROGRESS_ROW_RULES = {
   intro_serve: "serve"
 };
 
+const TUTORIAL_RECOVERY_SUB_RULES = {
+  intro_order: "orders",
+  intro_market: "buy",
+  intro_forage: "forage",
+  intro_cook: "cook",
+  intro_serve: "serve"
+};
+
 export function getTutorialStepId(player) {
   if (!player || typeof player !== "object" || Array.isArray(player)) return null;
   return getCurrentTutorialStep(player)?.id ?? null;
@@ -133,4 +141,34 @@ export function resolveNavSubForTutorial({ player, action, fallbackSub = action 
 
 export function resolveForageNavSub(player) {
   return resolveNavSubForTutorial({ player, action: "forage", fallbackSub: "forage_menu" });
+}
+
+export function resolveTutorialOrdersActionKey(player) {
+  const rowKey = resolveTutorialProgressRowKey(player);
+  if (rowKey === "accept_only") return "acc";
+  if (rowKey === "buy") return "buy";
+  if (rowKey === "forage") return "fg";
+  if (rowKey === "cook") return "ck";
+  if (rowKey === "serve") return "sv";
+  return null;
+}
+
+export function resolveTutorialRecoverySub({ player, fallbackSub = "orders" } = {}) {
+  const stepId = getTutorialStepId(player);
+  if (!stepId) return fallbackSub;
+  return TUTORIAL_RECOVERY_SUB_RULES[stepId] ?? fallbackSub;
+}
+
+export function shouldForceTutorialCommand({
+  player,
+  sub,
+  isChatInput = false,
+  inDevPath = false
+} = {}) {
+  if (!isChatInput || inDevPath) return false;
+  const stepId = getTutorialStepId(player);
+  if (!stepId) return false;
+
+  const normalizedSub = String(sub || "").trim();
+  return normalizedSub !== "start";
 }

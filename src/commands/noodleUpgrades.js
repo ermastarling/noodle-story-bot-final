@@ -5,8 +5,9 @@ import { withLock } from "../infra/locks.js";
 import { makeIdempotencyKey, getIdempotentResult, putIdempotentResult } from "../infra/idempotency.js";
 import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { loadUpgradesContent, loadStaffContent } from "../content/index.js";
-import { noodleMainMenuRow } from "./noodle.js";
-import { buildStaffOverviewEmbed } from "./noodleStaff.js";
+import { noodleMainMenuRow, runNoodle } from "./noodle.js";
+import { shouldForceTutorialCommand } from "../game/tutorialRouting.js";
+import { buildStaffOverviewComponents } from "./noodleStaff.js";
 import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../game/kitchen.js";
 import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "../game/garden.js";
 import { isFishingUnlocked, FISHING_UNLOCK_LEVEL } from "../game/fishing.js";
@@ -17,14 +18,17 @@ import {
   calculateUpgradeEffects
 } from "../game/upgrades.js";
 import { calculateStaffCost, levelUpStaff, getStaffUnlockStatus, filterUnlockedStaffEffects } from "../game/staff.js";
-import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
+import { normalizeRawContainerPayload } from "../util/rawPayload.js";
+import {
+  buildComponentsV2PayloadWithNoticeCards,
+  MESSAGE_FLAG_IS_COMPONENTS_V2
+} from "../ui/componentsV2.js";
 
 const {
   MessageActionRow,
   MessageSelectMenu,
   MessageButton,
-  MessageEmbed,
   Constants
 } = discordPkg;
 
@@ -32,7 +36,6 @@ const {
 const ActionRowBuilder = MessageActionRow;
 const StringSelectMenuBuilder = MessageSelectMenu;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
@@ -41,6 +44,7 @@ const ButtonStyle = {
   Danger: Constants?.MessageButtonStyles?.DANGER ?? 4,
   Link: Constants?.MessageButtonStyles?.LINK ?? 5
 };
+const MESSAGE_FLAG_EPHEMERAL = Constants?.MessageFlags?.EPHEMERAL ?? (1 << 6);
 
 const db = openDb();
 const upgradesContent = loadUpgradesContent();
@@ -56,22 +60,6 @@ function isFishingUpgradeEntry(upgradeInfo = {}, categoryId = "") {
 
 function formatTwoDecimals(value) {
   return Number(Number(value ?? 0).toFixed(2));
-}
-
-function ownerFooterText(userOrMember) {
-  const member = userOrMember?.user ? userOrMember : null;
-  const fallbackUser = member?.user ?? userOrMember;
-  const displayName = member?.displayName ?? userOrMember?.displayName ?? userOrMember?.nickname ?? null;
-  const tag = fallbackUser?.tag ?? fallbackUser?.username ?? "Unknown";
-  const name = displayName ?? fallbackUser?.globalName ?? tag;
-  return `Owner: ${name}`;
-}
-
-function applyOwnerFooter(embed, user) {
-  if (embed && user) {
-    embed.setFooter({ text: ownerFooterText(user) });
-  }
-  return embed;
 }
 
 function hasGreenButton(components) {
@@ -107,6 +95,184 @@ function applyGreenButtonFooter(embeds, components) {
   });
 }
 
+function isComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const type = Number(node.type);
+    if (type === 9 || type === 10 || type === 12 || type === 17) return true;
+    if (Array.isArray(node.components)) stack.push(...node.components);
+  }
+  return false;
+}
+
+function normalizeComponents(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
+    }
+    if (footerText) {
+      const compactFooter = footerText
+        .split("\n")
+        .map((line) => String(line ?? "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      if (compactFooter) blocks.push(`-# ${compactFooter}`);
+    }
+    const compact = blocks.join("\n\n").trim();
+    if (compact) out.push({ type: 10, content: compact });
+  }
+  return out;
+}
+
+function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (isComponentsV2Payload(payload)) return payload;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+
+  const guildId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  if (!guildId || !userId) return payload;
+
+  const normalizedRows = normalizeComponents(payload.components);
+  const mainComponents = [
+    ...legacyEmbedsToV2TextComponents(payload.embeds.slice(0, 1)),
+    ...normalizedRows
+  ];
+  const notices = payload.embeds.slice(1).map((embed) => ({
+    title: String((embed?.toJSON?.() ?? embed ?? {})?.title ?? "Notice").trim() || "Notice",
+    details: legacyEmbedsToV2TextComponents([embed]).map((entry) => String(entry?.content ?? "").trim()).filter(Boolean),
+    tone: "info"
+  }));
+
+  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices,
+    ownerId: userId,
+    ephemeral: payload.ephemeral === true || ((Number(payload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0)
+  });
+
+  const { embeds, components, flags, ephemeral, ...rest } = payload;
+  return { ...rest, ...v2Payload };
+}
+
+function normalizePayloadForReply(interaction, payload = {}, player = null) {
+  return convertPayloadToComponentsV2(interaction, payload, player);
+}
+
+function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
+async function rawWebhookEditOriginal(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .messages("@original")
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MESSAGE_FLAG_EPHEMERAL }) });
+}
+
+async function sendUpgradesPayload(interaction, payload = {}) {
+  const finalPayload = payload ?? {};
+  const isV2 = isComponentsV2Payload(finalPayload);
+
+  if (!isV2) {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(finalPayload);
+    }
+    return interaction.reply(finalPayload);
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    try {
+      return await rawWebhookEditOriginal(interaction, finalPayload);
+    } catch {
+      try {
+        return await interaction.editReply(finalPayload);
+      } catch (e) {
+        if (isInvalidComponentTypeError(e)) {
+          return rawWebhookEditOriginal(interaction, finalPayload);
+        }
+        throw e;
+      }
+    }
+  }
+
+  const isEphemeral = finalPayload.ephemeral === true
+    || ((Number(finalPayload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0);
+  try {
+    await interaction.deferReply({ ephemeral: isEphemeral });
+    return await rawWebhookEditOriginal(interaction, finalPayload);
+  } catch {
+    try {
+      return await interaction.reply(finalPayload);
+    } catch (e) {
+      if (isInvalidComponentTypeError(e)) {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferReply({ ephemeral: isEphemeral });
+        }
+        return rawWebhookEditOriginal(interaction, finalPayload);
+      }
+      throw e;
+    }
+  }
+}
+
 function formatEffects(effects) {
   const lines = [];
   for (const [key, value] of Object.entries(effects)) {
@@ -138,6 +304,39 @@ function formatEffects(effects) {
     else if (key === "harvest_cooldown_reduction") lines.push(`-${(value * 100).toFixed(2)}% harvest cooldown`);
   }
   return lines.join(", ");
+}
+
+function composeUpgradesViewComponents({ title = "", description = "", sections = [] } = {}) {
+  const components = [];
+  const safeTitle = String(title || "").trim();
+  const safeDescription = String(description || "").trim();
+  if (safeTitle) components.push({ type: 10, content: `## ${safeTitle}` });
+  if (safeDescription) components.push({ type: 10, content: safeDescription });
+
+  for (const section of sections) {
+    const name = String(section?.name || "").trim();
+    const value = String(section?.value || "").trim();
+    if (!name && !value) continue;
+    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+    components.push({ type: 10, content: block });
+  }
+
+  return components;
+}
+
+function buildUpgradesPayload({ content = " ", ownerId, bodyComponents = [], actionRows = [], ephemeral = false } = {}) {
+  const mainComponents = [
+    ...(Array.isArray(bodyComponents) ? bodyComponents : []),
+    ...normalizeComponents(actionRows)
+  ];
+
+  return buildComponentsV2PayloadWithNoticeCards({
+    content,
+    mainComponents,
+    notices: [],
+    ownerId: String(ownerId || "").trim() || undefined,
+    ephemeral: Boolean(ephemeral)
+  });
 }
 
 function formatStaffPickerEffectValue(effectKey, perLevel) {
@@ -269,6 +468,30 @@ export const noodleUpgradesCommand = {
 export async function noodleUpgradesHandler(interaction) {
   const userId = interaction.user.id;
   const serverId = interaction.guild?.id ?? "DM";
+  const isSlashLikeInvocation = !(
+    interaction.isButton?.()
+    || interaction.isSelectMenu?.()
+    || interaction.isModalSubmit?.()
+    || interaction.isAutocomplete?.()
+  );
+
+  if (interaction.guildId) {
+    let tutorialPlayer = getPlayer(db, serverId, userId);
+    if (!tutorialPlayer) {
+      tutorialPlayer = newPlayerProfile(userId);
+      const rev = upsertPlayer(db, serverId, userId, tutorialPlayer, null);
+      tutorialPlayer.state_rev = rev;
+    }
+
+    if (shouldForceTutorialCommand({
+      player: tutorialPlayer,
+      sub: "profile",
+      isChatInput: isSlashLikeInvocation,
+      inDevPath: false
+    })) {
+      return runNoodle(interaction, { sub: "profile" });
+    }
+  }
 
   const idempKey = makeIdempotencyKey({
     serverId,
@@ -278,10 +501,8 @@ export async function noodleUpgradesHandler(interaction) {
   });
   const existing = getIdempotentResult(db, idempKey);
   if (existing) {
-    if (interaction.deferred || interaction.replied) {
-      return interaction.editReply(existing);
-    }
-    return interaction.reply(existing);
+    const normalizedExisting = normalizePayloadForReply(interaction, existing);
+    return sendUpgradesPayload(interaction, normalizedExisting);
   }
 
   const lockKey = `user:${userId}`;
@@ -300,37 +521,30 @@ export async function noodleUpgradesHandler(interaction) {
       p.state_rev = rev;
     }
 
-    const embed = buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user);
-    const components = buildUpgradesComponents(userId, p, { source: "profile" });
-
-    const response = {
-      embeds: [embed],
-      components,
+    const actionRows = buildUpgradesComponents(userId, p, { source: "profile" });
+    const normalizedResponse = buildUpgradesPayload({
+      content: " ",
+      ownerId: userId,
+      bodyComponents: buildUpgradesManagementComponents(p),
+      actionRows,
       ephemeral: false
-    };
-    response.embeds = applyGreenButtonFooter(response.embeds, response.components);
+    });
 
-    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-upgrades", ttlSeconds: 900, result: response });
-    return response;
+    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-upgrades", ttlSeconds: 900, result: normalizedResponse });
+    return normalizedResponse;
   });
 
-  if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(lockedResult);
-  }
-  return interaction.reply(lockedResult);
+  return sendUpgradesPayload(interaction, lockedResult);
 }
 
-function buildUpgradesOverviewEmbed(player, user) {
+function buildUpgradesOverviewComponents(player) {
   const effects = calculateUpgradeEffects(player, upgradesContent);
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
   const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
   const gardenUnlocked = isGardenUnlocked(player);
   const fishingUnlocked = isFishingUnlocked(player);
-  
-  const embed = new EmbedBuilder()
-    .setTitle(`${getIcon("upgrades")} Shop Upgrades`)
-    .setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n\nUpgrade your shop to unlock powerful bonuses!`)
-    .setColor(theme.colors.accent);
+
+  const sections = [];
 
   // Display upgrades by category
   for (const [categoryId, categoryData] of Object.entries(upgradesByCategory)) {
@@ -352,10 +566,9 @@ function buildUpgradesOverviewEmbed(player, user) {
       return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}`;
     });
 
-    embed.addFields({
+    sections.push({
       name: `${resolveIcon(categoryData.icon, "")} ${categoryData.display_name || categoryId}`.trim(),
-      value: lines.join("\n"),
-      inline: true
+      value: lines.join("\n")
     });
   }
 
@@ -374,22 +587,20 @@ function buildUpgradesOverviewEmbed(player, user) {
   if (effects.kitchen_simmer_time_reduction > 0) effectLines.push(`${getIcon("hourglass")} -${(effects.kitchen_simmer_time_reduction * 100).toFixed(2)}% simmer time`);
 
   if (effectLines.length > 0) {
-    embed.addFields({
+    sections.push({
       name: `${getIcon("stats")} Total Upgrade Bonuses`,
-      value: effectLines.join("\n"),
-      inline: false
+      value: effectLines.join("\n")
     });
   }
 
-  applyOwnerFooter(embed, user);
-  return embed;
+  return composeUpgradesViewComponents({
+    title: `${getIcon("upgrades")} Shop Upgrades`,
+    description: `${getIcon("coins")} Coins: **${player.coins}**\n\nUpgrade your shop to unlock powerful bonuses!`,
+    sections
+  });
 }
 
-function buildUpgradesManagementEmbed(player, user) {
-  const embed = new EmbedBuilder()
-    .setTitle(`${getIcon("upgrades")} Upgrades Management`)
-    .setColor(theme.colors.accent);
-
+function buildUpgradesManagementComponents(player) {
   const upgrades = Object.values(upgradesContent.upgrades ?? {});
   const totalUpgrades = upgrades.length;
   const leveledEntries = Object.entries(player.upgrades ?? {})
@@ -401,7 +612,7 @@ function buildUpgradesManagementEmbed(player, user) {
       return { upgrade, level };
     })
     .filter(Boolean);
-  embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("upgrades")} Upgrades: **${leveledEntries.length}/${totalUpgrades}**`);
+  const description = `${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("upgrades")} Upgrades: **${leveledEntries.length}/${totalUpgrades}**`;
 
   const formatUpgradeEffectValue = (upgrade, level, effectKey, perLevel) => {
     const total = perLevel * level;
@@ -445,17 +656,19 @@ function buildUpgradesManagementEmbed(player, user) {
     return `${iconPrefix}**${upgrade.name}** — Lv${level}/${upgrade.max_level}${bonusText}`;
   });
 
-  embed.addFields({
+  const sections = [{
     name: "Your Upgrades",
-    value: upgradeLines.length ? upgradeLines.join("\n") : "_No upgrades purchased yet._",
-    inline: false
-  });
+    value: upgradeLines.length ? upgradeLines.join("\n") : "_No upgrades purchased yet._"
+  }];
 
-  applyOwnerFooter(embed, user);
-  return embed;
+  return composeUpgradesViewComponents({
+    title: `${getIcon("upgrades")} Upgrades Management`,
+    description,
+    sections
+  });
 }
 
-function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "common" } = {}) {
+function buildUpgradesCategoryComponents(player, categoryId, { staffRarity = "common" } = {}) {
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
   const categoryData = upgradesContent.upgrade_categories?.[categoryId];
   const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
@@ -463,16 +676,9 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
 
   if (categoryId === "staff") {
     if (staffRarity === "overview") {
-      const embed = buildStaffOverviewEmbed(player, null, user);
-      embed.setTitle(`${getIcon("staff_management")} Staff Management`);
-      return embed;
+      return buildStaffOverviewComponents(player, null, null);
     }
     if (staffRarity === "upgrades") {
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("staff_upgrades")} Staff Upgrades`)
-        .setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n\nUpgrades that improve staff capacity and performance.`)
-        .setColor(theme.colors.accent);
-
       const staffUpgrades = ["u_staff_quarters", "u_manuals"]
         .map((id) => upgradesContent.upgrades?.[id])
         .filter(Boolean)
@@ -484,20 +690,15 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
           return `• **${upgrade.name}** (${currentLevel}/${upgrade.max_level}) — ${status}\n  _${upgrade.description}_`;
         });
 
-      embed.addFields({
-        name: "Staff Upgrades",
-        value: staffUpgrades.length ? staffUpgrades.join("\n") : "_No staff upgrades found._",
-        inline: false
+      return composeUpgradesViewComponents({
+        title: `${getIcon("staff_upgrades")} Staff Upgrades`,
+        description: `${getIcon("coins")} Coins: **${player.coins}**\n\nUpgrades that improve staff capacity and performance.`,
+        sections: [{
+          name: "Staff Upgrades",
+          value: staffUpgrades.length ? staffUpgrades.join("\n") : "_No staff upgrades found._"
+        }]
       });
-
-      applyOwnerFooter(embed, user);
-      return embed;
     }
-
-    const embed = new EmbedBuilder()
-      .setTitle(`${getIcon("staff_upgrades")} Staff Upgrades`)
-      .setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n\nHire and empower your staff.`)
-      .setColor(theme.colors.accent);
 
     const allStaff = Object.values(staffContent.staff_members ?? {});
     const staffLines = allStaff
@@ -529,14 +730,14 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
       })
       .filter(Boolean);
 
-    embed.addFields({
-      name: `${rarityEmoji(staffRarity)} ${staffRarity[0].toUpperCase()}${staffRarity.slice(1)} Staff`,
-      value: staffLines.length ? staffLines.join("\n") : "_No staff found._",
-      inline: false
+    return composeUpgradesViewComponents({
+      title: `${getIcon("staff_upgrades")} Staff Upgrades`,
+      description: `${getIcon("coins")} Coins: **${player.coins}**\n\nHire and empower your staff.`,
+      sections: [{
+        name: `${rarityEmoji(staffRarity)} ${staffRarity[0].toUpperCase()}${staffRarity.slice(1)} Staff`,
+        value: staffLines.length ? staffLines.join("\n") : "_No staff found._"
+      }]
     });
-
-    applyOwnerFooter(embed, user);
-    return embed;
   }
 
   const categoryIcon = resolveIcon(categoryData?.icon, getIcon("upgrades"));
@@ -545,11 +746,6 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
     `${getIcon("coins")} Coins: **${player.coins}**`,
     categoryData?.description ? `\n${categoryData.description}` : ""
   ].join("\n");
-
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(descLines.trim())
-    .setColor(theme.colors.accent);
 
   const upgrades = upgradesByCategory[categoryId]?.upgrades ?? [];
   const lines = upgrades.map((u) => {
@@ -569,14 +765,14 @@ function buildUpgradesCategoryEmbed(player, user, categoryId, { staffRarity = "c
     return `• **${u.name}** (${u.currentLevel}/${u.maxLevel}) — ${status}${desc}`;
   });
 
-  embed.addFields({
-    name: "Upgrades",
-    value: lines.length ? lines.join("\n") : "_No upgrades found._",
-    inline: false
+  return composeUpgradesViewComponents({
+    title,
+    description: descLines.trim(),
+    sections: [{
+      name: "Upgrades",
+      value: lines.length ? lines.join("\n") : "_No upgrades found._"
+    }]
   });
-
-  applyOwnerFooter(embed, user);
-  return embed;
 }
 
 function buildUpgradesComponents(userId, player, { categoryId = null, staffRarity = "common", source = null } = {}) {
@@ -808,12 +1004,12 @@ export async function noodleUpgradesInteractionHandler(interaction) {
     const categoryId = resolveCategory();
     const staffRarity = resolveStaffRarity();
     const source = resolveSource();
-    const embed = categoryId && categoryId !== "all"
-      ? buildUpgradesCategoryEmbed(p, interaction.member ?? interaction.user, categoryId, { staffRarity })
+    const bodyComponents = categoryId && categoryId !== "all"
+      ? buildUpgradesCategoryComponents(p, categoryId, { staffRarity })
       : (source === "profile"
-        ? buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user)
-        : buildUpgradesOverviewEmbed(p, interaction.member ?? interaction.user));
-    const components = buildUpgradesComponents(userId, p, {
+        ? buildUpgradesManagementComponents(p)
+        : buildUpgradesOverviewComponents(p));
+    const actionRows = buildUpgradesComponents(userId, p, {
       categoryId: categoryId && categoryId !== "all" ? categoryId : null,
       staffRarity,
       source
@@ -831,31 +1027,34 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         p.state_rev = rev;
       }
 
-      const updatedEmbed = categoryId && categoryId !== "all"
-        ? buildUpgradesCategoryEmbed(p, interaction.member ?? interaction.user, categoryId, { staffRarity })
+      const updatedBodyComponents = categoryId && categoryId !== "all"
+        ? buildUpgradesCategoryComponents(p, categoryId, { staffRarity })
         : (source === "profile"
-          ? buildUpgradesManagementEmbed(p, interaction.member ?? interaction.user)
-          : buildUpgradesOverviewEmbed(p, interaction.member ?? interaction.user));
-      const updatedComponents = buildUpgradesComponents(userId, p, {
+          ? buildUpgradesManagementComponents(p)
+          : buildUpgradesOverviewComponents(p));
+      const updatedActionRows = buildUpgradesComponents(userId, p, {
         categoryId: categoryId && categoryId !== "all" ? categoryId : null,
         staffRarity,
         source
       });
 
       if (!result.success) {
-        return {
+        return buildUpgradesPayload({
           content: result.message,
-          embeds: [],
-          components: [],
+          ownerId: userId,
+          bodyComponents: [],
+          actionRows: [],
           ephemeral: true
-        };
+        });
       }
 
-      return {
-        embeds: [updatedEmbed],
-        components: updatedComponents,
+      return buildUpgradesPayload({
+        content: " ",
+        ownerId: userId,
+        bodyComponents: updatedBodyComponents,
+        actionRows: updatedActionRows,
         ephemeral: false
-      };
+      });
     }
 
     if (action === "staff") {
@@ -868,23 +1067,23 @@ export async function noodleUpgradesInteractionHandler(interaction) {
         p.state_rev = rev;
       }
 
-      const updatedEmbed = buildUpgradesCategoryEmbed(p, interaction.member ?? interaction.user, "staff", { staffRarity });
-      const updatedComponents = buildUpgradesComponents(userId, p, { categoryId: "staff", staffRarity, source });
-
-      const response = {
-        embeds: [updatedEmbed],
-        components: updatedComponents,
+      return buildUpgradesPayload({
+        content: result.success ? " " : result.message,
+        ownerId: userId,
+        bodyComponents: buildUpgradesCategoryComponents(p, "staff", { staffRarity }),
+        actionRows: buildUpgradesComponents(userId, p, { categoryId: "staff", staffRarity, source }),
         ephemeral: !result.success
-      };
-      if (!result.success) response.content = result.message;
-      return response;
+      });
     }
 
     if (action === "category" || action === "refresh" || action === "staffpage") {
-      return {
-        embeds: [embed],
-        components
-      };
+      return buildUpgradesPayload({
+        content: " ",
+        ownerId: userId,
+        bodyComponents,
+        actionRows,
+        ephemeral: false
+      });
     }
 
       return null;

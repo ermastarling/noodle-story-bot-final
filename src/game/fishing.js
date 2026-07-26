@@ -108,8 +108,16 @@ export function getFishingUnlockState(player) {
   const state = ensureFishingState(player);
   const seenLevel = Number.isFinite(state.unlock_seen_level) ? state.unlock_seen_level : level;
   const justUnlocked = unlocked && (!state.first_visit_ack || seenLevel < FISHING_UNLOCK_LEVEL);
-  state.unlock_seen_level = Math.max(seenLevel, level);
-  return { unlocked, justUnlocked, seenLevel: state.unlock_seen_level };
+  return { unlocked, justUnlocked, seenLevel };
+}
+
+export function acknowledgeFishingUnlock(player) {
+  const state = ensureFishingState(player);
+  const level = Number(player?.shop_level ?? 1);
+  const seenLevel = Number.isFinite(state.unlock_seen_level) ? state.unlock_seen_level : level;
+  state.unlock_seen_level = Math.max(seenLevel, level, FISHING_UNLOCK_LEVEL);
+  state.first_visit_ack = true;
+  return state.unlock_seen_level;
 }
 
 function rngInt(rng, min, max) {

@@ -237,9 +237,17 @@ export function getKitchenUnlockState(player) {
     : fallback;
   const justUnlocked = unlocked && seenLevel < KITCHEN_UNLOCK_LEVEL;
 
-  state.unlock_seen_level = Math.max(seenLevel, level);
+  return { unlocked, justUnlocked, seenLevel };
+}
 
-  return { unlocked, justUnlocked, seenLevel: state.unlock_seen_level };
+export function acknowledgeKitchenUnlock(player) {
+  const state = ensureKitchenState(player);
+  const level = Number(player?.shop_level ?? 1);
+  const seenLevel = Number.isFinite(state.unlock_seen_level)
+    ? state.unlock_seen_level
+    : Math.min(level, KITCHEN_UNLOCK_LEVEL - 1);
+  state.unlock_seen_level = Math.max(seenLevel, level, KITCHEN_UNLOCK_LEVEL);
+  return state.unlock_seen_level;
 }
 
 export function getKitchenBatches(player, now = nowTs()) {

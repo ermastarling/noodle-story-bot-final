@@ -9,7 +9,7 @@ process.env.NOODLE_SKIP_DB = process.env.NOODLE_SKIP_DB || "1";
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
-const guildId = process.env.DISCORD_GUILD_ID || "";
+const guildId = process.env.NOODLE_DEV_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 const guildRegistrationMode = String(process.env.NOODLE_GUILD_REGISTRATION_MODE || "dev-overrides").toLowerCase();
 const guildOverrideNames = new Set(
   String(process.env.NOODLE_GUILD_OVERRIDE_COMMANDS || "noodle-dev")

@@ -1,6 +1,5 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import discordPkg from "discord.js";
-import crypto from "node:crypto";
 import {
   openDb,
   getPlayer,
@@ -18,7 +17,8 @@ import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
 import { applyQuestProgress } from "../game/quests.js";
 import { loadBadgesContent, loadContentBundle, loadEventsContent, loadNewsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
-import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed } from "./noodle.js";
+import { noodleMainMenuRowNoProfile, displayItemName, renderProfileEmbed, runNoodle } from "./noodle.js";
+import { shouldForceTutorialCommand } from "../game/tutorialRouting.js";
 import {
   grantBlessing,
   getActiveBlessing,
@@ -54,18 +54,23 @@ import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { hasUnreadNewsUpdate } from "../util/news.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { getOrdersMeta } from "../game/orders.js";
+import { shouldRetainPersistentPartyNotice } from "../game/socialNoticeRouting.js";
 import { containsProfanity } from "../util/profanity.js";
+import { normalizeRawContainerPayload } from "../util/rawPayload.js";
 import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import {
+  buildComponentsV2PayloadWithNoticeCards,
+  MESSAGE_FLAG_IS_COMPONENTS_V2
+} from "../ui/componentsV2.js";
 
 const {
   MessageActionRow,
   MessageSelectMenu,
   MessageButton,
   MessageEmbed,
+  EmbedBuilder,
   MessageFlags,
-  Modal,
-  TextInputComponent,
   Constants
 } = discordPkg;
 
@@ -73,9 +78,6 @@ const {
 const ActionRowBuilder = MessageActionRow;
 const StringSelectMenuBuilder = MessageSelectMenu;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
-const ModalBuilder = Modal;
-const TextInputBuilder = TextInputComponent;
 
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
@@ -84,6 +86,7 @@ const ButtonStyle = {
   Danger: Constants?.MessageButtonStyles?.DANGER ?? 4,
   Link: Constants?.MessageButtonStyles?.LINK ?? 5
 };
+const MESSAGE_FLAG_EPHEMERAL = MessageFlags?.Ephemeral ?? (1 << 6);
 
 const db = openDb();
 const baseContent = loadContentBundle(1);
@@ -102,7 +105,6 @@ const SHARED_ORDER_REWARD = {
 };
 
 const SHARED_ORDER_MODAL_PREFIX = "noodle-social:modal:shared_order:";
-const SHARED_ORDER_MODAL_TTL_MS = 5 * 60 * 1000;
 const sharedOrderModalState = new Map();
 const RECENT_SOCIAL_PICKER_LIMIT = 25;
 const RECENT_SOCIAL_PICKER_MAX_RESULTS = 250;
@@ -140,6 +142,65 @@ const GLOBAL_LEADERBOARD_MAX_PLAYERS = 100;
 const CONTRIBUTOR_LOCK_CONCURRENCY = 3;
 const CONTRIBUTOR_LOCK_RETRY_DELAYS_MS = [25, 75, 150];
 const GLOBAL_LEADERBOARD_PROBE_SERVER_ID = "__leaderboard_probe__";
+
+const LegacyEmbedCtor = MessageEmbed ?? EmbedBuilder ?? null;
+
+function createCard() {
+  if (typeof LegacyEmbedCtor === "function") {
+    return new LegacyEmbedCtor();
+  }
+
+  const embed = {
+    title: "",
+    description: "",
+    color: theme.colors.info,
+    fields: []
+  };
+
+  embed.setTitle = function setTitle(title = "") {
+    this.title = String(title ?? "").trim();
+    return this;
+  };
+  embed.setDescription = function setDescription(description = "") {
+    this.description = String(description ?? "").trim();
+    return this;
+  };
+  embed.setColor = function setColor(color = theme.colors.info) {
+    this.color = color;
+    return this;
+  };
+  embed.addFields = function addFields(...fields) {
+    this.fields = [...(Array.isArray(this.fields) ? this.fields : []), ...fields.flat().filter(Boolean)];
+    return this;
+  };
+  embed.setFields = function setFields(...fields) {
+    this.fields = fields.flat().filter(Boolean);
+    return this;
+  };
+  embed.setFooter = function setFooter(footer = {}) {
+    this.footer = { ...(this.footer ?? {}), ...(footer ?? {}) };
+    return this;
+  };
+  embed.setImage = function setImage(url = "") {
+    this.image = { ...(this.image ?? {}), url: String(url ?? "").trim() };
+    return this;
+  };
+  embed.setThumbnail = function setThumbnail(url = "") {
+    this.thumbnail = { ...(this.thumbnail ?? {}), url: String(url ?? "").trim() };
+    return this;
+  };
+  embed.setURL = function setURL(url = "") {
+    this.url = String(url ?? "").trim();
+    return this;
+  };
+  embed.setTimestamp = function setTimestamp(timestamp = Date.now()) {
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    this.timestamp = date.toISOString();
+    return this;
+  };
+
+  return embed;
+}
 
 function getLeaderboardTypeIndex(typeId) {
   const idx = LEADERBOARD_TYPES.findIndex((type) => type.id === typeId);
@@ -303,7 +364,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     })
     .join("\n");
 
-  const embed = new EmbedBuilder()
+  const embed = createCard()
     .setTitle(`${getIcon("leaderboard")} Server Leaderboard`)
     .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
     .setColor(theme.colors.info)
@@ -365,7 +426,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
   );
 
   return {
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [navRow, typeRow, socialMainMenuRow(userId)]
   };
 }
@@ -382,7 +443,7 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     })
     .join("\n");
 
-  const embed = new EmbedBuilder()
+  const embed = createCard()
     .setTitle(`${getIcon("leaderboard")} Global Leaderboard`)
     .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
     .setColor(theme.colors.info)
@@ -444,7 +505,7 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
   );
 
   return {
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [navRow, typeRow]
   };
 }
@@ -562,7 +623,7 @@ function socialMainMenuRow(userId, { partyHasActiveOrder = null } = {}) {
       .setLabel("Stats").setEmoji(getButtonEmoji("stats"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:profile:${userId}`)
+      .setCustomId(`noodle:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
       .setStyle(ButtonStyle.Secondary)
   );
@@ -724,7 +785,7 @@ function buildRecentPickerPayload(interaction, {
   const options = buildRecentUserOptions(interaction, pageIds, { descriptionPrefix: `${verb} recent player` });
   const hasOptions = options.length > 0;
 
-  const embed = new EmbedBuilder()
+  const embed = createCard()
     .setTitle(title)
     .setDescription(hasOptions
       ? `Pick a recent player to ${verb.toLowerCase()}.`
@@ -755,7 +816,7 @@ function buildRecentPickerPayload(interaction, {
   components.push(socialMainMenuRow(userId));
 
   return {
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components
   };
 }
@@ -942,6 +1003,46 @@ function hasNonLeaderContributor(contributions, leaderUserId) {
   return (contributions ?? []).some((c) => c?.user_id && c.user_id !== leaderUserId);
 }
 
+function buildSharedOrderQuantityChoices(maxQuantity) {
+  const cap = Math.max(0, Number(maxQuantity) || 0);
+  if (cap <= 0) return [];
+  if (cap <= 5) {
+    return Array.from({ length: cap }, (_, idx) => idx + 1);
+  }
+
+  const candidates = [
+    1,
+    Math.ceil(cap * 0.25),
+    Math.ceil(cap * 0.5),
+    Math.ceil(cap * 0.75),
+    cap
+  ];
+
+  const uniqueSorted = [...new Set(candidates)]
+    .map((value) => Math.max(1, Math.min(cap, Number(value) || 1)))
+    .sort((a, b) => a - b);
+
+  if (uniqueSorted.length >= 5) return uniqueSorted.slice(0, 5);
+
+  const filled = [...uniqueSorted];
+  for (let qty = 2; qty <= cap && filled.length < 5; qty += 1) {
+    if (!filled.includes(qty)) filled.push(qty);
+  }
+  return filled.sort((a, b) => a - b).slice(0, 5);
+}
+
+function buildSharedOrderQuantityRow({ userId, ingredientId, maxQuantity }) {
+  const choices = buildSharedOrderQuantityChoices(maxQuantity);
+  if (!choices.length) return null;
+  const maxChoice = choices[choices.length - 1];
+  return new ActionRowBuilder().addComponents(
+    ...choices.map((qty) => new ButtonBuilder()
+      .setCustomId(`noodle-social:action:shared_order_contribute_qty:${userId}:${ingredientId}:${qty}`)
+      .setLabel(`x${qty}`)
+      .setStyle(qty === maxChoice ? ButtonStyle.Primary : ButtonStyle.Secondary))
+  );
+}
+
 function getCommonPartyRecipes(db, serverId, party) {
   const memberIds = Array.isArray(party?.members) ? party.members.map((m) => m.user_id) : [];
   let common = null;
@@ -1028,7 +1129,7 @@ function statsViewButtons(userId, { newsAvailable = false } = {}) {
       .setEmoji(getButtonEmoji("new"))
       .setStyle(newsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`noodle-social:nav:profile:${userId}`)
+      .setCustomId(`noodle:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
       .setStyle(ButtonStyle.Secondary)
   );
@@ -1040,15 +1141,339 @@ function statsViewButtons(userId, { newsAvailable = false } = {}) {
 /*  Helper functions                                                   */
 /* ------------------------------------------------------------------ */
 
+function isComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const type = Number(node.type);
+    if (type === 9 || type === 10 || type === 12 || type === 17) return true;
+    if (Array.isArray(node.components)) stack.push(...node.components);
+  }
+  return false;
+}
+
+function normalizeComponents(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function splitTextToChunks(text, maxLen = 3800) {
+  const raw = String(text ?? "");
+  if (!raw) return [];
+  const chunks = [];
+  let remaining = raw;
+  while (remaining.length > maxLen) {
+    let cut = remaining.lastIndexOf("\n", maxLen);
+    if (cut <= 0) cut = maxLen;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.trim()) chunks.push(remaining.trim());
+  return chunks.filter(Boolean);
+}
+
+function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+    const imageUrl = String(raw?.image?.url ?? "").trim();
+    const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
+    }
+
+    if (imageUrl) blocks.push(`Image: ${imageUrl}`);
+    if (thumbnailUrl) blocks.push(`Thumbnail: ${thumbnailUrl}`);
+    if (footerText) {
+      const compactFooter = footerText
+        .split("\n")
+        .map((line) => String(line ?? "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      if (compactFooter) blocks.push(`-# ${compactFooter}`);
+    }
+
+    const compact = blocks.join("\n\n").trim();
+    const chunks = splitTextToChunks(compact);
+    for (const chunk of chunks) out.push({ type: 10, content: chunk });
+  }
+  return out;
+}
+
+function detectOwnerIdFromComponents(components = []) {
+  const stack = Array.isArray(components) ? [...components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    const customId = String(node.custom_id ?? node.customId ?? "").trim();
+    if (customId) {
+      const match = customId.match(/(?:^|:)(\d{17,20})(?::|$)/);
+      if (match?.[1]) return match[1];
+    }
+    if (Array.isArray(node.components) && node.components.length > 0) {
+      stack.push(...node.components);
+    }
+  }
+  return null;
+}
+
+function convertPayloadToComponentsV2(interaction, payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (isComponentsV2Payload(payload)) return payload;
+
+  const hasSourceNativeComponents = Array.isArray(payload.mainComponents) || Array.isArray(payload.notices);
+  if (hasSourceNativeComponents) {
+    const guildId = interaction?.guildId;
+    const userId = interaction?.user?.id;
+    if (!guildId || !userId) return payload;
+
+    const normalizedRows = normalizeComponents(payload.components);
+    const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+    const ownerId = payload.ownerId || detectOwnerIdFromComponents(normalizedRows) || userId;
+    const mainComponents = [
+      ...(Array.isArray(payload.mainComponents) ? payload.mainComponents : []),
+      ...normalizedRows
+    ];
+    const notices = Array.isArray(payload.notices) ? payload.notices : [];
+
+    const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+      mainComponents,
+      notices,
+      ownerId,
+      ephemeral: isEphemeral
+    });
+
+    const { mainComponents: _mainComponents, notices: _notices, ownerId: _ownerId, components, flags, ephemeral, ...rest } = payload;
+    return { ...rest, ...v2Payload };
+  }
+
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+
+  const guildId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  if (!guildId || !userId) return payload;
+
+  const normalizedRows = normalizeComponents(payload.components);
+  const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+  const ownerId = detectOwnerIdFromComponents(normalizedRows) || userId;
+
+  const primaryEmbed = payload.embeds[0];
+  const notificationEmbeds = payload.embeds.slice(1);
+  const mainComponents = [...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []), ...normalizedRows];
+  const notices = notificationEmbeds.map((embed) => {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim() || "Notification";
+    const details = legacyEmbedsToV2TextComponents([embed])
+      .map((entry) => String(entry?.content ?? "").trim())
+      .filter(Boolean);
+    return { title, details, tone: "info" };
+  });
+
+  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices,
+    ownerId,
+    ephemeral: isEphemeral
+  });
+
+  const { embeds, components, flags, ephemeral, ...rest } = payload;
+  return { ...rest, ...v2Payload };
+}
+
+function composeV2FromLegacyEmbeds(embeds = []) {
+  const list = Array.isArray(embeds) ? embeds : [];
+  const primaryEmbed = list[0] ?? null;
+  const notices = list.slice(1).map((embed) => {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim() || "Notification";
+    const details = legacyEmbedsToV2TextComponents([embed])
+      .map((entry) => String(entry?.content ?? "").trim())
+      .filter(Boolean);
+    return { title, details, tone: "info" };
+  });
+
+  return {
+    mainComponents: legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
+    notices
+  };
+}
+
+function normalizePayloadForReply(interaction, payload = {}) {
+  const serverId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  let sourcePayload = payload;
+
+  if (db && serverId && userId) {
+    const player = ensurePlayer(serverId, userId);
+    const { notices, changed } = resolvePersistentV2NoticeCards(player, resolveSocialMenuKey(interaction));
+    if (notices.length > 0) {
+      sourcePayload = applyPersistentNoticeCards(sourcePayload, notices);
+    }
+    if (changed) {
+      upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+    }
+  }
+
+  const converted = convertPayloadToComponentsV2(interaction, sourcePayload);
+  if (converted?.embeds) {
+    converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
+  }
+  return converted;
+}
+
+function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
+function isUnknownWebhookError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 10015 || message.includes("Unknown Webhook");
+}
+
+function isUnknownInteractionError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 10062 || message.includes("Unknown interaction");
+}
+
+async function rawWebhookEditOriginal(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .messages("@original")
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+}
+
+async function rawChannelEditMessage(interaction, channelId, messageId, payload) {
+  if (!interaction?.client?.api || !channelId || !messageId) {
+    throw new Error("Raw channel message edit unavailable: missing client api/channelId/messageId");
+  }
+  return interaction.client.api
+    .channels(channelId)
+    .messages(messageId)
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+}
+
+async function sendSocialPayload(interaction, payload = {}) {
+  const finalPayload = payload ?? {};
+  const isV2 = isComponentsV2Payload(finalPayload);
+  const isMessageComponent = (
+    (typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent())
+      || Boolean(interaction?.message)
+      || Boolean(interaction?.isButton?.())
+      || Boolean(interaction?.isSelectMenu?.())
+  );
+
+  if (!isV2) {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(finalPayload);
+    }
+    return interaction.reply(finalPayload);
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    try {
+      return await rawWebhookEditOriginal(interaction, finalPayload);
+    } catch {
+      try {
+        return await interaction.editReply(finalPayload);
+      } catch (e) {
+        if (isInvalidComponentTypeError(e)) {
+          return rawWebhookEditOriginal(interaction, finalPayload);
+        }
+        throw e;
+      }
+    }
+  }
+
+  const isEphemeral = finalPayload.ephemeral === true
+    || ((Number(finalPayload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0);
+  try {
+    if (isMessageComponent) {
+      await interaction.deferUpdate();
+    } else {
+      await interaction.deferReply({ ephemeral: isEphemeral });
+    }
+    return await rawWebhookEditOriginal(interaction, finalPayload);
+  } catch {
+    try {
+      return await interaction.reply(finalPayload);
+    } catch (e) {
+      if (isInvalidComponentTypeError(e)) {
+        if (!interaction.deferred && !interaction.replied) {
+          if (isMessageComponent) {
+            await interaction.deferUpdate();
+          } else {
+            await interaction.deferReply({ ephemeral: isEphemeral });
+          }
+        }
+        return rawWebhookEditOriginal(interaction, finalPayload);
+      }
+      throw e;
+    }
+  }
+}
+
 /**
  * Commit a component interaction response
  */
 async function componentCommit(interaction, opts) {
-  const { ephemeral, targetMessageId, ...rest } = opts ?? {};
-  const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
-  if (rest.embeds) {
-    rest.embeds = applyGreenButtonFooter(rest.embeds, rest.components);
-  }
+  const normalizedPayload = normalizePayloadForReply(interaction, opts ?? {});
+  const { ephemeral, targetMessageId, targetChannelId, ...rest } = normalizedPayload ?? {};
+  const isMessageComponent = (
+    (typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent())
+      || Boolean(interaction?.message)
+      || Boolean(interaction?.isButton?.())
+      || Boolean(interaction?.isSelectMenu?.())
+  );
 
   if (ephemeral) {
     if (interaction.deferred || interaction.replied) {
@@ -1059,16 +1484,59 @@ async function componentCommit(interaction, opts) {
           // ignore if already deleted or not present
         }
       }
-      return interaction.followUp({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+      try {
+        return await interaction.followUp({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+      } catch (e) {
+        if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+          return null;
+        }
+        throw e;
+      }
     }
-    return interaction.reply({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+    try {
+      return await interaction.reply({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+    } catch (e) {
+      if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+        return null;
+      }
+      throw e;
+    }
   }
 
   if (targetMessageId) {
     try {
-      const target = await interaction.channel?.messages?.fetch(targetMessageId);
+      const targetPayload = normalizePayloadForReply(interaction, rest);
+      let target = null;
+
+      if (interaction.channel?.messages?.fetch) {
+        try {
+          target = await interaction.channel.messages.fetch(targetMessageId);
+        } catch {
+          target = null;
+        }
+      }
+
+      if (!target && targetChannelId && interaction.client?.channels?.fetch) {
+        try {
+          const targetChannel = await interaction.client.channels.fetch(targetChannelId);
+          if (targetChannel?.messages?.fetch) {
+            target = await targetChannel.messages.fetch(targetMessageId);
+          }
+        } catch {
+          target = null;
+        }
+      }
+
       if (target) {
-        const result = await target.edit(rest);
+        const isV2TargetPayload = isComponentsV2Payload(targetPayload);
+        const result = isV2TargetPayload
+          ? await rawChannelEditMessage(
+              interaction,
+              target.channelId ?? targetChannelId ?? interaction.channelId,
+              target.id,
+              targetPayload
+            )
+          : await target.edit(targetPayload);
         if (interaction.deferred || interaction.replied) {
           if (!isMessageComponent) {
             try {
@@ -1080,20 +1548,87 @@ async function componentCommit(interaction, opts) {
         }
         return result;
       }
+      throw new Error("target_message_not_found");
     } catch (e) {
-      // fall through to default reply flow
+      if (interaction.deferred || interaction.replied) {
+        if (!isMessageComponent) {
+          try {
+            await interaction.deleteReply();
+          } catch {
+            // ignore if already deleted
+          }
+        }
+        return interaction.followUp({
+          content: `${getIcon("warning")} Couldn't update the shared-order message. Please reopen Party > Shared Order and try again.`,
+          flags: MessageFlags.Ephemeral,
+          ephemeral: true
+        });
+      }
+      return interaction.reply({
+        content: `${getIcon("warning")} Couldn't update the shared-order message. Please reopen Party > Shared Order and try again.`,
+        flags: MessageFlags.Ephemeral,
+        ephemeral: true
+      });
     }
   }
 
   if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(rest);
+    const editPayload = normalizePayloadForReply(interaction, rest);
+    if (isComponentsV2Payload(editPayload)) {
+      try {
+        return await rawWebhookEditOriginal(interaction, editPayload);
+      } catch (e) {
+        if (isMessageComponent && (isUnknownWebhookError(e) || isUnknownInteractionError(e)) && interaction.message?.edit) {
+          return interaction.message.edit(editPayload);
+        }
+        // Fall back to discord.js path below.
+      }
+    }
+    try {
+      return await interaction.editReply(editPayload);
+    } catch (e) {
+      if (isMessageComponent && (isUnknownWebhookError(e) || isUnknownInteractionError(e)) && interaction.message?.edit) {
+        return interaction.message.edit(editPayload);
+      }
+      if (isComponentsV2Payload(editPayload) && isInvalidComponentTypeError(e)) {
+        return rawWebhookEditOriginal(interaction, editPayload);
+      }
+      throw e;
+    }
   }
-  return interaction.update(rest);
+
+  const updatePayload = normalizePayloadForReply(interaction, rest);
+  try {
+    return await interaction.update(updatePayload);
+  } catch (e) {
+    if (isMessageComponent && (isUnknownWebhookError(e) || isUnknownInteractionError(e)) && interaction.message?.edit) {
+      return interaction.message.edit(updatePayload);
+    }
+    if (isComponentsV2Payload(updatePayload) && isInvalidComponentTypeError(e)) {
+      try {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferUpdate();
+        }
+        return await rawWebhookEditOriginal(interaction, updatePayload);
+      } catch (webhookError) {
+        if (isMessageComponent && (isUnknownWebhookError(webhookError) || isUnknownInteractionError(webhookError)) && interaction.message?.edit) {
+          return interaction.message.edit(updatePayload);
+        }
+        throw webhookError;
+      }
+    }
+    throw e;
+  }
 }
 
 async function errorReply(interaction, content) {
   const payload = { content, flags: MessageFlags.Ephemeral, ephemeral: true };
-  const isMessageComponent = typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent();
+  const isMessageComponent = (
+    (typeof interaction.isMessageComponent === "function" && interaction.isMessageComponent())
+      || Boolean(interaction?.message)
+      || Boolean(interaction?.isButton?.())
+      || Boolean(interaction?.isSelectMenu?.())
+  );
   if (interaction.deferred || interaction.replied) {
     if (!isMessageComponent) {
       try {
@@ -1102,9 +1637,23 @@ async function errorReply(interaction, content) {
         // ignore if already deleted or not present
       }
     }
-    return interaction.followUp(payload);
+    try {
+      return await interaction.followUp(payload);
+    } catch (e) {
+      if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+        return null;
+      }
+      throw e;
+    }
   }
-  return interaction.reply(payload);
+  try {
+    return await interaction.reply(payload);
+  } catch (e) {
+    if (isUnknownWebhookError(e) || isUnknownInteractionError(e)) {
+      return null;
+    }
+    throw e;
+  }
 }
 
 /**
@@ -1163,6 +1712,177 @@ function ensurePlayer(serverId, userId) {
   clearExpiredBlessings(p);
   grantEventBadgesForKnownRecipes(p, content, badgesContent);
   return p;
+}
+
+const MAX_PENDING_V2_NOTICE_CARDS = 10;
+
+function ensurePersistentV2NoticeQueue(player) {
+  if (!player || typeof player !== "object") return [];
+  if (!player.notifications || typeof player.notifications !== "object" || Array.isArray(player.notifications)) {
+    player.notifications = {
+      pending_pantry_messages: [],
+      pending_v2_notice_cards: [],
+      active_v2_notice_cards: [],
+      active_v2_notice_menu_key: null,
+      dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
+    };
+  }
+  if (!Array.isArray(player.notifications.pending_v2_notice_cards)) {
+    player.notifications.pending_v2_notice_cards = [];
+  }
+  return player.notifications.pending_v2_notice_cards;
+}
+
+function queuePersistentV2NoticeCard(player, { title, details, tone = "info" } = {}) {
+  const queue = ensurePersistentV2NoticeQueue(player);
+  const heading = String(title || "Notification").trim() || "Notification";
+  const lines = (Array.isArray(details) ? details : [details])
+    .map((line) => String(line ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!lines.length) return;
+  const normalizedTone = ["info", "success", "warning", "error"].includes(String(tone || "").toLowerCase())
+    ? String(tone).toLowerCase()
+    : "info";
+
+  queue.push({ title: heading, details: lines, tone: normalizedTone });
+  if (queue.length > MAX_PENDING_V2_NOTICE_CARDS) {
+    queue.splice(0, queue.length - MAX_PENDING_V2_NOTICE_CARDS);
+  }
+}
+
+function normalizePersistentV2NoticeCard(card) {
+  if (!card || typeof card !== "object") return null;
+  const title = String(card.title || "Notification").trim() || "Notification";
+  const toneRaw = String(card.tone || "info").trim().toLowerCase();
+  const tone = ["info", "success", "warning", "error"].includes(toneRaw) ? toneRaw : "info";
+  const details = (Array.isArray(card.details) ? card.details : [card.details])
+    .map((line) => String(line ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!details.length) return null;
+  return { title, details, tone };
+}
+
+function hasActiveSharedOrderForPlayer(player) {
+  if (!db) return false;
+  const userId = String(player?.user_id || "").trim();
+  if (!userId) return false;
+
+  const hintedServerId = String(player?.notifications?.last_noodle_guild_id || "").trim();
+  const scopedParty = hintedServerId ? getUserActivePartyBridge(hintedServerId, userId) : null;
+  const party = scopedParty ?? getUserActiveParty(db, userId);
+  if (!party?.party_id) return false;
+
+  return Boolean(getActiveSharedOrderByParty(db, party.party_id));
+}
+
+function resolveSocialMenuKey(interaction) {
+  const sub = String(interaction?.options?.getSubcommand?.() || "").trim();
+  if (sub) {
+    const action = String(interaction?.options?.getString?.("action") || "").trim();
+    return `social:${sub}:${action || "main"}`;
+  }
+
+  const customId = String(interaction?.customId || "").trim();
+  const parts = customId.split(":");
+  if (parts[0] === "noodle-social") {
+    return `social:${String(parts[1] || "component").trim()}:${String(parts[2] || "main").trim()}`;
+  }
+
+  return "social:unknown";
+}
+
+function resolvePersistentV2NoticeCards(player, menuKey) {
+  const queue = ensurePersistentV2NoticeQueue(player);
+  const notifications = player.notifications;
+  const normalizedMenuKey = String(menuKey || "social:unknown").trim() || "social:unknown";
+  const hasActiveSharedOrder = hasActiveSharedOrderForPlayer(player);
+  let changed = false;
+
+  if (!Array.isArray(notifications.active_v2_notice_cards)) {
+    notifications.active_v2_notice_cards = [];
+    changed = true;
+  }
+  if (typeof notifications.active_v2_notice_menu_key !== "string") {
+    notifications.active_v2_notice_menu_key = null;
+  }
+
+  const normalizedPending = queue
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter((card) => shouldRetainPersistentPartyNotice({
+      notice: card,
+      hasActiveSharedOrder
+    }))
+    .filter(Boolean)
+    .slice(0, MAX_PENDING_V2_NOTICE_CARDS);
+  if (normalizedPending.length !== queue.length) changed = true;
+  notifications.pending_v2_notice_cards = normalizedPending;
+
+  const normalizedActive = notifications.active_v2_notice_cards
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter((card) => shouldRetainPersistentPartyNotice({
+      notice: card,
+      hasActiveSharedOrder
+    }))
+    .filter(Boolean)
+    .slice(0, MAX_PENDING_V2_NOTICE_CARDS);
+  if (normalizedActive.length !== notifications.active_v2_notice_cards.length) changed = true;
+  notifications.active_v2_notice_cards = normalizedActive;
+
+  if (
+    notifications.active_v2_notice_cards.length > 0
+    && notifications.active_v2_notice_menu_key
+    && notifications.active_v2_notice_menu_key !== normalizedMenuKey
+  ) {
+    notifications.active_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = null;
+    changed = true;
+  }
+
+  if (notifications.active_v2_notice_cards.length <= 0 && notifications.pending_v2_notice_cards.length > 0) {
+    notifications.active_v2_notice_cards = notifications.pending_v2_notice_cards.slice(0, MAX_PENDING_V2_NOTICE_CARDS);
+    notifications.pending_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = normalizedMenuKey;
+    changed = true;
+  }
+
+  return {
+    notices: notifications.active_v2_notice_cards,
+    changed
+  };
+}
+
+function applyPersistentNoticeCards(payload = {}, notices = []) {
+  const cards = (notices || []).map((notice) => normalizePersistentV2NoticeCard(notice)).filter(Boolean);
+  if (!cards.length) return payload;
+
+  let updated = { ...(payload ?? {}) };
+  const hasSourceNativeNoticeShape = Array.isArray(updated.mainComponents) || Array.isArray(updated.notices);
+
+  if (hasSourceNativeNoticeShape) {
+    const existing = Array.isArray(updated.notices) ? [...updated.notices] : [];
+    updated.notices = [...existing, ...cards];
+    return updated;
+  }
+
+  if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
+    const composed = composeV2FromLegacyEmbeds(updated.embeds);
+    const { embeds, ...rest } = updated;
+    updated = {
+      ...rest,
+      ...composed,
+      notices: [...(Array.isArray(composed.notices) ? composed.notices : []), ...cards]
+    };
+    return updated;
+  }
+
+  updated.notices = cards;
+  if (updated.content === undefined) updated.content = " ";
+  return updated;
 }
 
 function touchLastKitchen(player, serverId, channelId, userId) {
@@ -1251,7 +1971,7 @@ async function handleParty(interaction) {
 
       const result = createParty(db, serverId, userId, cleanedName);
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("party")} Party Created!`)
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
@@ -1265,7 +1985,7 @@ async function handleParty(interaction) {
       return {
         ok: true,
         response: {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
         }
       };
@@ -1280,7 +2000,7 @@ async function handleParty(interaction) {
         const joinServerId = resolveJoinPartyServerId(serverId, partyId);
         const result = joinParty(db, joinServerId, partyId, userId);
         
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Joined Party!`)
           .setDescription(`You've joined the party **${result.partyName}**`)
           .setColor(theme.colors.success);
@@ -1290,7 +2010,7 @@ async function handleParty(interaction) {
         return {
           ok: true,
           response: {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
           }
         };
@@ -1308,14 +2028,14 @@ async function handleParty(interaction) {
       try {
         leaveParty(db, currentParty.party_id, userId);
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Party`)
           .setDescription(`${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`)
           .setColor(theme.colors.info);
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyCreationRow(userId), socialMainMenuRow(userId)]
         };
 
@@ -1339,8 +2059,8 @@ async function handleParty(interaction) {
         .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
         .join("\n");
 
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("party")} ${currentParty.party_name}`)
+      const embed = createCard()
+        .setTitle(`${getIcon("party")} Party • ${currentParty.party_name}`)
         .setDescription(`Party ID:\n\`\`\`${formatPartyId(currentParty.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${currentParty.leader_user_id}>`, inline: true },
@@ -1356,7 +2076,7 @@ async function handleParty(interaction) {
       return {
         ok: true,
         response: {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
         }
       };
@@ -1411,7 +2131,7 @@ async function handleParty(interaction) {
           return { ok: false, error: `${getIcon("error")} No eligible party members found to transfer leadership.` };
         }
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Transfer Leadership`)
           .setDescription("Pick a party member from recent players.")
           .setColor(theme.colors.info);
@@ -1427,7 +2147,7 @@ async function handleParty(interaction) {
         return {
           ok: true,
           response: {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
           }
         };
@@ -1477,7 +2197,7 @@ async function handleParty(interaction) {
           return { ok: false, error: `${getIcon("error")} No kick-eligible party members found.` };
         }
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Kick Party Member`)
           .setDescription("Pick a party member from recent players.")
           .setColor(theme.colors.warning);
@@ -1493,7 +2213,7 @@ async function handleParty(interaction) {
         return {
           ok: true,
           response: {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
           }
         };
@@ -1530,11 +2250,11 @@ async function handleParty(interaction) {
   }
 
   if (lockedResult.ephemeral) {
-    const payload = {
+    const payload = normalizePayloadForReply(interaction, {
       ...(lockedResult.response ?? {}),
       flags: MessageFlags.Ephemeral,
       ephemeral: true
-    };
+    });
     if (interaction.deferred || interaction.replied) {
       return interaction.followUp(payload);
     }
@@ -1544,7 +2264,7 @@ async function handleParty(interaction) {
   if (lockedResult.targetMessageId && interaction.channel?.messages) {
     try {
       const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
-      await msg.edit(lockedResult.response ?? {});
+      await msg.edit(normalizePayloadForReply(interaction, lockedResult.response ?? {}));
       if (interaction.deferred || interaction.replied) {
         await interaction.deleteReply().catch(() => {});
       }
@@ -1555,7 +2275,7 @@ async function handleParty(interaction) {
   }
 
   await ensurePublicReply();
-  return interaction.editReply(lockedResult.response ?? {});
+  return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response ?? {}));
 }
 
 async function handleTip(interaction) {
@@ -1581,7 +2301,7 @@ async function handleTip(interaction) {
   const action = "tip";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
   const cached = db ? getIdempotentResult(db, idemKey) : null;
-  if (cached) return interaction.editReply(cached);
+  if (cached) return sendSocialPayload(interaction, normalizePayloadForReply(interaction, cached));
 
   const ownerLock = `discord:${interaction.id}`;
 
@@ -1597,6 +2317,15 @@ async function handleTip(interaction) {
       try {
         const result = transferTip(db, serverId, sender, receiver, amount, message);
 
+        queuePersistentV2NoticeCard(result.receiver, {
+          title: `${getIcon("tips")} Tip Received`,
+          details: [
+            `<@${userId}> tipped you **${amount}c**.`,
+            message ? `Message: ${message}` : "Open your social menu to send a tip back."
+          ],
+          tone: "success"
+        });
+
         applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
 
         // Save both players
@@ -1606,7 +2335,7 @@ async function handleTip(interaction) {
         }
         noteRecentSocialUser(serverId, targetUser.id);
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("tips")} Tip Sent!`)
           .setDescription(`<@${userId}> tipped <@${targetUser.id}> **${amount}c**!`)
           .setColor(theme.colors.highlight);
@@ -1623,7 +2352,7 @@ async function handleTip(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         const replyObj = { 
-          embeds: [embed], 
+          ...composeV2FromLegacyEmbeds([embed]), 
           components: [socialMainMenuRow(userId)] 
         };
         if (db) {
@@ -1639,7 +2368,7 @@ async function handleTip(interaction) {
   if (!lockedResult?.ok) {
     return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process tip.`);
   }
-  return interaction.editReply(lockedResult.response);
+  return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
 }
 
 async function handleVisit(interaction) {
@@ -1663,7 +2392,7 @@ async function handleVisit(interaction) {
   const action = "visit";
   const idemKey = makeIdempotencyKey({ serverId, userId, action, interactionId: interaction.id });
   const cached = db ? getIdempotentResult(db, idemKey) : null;
-  if (cached) return interaction.editReply(cached);
+  if (cached) return sendSocialPayload(interaction, normalizePayloadForReply(interaction, cached));
 
   const ownerLock = `discord:${interaction.id}`;
 
@@ -1681,6 +2410,23 @@ async function handleVisit(interaction) {
         // Grant a random blessing
         const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
         targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+
+        const blessingLabels = {
+          discovery_chance_add: "Enhanced Discovery",
+          limited_time_window_add: "Extended Time Window",
+          quality_shift: "Quality Boost",
+          npc_weight_mult: "Customer Favor",
+          coin_bonus: "Coin Bonus",
+          rep_bonus: "Reputation Bonus"
+        };
+        queuePersistentV2NoticeCard(targetPlayer, {
+          title: `${getIcon("bless")} Blessing Received`,
+          details: [
+            `<@${userId}> blessed your shop.`,
+            `Effect: **${blessingLabels[blessingType] || blessingType}** for **${BLESSING_DURATION_HOURS}h**.`
+          ],
+          tone: "success"
+        });
 
         // Log visit for analytics (D6)
         serverState = logVisitActivity(serverState, userId, targetUser.id);
@@ -1706,7 +2452,7 @@ async function handleVisit(interaction) {
         };
         const blessingName = blessingNames[blessingType] || blessingType;
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("star")} Shop Visit!`)
           .setDescription(
             `<@${userId}> visited <@${targetUser.id}>'s shop and granted them a **Blessing**!\n\n` +
@@ -1719,7 +2465,7 @@ async function handleVisit(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
       const replyObj = { 
-        embeds: [embed], 
+        ...composeV2FromLegacyEmbeds([embed]), 
         components: [socialMainMenuRow(userId)] 
       };
         if (db) {
@@ -1742,7 +2488,7 @@ async function handleVisit(interaction) {
   if (!lockedResult?.ok) {
     return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to process visit.`);
   }
-  return interaction.editReply(lockedResult.response);
+  return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
 }
 
 async function handleLeaderboard(interaction) {
@@ -1769,7 +2515,7 @@ async function handleLeaderboard(interaction) {
       ownerUser: interaction.member ?? interaction.user
     });
 
-    return interaction.editReply(view);
+    return sendSocialPayload(interaction, normalizePayloadForReply(interaction, view));
   } catch (err) {
     console.error("Leaderboard error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading leaderboard: ${err.message}`);
@@ -1800,7 +2546,7 @@ async function handleGlobalLeaderboard(interaction) {
       ownerUser: interaction.member ?? interaction.user
     });
 
-    return interaction.editReply(view);
+    return sendSocialPayload(interaction, normalizePayloadForReply(interaction, view));
   } catch (err) {
     console.error("Global leaderboard error:", err);
     return errorReply(interaction, `${getIcon("error")} Error loading global leaderboard: ${err.message}`);
@@ -1823,7 +2569,7 @@ async function handleStats(interaction) {
     const party = getUserActivePartyBridge(serverId, userId);
     const blessing = getActiveBlessing(player);
 
-    const embed = new EmbedBuilder()
+    const embed = createCard()
       .setTitle(`${getIcon("stats")} Your Social Stats`)
       .setColor(theme.colors.success);
 
@@ -1878,13 +2624,13 @@ async function handleStats(interaction) {
       });
     }
 
-    return interaction.editReply({ 
-      embeds: [embed], 
+    return sendSocialPayload(interaction, normalizePayloadForReply(interaction, { 
+      ...composeV2FromLegacyEmbeds([embed]), 
       components: [socialMainMenuRow(userId)] 
-    });
+    }));
   } catch (err) {
     console.error("Stats error:", err);
-    return errorReply(interaction, `${getIcon("error")} Error loading stats: ${err.message}`);
+    return errorReply(interaction, `${getIcon("error")} Couldn't load your social stats right now. Please try again.`);
   }
 }
 
@@ -1910,7 +2656,7 @@ async function handleComponent(interaction) {
   if (interaction.isModalSubmit?.()) {
     if (!interaction.deferred && !interaction.replied) {
       try {
-        await interaction.deferReply({ ephemeral: false });
+        await interaction.deferReply({ ephemeral: true });
       } catch (err) {
         // If defer fails, fall through and let reply errors surface
       }
@@ -1919,6 +2665,10 @@ async function handleComponent(interaction) {
       const parts = customId.split(":");
       const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : null;
       const partyName = interaction.fields.getTextInputValue("party_name");
+
+      if (!sourceMessageId) {
+        return errorReply(interaction, "That menu expired, tap again.");
+      }
       
       if (!partyName || partyName.trim().length === 0) {
         return errorReply(interaction, `${getIcon("error")} Party name cannot be empty.`);
@@ -1936,7 +2686,7 @@ async function handleComponent(interaction) {
         try {
           const result = createParty(db, serverId, userId, cleanedName);
 
-          const embed = new EmbedBuilder()
+          const embed = createCard()
             .setTitle(`${getIcon("party")} Party Created!`)
             .setDescription(`You've created the party **${result.partyName}**`)
             .addFields(
@@ -1947,7 +2697,7 @@ async function handleComponent(interaction) {
 
           applyOwnerFooter(embed, interaction.member ?? interaction.user);
           const replyObj = {
-            embeds: [embed],
+            ...composeV2FromLegacyEmbeds([embed]),
             components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
           };
           return { ok: true, response: replyObj, targetMessageId: sourceMessageId };
@@ -1960,24 +2710,21 @@ async function handleComponent(interaction) {
         return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to create party.`);
       }
 
-      if (lockedResult.targetMessageId && interaction.channel?.messages) {
-        try {
-          const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
-          await msg.edit(lockedResult.response);
-          await interaction.deleteReply().catch(() => {});
-          return;
-        } catch {
-          // fallback to editing interaction reply
-        }
-      }
-
-      return interaction.editReply(lockedResult.response);
+      return componentCommit(interaction, {
+        ...lockedResult.response,
+        targetMessageId: lockedResult.targetMessageId,
+        targetChannelId: interaction.channelId ?? interaction.channel?.id ?? null
+      });
     }
 
     if (customId.startsWith("noodle-social:modal:join_party:")) {
       const parts = customId.split(":");
       const ownerId = parts[3];
       const sourceMessageId = parts[4] && parts[4] !== "none" ? parts[4] : null;
+
+      if (!sourceMessageId) {
+        return errorReply(interaction, "That menu expired, tap again.");
+      }
 
       if (ownerId && ownerId !== userId) {
         return errorReply(interaction, "That party join prompt isn’t for you.");
@@ -1998,7 +2745,7 @@ async function handleComponent(interaction) {
           const joinServerId = resolveJoinPartyServerId(serverId, partyId);
           const result = joinParty(db, joinServerId, partyId, userId);
           
-          const embed = new EmbedBuilder()
+          const embed = createCard()
             .setTitle(`${getIcon("confetti")} Joined Party!`)
             .setDescription(`You've joined the party **${result.partyName}**`)
             .setColor(theme.colors.success);
@@ -2008,7 +2755,7 @@ async function handleComponent(interaction) {
           return {
             ok: true,
             response: {
-              embeds: [embed],
+              ...composeV2FromLegacyEmbeds([embed]),
               components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
             },
             targetMessageId: sourceMessageId
@@ -2022,18 +2769,11 @@ async function handleComponent(interaction) {
         return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to join party.`);
       }
 
-      if (lockedResult.targetMessageId && interaction.channel?.messages) {
-        try {
-          const msg = await interaction.channel.messages.fetch(lockedResult.targetMessageId);
-          await msg.edit(lockedResult.response);
-          await interaction.deleteReply().catch(() => {});
-          return;
-        } catch {
-          // fallback to editing interaction reply
-        }
-      }
-
-      return interaction.editReply(lockedResult.response);
+      return componentCommit(interaction, {
+        ...lockedResult.response,
+        targetMessageId: lockedResult.targetMessageId,
+        targetChannelId: interaction.channelId ?? interaction.channel?.id ?? null
+      });
     }
 
     if (customId.startsWith("noodle-social:modal:invite_user:")) {
@@ -2064,7 +2804,7 @@ async function handleComponent(interaction) {
             const inviteResult = inviteUserToParty(db, currentParty.server_id, currentParty.party_id, targetId);
             noteRecentSocialUser(serverId, targetId);
             
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("status_complete")} User Invited!`)
               .setDescription(`<@${targetId}> has been invited to **${inviteResult.partyName}**`)
               .setColor(theme.colors.success);
@@ -2075,7 +2815,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               response: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
               }
             };
@@ -2088,7 +2828,7 @@ async function handleComponent(interaction) {
         if (!lockedResult?.ok) {
           return errorReply(interaction, lockedResult?.error || `${getIcon("error")} Unable to invite user.`);
         }
-        return interaction.editReply(lockedResult.response);
+        return sendSocialPayload(interaction, normalizePayloadForReply(interaction, lockedResult.response));
       } catch (err) {
         console.error(`${getIcon("error")} withLock failed:`, err);
         try {
@@ -2136,6 +2876,15 @@ async function handleComponent(interaction) {
           try {
             const result = transferTip(db, serverId, sender, receiver, amount, null);
 
+            queuePersistentV2NoticeCard(result.receiver, {
+              title: `${getIcon("tips")} Tip Received`,
+              details: [
+                `<@${userId}> tipped you **${amount}c**.`,
+                "Open your social menu to send a tip back."
+              ],
+              tone: "success"
+            });
+
             applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
 
             if (db) {
@@ -2149,7 +2898,7 @@ async function handleComponent(interaction) {
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("tips")} Tip Sent!`)
               .setDescription(`<@${userId}> tipped <@${targetId}> **${amount}c**!`)
               .setColor(theme.colors.highlight);
@@ -2164,7 +2913,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyRow, socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -2216,6 +2965,15 @@ async function handleComponent(interaction) {
 
           try {
             const result = transferTip(db, serverId, sender, receiver, amount, null);
+
+            queuePersistentV2NoticeCard(result.receiver, {
+              title: `${getIcon("tips")} Tip Received`,
+              details: [
+                `<@${userId}> tipped you **${amount}c**.`,
+                "Open your social menu to send a tip back."
+              ],
+              tone: "success"
+            });
             applyQuestProgress(result.sender, questsContent, userId, { type: "tip_player", amount: 1 }, nowTs());
 
             if (db) {
@@ -2229,7 +2987,7 @@ async function handleComponent(interaction) {
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("tips")} Tip Sent!`)
               .setDescription(`<@${userId}> tipped <@${targetId}> **${amount}c**!`)
               .setColor(theme.colors.highlight);
@@ -2244,7 +3002,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyRow, socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -2292,6 +3050,23 @@ async function handleComponent(interaction) {
             const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
             targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
 
+            const blessingLabels = {
+              discovery_chance_add: "Enhanced Discovery",
+              limited_time_window_add: "Extended Time Window",
+              quality_shift: "Quality Boost",
+              npc_weight_mult: "Customer Favor",
+              coin_bonus: "Coin Bonus",
+              rep_bonus: "Reputation Bonus"
+            };
+            queuePersistentV2NoticeCard(targetPlayer, {
+              title: `${getIcon("bless")} Blessing Received`,
+              details: [
+                `<@${userId}> blessed your shop.`,
+                `Effect: **${blessingLabels[blessingType] || blessingType}** for **${BLESSING_DURATION_HOURS}h**.`
+              ],
+              tone: "success"
+            });
+
             serverState = logVisitActivity(serverState, userId, targetId);
 
             applyQuestProgress(visitor, questsContent, userId, { type: "bless_player", amount: 1 }, nowTs());
@@ -2321,7 +3096,7 @@ async function handleComponent(interaction) {
             const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
             const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("star")} Blessing Granted!`)
               .setDescription(
                 `<@${userId}> blessed <@${targetId}>!\n\n` +
@@ -2336,7 +3111,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyRow, socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -2378,6 +3153,7 @@ async function handleComponent(interaction) {
 
       const ownerId = modalState.ownerId;
       const sourceMessageId = modalState.sourceMessageId ?? null;
+      const sourceChannelId = modalState.sourceChannelId ?? interaction.channelId ?? interaction.channel?.id ?? null;
       const ingredientId = modalState.ingredientId;
 
       if (!ingredientId) {
@@ -2469,8 +3245,8 @@ async function handleComponent(interaction) {
           // Contribute to shared order
           contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, { maxIngredientSlots: maxSlots });
 
-          const embed = new EmbedBuilder()
-            .setTitle(`${getIcon("status_complete")} Contribution Recorded!`)
+          const embed = createCard()
+            .setTitle(`${getIcon("status_complete")} Shared Order • Contribution Recorded`)
             .setDescription(
               `You contributed **${quantity}× ${ingredient.name}** to the shared order.\n\n` +
               `Thank you for helping the party! ${getIcon("party")}`
@@ -2493,9 +3269,10 @@ async function handleComponent(interaction) {
           return {
             ok: true,
             payload: {
-              embeds: [embed],
+              ...composeV2FromLegacyEmbeds([embed]),
               components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)],
-              targetMessageId: sourceMessageId
+              targetMessageId: sourceMessageId,
+              targetChannelId: sourceChannelId
             }
           };
         } catch (err) {
@@ -2503,7 +3280,16 @@ async function handleComponent(interaction) {
         }
       });
 
-      return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
+      if (!lockedResult?.ok) {
+        const errorText = String(lockedResult?.payload?.content || `${getIcon("error")} Unable to record contribution.`);
+        return componentCommit(interaction, {
+          content: errorText,
+          ephemeral: true,
+          targetMessageId: sourceMessageId,
+          targetChannelId: sourceChannelId
+        });
+      }
+      return componentCommit(interaction, lockedResult.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
     }
   }
 
@@ -2600,7 +3386,7 @@ async function handleComponent(interaction) {
             const inviteResult = inviteUserToParty(db, currentParty.server_id, currentParty.party_id, targetId);
             noteRecentSocialUser(serverId, targetId);
 
-            const embed = new EmbedBuilder()
+            const embed = createCard()
               .setTitle(`${getIcon("status_complete")} User Invited!`)
               .setDescription(`<@${targetId}> has been invited to **${inviteResult.partyName}**`)
               .setColor(theme.colors.success);
@@ -2610,7 +3396,7 @@ async function handleComponent(interaction) {
             return {
               ok: true,
               payload: {
-                embeds: [embed],
+                ...composeV2FromLegacyEmbeds([embed]),
                 components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)],
                 targetMessageId: sourceMessageId
               }
@@ -2634,6 +3420,24 @@ async function handleComponent(interaction) {
             try {
               const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
               targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+
+              const blessingLabels = {
+                discovery_chance_add: "Enhanced Discovery",
+                limited_time_window_add: "Extended Time Window",
+                quality_shift: "Quality Boost",
+                npc_weight_mult: "Customer Favor",
+                coin_bonus: "Coin Bonus",
+                rep_bonus: "Reputation Bonus"
+              };
+              queuePersistentV2NoticeCard(targetPlayer, {
+                title: `${getIcon("bless")} Blessing Received`,
+                details: [
+                  `<@${userId}> blessed your shop.`,
+                  `Effect: **${blessingLabels[blessingType] || blessingType}** for **${BLESSING_DURATION_HOURS}h**.`
+                ],
+                tone: "success"
+              });
+
               serverState = logVisitActivity(serverState, userId, targetId);
               applyQuestProgress(visitor, questsContent, userId, { type: "bless_player", amount: 1 }, nowTs());
 
@@ -2662,7 +3466,7 @@ async function handleComponent(interaction) {
               const existingOrder = party ? getActiveSharedOrderByParty(db, party.party_id) : null;
               const partyRow = party ? partyActionRow(userId, true, isLeader, !!existingOrder) : partyCreationRow(userId);
 
-              const embed = new EmbedBuilder()
+              const embed = createCard()
                 .setTitle(`${getIcon("star")} Blessing Granted!`)
                 .setDescription(
                   `<@${userId}> blessed <@${targetId}>!\n\n` +
@@ -2676,7 +3480,7 @@ async function handleComponent(interaction) {
               return {
                 ok: true,
                 payload: {
-                  embeds: [embed],
+                  ...composeV2FromLegacyEmbeds([embed]),
                   components: [partyRow, socialMainMenuRow(userId)],
                   targetMessageId: sourceMessageId
                 }
@@ -2805,7 +3609,7 @@ async function handleComponent(interaction) {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      const servingsEmbed = new EmbedBuilder()
+      const servingsEmbed = createCard()
         .setTitle(`${getIcon("serve")} Create Shared Order`)
         .setDescription(`**Recipe**: ${recipe.name}\n\nStep 2: How many servings should your party make?`)
         .setColor(theme.colors.info);
@@ -2813,7 +3617,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(servingsEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [servingsEmbed],
+        ...composeV2FromLegacyEmbeds([servingsEmbed]),
         components: [new ActionRowBuilder().addComponents(menu), backRow]
       });
     }
@@ -2871,13 +3675,30 @@ async function handleComponent(interaction) {
           const result = createSharedOrder(db, party.party_id, recipeId, serverId, servings);
           const viewer = ensurePlayer(serverId, userId);
 
+          for (const member of party.members ?? []) {
+            const memberId = String(member?.user_id || "").trim();
+            if (!memberId || memberId === String(userId)) continue;
+            const memberPlayer = ensurePlayer(serverId, memberId);
+            queuePersistentV2NoticeCard(memberPlayer, {
+              title: `${getIcon("serve")} Party Shared Order Started`,
+              details: [
+                `Your party started **${recipe.name}** (${servings} servings).`,
+                "Open your party menu & contribute ingredients to help complete it and earn rewards!"
+              ],
+              tone: "info"
+            });
+            if (db) {
+              upsertPlayer(db, serverId, memberId, memberPlayer, null, memberPlayer.schema_version);
+            }
+          }
+
           const ingredientList = getSharedOrderVisibleIngredients(viewer, recipe)
             .map(ing => `• ${content.items[ing.item_id]?.name || ing.item_id} × ${ing.qty * servings}`)
             .join("\n");
           const ingredientBlock = ingredientList || "_No visible ingredients required before your current fishing unlock._";
 
             const totalReward = servings * SHARED_ORDER_REWARD.coinsPerServing;
-          const embed = new EmbedBuilder()
+          const embed = createCard()
             .setTitle(`${getIcon("serve")} Shared Order Created!`)
             .setDescription(
               `**${recipe.name}**\n\n` +
@@ -2898,7 +3719,7 @@ async function handleComponent(interaction) {
           return {
             ok: true,
             payload: {
-              embeds: [embed],
+              ...composeV2FromLegacyEmbeds([embed]),
               components: [partyActionRow(userId, true, isLeader, true), socialMainMenuRow(userId)]
             }
           };
@@ -2957,39 +3778,45 @@ async function handleComponent(interaction) {
         });
       }
 
-      const sourceMessageId = interaction.message?.id ?? null;
-      const modalToken = crypto.randomBytes(6).toString("hex");
-      sharedOrderModalState.set(modalToken, {
-        ownerId: userId,
-        sourceMessageId,
-        ingredientId
-      });
-      const cleanupTimer = setTimeout(() => sharedOrderModalState.delete(modalToken), SHARED_ORDER_MODAL_TTL_MS);
-      cleanupTimer.unref?.();
+      const ingredient = content.items?.[ingredientId];
+      if (!ingredient) {
+        return componentCommit(interaction, { content: `${getIcon("error")} Ingredient not found.`, ephemeral: true });
+      }
 
-      const modal = new ModalBuilder()
-        .setCustomId(`${SHARED_ORDER_MODAL_PREFIX}${modalToken}`)
-        .setTitle("Contribute Ingredient");
-
-      const input = new TextInputBuilder()
-        .setCustomId("quantity")
-        .setLabel(`Quantity (max ${selected.remaining})`)
-        .setStyle(1)
-        .setRequired(true)
-        .setPlaceholder("1");
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-
-      try {
-        return await interaction.showModal(modal);
-      } catch (e) {
-        sharedOrderModalState.delete(modalToken);
-        console.log(`⚠️ showModal failed for shared_order_contribute:`, e?.message);
+      const availableQty = Math.max(0, Number(viewer.inv_ingredients?.[ingredientId] || 0));
+      const maxQty = Math.max(0, Math.min(selected.remaining, availableQty));
+      if (maxQty <= 0) {
         return componentCommit(interaction, {
-          content: `${getIcon("warning")} Discord couldn't show the modal.`,
+          content: `${getIcon("error")} You do not have any of that ingredient available to contribute right now.`,
           ephemeral: true
         });
       }
+      const qtyRow = buildSharedOrderQuantityRow({ userId, ingredientId, maxQuantity: maxQty });
+      if (!qtyRow) {
+        return componentCommit(interaction, {
+          content: `${getIcon("error")} Unable to build quantity options right now.`,
+          ephemeral: true
+        });
+      }
+      const isLeader = party.leader_user_id === userId;
+      const hasOtherContributor = hasNonLeaderContributor(contributions, party.leader_user_id);
+      const canComplete = progress.isComplete && hasOtherContributor;
+
+      const qtyEmbed = createCard()
+        .setTitle(`${getIcon("contribute")} Shared Order • Contribute Ingredient`)
+        .setDescription(
+          `Ingredient: **${ingredient.name}**\n` +
+          `Remaining needed: **${selected.remaining}**\n` +
+          `You have: **${availableQty}**\n\n` +
+          "Choose quantity:"
+        )
+        .setColor(theme.colors.info);
+      applyOwnerFooter(qtyEmbed, interaction.member ?? interaction.user);
+
+      return componentCommit(interaction, {
+        ...composeV2FromLegacyEmbeds([qtyEmbed]),
+        components: [qtyRow, sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
+      });
     }
   }
 
@@ -3002,14 +3829,14 @@ async function handleComponent(interaction) {
       }
       const party = getUserActivePartyBridge(serverId, userId);
       if (!party) {
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Party`)
           .setDescription("You're not in any party. Create or join one!")
           .setColor(theme.colors.info);
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
         return componentCommit(interaction, {
           content: " ",
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyCreationRow(userId), socialMainMenuRow(userId)],
           ephemeral: false
         });
@@ -3019,9 +3846,9 @@ async function handleComponent(interaction) {
         .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
         .join("\n");
 
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("party")} ${party.party_name}`)
-        .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
+      const embed = createCard()
+        .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
+        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
@@ -3052,7 +3879,7 @@ async function handleComponent(interaction) {
         });
       }
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
       });
     }
@@ -3064,7 +3891,7 @@ async function handleComponent(interaction) {
       const party = getUserActivePartyBridge(serverId, userId);
       const blessing = getActiveBlessing(player);
 
-      const embed = new EmbedBuilder()
+      const embed = createCard()
         .setTitle(`${getIcon("stats")} Your Social Stats`)
         .setColor(theme.colors.success);
 
@@ -3117,7 +3944,7 @@ async function handleComponent(interaction) {
       }
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: statsViewButtons(userId, { newsAvailable })
       });
     }
@@ -3180,6 +4007,8 @@ async function handleComponent(interaction) {
       const player = ensurePlayer(serverId, userId);
       const server = ensureServer(serverId);
       const party = getUserActivePartyBridge(serverId, userId);
+      const activeSharedOrder = (party?.party_id && db) ? getActiveSharedOrderByParty(db, party.party_id) : null;
+      const partyHasActiveOrder = Boolean(activeSharedOrder);
       const questsAvailable = hasDailyRewardAvailable(player, nowTs())
         || Object.values(player?.quests?.active ?? {}).some((quest) => quest?.completed_at && !quest?.claimed_at);
       const specializationsAvailable = hasNewShopLevelSpecialization(player, specializationsContent);
@@ -3202,11 +4031,14 @@ async function handleComponent(interaction) {
         const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
         embed.setFooter({ text: footerText });
       }
-      const profileComponents = [noodleMainMenuRowNoProfile(userId), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })];
+      const profileComponents = [
+        noodleMainMenuRowNoProfile(userId),
+        socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable, partyHasActiveOrder })
+      ];
       applyGreenButtonFooter([embed], profileComponents);
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: profileComponents
       });
     }
@@ -3312,9 +4144,9 @@ async function handleComponent(interaction) {
             return `${itemName} ${bar}`;
           }).join('\n');
 
-          embed = new EmbedBuilder()
-            .setTitle(`${getIcon("serve")} ${recipe.name}`)
-            .setDescription(`**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
+          embed = createCard()
+            .setTitle(`${getIcon("serve")} Shared Order • ${recipe.name}`)
+            .setDescription(`**Recipe**: ${recipe.name}\n**Servings**: ${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
             .addFields(
               {
                 name: `${getIcon("ingredient_capacity")} Ingredients`,
@@ -3339,7 +4171,7 @@ async function handleComponent(interaction) {
       if (embed) {
         replyObj.embeds = [embed];
       } else {
-        const emptyEmbed = new EmbedBuilder()
+        const emptyEmbed = createCard()
           .setTitle(`${getIcon("serve")} Shared Order`)
           .setDescription(
             isLeader
@@ -3408,9 +4240,9 @@ async function handleComponent(interaction) {
         return `${itemName} ${bar}`;
       }).join("\n");
 
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("serve")} ${recipe.name}`)
-        .setDescription(`**Servings**: ${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
+      const embed = createCard()
+        .setTitle(`${getIcon("serve")} Shared Order • ${recipe.name}`)
+        .setDescription(`**Recipe**: ${recipe.name}\n**Servings**: ${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS}`)
         .addFields(
           {
             name: `${getIcon("ingredient_capacity")} Ingredients`,
@@ -3429,7 +4261,7 @@ async function handleComponent(interaction) {
       const targetMessageId = interaction.message?.id ?? null;
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [sharedOrderActionRow(userId, true, true, canComplete), socialMainMenuRow(userId)],
         targetMessageId
       });
@@ -3490,7 +4322,7 @@ async function handleComponent(interaction) {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      const createEmbed = new EmbedBuilder()
+      const createEmbed = createCard()
         .setTitle(`${getIcon("serve")} Create Shared Order`)
         .setDescription("Step 1: Pick a recipe that your party members know.")
         .setColor(theme.colors.info);
@@ -3498,7 +4330,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(createEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [createEmbed],
+        ...composeV2FromLegacyEmbeds([createEmbed]),
         components: [new ActionRowBuilder().addComponents(menu), backRow]
       });
     }
@@ -3508,7 +4340,7 @@ async function handleComponent(interaction) {
       if (!party) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You're not in any party.`,
-          embeds: [],
+          ...composeV2FromLegacyEmbeds([]),
           ephemeral: false
         });
       }
@@ -3517,9 +4349,9 @@ async function handleComponent(interaction) {
         .map((m, i) => `${i + 1}. <@${m.user_id}> (${m.contribution_points} points)`)
         .join("\n");
 
-      const embed = new EmbedBuilder()
-        .setTitle(`${getIcon("party")} ${party.party_name}`)
-        .setDescription(`Party ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
+      const embed = createCard()
+        .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
+        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
@@ -3528,7 +4360,7 @@ async function handleComponent(interaction) {
         .setColor(theme.colors.info);
 
       return componentCommit(interaction, {
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [socialMainMenuRow(userId)]
       });
     }
@@ -3545,7 +4377,7 @@ async function handleComponent(interaction) {
       try {
         leaveParty(db, currentParty.party_id, userId);
 
-        const embed = new EmbedBuilder()
+        const embed = createCard()
           .setTitle(`${getIcon("party")} Party`)
           .setDescription(`${getIcon("status_complete")} You've left the party **${currentParty.party_name}**.`)
           .setColor(theme.colors.info);
@@ -3553,7 +4385,7 @@ async function handleComponent(interaction) {
         applyOwnerFooter(embed, interaction.member ?? interaction.user);
 
         return componentCommit(interaction, {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [socialMainMenuRow(userId)]
         });
       } catch (err) {
@@ -3670,9 +4502,9 @@ async function handleComponent(interaction) {
         .addOptions(ingredientOptions);
 
       const isLeader = party.leader_user_id === userId;
-      const contributeEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("contribute")} Contribute Ingredients`)
-        .setDescription("Pick an ingredient to add:")
+      const contributeEmbed = createCard()
+        .setTitle(`${getIcon("contribute")} Shared Order • Contribute Ingredients`)
+        .setDescription(`**Recipe**: ${recipe.name}\nPick an ingredient to add:`)
         .setColor(theme.colors.info);
 
       applyOwnerFooter(contributeEmbed, interaction.member ?? interaction.user);
@@ -3681,9 +4513,154 @@ async function handleComponent(interaction) {
       const canComplete = progress.isComplete && hasOtherContributor;
 
       return componentCommit(interaction, {
-        embeds: [contributeEmbed],
+        ...composeV2FromLegacyEmbeds([contributeEmbed]),
         components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
       });
+    }
+
+    if (action === "shared_order_contribute_qty") {
+      const ingredientId = String(parts[4] ?? "");
+      const qtyRaw = Number.parseInt(String(parts[5] ?? "0"), 10);
+      const quantity = Number.isFinite(qtyRaw) ? qtyRaw : 0;
+      if (!ingredientId) {
+        return componentCommit(interaction, { content: `${getIcon("error")} Ingredient not found.`, ephemeral: true });
+      }
+      if (quantity < 1 || quantity > 999999) {
+        return componentCommit(interaction, { content: `${getIcon("error")} Invalid quantity.`, ephemeral: true });
+      }
+
+      const ownerLock = `discord:${interaction.id}`;
+      if (!db) {
+        return componentCommit(interaction, { content: "Database unavailable in this environment.", ephemeral: true });
+      }
+
+      const lockedResult = await withLock(db, `lock:user:${userId}`, ownerLock, 8000, async () => {
+        try {
+          const party = getUserActivePartyBridge(serverId, userId);
+          if (!party) {
+            return { ok: false, payload: { content: `${getIcon("error")} You're not in a party.`, ephemeral: true } };
+          }
+
+          const sharedOrder = getActiveSharedOrderByParty(db, party.party_id);
+          if (!sharedOrder) {
+            return { ok: false, payload: { content: `${getIcon("error")} No active shared order.`, ephemeral: true } };
+          }
+
+          const recipe = content.recipes[sharedOrder.order_id];
+          if (!recipe) {
+            return { ok: false, payload: { content: `${getIcon("error")} Recipe not found.`, ephemeral: true } };
+          }
+
+          const contributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+          const player = ensurePlayer(serverId, userId);
+          const progress = buildSharedOrderUiProgress({
+            player,
+            recipe,
+            servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+            contributions
+          });
+
+          const maxSlots = getSharedOrderIngredientLimit(recipe, player);
+          const userIngredientSlots = getUserIngredientSlots(contributions, userId);
+          const userSlotsUsed = userIngredientSlots.size;
+
+          const selected = progress.items.find((i) => i.ingredientId === ingredientId);
+          if (!selected || selected.remaining <= 0) {
+            return { ok: false, payload: { content: `${getIcon("status_complete")} That ingredient is already covered.`, ephemeral: true } };
+          }
+
+          if (!userIngredientSlots.has(ingredientId) && Number.isFinite(maxSlots) && userSlotsUsed >= maxSlots) {
+            return {
+              ok: false,
+              payload: {
+                content: `${getIcon("warning")} You've reached your max ingredient slots for this shared order. Ask teammates to cover another ingredient.`,
+                ephemeral: true
+              }
+            };
+          }
+
+          if (quantity > selected.remaining) {
+            return { ok: false, payload: { content: `${getIcon("error")} Max remaining is ${selected.remaining}.`, ephemeral: true } };
+          }
+
+          const ingredient = content.items[ingredientId];
+          if (!ingredient) {
+            return { ok: false, payload: { content: `${getIcon("error")} Ingredient not found.`, ephemeral: true } };
+          }
+
+          const owned = player.inv_ingredients?.[ingredientId] ?? 0;
+          if (owned < quantity) {
+            return { ok: false, payload: { content: `${getIcon("error")} You only have ${owned}.`, ephemeral: true } };
+          }
+
+          player.inv_ingredients[ingredientId] = owned - quantity;
+          if (db) {
+            upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+          }
+
+          contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, { maxIngredientSlots: maxSlots });
+
+          const embed = createCard()
+            .setTitle(`${getIcon("status_complete")} Shared Order • Contribution Recorded`)
+            .setDescription(
+              `You contributed **${quantity}x ${ingredient.name}** to the shared order.\n\n` +
+              `Thank you for helping the party! ${getIcon("party")}`
+            )
+            .setColor(theme.colors.success);
+          applyOwnerFooter(embed, interaction.member ?? interaction.user);
+
+          const isLeader = party.leader_user_id === userId;
+          const updatedContributions = getSharedOrderContributions(db, sharedOrder.shared_order_id);
+          const updatedProgress = buildSharedOrderUiProgress({
+            player,
+            recipe,
+            servings: sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS,
+            contributions: updatedContributions
+          });
+          const hasOtherContributor = hasNonLeaderContributor(updatedContributions, party.leader_user_id);
+          const canComplete = updatedProgress.isComplete && hasOtherContributor;
+          const updatedIngredient = updatedProgress.items.find((entry) => entry.ingredientId === ingredientId);
+          const updatedOwned = Math.max(0, Number(player.inv_ingredients?.[ingredientId] || 0));
+          const updatedMaxQty = Math.max(0, Math.min(updatedIngredient?.remaining ?? 0, updatedOwned));
+          const qtyRow = buildSharedOrderQuantityRow({ userId, ingredientId, maxQuantity: updatedMaxQty });
+
+          if (qtyRow && (updatedIngredient?.remaining ?? 0) > 0) {
+            const continueEmbed = createCard()
+              .setTitle(`${getIcon("status_complete")} Shared Order • Contribution Recorded`)
+              .setDescription(
+                `Added **${quantity}x ${ingredient.name}**.\n` +
+                `Remaining needed: **${updatedIngredient.remaining}**\n` +
+                `You have left: **${updatedOwned}**\n\n` +
+                "Choose another quantity or switch ingredients."
+              )
+              .setColor(theme.colors.success);
+            applyOwnerFooter(continueEmbed, interaction.member ?? interaction.user);
+
+            return {
+              ok: true,
+              payload: {
+                ...composeV2FromLegacyEmbeds([continueEmbed]),
+                components: [qtyRow, sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
+              }
+            };
+          }
+
+          return {
+            ok: true,
+            payload: {
+              ...composeV2FromLegacyEmbeds([embed]),
+              components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
+            }
+          };
+        } catch (err) {
+          return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
+        }
+      });
+
+      if (!lockedResult?.ok) {
+        return componentCommit(interaction, lockedResult?.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
+      }
+      return componentCommit(interaction, lockedResult.payload ?? { content: `${getIcon("error")} Unable to record contribution.`, ephemeral: true });
     }
 
     if (action === "shared_order_complete") {
@@ -3738,8 +4715,8 @@ async function handleComponent(interaction) {
       }
 
       // Confirm completion
-      const promptEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("serve")} Complete Shared Order?`)
+      const promptEmbed = createCard()
+        .setTitle(`${getIcon("serve")} Shared Order • Complete Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Mark this shared order as complete? This will distribute rewards to all contributors."
@@ -3751,7 +4728,7 @@ async function handleComponent(interaction) {
       const targetMessageId = interaction.message?.id ?? null;
 
       return componentCommit(interaction, {
-        embeds: [promptEmbed],
+        ...composeV2FromLegacyEmbeds([promptEmbed]),
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -3793,8 +4770,8 @@ async function handleComponent(interaction) {
       }
 
       const recipe = content.recipes?.[sharedOrder.order_id];
-      const promptEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("warning")} Cancel Shared Order?`)
+      const promptEmbed = createCard()
+        .setTitle(`${getIcon("warning")} Shared Order • Cancel Order?`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributors will not receive rewards, but their ingredients will be returned."
@@ -3804,7 +4781,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(promptEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [promptEmbed],
+        ...composeV2FromLegacyEmbeds([promptEmbed]),
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -3923,6 +4900,15 @@ async function handleComponent(interaction) {
               player.rep = (player.rep || 0) + repReward;
               player.sxp_progress = (player.sxp_progress || 0) + sxpReward;
 
+              queuePersistentV2NoticeCard(player, {
+                title: `${getIcon("serve")} Party Shared Order Completed`,
+                details: [
+                  `**${recipe.name}** (${servings} servings) was completed by your party.`,
+                  `Your rewards: ${coinsReward}c, ${repReward} REP, ${sxpReward} SXP.`
+                ],
+                tone: "success"
+              });
+
               applyQuestProgress(player, questsContent, contributorId, { type: "shared_order_complete", amount: 1 }, nowTs());
 
               // Apply SXP level up (modifies player in place)
@@ -3950,8 +4936,8 @@ async function handleComponent(interaction) {
           ? rewardLines.join("\n")
           : "No contributions recorded.";
 
-        const embed = new EmbedBuilder()
-          .setTitle(`${getIcon("serve")} Shared Order Complete!`)
+        const embed = createCard()
+          .setTitle(`${getIcon("serve")} Shared Order • Complete`)
           .setDescription(
             `**${recipe.name}** (${servings} servings)\n\n` +
             `${getIcon("group")} **Contributors**: ${Object.keys(contributorQuantities).length}\n` +
@@ -3964,7 +4950,7 @@ async function handleComponent(interaction) {
         const isLeader = party.leader_user_id === userId;
         const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
         const commitPayload = {
-          embeds: [embed],
+          ...composeV2FromLegacyEmbeds([embed]),
           components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
         };
 
@@ -3993,8 +4979,8 @@ async function handleComponent(interaction) {
       const isLeader = party.leader_user_id === userId;
       const existingOrder = getActiveSharedOrderByParty(db, party.party_id);
       const recipe = existingOrder ? content.recipes?.[existingOrder.order_id] : null;
-      const cancelEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("cancel")} Cancelled`)
+      const cancelEmbed = createCard()
+        .setTitle(`${getIcon("cancel")} Shared Order • Completion Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${existingOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Shared order completion cancelled."
@@ -4004,7 +4990,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [cancelEmbed],
+        ...composeV2FromLegacyEmbeds([cancelEmbed]),
         components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
       });
     }
@@ -4068,8 +5054,8 @@ async function handleComponent(interaction) {
       cancelSharedOrder(db, sharedOrder.shared_order_id);
 
       const recipe = content.recipes?.[sharedOrder.order_id];
-      const cancelEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("broom")} Shared Order Cancelled`)
+      const cancelEmbed = createCard()
+        .setTitle(`${getIcon("broom")} Shared Order • Cancelled`)
         .setDescription(
           `${recipe?.name ? `**${recipe.name}** (${sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS} servings)\n\n` : ""}` +
           "Contributions have been returned to the party."
@@ -4079,7 +5065,7 @@ async function handleComponent(interaction) {
       applyOwnerFooter(cancelEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [cancelEmbed],
+        ...composeV2FromLegacyEmbeds([cancelEmbed]),
         components: [sharedOrderActionRow(userId, false, true), socialMainMenuRow(userId)]
       });
     }
@@ -4109,15 +5095,15 @@ async function handleComponent(interaction) {
           canComplete = progress.isComplete && hasOtherContributor;
         }
       }
-      const keepEmbed = new EmbedBuilder()
-        .setTitle(`${getIcon("status_complete")} Shared Order Kept`)
+      const keepEmbed = createCard()
+        .setTitle(`${getIcon("status_complete")} Shared Order • Kept`)
         .setDescription("Keeping the shared order active.")
         .setColor(theme.colors.info);
 
       applyOwnerFooter(keepEmbed, interaction.member ?? interaction.user);
 
       return componentCommit(interaction, {
-        embeds: [keepEmbed],
+        ...composeV2FromLegacyEmbeds([keepEmbed]),
         components: [sharedOrderActionRow(userId, !!existingOrder, isLeader, canComplete), socialMainMenuRow(userId)]
       });
     }
@@ -4305,6 +5291,26 @@ export const noodleSocialCommand = {
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
+    const serverId = interaction.guildId;
+    const userId = interaction.user?.id;
+    const isSlashLikeInvocation = !(
+      interaction.isButton?.()
+      || interaction.isSelectMenu?.()
+      || interaction.isModalSubmit?.()
+      || interaction.isAutocomplete?.()
+    );
+
+    if (serverId && userId) {
+      const tutorialPlayer = ensurePlayer(serverId, userId);
+      if (shouldForceTutorialCommand({
+        player: tutorialPlayer,
+        sub: "profile",
+        isChatInput: isSlashLikeInvocation,
+        inDevPath: false
+      })) {
+        return runNoodle(interaction, { sub: "profile" });
+      }
+    }
 
     try {
       switch (sub) {

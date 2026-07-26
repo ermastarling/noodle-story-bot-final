@@ -71,8 +71,20 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 - `npm run mobile:baseline` — run tests and create a baseline migration tag (`mobile-base-v1` by default)
 - `npm run mobile:bootstrap` — clone and bootstrap a dedicated mobile repository with `gh`
 - `npm run review:guard` — run local pre-review safety checks (env-doc drift, new stream-safety patterns, script memory-risk patterns)
+- `npm run review:audit-gate` — fail unless `NOODLE_AUDIT_VERDICT=COMPLETE` and unresolved, non-outdated PR review threads are `0`
+- `npm run review:one-command` — run lint + tests + review guard + audit gate in one command
 - `npm run review:all` — run lint + tests + pre-review guard
 - `npm run check:pr-checklist` — validate the active PR body against required checklist rules
+
+### Audit Gate Usage
+
+After your strict PR auditor reports COMPLETE, run:
+
+```bash
+NOODLE_AUDIT_VERDICT=COMPLETE npm run review:one-command
+```
+
+This enforces the final machine-checked gate and blocks completion if unresolved review threads remain.
 
 ## Git Hooks
 
@@ -102,7 +114,7 @@ For a brand-new branch publish (no PR yet), the first push is allowed and the ho
 
 Only `DISCORD_TOKEN` is required for booting the bot.
 
-Set `NOODLE_OFFICIAL_GUILD_ID` to lock official-server-only flows (dev commands, social bridge checks, and related guards) to a single guild ID.
+Set `NOODLE_DEV_GUILD_ID` to lock `/noodle-dev` registration and access to a test guild, and set `NOODLE_OFFICIAL_GUILD_ID` for official-server-only flows (alerts, social bridge checks, and related guards).
 
 All environment variables, webhook templates, and alert behavior have moved to [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
 

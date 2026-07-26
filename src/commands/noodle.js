@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import {
   canForage,
@@ -22,7 +23,11 @@ import {
 import {
   resolveTutorialGateValue,
   isTutorialStep as isTutorialStepFromRouting,
-  resolveTutorialProgressRowKey
+  resolveTutorialProgressRowKey,
+  resolveTutorialRecoverySub,
+  shouldForceTutorialCommand,
+  resolveForageNavSub,
+  resolveTutorialOrdersActionKey
 } from "../game/tutorialRouting.js";
 import { resolveComponentNavSub } from "./navDispatch.js";
 import {
@@ -45,6 +50,7 @@ import {
   openDb,
   getPlayer,
   upsertPlayer,
+  deletePlayerProfiles,
   getServer,
   upsertServer,
   getLastActiveAt,
@@ -65,7 +71,8 @@ import {
   generateOrderPageForPlayer,
   findOrderByToken,
   getOrdersMeta,
-  markOrderConsumed
+  markOrderConsumed,
+  ensureUnlimitedOrdersBuffer
 } from "../game/orders.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import {
@@ -78,6 +85,7 @@ import {
   PROFILE_COLLECTIONS_SHOWN
 } from "../constants.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
+import { normalizeRawContainerPayload } from "../util/rawPayload.js";
 import { containsProfanity } from "../util/profanity.js";
 import {
   formatNewsVersion,
@@ -87,7 +95,14 @@ import {
   normalizeNewsClassification,
 } from "../util/news.js";
 import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
-import { getUserActiveParty, getActiveBlessing, clearExpiredBlessings, BLESSING_EFFECTS, repairPartyRecord } from "../game/social.js";
+import {
+  getUserActiveParty,
+  getActiveBlessing,
+  clearExpiredBlessings,
+  BLESSING_EFFECTS,
+  repairPartyRecord,
+  getActiveSharedOrderByParty
+} from "../game/social.js";
 import {
   applySubscriptionEntitlementEvent,
   applyMonthlySubscriptionCoinGrant,
@@ -122,11 +137,17 @@ import {
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
 import { applySeasonRolloverReward } from "../game/seasonRollover.js";
-import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap } from "../game/events.js";
-import { rollRecipeDiscovery, applyDiscovery, applyNpcDiscoveryBuff, getTakeoutDiscoveryAttemptLimit } from "../game/discovery.js";
+import {
+  rollRecipeDiscovery,
+  applyDiscovery,
+  applyNpcDiscoveryBuff,
+  getTakeoutDiscoveryAttemptLimit,
+  unlockRecipeForPlayer
+} from "../game/discovery.js";
 import { makeStreamRng } from "../util/rng.js";
 import { applyQuestProgress, ensureQuests, claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { claimDailyReward, hasDailyRewardAvailable } from "../game/daily.js";
+import { triggerDailyRewardReminderTest } from "../jobs/dailyRewardReminders.js";
 import { getVoteRewardStatus, claimVoteRewards, getVotePlatformStatusLines, getDisplayVotePlatformPages } from "../game/voteRewards.js";
 import { ensureBadgeState, getBadgeById, getOwnedBadges, unlockBadges, grantTemporaryBadge, grantEventBadgesForKnownRecipes } from "../game/badges.js";
 import {
@@ -148,7 +169,8 @@ import {
   getUnseenHiddenSpecializations,
   markSpecializationShopLevelSeen,
   meetsSpecializationRequirements,
-  selectSpecialization
+  selectSpecialization,
+  unlockSpecialization
 } from "../game/specialization.js";
 import {
   ensureDecorState,
@@ -170,11 +192,14 @@ import {
   rollIngredientSave,
   rollDoubleCraft
 } from "../game/upgrades.js";
+import { setPlayerShopLevel } from "../game/serve.js";
+import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap, getEventById } from "../game/events.js";
 import { calculateStaffEffects } from "../game/staff.js";
 import {
   ensureGardenState,
   isGardenUnlocked,
   getGardenUnlockState,
+  acknowledgeGardenUnlock,
   addSeeds,
   getGardenPlotCount,
   ensureGardenPlots,
@@ -202,6 +227,7 @@ import {
   setFishingCooldown,
   ensureFishingState,
   getFishingUnlockState,
+  acknowledgeFishingUnlock,
   applyFishingDrops,
   FISHING_RECIPE_IDS,
   unlockFishingRecipesFromDrops,
@@ -218,6 +244,7 @@ import {
   getKitchenBatches,
   getKitchenCapacity,
   getKitchenUnlockState,
+  acknowledgeKitchenUnlock,
   getKitchenForagePool,
   getCraftableCountForBroth,
   getBrothRecipe,
@@ -228,35 +255,86 @@ import {
   KITCHEN_UNLOCK_LEVEL
 } from "../game/kitchen.js";
 import { theme } from "../ui/theme.js";
-import { getIcon, getIconUrl, getButtonEmoji, resolveIcon } from "../ui/icons.js";
+import { getIcon, getIconUrl, getButtonEmoji, resolveIcon, getSceneBannerUrl } from "../ui/icons.js";
+import {
+  buildComponentsV2MenuPayload,
+  buildComponentsV2PayloadWithNoticeCards,
+  buildComponentsV2NoticeCardPayload,
+  isComponentsV2Enabled,
+  MESSAGE_FLAG_IS_COMPONENTS_V2,
+  replyOrEditInteraction
+} from "../ui/componentsV2.js";
+import { isV2OwnerMismatch, parseV2CustomId } from "../ui/sceneRoutingV2.js";
+import { getSceneState, putSceneState } from "../ui/sceneStateV2.js";
+import { buildOrdersBoardV2Message } from "../ui/ordersBoardV2.js";
+import {
+  buildAcceptConfirmV2Message,
+  buildAcceptPickerV2Message,
+  buildAcceptResultV2Message,
+  deriveAcceptOutcome
+} from "../ui/acceptFlowV2.js";
+import {
+  buildCookMinigameTargetActions,
+  buildCookMinigameV2Message,
+  createCookRunToken,
+  evaluateCookMinigameTurn,
+  buildCookRecipePickerV2Message,
+  buildCookResultV2Message,
+  deriveCookMinigameTotalTurns,
+  deriveCookMinigamePerformance,
+  resolveCookOutcomeForFlow
+} from "../ui/cookFlowV2.js";
+import {
+  buildServePickerV2Message
+} from "../ui/serveFlowV2.js";
+import {
+  buildCancelPickerV2Message,
+  deriveCancelOutcome
+} from "../ui/cancelFlowV2.js";
+import {
+  buildProfileHomeV2Message,
+  buildProfileEditV2Message,
+  buildSpecializationListV2Message,
+  buildSpecializationPickerV2Message,
+  buildSpecializationConfirmV2Message,
+  buildSpecializationUpdatedV2Message,
+  buildDecorSetsV2Message
+} from "../ui/profileFlowV2.js";
 import discordPkg from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
-
 const {
-MessageActionRow,
-MessageSelectMenu,
-MessageButton,
-MessageEmbed,
-MessageFlags,
-Modal,
-TextInputComponent,
-Constants
+  MessageActionRow,
+  MessageSelectMenu,
+  MessageButton,
+  MessageEmbed,
+  MessageFlags,
+  Modal,
+  TextInputComponent,
+  Constants
 } = discordPkg;
 
 // Temporary cache for multibuy selections to avoid custom ID length limits
 const multibuyCacheV2 = new Map();
+
 // Temporary cache for sell selections to avoid custom ID length limits
 const sellSelectionCacheV2 = new Map();
 // Temporary cache for compost selections keyed by message id
 const compostSelectionCache = new Map();
 // Temporary cache for takeout menu draft selections across paginated picker pages
 const takeoutMenuSelectionCache = new Map();
+// Temporary cache for accept-order draft selections across paginated picker pages
+const acceptOrderSelectionCache = new Map();
+// Temporary cache for cancel-order draft selections across paginated picker pages
+const cancelOrderSelectionCache = new Map();
+const v2LoopTracker = new Map();
 
 const SELECTION_CACHE_TTL_MS = 5 * 60 * 1000;
 const TAKEOUT_MENU_SELECTION_CACHE_TTL_MS = 30 * 60 * 1000;
+const ACCEPT_ORDER_SELECTION_CACHE_TTL_MS = 15 * 60 * 1000;
+const CANCEL_ORDER_SELECTION_CACHE_TTL_MS = 15 * 60 * 1000;
 
 function makeSelectionToken() {
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `${Date.now().toString(36)}${randomBytes(6).toString("hex")}`;
 }
 
 function purgeExpiredSelectionCache(cache) {
@@ -305,6 +383,144 @@ function clearTakeoutMenuDraftSelection({ serverId, userId } = {}) {
   takeoutMenuSelectionCache.delete(key);
 }
 
+function getAcceptOrderSelectionCacheKey(serverId, userId) {
+  return `${String(serverId || "")}:${String(userId || "")}`;
+}
+
+function normalizeAcceptOrderDraftSelection(ids = [], availableOrderIds = []) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const out = [];
+  const seen = new Set();
+  for (const rawId of ids || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id) || !availableSet.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function readAcceptOrderDraftSelection({ serverId, userId, availableOrderIds = [] } = {}) {
+  purgeExpiredSelectionCache(acceptOrderSelectionCache);
+  const key = getAcceptOrderSelectionCacheKey(serverId, userId);
+  const cached = acceptOrderSelectionCache.get(key);
+  const cachedIds = Array.isArray(cached?.selectedOrderIds) ? cached.selectedOrderIds : [];
+  if (!Array.isArray(availableOrderIds) || availableOrderIds.length === 0) {
+    return [...new Set(cachedIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  }
+  return normalizeAcceptOrderDraftSelection(cachedIds, availableOrderIds);
+}
+
+function writeAcceptOrderDraftSelection({ serverId, userId, selectedOrderIds = [] } = {}) {
+  const key = getAcceptOrderSelectionCacheKey(serverId, userId);
+  acceptOrderSelectionCache.set(key, {
+    selectedOrderIds: [...selectedOrderIds],
+    expiresAt: Date.now() + ACCEPT_ORDER_SELECTION_CACHE_TTL_MS
+  });
+}
+
+function clearAcceptOrderDraftSelection({ serverId, userId } = {}) {
+  const key = getAcceptOrderSelectionCacheKey(serverId, userId);
+  acceptOrderSelectionCache.delete(key);
+}
+
+function mergeAcceptOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSet = new Set((pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSelectedSet = new Set((pageSelectedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+
+  const merged = [];
+  const seen = new Set();
+
+  for (const rawId of currentSelectedOrderIds || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    if (pageSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  for (const rawId of pageSelectedSet) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  return merged;
+}
+
+function getCancelOrderSelectionCacheKey(serverId, userId) {
+  return `${String(serverId || "")}:${String(userId || "")}`;
+}
+
+function normalizeCancelOrderDraftSelection(ids = [], availableOrderIds = []) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const out = [];
+  const seen = new Set();
+  for (const rawId of ids || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id) || !availableSet.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function readCancelOrderDraftSelection({ serverId, userId, availableOrderIds = [] } = {}) {
+  purgeExpiredSelectionCache(cancelOrderSelectionCache);
+  const key = getCancelOrderSelectionCacheKey(serverId, userId);
+  const cached = cancelOrderSelectionCache.get(key);
+  const cachedIds = Array.isArray(cached?.selectedOrderIds) ? cached.selectedOrderIds : [];
+  if (!Array.isArray(availableOrderIds) || availableOrderIds.length === 0) {
+    return [...new Set(cachedIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  }
+  return normalizeCancelOrderDraftSelection(cachedIds, availableOrderIds);
+}
+
+function writeCancelOrderDraftSelection({ serverId, userId, selectedOrderIds = [] } = {}) {
+  const key = getCancelOrderSelectionCacheKey(serverId, userId);
+  cancelOrderSelectionCache.set(key, {
+    selectedOrderIds: [...selectedOrderIds],
+    expiresAt: Date.now() + CANCEL_ORDER_SELECTION_CACHE_TTL_MS
+  });
+}
+
+function clearCancelOrderDraftSelection({ serverId, userId } = {}) {
+  const key = getCancelOrderSelectionCacheKey(serverId, userId);
+  cancelOrderSelectionCache.delete(key);
+}
+
+function mergeCancelOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
+  const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSet = new Set((pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSelectedSet = new Set((pageSelectedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+
+  const merged = [];
+  const seen = new Set();
+
+  for (const rawId of currentSelectedOrderIds || []) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    if (pageSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  for (const rawId of pageSelectedSet) {
+    const id = String(rawId || "").trim();
+    if (!id || seen.has(id)) continue;
+    if (!availableSet.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+
+  return merged;
+}
+
 function formatSelectedItemNames(selectedIds, { maxNames = 3, maxChars = 80 } = {}) {
   const names = (selectedIds ?? []).map((id) => displayItemName(id)).filter(Boolean);
   if (!names.length) return "None";
@@ -330,8 +546,23 @@ function getTakeoutCounterLabel() {
   return `${getIcon("perk_takeout_counter", getIcon("orders"))} Take Out Counter`;
 }
 
+function normalizeSeasonTag(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized || null;
+}
+
+function syncServerSeasonFromSettings(serverState, settings) {
+  const computedSeason = normalizeSeasonTag(computeActiveSeason(settings));
+  const activeEvent = getActiveEvent(eventsContent, serverState);
+  const eventSeason = normalizeSeasonTag(activeEvent?.season);
+  const effectiveSeason = eventSeason || computedSeason;
+  serverState.season = effectiveSeason;
+  return effectiveSeason;
+}
+
 function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNotice = false, consumeSubscriptionNotice = false } = {}) {
   if (!player) return payload;
+  void user;
 
   const garden = getGardenUnlockState(player);
   const kitchen = getKitchenUnlockState(player);
@@ -339,31 +570,31 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
 
   const notices = [];
   if (garden?.justUnlocked) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("garden")} Garden Unlocked`,
-        description: "Plant seeds and harvest ingredients with `/noodle garden` (or find it through your Pantry).",
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("garden")} Garden Unlocked!`,
+      imageUrl: getSceneBannerUrl("garden"),
+      details: ["Plant seeds and harvest ingredients with `/noodle garden` (or find it through your Pantry)."],
+      tone: "success"
+    });
+    acknowledgeGardenUnlock(player);
   }
   if (kitchen?.justUnlocked) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("kitchen")} Kitchen Unlocked`,
-        description: "Simmer gold-star broths with `/noodle kitchen` (or find it through your Pantry).",
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("kitchen")} Kitchen Unlocked!`,
+      imageUrl: getSceneBannerUrl("kitchen"),
+      details: ["Simmer gold-star broths with `/noodle kitchen` (or find it through your Pantry)."],
+      tone: "success"
+    });
+    acknowledgeKitchenUnlock(player);
   }
   if (fishing?.justUnlocked) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("fishing")} Fishing Unlocked`,
-        description: "Catch fish and seafood with `/noodle fishing` (or find it through your Pantry).",
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("fishing")} Fishing Unlocked!`,
+      imageUrl: getSceneBannerUrl("fishing"),
+      details: ["Catch fish and seafood with `/noodle fishing` (or find it through your Pantry)."],
+      tone: "success"
+    });
+    acknowledgeFishingUnlock(player);
   }
 
   const seatingUpgrade = upgradesContent?.upgrades?.u_seating;
@@ -382,23 +613,16 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
     && !seatingNoticeAlreadySeen;
 
   if (shouldShowSeatingNotice) {
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("orders")} More Orders Available`,
-        description: `${getIcon("rep")} You have enough REP to unlock more seating & **Daily Orders**.\nOpen **/noodle-upgrades** and unlock **Seating** in the **Service** category using your earned REP.`,
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("orders")} More Orders Available`,
+      details: [
+        `${getIcon("rep")} You have enough REP to unlock more seating & **Daily Orders**.`,
+        "Open **/noodle-upgrades** and unlock **Seating** in the **Service** category using your earned REP."
+      ],
+      tone: "info"
+    });
     if (consumeSeatingNotice) {
-      if (!player.notifications) {
-        player.notifications = {
-          pending_pantry_messages: [],
-          dm_reminders_opt_out: false,
-          last_daily_reminder_day: null,
-          last_noodle_channel_id: null,
-          last_noodle_guild_id: null
-        };
-      }
+      ensurePersistentV2NoticeState(player);
       player.notifications.seating_unlock_notice_seen = true;
     }
   }
@@ -481,40 +705,205 @@ function applyUnlockNoticeEmbeds(payload = {}, player, user, { consumeSeatingNot
     const coinLine = sawCoinGrant
       ? `${getIcon("coins")} Subscription coin reward credited: **${totalCoinReward}c**`
       : `${getIcon("coins")} Subscription coin reward credited this cycle: **0c**`;
-    notices.push(
-      buildMenuEmbed({
-        title: `${getIcon("sparkle")} Subscription Perks Unlocked`,
-        description: [
-          ...grantedPerkLines,
-          "",
-          coinLine
-        ].join("\n"),
-        user
-      })
-    );
+    notices.push({
+      title: `${getIcon("sparkle")} Subscription Perks Unlocked`,
+      details: [...grantedPerkLines, coinLine],
+      tone: "success"
+    });
   }
 
   if (!notices.length) return payload;
 
   const updated = { ...(payload ?? {}) };
-  const existingEmbeds = Array.isArray(updated.embeds) ? [...updated.embeds] : [];
+  const existingNotices = Array.isArray(updated.notices) ? [...updated.notices] : [];
 
   for (const notice of notices) {
-    if (!notice) continue;
-    const title = notice?.title ?? notice?.data?.title ?? "";
-    const alreadyPresent = existingEmbeds.some((e) => {
-      const t = e?.title ?? e?.data?.title ?? "";
-      return title && t === title;
+    if (!notice || typeof notice !== "object") continue;
+    const signature = JSON.stringify({
+      title: String(notice.title || "").trim(),
+      details: Array.isArray(notice.details) ? notice.details : [],
+      tone: String(notice.tone || "info").trim()
     });
-    if (!alreadyPresent) existingEmbeds.push(notice);
+    const alreadyPresent = existingNotices.some((entry) => {
+      const existingSignature = JSON.stringify({
+        title: String(entry?.title || "").trim(),
+        details: Array.isArray(entry?.details) ? entry.details : [],
+        tone: String(entry?.tone || "info").trim()
+      });
+      return signature === existingSignature;
+    });
+    if (!alreadyPresent) existingNotices.push(notice);
   }
 
-  if (existingEmbeds.length) {
-    updated.embeds = existingEmbeds;
+  if (existingNotices.length) {
+    updated.notices = existingNotices;
     if (updated.content === undefined) updated.content = " ";
   }
 
   Object.defineProperty(updated, "__unlockNoticeApplied", { value: true, enumerable: false });
+  return updated;
+}
+
+const MAX_PERSISTENT_V2_NOTICE_CARDS = 10;
+
+function ensurePersistentV2NoticeState(player) {
+  if (!player || typeof player !== "object") return null;
+  if (!player.notifications || typeof player.notifications !== "object" || Array.isArray(player.notifications)) {
+    player.notifications = {
+      pending_pantry_messages: [],
+      pending_v2_notice_cards: [],
+      active_v2_notice_cards: [],
+      active_v2_notice_menu_key: null,
+      dm_reminders_opt_out: false,
+      last_daily_reminder_day: null,
+      last_noodle_channel_id: null,
+      last_noodle_guild_id: null
+    };
+  }
+  if (!Array.isArray(player.notifications.pending_v2_notice_cards)) {
+    player.notifications.pending_v2_notice_cards = [];
+  }
+  if (!Array.isArray(player.notifications.active_v2_notice_cards)) {
+    player.notifications.active_v2_notice_cards = [];
+  }
+  if (typeof player.notifications.active_v2_notice_menu_key !== "string") {
+    player.notifications.active_v2_notice_menu_key = null;
+  }
+  return player.notifications;
+}
+
+function normalizePersistentV2NoticeCard(card) {
+  if (!card || typeof card !== "object") return null;
+  const title = String(card.title || "Notification").trim() || "Notification";
+  const toneRaw = String(card.tone || "info").trim().toLowerCase();
+  const tone = ["info", "success", "warning", "error"].includes(toneRaw) ? toneRaw : "info";
+  const details = (Array.isArray(card.details) ? card.details : [card.details])
+    .map((line) => String(line ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!details.length) return null;
+  return { title, details, tone };
+}
+
+function enqueuePersistentV2NoticeCards(player, notices = []) {
+  const notifications = ensurePersistentV2NoticeState(player);
+  if (!notifications) return false;
+
+  const normalized = (Array.isArray(notices) ? notices : [])
+    .map((notice) => normalizePersistentV2NoticeCard(notice))
+    .filter(Boolean);
+  if (!normalized.length) return false;
+
+  const pending = Array.isArray(notifications.pending_v2_notice_cards)
+    ? notifications.pending_v2_notice_cards.map((notice) => normalizePersistentV2NoticeCard(notice)).filter(Boolean)
+    : [];
+  const existingSignatures = new Set(
+    pending.map((notice) => JSON.stringify({ title: notice.title, details: notice.details, tone: notice.tone }))
+  );
+
+  let changed = false;
+  for (const notice of normalized) {
+    const signature = JSON.stringify({ title: notice.title, details: notice.details, tone: notice.tone });
+    if (existingSignatures.has(signature)) continue;
+    existingSignatures.add(signature);
+    pending.push(notice);
+    changed = true;
+  }
+
+  if (!changed) return false;
+
+  notifications.pending_v2_notice_cards = pending.slice(-MAX_PERSISTENT_V2_NOTICE_CARDS);
+  return true;
+}
+
+function resolvePersistentV2NoticeCards(player, menuKey) {
+  const notifications = ensurePersistentV2NoticeState(player);
+  if (!notifications) return { notices: [], changed: false };
+
+  let changed = false;
+  const normalizedMenuKey = String(menuKey || "menu:unknown").trim() || "menu:unknown";
+  const pending = notifications.pending_v2_notice_cards
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter(Boolean)
+    .slice(0, MAX_PERSISTENT_V2_NOTICE_CARDS);
+  if (pending.length !== notifications.pending_v2_notice_cards.length) changed = true;
+  notifications.pending_v2_notice_cards = pending;
+
+  const active = notifications.active_v2_notice_cards
+    .map((card) => normalizePersistentV2NoticeCard(card))
+    .filter(Boolean)
+    .slice(0, MAX_PERSISTENT_V2_NOTICE_CARDS);
+  if (active.length !== notifications.active_v2_notice_cards.length) changed = true;
+  notifications.active_v2_notice_cards = active;
+
+  if (active.length > 0 && notifications.active_v2_notice_menu_key && notifications.active_v2_notice_menu_key !== normalizedMenuKey) {
+    notifications.active_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = null;
+    changed = true;
+  }
+
+  if (notifications.active_v2_notice_cards.length <= 0 && notifications.pending_v2_notice_cards.length > 0) {
+    notifications.active_v2_notice_cards = notifications.pending_v2_notice_cards.slice(0, MAX_PERSISTENT_V2_NOTICE_CARDS);
+    notifications.pending_v2_notice_cards = [];
+    notifications.active_v2_notice_menu_key = normalizedMenuKey;
+    changed = true;
+  }
+
+  return {
+    notices: notifications.active_v2_notice_cards,
+    changed
+  };
+}
+
+function applyPersistentNoticeCards(payload = {}, notices = []) {
+  const cards = (notices || []).map((notice) => normalizePersistentV2NoticeCard(notice)).filter(Boolean);
+  if (!cards.length) return payload;
+
+  let updated = { ...(payload ?? {}) };
+  const hasSourceNativeNoticeShape = Array.isArray(updated.mainComponents) || Array.isArray(updated.notices);
+
+  if (hasSourceNativeNoticeShape) {
+    const existing = Array.isArray(updated.notices) ? [...updated.notices] : [];
+    updated.notices = [...existing, ...cards];
+    return updated;
+  }
+
+  if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
+    const composed = composeV2FromLegacyEmbeds(updated.embeds);
+    const { embeds, ...rest } = updated;
+    updated = {
+      ...rest,
+      ...composed,
+      notices: [...(Array.isArray(composed.notices) ? composed.notices : []), ...cards]
+    };
+    return updated;
+  }
+
+  if (isComponentsV2Payload(updated) && Array.isArray(updated.components) && updated.components.length > 0) {
+    const extractedMain = [];
+    for (const entry of updated.components) {
+      const type = Number(entry?.type);
+      if (type === 17 && Array.isArray(entry?.components)) {
+        extractedMain.push(...entry.components);
+      } else if (Number.isFinite(type)) {
+        extractedMain.push(entry);
+      }
+    }
+
+    const { components, flags, ...rest } = updated;
+    const ephemeralFromFlags = (Number(flags) & MessageFlags.Ephemeral) !== 0;
+    updated = {
+      ...rest,
+      mainComponents: extractedMain,
+      notices: cards,
+      ownerId: updated.ownerId || detectOwnerIdFromComponents(extractedMain),
+      ephemeral: updated.ephemeral === true || ephemeralFromFlags
+    };
+    return updated;
+  }
+
+  updated.notices = cards;
+  if (updated.content === undefined) updated.content = " ";
   return updated;
 }
 
@@ -524,7 +913,6 @@ const StringSelectMenuBuilder = MessageSelectMenu;
 const ModalBuilder = Modal;
 const TextInputBuilder = TextInputComponent;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
   Secondary: Constants?.MessageButtonStyles?.SECONDARY ?? 2,
@@ -596,7 +984,7 @@ const db = openDb();
 const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
-const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
+const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_DEV_GUILD_ID || process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
 const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
 const DEFAULT_SUPPORT_SERVER_URL = "https://discord.gg/uue7K92pwj";
 const SUPPORT_SERVER_URL_ALLOWED_HOSTS = new Set([
@@ -754,15 +1142,125 @@ function getCachedDistinctShopCount(dbHandle) {
 }
 
 function applyOwnerFooter(embed, user) {
-  if (embed && user) {
-    embed.setFooter({ text: ownerFooterText(user) });
+  if (!embed || !user) return embed;
+  const text = ownerFooterText(user);
+
+  if (typeof embed.setFooter === "function") {
+    embed.setFooter({ text });
+    return embed;
   }
+
+  if (embed.data && typeof embed.data === "object") {
+    embed.data.footer = { ...(embed.data.footer ?? {}), text };
+    return embed;
+  }
+
+  embed.footer = { ...(embed.footer ?? {}), text };
+  return embed;
+}
+
+function attachLegacyEmbedCompatMethods(embed) {
+  if (!embed || typeof embed !== "object") return embed;
+
+  if (typeof embed.setFooter !== "function") {
+    Object.defineProperty(embed, "setFooter", {
+      enumerable: false,
+      value(footer = {}) {
+        const text = String(footer?.text ?? "").trim();
+        if (this.data && typeof this.data === "object") {
+          this.data.footer = { ...(this.data.footer ?? {}), ...(footer ?? {}), text };
+        } else {
+          this.footer = { ...(this.footer ?? {}), ...(footer ?? {}), text };
+        }
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.addFields !== "function") {
+    Object.defineProperty(embed, "addFields", {
+      enumerable: false,
+      value(...fields) {
+        const flat = fields.flat().filter(Boolean);
+        this.fields = [...(Array.isArray(this.fields) ? this.fields : []), ...flat];
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setFields !== "function") {
+    Object.defineProperty(embed, "setFields", {
+      enumerable: false,
+      value(...fields) {
+        const flat = fields.flat().filter(Boolean);
+        this.fields = flat;
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setURL !== "function") {
+    Object.defineProperty(embed, "setURL", {
+      enumerable: false,
+      value(url = "") {
+        this.url = String(url ?? "").trim();
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setThumbnail !== "function") {
+    Object.defineProperty(embed, "setThumbnail", {
+      enumerable: false,
+      value(url = "") {
+        this.thumbnail = { ...(this.thumbnail ?? {}), url: String(url ?? "").trim() };
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setImage !== "function") {
+    Object.defineProperty(embed, "setImage", {
+      enumerable: false,
+      value(url = "") {
+        this.image = { ...(this.image ?? {}), url: String(url ?? "").trim() };
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setTitle !== "function") {
+    Object.defineProperty(embed, "setTitle", {
+      enumerable: false,
+      value(title = "") {
+        this.title = String(title ?? "").trim();
+        return this;
+      }
+    });
+  }
+
+  if (typeof embed.setDescription !== "function") {
+    Object.defineProperty(embed, "setDescription", {
+      enumerable: false,
+      value(description = "") {
+        this.description = String(description ?? "").trim();
+        return this;
+      }
+    });
+  }
+
   return embed;
 }
 
 function buildMenuEmbed({ title, description, user, color = theme.colors.primary } = {}) {
-  const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color);
-  return applyOwnerFooter(embed, user);
+  const embed = {
+    title: String(title ?? ""),
+    description: String(description ?? ""),
+    color,
+    fields: []
+  };
+  applyOwnerFooter(embed, user);
+  return attachLegacyEmbedCompatMethods(embed);
 }
 
 function chunkLinesIntoEmbedFields(lines, {
@@ -887,23 +1385,8 @@ function applyHouse247OrderBoardOverride(player) {
   if (!hasHouse247Perk(player)) return;
 
   const orderCap = Math.max(0, Math.floor(Number(getOrderAcceptCap(player, nowTs()) || 0) || 0));
-  const currentTotal = Math.max(0, Math.floor(Number(player?.orders_total_count || 0) || 0));
-  const consumedCount = Array.isArray(player?.orders_consumed_indices)
-    ? player.orders_consumed_indices.length
-    : 0;
-
-  // Keep a rolling board chunk available while preserving stable order IDs within a day.
-  // This makes 24/7 House effectively unlimited without allocating a giant board upfront.
-  const boardChunk = Math.max(1, orderCap || 500);
-  const minimumTotal = Math.max(currentTotal, boardChunk);
-  const consumedChunks = Math.floor(consumedCount / boardChunk);
-  const desiredTotal = Math.max(minimumTotal, (consumedChunks + 1) * boardChunk);
-  if (desiredTotal <= currentTotal) return;
-
-  player.orders_total_count = desiredTotal;
-  if (consumedCount < desiredTotal) {
-    player.orders_depleted_day = null;
-  }
+  const minimumVisibleOrders = Math.max(orderCap || 0, 25 * 10);
+  ensureUnlimitedOrdersBuffer(player, { minVisibleOrders: minimumVisibleOrders });
 }
 
 function buildHelpPage({ page, userId, user }) {
@@ -963,7 +1446,7 @@ function buildHelpPage({ page, userId, user }) {
             "• `/noodle-staff` — Hire, level, and manage your staff.",
             "• `/noodle specialize` — Choose a shop specialization.",
             "• Shop Name & Tagline buttons — Edit shop name/tagline.",
-            "• Store button — Opens the decor/cosmetics store."
+            "• Store button — Open the premium store."
           ].join("\n"),
           inline: true
         },
@@ -1078,7 +1561,7 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization", page = 0, pageSize = 5 }) {
+function buildDecorSetsViewData({ player, view = "specialization", page = 0, pageSize = 5 }) {
   const completed = new Set(player.profile?.decor_sets_completed ?? []);
   const owned = new Set(getOwnedDecorItems(player));
   const activeSpecId = player.profile?.specialization?.active_spec_id ?? null;
@@ -1094,7 +1577,7 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
   const pageSets = showSpecialization
     ? sets.slice(safePage * pageSize, (safePage + 1) * pageSize)
     : sets;
-  const lines = pageSets.map((set) => {
+  const entries = pageSets.map((set) => {
     const specId = getDecorSetSpecId(set.set_id);
     const spec = specId ? getSpecializationById(specializationsContent, specId) : null;
     const requirements = spec?.requirements ?? null;
@@ -1117,9 +1600,19 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
       return { item, itemId: p.item_id };
     });
     const piecesList = pieces.map(({ item, itemId }) => item?.name ?? itemId).join(", ");
+    const imageUrl = getIconUrl(`decor_set_${set.set_id}`)
+      ?? (specId ? getIconUrl(`decor_set_${specId}`) : null)
+      ?? getIconUrl("decor_set_placeholder");
 
     if (showSpecialization) {
-      return `${status} **${set.name}**\n${piecesList}\n${description}`;
+      return {
+        setId: set.set_id,
+        name: set.name,
+        statusLine: status,
+        piecesLine: piecesList,
+        description,
+        imageUrl
+      };
     }
 
     const totalPieces = (set.pieces ?? []).length;
@@ -1150,8 +1643,33 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
         }
       }
     }
-    return `${status} **${set.name}**\n${piecesList}\n${countLine}\n${description}\n${missingBlock}`;
+    return {
+      setId: set.set_id,
+      name: set.name,
+      statusLine: status,
+      piecesLine: `${piecesList}\n${countLine}`,
+      description: `${description}\n${missingBlock}`,
+      imageUrl
+    };
   });
+
+  return {
+    entries,
+    page: safePage,
+    totalPages,
+    showSpecialization
+  };
+}
+
+function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization", page = 0, pageSize = 5 }) {
+  const {
+    entries,
+    page: safePage,
+    totalPages,
+    showSpecialization
+  } = buildDecorSetsViewData({ player, view, page, pageSize });
+
+  const lines = entries.map((entry) => `${entry.statusLine} **${entry.name}**\n${entry.piecesLine}\n${entry.description}`);
 
   let description = lines.length ? lines.join("\n\n") : "_No sets available on this page yet._";
   if (showSpecialization && totalPages > 1) {
@@ -1454,18 +1972,17 @@ function sanitizeEmbedsForDiscord(embeds) {
 
   return embeds.map((embed) => {
     if (!embed) return embed;
-    const safe = embed.toJSON ? new EmbedBuilder(embed) : embed; // clone if builder
-    const fields = safe?.data?.fields || safe?.fields || [];
+    const safe = embed?.toJSON ? embed.toJSON() : { ...(embed ?? {}) };
+    const fields = safe?.fields || safe?.data?.fields || [];
     if (fields.length) {
       const newFields = fields.flatMap((f) => chunkField(f));
-      if (safe.spliceFields) safe.spliceFields(0, safe.fields?.length ?? fields.length, ...newFields);
-      else safe.fields = newFields;
+      safe.fields = newFields;
     }
 
-    const desc = safe?.data?.description ?? safe?.description ?? "";
-    if (desc && desc.length > MAX_DESC && safe.setDescription) {
+    const desc = safe?.description ?? safe?.data?.description ?? "";
+    if (desc && desc.length > MAX_DESC) {
       const truncated = desc.slice(0, MAX_DESC);
-      safe.setDescription(`${truncated}\n\n(Description truncated)`);
+      safe.description = `${truncated}\n\n(Description truncated)`;
     }
 
     return safe;
@@ -1897,6 +2414,27 @@ function noodleAboutNewsBackRow(userId) {
   );
 }
 
+function noodleNewsPageRow(userId, page = 0, totalPages = 1) {
+  if (!Number.isFinite(totalPages) || totalPages <= 1) return null;
+  const safeTotal = Math.max(1, Math.floor(totalPages));
+  const safePage = Math.min(Math.max(Math.floor(page), 0), safeTotal - 1);
+  const prevPage = safePage <= 0 ? safeTotal - 1 : safePage - 1;
+  const nextPage = safePage >= safeTotal - 1 ? 0 : safePage + 1;
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}:${prevPage}`)
+      .setLabel("Prev Update")
+      .setEmoji(getButtonEmoji("back"))
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:news:${userId}:${nextPage}`)
+      .setLabel("Next Update")
+      .setEmoji(getButtonEmoji("next"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
 function noodleMainMenuRowNoPantry(userId) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Orders").setEmoji(getButtonEmoji("orders")).setStyle(ButtonStyle.Primary),
@@ -2161,37 +2699,6 @@ const s = String(orderId)
 return s.slice(-6).toUpperCase();
 }
 
-function extractOrderIndexFromId(orderId) {
-  if (!orderId) return null;
-  const match = String(orderId).match(/-o(\d+)-/i);
-  if (!match) return null;
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function parseNonNegativeOrderIndex(value) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) && value >= 0 ? value : null;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-  }
-  return null;
-}
-
-function resolveConsumedOrderIndex(fullOrderId, acceptedOrder, resolvedOrder) {
-  const acceptedIndex = parseNonNegativeOrderIndex(acceptedOrder?.order_index);
-  if (acceptedIndex !== null) return acceptedIndex;
-
-  const resolvedIndex = parseNonNegativeOrderIndex(resolvedOrder?.order_index);
-  if (resolvedIndex !== null) return resolvedIndex;
-
-  return extractOrderIndexFromId(fullOrderId);
-}
-
 function formatBonusValue(key, value) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") {
@@ -2208,6 +2715,23 @@ function formatBonusLabel(key) {
   return key
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatPrepChefPurchasedItems(purchasedItems) {
+  const entries = purchasedItems instanceof Map
+    ? [...purchasedItems.entries()]
+    : Object.entries(purchasedItems ?? {});
+
+  return entries
+    .map(([idOrName, qty]) => {
+      const safeQty = Math.max(0, Math.floor(Number(qty) || 0));
+      if (!safeQty) return null;
+      const label = purchasedItems instanceof Map ? String(idOrName || "").trim() : displayItemName(idOrName);
+      if (!label) return null;
+      return `**${label} x${safeQty}**`;
+    })
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function normalizeIngredientType(itemId) {
@@ -2250,6 +2774,207 @@ function getIngredientCapacitiesByType(player, effects) {
     topping: getIngredientCapacityPerType(player, effects, "topping"),
     protein: getIngredientCapacityPerType(player, effects, "protein")
   };
+}
+
+function runPrepChefAutoBuy({
+  p,
+  s,
+  acceptedOrdersNow = [],
+  acceptedNow = 0,
+  triggerOnOrdersBoard = false,
+  includeFailureMessages = true
+} = {}) {
+  const messages = [];
+  const prepChefLevel = Math.max(0, Number(p?.staff_levels?.prep_chef || 0));
+  if (prepChefLevel <= 0) return { messages, purchased: false };
+
+  const acceptedOrdersForAutoBuy = (() => {
+    const seen = new Set();
+    const merged = [];
+    const addOrder = (order) => {
+      const id = String(order?.order_id || "").trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      merged.push(order);
+    };
+    for (const order of acceptedOrdersNow || []) addOrder(order);
+    for (const entry of Object.values(p?.orders?.accepted ?? {})) {
+      addOrder(entry?.order ?? null);
+    }
+    return merged;
+  })();
+
+  const shouldRun = triggerOnOrdersBoard ? acceptedOrdersForAutoBuy.length > 0 : acceptedNow > 0;
+  if (!shouldRun || acceptedOrdersForAutoBuy.length <= 0) {
+    return { messages, purchased: false };
+  }
+
+  const acceptCap = Math.max(0, Number(getOrderAcceptCap(p, nowTs()) || 0));
+  const autoOrderCap = Math.min(acceptedOrdersForAutoBuy.length, prepChefLevel, acceptCap || prepChefLevel);
+  if (autoOrderCap <= 0) return { messages, purchased: false };
+
+  const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
+  const stockRemaining = { ...(p.market_stock ?? {}) };
+  const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
+  const countsByType = getIngredientCountsByType(p);
+  const remainingByType = {
+    broth: Math.max(0, (perTypeCap.broth ?? 0) - (countsByType.broth ?? 0)),
+    noodles: Math.max(0, (perTypeCap.noodles ?? 0) - (countsByType.noodles ?? 0)),
+    spice: Math.max(0, (perTypeCap.spice ?? 0) - (countsByType.spice ?? 0)),
+    topping: Math.max(0, (perTypeCap.topping ?? 0) - (countsByType.topping ?? 0)),
+    protein: Math.max(0, (perTypeCap.protein ?? 0) - (countsByType.protein ?? 0))
+  };
+  const bowlsRemaining = {};
+  const coinsStart = Number(p.coins || 0);
+  let coinsRemaining = coinsStart;
+
+  for (const order of acceptedOrdersForAutoBuy) {
+    bowlsRemaining[order.recipe_id] = getTotalBowlsForRecipe(p, order.recipe_id);
+  }
+
+  const purchasedByItem = {};
+  let totalAutoCost = 0;
+  let ordersCovered = 0;
+  let needsForageOnlyItems = false;
+  let blockedByCapacity = false;
+  let blockedByStock = false;
+  let blockedByCoins = false;
+  let missingMarketItems = false;
+  let allOrdersAlreadyReady = true;
+
+  let autoBuyTargetsProcessed = 0;
+  for (const order of acceptedOrdersForAutoBuy) {
+    if (autoBuyTargetsProcessed >= autoOrderCap) break;
+    const recipe = content.recipes?.[order.recipe_id];
+    if (!recipe?.ingredients) continue;
+
+    if ((bowlsRemaining[order.recipe_id] ?? 0) > 0) {
+      bowlsRemaining[order.recipe_id] -= 1;
+      ordersCovered += 1;
+      continue;
+    }
+
+    allOrdersAlreadyReady = false;
+    autoBuyTargetsProcessed += 1;
+
+    const allItems = [];
+    const neededItems = [];
+    let orderCost = 0;
+    let orderOk = true;
+
+    for (const ing of getRelevantRecipeIngredients(p, recipe)) {
+      const itemId = ing.item_id;
+      const need = Math.max(0, Number(ing.qty) || 0);
+      const have = Math.max(0, Number(inventoryAvailable[itemId] || 0));
+      const missing = Math.max(0, need - have);
+
+      const item = content.items?.[itemId];
+      if (!item) {
+        orderOk = false;
+        break;
+      }
+
+      const acqRaw = item?.acquisition;
+      const acqType = typeof acqRaw === "string" ? acqRaw : acqRaw?.type;
+      const isMarketItem = MARKET_ITEM_IDS.includes(itemId) || acqType === "market";
+      const type = normalizeIngredientType(itemId);
+      allItems.push({ itemId, need, have, missing, type, name: item.name });
+
+      if (missing > 0) {
+        if (!isMarketItem) {
+          needsForageOnlyItems = true;
+          continue;
+        }
+
+        missingMarketItems = true;
+
+        const remaining = remainingByType[type] ?? 0;
+        if (remaining < missing) {
+          blockedByCapacity = true;
+          orderOk = false;
+          break;
+        }
+
+        const stock = stockRemaining[itemId] ?? 0;
+        if (!unlimitedMarketStock && stock < missing) {
+          blockedByStock = true;
+          orderOk = false;
+          break;
+        }
+
+        const basePrice = s.market_prices?.[itemId] ?? item.base_price ?? 0;
+        const price = applyMarketDiscount(basePrice, combinedEffects);
+        orderCost += price * missing;
+        neededItems.push({ itemId, qty: missing, name: item.name, price, type });
+      }
+    }
+
+    if (!orderOk || coinsRemaining < orderCost) {
+      if (coinsRemaining < orderCost) {
+        blockedByCoins = true;
+      }
+      continue;
+    }
+
+    for (const item of allItems) {
+      const usedFromInventory = Math.min(item.need, item.have);
+      inventoryAvailable[item.itemId] = Math.max(0, (inventoryAvailable[item.itemId] || 0) - usedFromInventory);
+      if (usedFromInventory > 0) {
+        const t = item.type;
+        remainingByType[t] = (remainingByType[t] ?? 0) + usedFromInventory;
+      }
+    }
+
+    for (const needItem of neededItems) {
+      remainingByType[needItem.type] = Math.max(0, (remainingByType[needItem.type] ?? 0) - needItem.qty);
+      if (!unlimitedMarketStock) {
+        stockRemaining[needItem.itemId] = Math.max(0, (stockRemaining[needItem.itemId] ?? 0) - needItem.qty);
+      }
+      purchasedByItem[needItem.itemId] = (purchasedByItem[needItem.itemId] ?? 0) + needItem.qty;
+    }
+
+    coinsRemaining -= orderCost;
+    totalAutoCost += orderCost;
+    ordersCovered += 1;
+  }
+
+  const purchasedItems = formatPrepChefPurchasedItems(purchasedByItem);
+
+  if (totalAutoCost > 0) {
+    if (!p.inv_ingredients) p.inv_ingredients = {};
+    if (!p.market_stock) p.market_stock = {};
+    for (const [id, qty] of Object.entries(purchasedByItem)) {
+      p.inv_ingredients[id] = (p.inv_ingredients[id] ?? 0) + qty;
+      if (!unlimitedMarketStock) {
+        p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
+      }
+    }
+    p.coins = coinsRemaining;
+    messages.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
+    return { messages, purchased: true };
+  }
+
+  if (!includeFailureMessages) {
+    return { messages, purchased: false };
+  }
+
+  if (allOrdersAlreadyReady) {
+    messages.push(`${getIcon("chef")} Prep Chef skipped auto-buy: accepted orders already have ready bowls.`);
+  } else if (blockedByCoins) {
+    messages.push(`${getIcon("chef")} Prep Chef could not auto-buy: not enough coins.`);
+  } else if (blockedByStock) {
+    messages.push(`${getIcon("chef")} Prep Chef could not auto-buy: market stock is sold out for one or more needed items.`);
+  } else if (blockedByCapacity) {
+    messages.push(`${getIcon("chef")} Prep Chef could not auto-buy: pantry storage is full for one or more ingredient types.`);
+  } else if (needsForageOnlyItems && !missingMarketItems) {
+    messages.push(`${getIcon("chef")} Prep Chef found only forage/fishing ingredients missing (no market ingredients to auto-buy).`);
+  } else {
+    messages.push(`${getIcon("chef")} Prep Chef found no market purchases to make for the selected accepted orders.`);
+  }
+
+  return { messages, purchased: false };
 }
 
 function getBowlCount(player) {
@@ -2786,7 +3511,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
   }
 
-  return { content: " ", embeds: [embed], components };
+  return { content: " ", ...composeV2FromLegacyEmbeds([embed]), components };
 }
 
 function getLimitedTimeWindowSeconds(player, baseSeconds) {
@@ -2874,17 +3599,39 @@ function getValidAvailableRecipeIds(player) {
 }
 
 function filterRecipeIdsByActiveSeasonEvent(recipeIds, server) {
-  const activeSeason = server?.season ?? null;
-  const activeEventId = server?.active_event_id ?? null;
+  const activeSeason = normalizeSeasonTag(server?.season ?? null);
+  const activeEventId = String(server?.active_event_id ?? "").trim() || null;
   return (recipeIds ?? []).filter((rid) => {
     const recipe = content.recipes?.[rid];
     if (!recipe) return false;
     if (recipe.is_event_recipe) {
-      return !!activeEventId && recipe.event_id === activeEventId;
+      const recipeEventId = String(recipe.event_id ?? "").trim();
+      return !!activeEventId && recipeEventId === activeEventId;
     }
     if (recipe.tier !== "seasonal") return true;
-    return !!activeSeason && recipe.season === activeSeason;
+    const recipeSeason = normalizeSeasonTag(recipe.season ?? null);
+    return !!activeSeason && !!recipeSeason && recipeSeason === activeSeason;
   });
+}
+
+function isRecipeCookAvailableForCurrentSeasonEvent(recipe, server) {
+  if (!recipe || typeof recipe !== "object") return false;
+  const activeSeason = normalizeSeasonTag(server?.season ?? null);
+  const activeEventId = String(server?.active_event_id ?? "").trim() || null;
+  const recipeSeason = normalizeSeasonTag(recipe?.season ?? null);
+
+  if (recipe.is_event_recipe) {
+    const recipeEventId = String(recipe?.event_id ?? "").trim() || null;
+    const eventMatches = Boolean(activeEventId && recipeEventId && recipeEventId === activeEventId);
+    const seasonMatches = Boolean(activeSeason && recipeSeason && recipeSeason === activeSeason);
+    return eventMatches || seasonMatches;
+  }
+
+  if (recipe.tier === "seasonal") {
+    return Boolean(activeSeason && recipeSeason && recipeSeason === activeSeason);
+  }
+
+  return true;
 }
 
 function migrateLegacyRecipeIds(player) {
@@ -3106,11 +3853,11 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   }
   const titlePrefix = activePerkTitleIcons.length ? `${activePerkTitleIcons.join(" ")} ` : "";
 
-  const embed = new EmbedBuilder()
-    .setTitle(`${titlePrefix}${getIcon("profile")} ${player.profile.shop_name}`)
-    .setDescription(description)
-    .setColor(theme.colors.primary)
-    .addFields(
+  const embed = {
+    title: `${titlePrefix}${getIcon("profile")} ${player.profile.shop_name}`,
+    description,
+    color: theme.colors.primary,
+    fields: [
       {
         name: `${getIcon("serve")} Bowls Served`,
         value: String(player.lifetime.bowls_served_total || 0),
@@ -3134,10 +3881,11 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
       { name: `${getIcon("badges")} Badges`, value: badgesText, inline: false },
       { name: `${getIcon("collections")} Collections`, value: collectionsText, inline: false },
       { name: `${getIcon("decor")} Decor Set`, value: decorSetValue, inline: false }
-    );
+    ]
+  };
 
   if (decorSetImageUrl) {
-    embed.setImage(decorSetImageUrl);
+    embed.image = { url: decorSetImageUrl };
   }
 
   applyOwnerFooter(embed, ownerUser);
@@ -3151,29 +3899,86 @@ function isSpecializationVisible(player, spec) {
   return reqCheck.ok || player?.profile?.specialization?.active_spec_id === spec.spec_id;
 }
 
-function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0, pageSize = 5) {
+function getSpecializationThumbnailUrl(spec = null) {
+  if (!spec) return getIconUrl("decor_set_placeholder");
+  const decorSetId = getDecorSetIdForSpec(spec.spec_id);
+  return (decorSetId ? getIconUrl(`decor_set_${decorSetId}`) : null)
+    ?? getIconUrl(`decor_set_${spec.spec_id}`)
+    ?? getIconUrl(`decor_set_${spec.icon}`)
+    ?? getIconUrl("decor_set_placeholder");
+}
+
+function buildSpecializationUnlockNoticeCard(spec = null, { hidden = false } = {}) {
+  const name = String(spec?.name || spec?.spec_id || "Specialization").trim() || "Specialization";
+  return {
+    title: hidden
+      ? `${getIcon("sparkle")} Hidden Specialization Unlocked!`
+      : `${getIcon("sparkle")} Specialization Unlocked!`,
+    details: [
+      `**${name}** is now unlocked!`,
+      "Open **/noodle specialize** to view and switch your specialization."
+    ],
+    tone: "success",
+    thumbnailUrl: getSpecializationThumbnailUrl(spec)
+  };
+}
+
+function buildSpecializationListData(player, now = nowTs(), page = 0, pageSize = 5) {
   const state = ensureSpecializationState(player);
   const specs = (specializationsContent?.specializations ?? [])
     .filter((spec) => isSpecializationVisible(player, spec));
   const totalPages = Math.max(1, Math.ceil(specs.length / pageSize));
   const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
   const pageSpecs = specs.slice(safePage * pageSize, (safePage + 1) * pageSize);
-  const lines = pageSpecs.map((spec) => {
+
+  const entries = pageSpecs.map((spec) => {
     const isActive = state.active_spec_id === spec.spec_id;
     const check = canSelectSpecialization(player, specializationsContent, spec.spec_id, now);
-    const status = isActive
+    const statusLine = isActive
       ? `${getIcon("status_complete")} Equipped`
       : check.ok
         ? "Available"
         : `${getIcon("lock")} ${check.reason}`;
-    const icon = resolveIcon(spec.icon, getIcon("sparkle"));
-    const description = spec.description ? `\n_${spec.description}_` : "";
-    return `${icon} **${spec.name}** — ${status}${description}`;
+
+    return {
+      specId: spec.spec_id,
+      name: spec.name,
+      icon: resolveIcon(spec.icon, getIcon("sparkle")),
+      description: spec.description ? `_${spec.description}_` : "",
+      statusLine,
+      thumbnailUrl: getSpecializationThumbnailUrl(spec)
+    };
   });
 
   if (state?.active_spec_id && !specs.some((s) => s.spec_id === state.active_spec_id)) {
-    lines.unshift(`${getIcon("sparkle")} **${state.active_spec_id}** — ${getIcon("status_complete")} Equipped`);
+    entries.unshift({
+      specId: state.active_spec_id,
+      name: state.active_spec_id,
+      icon: getIcon("sparkle"),
+      description: "",
+      statusLine: `${getIcon("status_complete")} Equipped`,
+      thumbnailUrl: getIconUrl("decor_set_placeholder")
+    });
   }
+
+  const selectOptions = specs.slice(0, 25).map((spec) => ({
+    label: spec.name?.slice(0, 100) ?? spec.spec_id,
+    description: (spec.description ?? "").slice(0, 100) || "No description yet.",
+    value: spec.spec_id
+  }));
+
+  return {
+    entries,
+    page: safePage,
+    totalPages,
+    selectOptions,
+    visibleSpecs: specs
+  };
+}
+
+function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0, pageSize = 5) {
+  const { entries, page: safePage, totalPages } = buildSpecializationListData(player, now, page, pageSize);
+  const lines = entries.map((entry) => `${entry.icon} **${entry.name}** — ${entry.statusLine}${entry.description ? `\n${entry.description}` : ""}`);
 
   let description = lines.length
     ? `${lines.join("\n\n")}\n\nUse **Select Specialization** below to switch.`
@@ -3191,6 +3996,25 @@ function buildSpecializationListEmbed(player, ownerUser, now = nowTs(), page = 0
   embed.setFooter({ text: footerText });
 
   return { embed, page: safePage, totalPages };
+}
+
+function getProfileV2ButtonEmoji() {
+  return {
+    orders: getButtonEmoji("orders"),
+    cart: getButtonEmoji("cart"),
+    pantry: getButtonEmoji("pantry"),
+    new: getButtonEmoji("new"),
+    party: getButtonEmoji("party"),
+    upgrades: getButtonEmoji("upgrades"),
+    stats: getButtonEmoji("stats"),
+    quests: getButtonEmoji("quests"),
+    customize: getButtonEmoji("customize"),
+    note: getButtonEmoji("note"),
+    tag: getButtonEmoji("tag"),
+    sparkle: getButtonEmoji("sparkle"),
+    back: getButtonEmoji("back"),
+    next: getButtonEmoji("next")
+  };
 }
 
 function resetTutorialState(player) {
@@ -3323,8 +4147,28 @@ warning: `${lines.join("\n")}${more}`
 /*  Component-safe commit helpers                                      */
 /* ------------------------------------------------------------------ */
 
-function normalizeComponents(rows) {
+function normalizeComponents(rows, flags = 0) {
   if (!Array.isArray(rows)) return rows;
+  const isComponentsV2Payload = (Number(flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+
+  if (isComponentsV2Payload) {
+    const normalizeV2Node = (node) => {
+      const baseNode = node?.toJSON?.() ?? node;
+      if (!baseNode || typeof baseNode !== "object") return null;
+
+      if (!Array.isArray(baseNode.components)) return { ...baseNode };
+
+      const childNodes = baseNode.components
+        .map((child) => normalizeV2Node(child))
+        .filter(Boolean);
+      return { ...baseNode, components: childNodes };
+    };
+
+    return rows
+      .map((row) => normalizeV2Node(row))
+      .filter(Boolean);
+  }
+
   const normalized = [];
   for (const row of rows) {
     if (!row) continue;
@@ -3346,6 +4190,505 @@ function normalizeComponents(rows) {
   return normalized.length ? normalized : [];
 }
 
+function normalizePayloadContent(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (typeof payload.content !== "string") return payload;
+
+  if (payload.content.trim().length > 0) return payload;
+
+  const hasEmbeds = Array.isArray(payload.embeds)
+    ? payload.embeds.length > 0
+    : Boolean(payload.embeds);
+  const hasComponents = Array.isArray(payload.components)
+    ? payload.components.length > 0
+    : Boolean(payload.components);
+
+  if (hasEmbeds || hasComponents) {
+    const { content, ...rest } = payload;
+    return rest;
+  }
+
+  return { ...payload, content: "\u200b" };
+}
+
+function normalizeComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  let isV2Payload = (Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  if (!isV2Payload) {
+    const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node || typeof node !== "object") continue;
+      const type = Number(node.type);
+      if (type === 9 || type === 10 || type === 17) {
+        isV2Payload = true;
+        break;
+      }
+      if (Array.isArray(node.components)) stack.push(...node.components);
+    }
+  }
+  if (!isV2Payload) return payload;
+  if (!payload.embeds) return payload;
+
+  // Discord rejects embeds when MessageFlags.IS_COMPONENTS_V2 is set.
+  const { embeds, ...rest } = payload;
+  return rest;
+}
+
+function splitTextToV2Chunks(text, maxLen = 3800) {
+  const raw = String(text ?? "");
+  if (!raw) return [];
+  const chunks = [];
+  let remaining = raw;
+  while (remaining.length > maxLen) {
+    let cut = remaining.lastIndexOf("\n", maxLen);
+    if (cut <= 0) cut = maxLen;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.trim()) chunks.push(remaining.trim());
+  return chunks.filter(Boolean);
+}
+
+function normalizeEmbedFieldName(name = "") {
+  return String(name ?? "")
+    .toLowerCase()
+    .replace(/:[a-z0-9_+-]+:/gi, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function buildProfileEmbedV2Components(raw = {}) {
+  const title = String(raw?.title ?? "").trim();
+  const description = String(raw?.description ?? "").trim();
+  const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+  const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+  const imageUrl = String(raw?.image?.url ?? "").trim();
+  const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+  const components = [];
+  if (title) components.push({ type: 10, content: `## ${title}` });
+  if (description) components.push({ type: 10, content: description });
+
+  const fieldMap = new Map();
+  for (const field of fields) {
+    const normalized = normalizeEmbedFieldName(field?.name);
+    const value = String(field?.value ?? "").trim();
+    if (!normalized || !value) continue;
+    fieldMap.set(normalized, value);
+  }
+
+  const bowlsServed = fieldMap.get("bowls served") ?? "-";
+  const level = fieldMap.get("level") ?? "-";
+  const rep = fieldMap.get("rep") ?? "-";
+  const coins = fieldMap.get("coins") ?? "-";
+
+  const statRows = [
+    { leftLabel: "Bowls Served", leftValue: bowlsServed, rightLabel: "Level", rightValue: level },
+    { leftLabel: "REP", leftValue: rep, rightLabel: "Coins", rightValue: coins }
+  ];
+  const leftColWidth = Math.max(14, ...statRows.map((row) => Math.max(
+    String(row.leftLabel).length,
+    String(row.leftValue).length
+  )));
+  const rightColWidth = Math.max(10, ...statRows.map((row) => Math.max(
+    String(row.rightLabel).length,
+    String(row.rightValue).length
+  )));
+  const divider = "  |  ";
+  const separator = `${"-".repeat(leftColWidth)}${divider}${"-".repeat(rightColWidth)}`;
+  const statLines = [];
+  for (let idx = 0; idx < statRows.length; idx += 1) {
+    const row = statRows[idx];
+    const leftLabel = String(row.leftLabel).padEnd(leftColWidth, " ");
+    const rightLabel = String(row.rightLabel).padEnd(rightColWidth, " ");
+    const leftValue = String(row.leftValue).padEnd(leftColWidth, " ");
+    const rightValue = String(row.rightValue).padEnd(rightColWidth, " ");
+    statLines.push(`${leftLabel}${divider}${rightLabel}`);
+    statLines.push(`${leftValue}${divider}${rightValue}`);
+    if (idx < statRows.length - 1) statLines.push(separator);
+  }
+
+  components.push({
+    type: 10,
+    content: ["```", ...statLines, "```"].join("\n")
+  });
+
+  for (const field of fields) {
+    const name = String(field?.name ?? "").trim();
+    const value = String(field?.value ?? "").trim();
+    if (!name && !value) continue;
+
+    const normalized = normalizeEmbedFieldName(name);
+    if (normalized === "bowls served" || normalized === "level" || normalized === "rep" || normalized === "coins") {
+      continue;
+    }
+
+    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+    if (block) components.push({ type: 10, content: block });
+  }
+
+  if (imageUrl) {
+    components.push({
+      type: 12,
+      items: [{ media: { url: imageUrl } }]
+    });
+  }
+  if (thumbnailUrl) {
+    components.push({
+      type: 12,
+      items: [{ media: { url: thumbnailUrl } }]
+    });
+  }
+
+  if (footerText) {
+    const compactFooter = footerText
+      .split("\n")
+      .map((line) => String(line ?? "").trim())
+      .filter(Boolean)
+      .join(" • ");
+    if (compactFooter) components.push({ type: 10, content: `-# ${compactFooter}` });
+  }
+
+  return components;
+}
+
+function isProfileEmbedForV2(raw = {}) {
+  const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+  if (fields.length < 4) return false;
+  const normalized = new Set(fields.map((field) => normalizeEmbedFieldName(field?.name)).filter(Boolean));
+  return normalized.has("bowls served")
+    && normalized.has("level")
+    && normalized.has("rep")
+    && normalized.has("coins");
+}
+
+function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    if (isProfileEmbedForV2(raw)) {
+      out.push(...buildProfileEmbedV2Components(raw));
+      continue;
+    }
+
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+    const imageUrl = String(raw?.image?.url ?? "").trim();
+    const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+      if (block) blocks.push(block);
+    }
+
+    if (footerText) {
+      const compactFooter = footerText
+        .split("\n")
+        .map((line) => String(line ?? "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      if (compactFooter) blocks.push(`-# ${compactFooter}`);
+    }
+
+    const compact = blocks.join("\n\n").trim();
+    const chunks = splitTextToV2Chunks(compact);
+    if (chunks.length > 0 && thumbnailUrl) {
+      out.push({
+        type: 9,
+        components: [{ type: 10, content: chunks[0] }],
+        accessory: { type: 11, media: { url: thumbnailUrl } }
+      });
+      for (const chunk of chunks.slice(1)) {
+        out.push({ type: 10, content: chunk });
+      }
+    } else {
+      for (const chunk of chunks) {
+        out.push({ type: 10, content: chunk });
+      }
+    }
+
+    if (imageUrl) {
+      out.push({
+        type: 12,
+        items: [{ media: { url: imageUrl } }]
+      });
+    }
+    if (thumbnailUrl && chunks.length === 0) {
+      out.push({
+        type: 12,
+        items: [{ media: { url: thumbnailUrl } }]
+      });
+    }
+  }
+  return out;
+}
+
+function detectOwnerIdFromComponents(components = []) {
+  const stack = Array.isArray(components) ? [...components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+
+    const customId = String(node.custom_id ?? node.customId ?? "").trim();
+    if (customId) {
+      const match = customId.match(/(?:^|:)(\d{17,20})(?::|$)/);
+      if (match?.[1]) return match[1];
+    }
+
+    if (Array.isArray(node.components) && node.components.length > 0) {
+      stack.push(...node.components);
+    }
+  }
+  return null;
+}
+
+function inferNoticeToneFromEmbed(raw = {}) {
+  const title = String(raw?.title ?? "").trim().toLowerCase();
+  const description = String(raw?.description ?? "").trim().toLowerCase();
+  const haystack = `${title}\n${description}`;
+  if (/warning|failed|error|lock|cooldown|missing/.test(haystack)) return "warning";
+  if (/complete|unlocked|started|success|claimed/.test(haystack)) return "success";
+  return "info";
+}
+
+function legacyEmbedToNoticeCardSpec(embed) {
+  const raw = embed?.toJSON?.() ?? embed ?? {};
+  const title = String(raw?.title ?? "").trim() || "Notification";
+  const description = String(raw?.description ?? "").trim();
+  const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+  const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+  const imageUrl = String(raw?.image?.url ?? "").trim();
+  const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
+
+  const detailBlocks = [];
+  if (description) detailBlocks.push(description);
+
+  for (const field of fields) {
+    const name = String(field?.name ?? "").trim();
+    const value = String(field?.value ?? "").trim();
+    if (!name && !value) continue;
+    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+    if (block) detailBlocks.push(block);
+  }
+
+  if (imageUrl) detailBlocks.push(`Image: ${imageUrl}`);
+  if (thumbnailUrl) detailBlocks.push(`Thumbnail: ${thumbnailUrl}`);
+  if (footerText) {
+    const compactFooter = footerText
+      .split("\n")
+      .map((line) => String(line ?? "").trim())
+      .filter(Boolean)
+      .join(" • ");
+    if (compactFooter) detailBlocks.push(`-# ${compactFooter}`);
+  }
+
+  const compact = detailBlocks.join("\n\n").trim();
+  const details = splitTextToV2Chunks(compact);
+  return {
+    title,
+    details,
+    tone: inferNoticeToneFromEmbed(raw)
+  };
+}
+
+function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  const hasSourceNativeComponents = Array.isArray(payload.mainComponents) || Array.isArray(payload.notices);
+  if (hasSourceNativeComponents) {
+    const normalizedComponentRows = normalizeComponents(payload.components, payload.flags);
+    const normalizedRows = (Array.isArray(normalizedComponentRows) ? normalizedComponentRows : [])
+      .filter((row) => Number(row?.type) === 1);
+    const extractedMainComponents = [];
+    if (Array.isArray(payload.components)) {
+      for (const entry of payload.components) {
+        const type = Number(entry?.type);
+        if (type === 17 && Array.isArray(entry?.components)) {
+          extractedMainComponents.push(...entry.components);
+        } else if (Number.isFinite(type)) {
+          extractedMainComponents.push(entry);
+        }
+      }
+    }
+    const explicitMainComponents = Array.isArray(payload.mainComponents) ? payload.mainComponents : [];
+    const effectiveMainComponents = explicitMainComponents.length > 0
+      ? explicitMainComponents
+      : extractedMainComponents;
+    const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+    const ownerId = payload.ownerId || detectOwnerIdFromComponents(effectiveMainComponents) || detectOwnerIdFromComponents(normalizedRows);
+
+    const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [
+        ...effectiveMainComponents,
+        ...normalizedRows
+      ],
+      notices: Array.isArray(payload.notices) ? payload.notices : [],
+      ownerId,
+      ephemeral: isEphemeral,
+      includeGreenButtonTip: payload.disableGreenButtonTip !== true
+    });
+
+    const {
+      mainComponents: _mainComponents,
+      notices: _notices,
+      ownerId: _ownerId,
+      components,
+      flags,
+      ephemeral,
+      disableGreenButtonTip,
+      ...rest
+    } = payload;
+
+    return {
+      ...rest,
+      ...v2Payload
+    };
+  }
+
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+  if (isComponentsV2Payload(payload)) return payload;
+
+  const normalizedComponentRows = normalizeComponents(payload.components, payload.flags);
+  const normalizedRows = (Array.isArray(normalizedComponentRows) ? normalizedComponentRows : [])
+    .filter((row) => Number(row?.type) === 1);
+  const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
+  const ownerId = detectOwnerIdFromComponents(normalizedRows);
+
+  const primaryEmbed = payload.embeds[0];
+  const notificationEmbeds = payload.embeds.slice(1);
+  const primaryTextComponents = legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []);
+  const notices = notificationEmbeds
+    .map((embed) => legacyEmbedToNoticeCardSpec(embed))
+    .filter((notice) => (Array.isArray(notice?.details) && notice.details.length > 0) || notice?.title);
+
+  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+    mainComponents: [...primaryTextComponents, ...normalizedRows],
+    notices,
+    ownerId,
+    ephemeral: isEphemeral,
+    includeGreenButtonTip: payload.disableGreenButtonTip !== true
+  });
+
+  const { embeds, components, flags, ephemeral, disableGreenButtonTip, ...rest } = payload;
+  return {
+    ...rest,
+    ...v2Payload
+  };
+}
+
+function composeV2FromLegacyEmbeds(embeds = []) {
+  const list = Array.isArray(embeds) ? embeds : [];
+  const primaryEmbed = list[0] ?? null;
+  const notificationEmbeds = list.slice(1);
+  return {
+    mainComponents: legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
+    notices: notificationEmbeds
+      .map((embed) => legacyEmbedToNoticeCardSpec(embed))
+      .filter((notice) => (Array.isArray(notice?.details) && notice.details.length > 0) || notice?.title)
+  };
+}
+
+const LEGACY_TO_V2_SUBS = new Set([
+  "buy",
+  "sell",
+  "cook",
+  "pantry",
+  "help",
+  "recipes",
+  "regulars",
+  "season",
+  "event",
+  "status",
+  "dashboard",
+  "giveaway_winner",
+  "profile",
+  "profile_edit",
+  "specialize",
+  "decor",
+  "decor_sets_spec",
+  "store",
+  "about",
+  "news",
+  "takeout",
+  "takeout_menu",
+  "takeout_open",
+  "takeout_claim",
+  "takeout_cook",
+  "takeout_serve",
+  "takeout_needs",
+  "forage",
+  "forage_menu",
+  "fishing",
+  "fishing_menu",
+  "garden",
+  "compost",
+  "plant",
+  "harvest",
+  "kitchen",
+  "kitchen_start",
+  "kitchen_collect"
+]);
+
+function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
+  if (sourceMessageIsV2) return true;
+  if (!rolloutEnabled) return false;
+  const normalizedSub = String(sub || "").trim();
+  const normalizedNavSource = String(navSource || "").trim();
+  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource);
+}
+
+function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
+  if (!interaction || !payload || typeof payload !== "object") return false;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return false;
+  if (isComponentsV2Payload(payload)) return false;
+
+  const customId = String(interaction?.customId ?? "").trim();
+  const isConvertibleComponent =
+    /^noodle:(multibuy|sell):/.test(customId)
+    || /^noodle:nav:(orders|buy|sell|pantry|cook|serve|cancel|help|recipes|regulars|season|event|profile|profile_edit|specialize|decor|about|news|takeout|takeout_menu|takeout_open|takeout_claim|takeout_needs|forage|fishing|garden|compost|kitchen):/.test(customId)
+    || /^noodle:action:(store):/.test(customId)
+    || /^noodle:profile:(edit_shop_name|edit_tagline|specialize_select|specialize_confirm|specialize_cancel):/.test(customId)
+    || /^noodle:profile:specialize_pick:/.test(customId)
+    || /^noodle:pick:(cook|cook_select|serve|serve_select|cancel|cancel_select|forage_|fishing_)/.test(customId)
+    || /^noodle:pick:(takeout_cook|takeout_serve|takeout_cook_select|takeout_serve_select|takeout_cook_qty):/.test(customId)
+    || /^noodle:garden:(plant_select|harvest_select):/.test(customId)
+    || /^noodle:kitchen:(start|collect):/.test(customId);
+  if (!isConvertibleComponent) return false;
+
+  const guildId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  if (!guildId || !userId) return false;
+  const player = ensurePlayer(guildId, userId);
+  return isComponentsV2Enabled({ guildId, userId, player });
+}
+
 function buildInteractionFailureContext(interaction, messageId = null) {
   return {
     guildId: interaction?.guildId ?? null,
@@ -3355,12 +4698,91 @@ function buildInteractionFailureContext(interaction, messageId = null) {
   };
 }
 
+function isComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
+  const stack = Array.isArray(payload.components) ? [...payload.components] : [];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    if ([9, 10, 17].includes(Number(node.type))) return true;
+    if (Array.isArray(node.components)) stack.push(...node.components);
+  }
+  return false;
+}
+
+function isInvalidComponentTypeError(error) {
+  const message = String(error?.message ?? "");
+  return String(error?.code ?? "") === "INVALID_TYPE"
+    || message.includes("valid MessageComponentType");
+}
+
+function isV2EmbedConflictError(error) {
+  const message = String(error?.message ?? "");
+  return Number(error?.code) === 50035
+    && message.includes("embeds: The 'embeds' field cannot be used when using MessageFlags.IS_COMPONENTS_V2");
+}
+
+async function rawWebhookEditOriginal(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .messages("@original")
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+}
+
+async function rawWebhookFollowUp(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook followUp unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .post({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+}
+
+async function rawChannelEditMessage(interaction, channelId, messageId, payload) {
+  if (!interaction?.client?.api || !channelId || !messageId) {
+    throw new Error("Raw channel message edit unavailable: missing client api/channelId/messageId");
+  }
+  return interaction.client.api
+    .channels(channelId)
+    .messages(messageId)
+    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+}
+
 async function componentCommit(interaction, payload) {
-const { ephemeral, targetMessageId, ...rest } = payload ?? {};
+let sourcePayload = payload ?? {};
+const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+const hasSourceNativeNoticeShape = Array.isArray(sourcePayload?.mainComponents) || Array.isArray(sourcePayload?.notices);
+
+if (hasSourceNativeNoticeShape) {
+  sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
+}
+
+if (sourceMessageIsV2 && Array.isArray(sourcePayload?.embeds) && sourcePayload.embeds.length > 0) {
+  sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
+}
+
+if (shouldAutoConvertCommerceComponentPayload(interaction, sourcePayload)) {
+  sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
+}
+
+const { ephemeral, targetMessageId, ...rawRest } = sourcePayload;
+let rest = normalizePayloadContent(rawRest);
+rest = normalizeComponentsV2Payload(rest);
 
 if (rest.embeds) {
   rest.embeds = sanitizeEmbedsForDiscord(rest.embeds);
 }
+rest = normalizePayloadContent(rest);
+rest = normalizeComponentsV2Payload(rest);
 
 // Force ephemeral responses for modal submits when requested
 if (interaction.isModalSubmit?.() && ephemeral === true) {
@@ -3385,14 +4807,21 @@ if (targetMessageId && !ephemeral) {
   try {
     const target = await interaction.channel?.messages?.fetch(targetMessageId);
     if (target) {
+      const targetFlags = Number(target?.flags?.bitfield ?? target?.flags ?? 0);
+      const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
       // Convert components to JSON if they're builder objects
-      const editPayload = { ...rest };
+      let editPayload = { ...rest };
+      if (targetIsV2 && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+        editPayload = convertLegacyEmbedPayloadToComponentsV2(editPayload);
+      }
       if (editPayload.components) {
-        editPayload.components = normalizeComponents(editPayload.components);
+        editPayload.components = normalizeComponents(editPayload.components, editPayload.flags);
       }
       if (editPayload.embeds) {
         editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
       }
+      editPayload = normalizePayloadContent(editPayload);
+      editPayload = normalizeComponentsV2Payload(editPayload);
       // Dismiss the modal response only for modal submits
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
@@ -3401,7 +4830,10 @@ if (targetMessageId && !ephemeral) {
           // Ignore if already deleted
         }
       }
-      return target.edit(editPayload);
+      if (isComponentsV2Payload(editPayload)) {
+        return await rawChannelEditMessage(interaction, target.channelId ?? interaction.channelId, targetMessageId, editPayload);
+      }
+      return await target.edit(editPayload);
     }
   } catch (e) {
     console.error("Failed to edit target message", {
@@ -3417,20 +4849,22 @@ if (targetMessageId && !ephemeral) {
 // If payload has components (select menus, etc), don't make it ephemeral unless explicitly requested
 const hasComponents = Array.isArray(rest.components) ? rest.components.length > 0 : Boolean(rest.components);
 const shouldBeEphemeral = ephemeral === true && !hasComponents;
-const options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...rest };
+let options = shouldBeEphemeral ? { ...rest, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...rest };
 if (options.embeds) {
   options.embeds = sanitizeEmbedsForDiscord(options.embeds);
 }
 if (options.components) {
-  options.components = normalizeComponents(options.components);
+  options.components = normalizeComponents(options.components, options.flags);
 }
+options = normalizePayloadContent(options);
+options = normalizeComponentsV2Payload(options);
 
 if (shouldBeEphemeral) {
   try {
     if (interaction.deferred || interaction.replied) {
-      return interaction.followUp({ ...rest, ephemeral: true });
+      return interaction.followUp(normalizePayloadContent({ ...rest, ephemeral: true }));
     }
-    return interaction.reply({ ...rest, ephemeral: true });
+    return interaction.reply(normalizePayloadContent({ ...rest, ephemeral: true }));
   } catch (e) {
     if (e?.code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
       console.log(`⏭️  Skipping ephemeral reply - interaction invalid or already handled`);
@@ -3443,32 +4877,34 @@ if (shouldBeEphemeral) {
 
 // Modal submits: deferred in index.js, so use editReply unless ephemeral
 if (interaction.isModalSubmit?.()) {
-  if (shouldBeEphemeral) {
-    if (interaction.deferred || interaction.replied) {
-      try {
-        return await interaction.followUp({ ...rest, ephemeral: true });
-      } catch (e) {
-        console.log(`⚠️ Modal followUp failed:`, e?.message);
-        return;
-      }
-    }
-    try {
-      return await interaction.reply({ ...rest, ephemeral: true });
-    } catch (e) {
-      console.log(`⚠️ Modal reply failed:`, e?.message);
-      return;
-    }
-  }
-
   if (interaction.deferred || interaction.replied) {
+    const modalPayload = normalizeComponentsV2Payload(normalizePayloadContent(options));
     try {
-      return await interaction.editReply(rest);
+      if (isComponentsV2Payload(modalPayload)) {
+        return await rawWebhookEditOriginal(interaction, modalPayload);
+      }
+      return await interaction.editReply(modalPayload);
     } catch (e) {
       console.log(`⚠️ Modal editReply failed:`, e?.message);
+      if (isComponentsV2Payload(modalPayload) && isInvalidComponentTypeError(e)) {
+        try {
+          return await rawWebhookEditOriginal(interaction, modalPayload);
+        } catch (rawError) {
+          console.log(`⚠️ Modal raw webhook edit fallback failed:`, rawError?.message);
+        }
+      }
       // If edit fails, try followUp as last resort
+      const followUpPayload = normalizeComponentsV2Payload(normalizePayloadContent({ ...modalPayload, ephemeral: true }));
       try {
-        return await interaction.followUp({ ...rest, ephemeral: true });
+        return await interaction.followUp(followUpPayload);
       } catch (e2) {
+        if (isComponentsV2Payload(followUpPayload) && isInvalidComponentTypeError(e2)) {
+          try {
+            return await rawWebhookFollowUp(interaction, followUpPayload);
+          } catch (rawFollowUpError) {
+            console.log(`⚠️ Modal raw webhook followUp fallback failed:`, rawFollowUpError?.message);
+          }
+        }
         console.log(`⚠️ Modal followUp also failed:`, e2?.message);
         return;
       }
@@ -3505,7 +4941,7 @@ return interaction.reply(options);
 // Convert components to JSON if they're builder objects
 let finalOptions = { ...options };
 if (finalOptions.components) {
-  finalOptions.components = normalizeComponents(finalOptions.components);
+  finalOptions.components = normalizeComponents(finalOptions.components, finalOptions.flags);
 }
 
 // Ensure embeds are included in finalOptions and converted to JSON
@@ -3513,18 +4949,61 @@ if (!finalOptions.embeds && rest.embeds) {
   finalOptions.embeds = rest.embeds;
 }
 if (finalOptions.embeds) {
-  finalOptions.embeds = applyGreenButtonFooter(finalOptions.embeds, finalOptions.components);
+  const isComponentsV2 = (Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  if (!isComponentsV2) {
+    finalOptions.embeds = applyGreenButtonFooter(finalOptions.embeds, finalOptions.components);
+  }
 }
 // Convert EmbedBuilder objects to JSON
 if (finalOptions.embeds) {
   finalOptions.embeds = finalOptions.embeds.map(embed => embed.toJSON?.() ?? embed);
 }
+finalOptions = normalizePayloadContent(finalOptions);
+finalOptions = normalizeComponentsV2Payload(finalOptions);
+if ((Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && finalOptions.embeds) {
+  const { embeds, ...restFinal } = finalOptions;
+  finalOptions = restFinal;
+}
 
 // Use editReply for components that were deferred  
 if (interaction.deferred || interaction.replied) {
+  if (isComponentsV2Payload(finalOptions)) {
+    try {
+      return await rawWebhookEditOriginal(interaction, finalOptions);
+    } catch (rawEditError) {
+      console.error("Component raw webhook edit failed", {
+        ...buildInteractionFailureContext(interaction),
+        errorCode: rawEditError?.code ?? null,
+        errorMessage: rawEditError?.message ?? String(rawEditError)
+      });
+    }
+  }
   try {
     return await interaction.editReply(finalOptions);
   } catch (e) {
+    if (isV2EmbedConflictError(e) && Array.isArray(finalOptions?.embeds) && finalOptions.embeds.length > 0) {
+      try {
+        const recovered = normalizeComponentsV2Payload(convertLegacyEmbedPayloadToComponentsV2(finalOptions));
+        return await rawWebhookEditOriginal(interaction, recovered);
+      } catch (recoverError) {
+        console.error("Component V2 embed-conflict recovery failed", {
+          ...buildInteractionFailureContext(interaction),
+          errorCode: recoverError?.code ?? null,
+          errorMessage: recoverError?.message ?? String(recoverError)
+        });
+      }
+    }
+    if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e)) {
+      try {
+        return await rawWebhookEditOriginal(interaction, finalOptions);
+      } catch (rawError) {
+        console.error("Component raw webhook edit fallback failed", {
+          ...buildInteractionFailureContext(interaction),
+          errorCode: rawError?.code ?? null,
+          errorMessage: rawError?.message ?? String(rawError)
+        });
+      }
+    }
     console.error("Component editReply failed", {
       ...buildInteractionFailureContext(interaction),
       errorCode: e?.code ?? null,
@@ -3532,8 +5011,19 @@ if (interaction.deferred || interaction.replied) {
     });
     // Try followUp as fallback
     try {
-      return await interaction.followUp({ ...finalOptions, ephemeral: true });
+      return await interaction.followUp(normalizePayloadContent({ ...finalOptions, ephemeral: true }));
     } catch (e2) {
+      if (isComponentsV2Payload(finalOptions) && isInvalidComponentTypeError(e2)) {
+        try {
+          return await rawWebhookFollowUp(interaction, normalizePayloadContent({ ...finalOptions, ephemeral: true }));
+        } catch (rawError2) {
+          console.error("Component raw webhook followUp fallback failed", {
+            ...buildInteractionFailureContext(interaction),
+            errorCode: rawError2?.code ?? null,
+            errorMessage: rawError2?.message ?? String(rawError2)
+          });
+        }
+      }
       console.error("Component followUp fallback also failed", {
         ...buildInteractionFailureContext(interaction),
         errorCode: e2?.code ?? null,
@@ -3687,18 +5177,22 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
   const marketRestockDay = p.market_stock_day ?? s.market_day ?? dayKeyUTC();
   const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
   const marketRestockTs = Math.floor(marketRestockMs / 1000);
-  const marketRestockLine = `\n${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
+  const marketRestockLine = unlimitedMarketStock
+    ? ""
+    : `\n${getIcon("refresh")} Market restocks <t:${marketRestockTs}:f> (<t:${marketRestockTs}:R>).`;
 
   if (!opts.length) {
     const emptyEmbed = buildMenuEmbed({
       title: `${getIcon("cart")} Multi-buy`,
-      description: `${getIcon("cart")} No market items are available for your unlocked recipes right now.\n\n${marketRestockLine}`,
+      description: `${getIcon("cart")} No market items are available for your unlocked recipes right now.${marketRestockLine ? `\n\n${marketRestockLine}` : ""}`,
       user: ownerUser
     });
-    emptyEmbed.setTimestamp(new Date(marketRestockMs));
+    if (marketRestockLine) {
+      emptyEmbed.setTimestamp(new Date(marketRestockMs));
+    }
     return {
       content: " ",
-      embeds: [emptyEmbed],
+      ...composeV2FromLegacyEmbeds([emptyEmbed]),
       components: [noodleMainMenuRow(userId)],
       ephemeral: true
     };
@@ -3752,8 +5246,8 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
     unlimitedMarketStock ? `${getHouse247Label()} active: market stock is **unlimited**.` : null,
     shoppingList ? "" : null,
     shoppingList,
-    "",
-    marketRestockLine
+    marketRestockLine ? "" : null,
+    marketRestockLine || null
   ].filter(Boolean);
 
   const buyEmbed = buildMenuEmbed({
@@ -3790,7 +5284,7 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
 
   return {
     content: " ",
-    embeds: [buyEmbed],
+    ...composeV2FromLegacyEmbeds([buyEmbed]),
     components: rows
   };
 }
@@ -3843,6 +5337,30 @@ function buildSellQuantityRow(userId, selectedIds, page, selectionToken = null) 
   );
 }
 
+function buildSellMenuPayload({
+  title = `${getIcon("coins")} Sell Items`,
+  description = "",
+  userId,
+  components = [],
+  ephemeral = false,
+  notices = []
+} = {}) {
+  const mainComponents = [];
+  const safeTitle = String(title ?? "").trim();
+  const safeDescription = String(description ?? "").trim();
+  if (safeTitle) mainComponents.push({ type: 10, content: `## ${safeTitle}` });
+  if (safeDescription) mainComponents.push({ type: 10, content: safeDescription });
+
+  return {
+    content: " ",
+    ownerId: userId,
+    mainComponents,
+    notices: Array.isArray(notices) ? notices : [],
+    components,
+    ephemeral
+  };
+}
+
 function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const ownedItems = Object.entries(p.inv_ingredients ?? {})
     .filter(([id, q]) => q > 0 && SELLABLE_ITEM_IDS.has(id))
@@ -3859,10 +5377,12 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   if (!ownedItems.length) {
-    return {
-      content: `${getIcon("coins")} You don't have any sellable items right now.`,
+    return buildSellMenuPayload({
+      title: `${getIcon("coins")} Sell Items`,
+      description: `${getIcon("coins")} You don't have any sellable items right now.`,
+      userId,
       ephemeral: true
-    };
+    });
   }
 
   const pageSize = 25;
@@ -3878,10 +5398,12 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   }).filter(Boolean);
 
   if (!opts.length) {
-    return {
-      content: `${getIcon("coins")} You don't have any sellable items right now.`,
+    return buildSellMenuPayload({
+      title: `${getIcon("coins")} Sell Items`,
+      description: `${getIcon("coins")} You don't have any sellable items right now.`,
+      userId,
       ephemeral: true
-    };
+    });
   }
 
   const menu = new StringSelectMenuBuilder()
@@ -3913,35 +5435,29 @@ function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
       )
     : null;
 
-  const sellEmbed = buildMenuEmbed({
-    title: `${getIcon("coins")} Sell Items`,
-    description:
-      "Select up to **5** sellable items (market or fresh catches)\n" +
-      "When you’re done selecting, if on Desktop, press **Esc** to continue",
-    user: ownerUser
-  });
-
   const footerBase = `Coins: ${p.coins || 0}c`;
-  const footerOwner = ownerFooterText(ownerUser);
   const pageLabel = totalPages > 1 ? `Page ${safePage + 1}/${totalPages}` : null;
   const footerParts = [footerBase, pageLabel].filter(Boolean).join(" • ");
-  const footerText = footerOwner ? `${footerParts}\n${footerOwner}` : footerParts;
-  sellEmbed.setFooter({ text: footerText });
 
-  return {
-    content: " ",
-    embeds: [sellEmbed],
+  return buildSellMenuPayload({
+    title: `${getIcon("coins")} Sell Items`,
+    description: [
+      "Select up to **5** sellable items (market or fresh catches).",
+      "When you’re done selecting, if on Desktop, press **Esc** to continue.",
+      footerParts ? `-# ${footerParts}` : ""
+    ].filter(Boolean).join("\n"),
+    userId,
     components: [
       new ActionRowBuilder().addComponents(menu),
       ...(navRow ? [navRow] : []),
       new ActionRowBuilder().addComponents(cancelButton)
     ]
-  };
+  });
 }
 
 function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 }) {
   const set = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(set);
+  syncServerSeasonFromSettings(s, set);
   const activeEventEffects = getActiveEventEffects(eventsContent, s);
   const activeEventId = s.active_event_id ?? null;
   rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
@@ -4002,8 +5518,26 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   }
 
   if (!pageData.orders.length) {
+    clearAcceptOrderDraftSelection({ serverId, userId });
     return { content: "No orders available to accept.", ephemeral: true };
   }
+
+  const availableOrderIds = [];
+  const pageOrderIdsByPage = new Map();
+  const pagesToScan = availablePages.length > 0 ? availablePages : [safePage];
+  for (const pg of pagesToScan) {
+    const data = Number(pg) === safePage ? pageData : loadPage(pg);
+    const pageOrderIds = (data?.orders ?? []).map((o) => String(o.order_id));
+    pageOrderIdsByPage.set(Number(pg), pageOrderIds);
+    availableOrderIds.push(...pageOrderIds);
+  }
+
+  const selectedOrderIds = readAcceptOrderDraftSelection({
+    serverId,
+    userId,
+    availableOrderIds
+  });
+  const selectedSet = new Set(selectedOrderIds);
 
   const opts = pageData.orders.map((o) => {
     const rName = content.recipes[o.recipe_id]?.name ?? "a dish";
@@ -4013,7 +5547,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
     const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
     const descRaw = `${npcName}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
-    const option = { label, value: String(o.order_id), description };
+    const option = { label, value: String(o.order_id), description, default: selectedSet.has(String(o.order_id)) };
     if (readyBowls > 0) {
       const emoji = getButtonEmoji("status_complete");
       if (emoji) option.emoji = emoji;
@@ -4022,7 +5556,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   });
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:accept_select:${userId}`)
+    .setCustomId(`noodle:pick:accept_select:${userId}:${safePage}`)
     .setPlaceholder("Select orders to accept (up to 5)")
     .setMinValues(1)
     .setMaxValues(Math.min(5, opts.length))
@@ -4052,6 +5586,20 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   }
 
   const rows = [new ActionRowBuilder().addComponents(menu)];
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`noodle:pick:accept_commit:${userId}`)
+        .setLabel(`Accept Selected (${selectedOrderIds.length})`)
+        .setStyle(selectedOrderIds.length > 0 ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(selectedOrderIds.length === 0),
+      new ButtonBuilder()
+        .setCustomId(`noodle:pick:accept_clear:${userId}:${safePage}`)
+        .setLabel("Clear Selection")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(selectedOrderIds.length === 0)
+    )
+  );
   if (navRow) rows.push(navRow);
   const showBackButton = resolveTutorialGateValue({
     player: p,
@@ -4072,7 +5620,7 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   const acceptEmbed = buildMenuEmbed({
     title: `${getIcon("status_complete")} Accept Orders`,
-    description: `Select orders to accept here.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.`,
+    description: `Select orders across pages, then use **Accept Selected**.\nSelected now: **${selectedOrderIds.length}**.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.`,
     user: ownerUser
   });
 
@@ -4083,15 +5631,26 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   return {
     content: " ",
-    embeds: [acceptEmbed],
+    ...composeV2FromLegacyEmbeds([acceptEmbed]),
     components: rows
   };
 }
 
-function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
+function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser, page = 0 }) {
   const accepted = Object.entries(p.orders?.accepted ?? {});
   const hasAcceptedOrders = accepted.length > 0;
   const canServeAll = action === "serve" ? canServeAllOrders(p) : false;
+  const availableOrderIds = accepted.map(([oid]) => String(oid));
+
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, accepted.length) / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
+  const pagedAccepted = accepted.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const pageOrderIds = pagedAccepted.map(([oid]) => String(oid));
+  const cancelSelectedOrderIds = action === "cancel"
+    ? readCancelOrderDraftSelection({ serverId, userId, availableOrderIds })
+    : [];
+  const cancelSelectedSet = new Set(cancelSelectedOrderIds);
 
   // Summarize missing bowls for accepted orders
   const neededByRecipe = {};
@@ -4113,7 +5672,7 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     })
     .filter(Boolean);
 
-  const opts = accepted.slice(0, 25).map(([oid, entry]) => {
+  const opts = pagedAccepted.map(([oid, entry]) => {
     const snap = entry?.order ?? null;
     const rName = snap ? displayRecipeName(snap.recipe_id) : "Unknown Recipe";
     const npcName = snap ? (content.npcs[snap.npc_archetype]?.name ?? snap.npc_archetype) : "Unknown NPC";
@@ -4122,7 +5681,12 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
     const descRaw = `${npcName}`;
     const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
     const ready = entry?.order?.recipe_id ? getTotalBowlsForRecipe(p, entry.order.recipe_id) > 0 : false;
-    const option = { label, value: oid, description };
+    const option = {
+      label,
+      value: oid,
+      description,
+      ...(action === "cancel" ? { default: cancelSelectedSet.has(String(oid)) } : {})
+    };
     if (action === "serve" && ready) {
       const emoji = getButtonEmoji("status_complete");
       if (emoji) option.emoji = emoji;
@@ -4135,46 +5699,669 @@ function buildCancelServePickerPayload({ action, userId, p, ownerUser }) {
   }
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:${action}_select:${userId}`)
-    .setPlaceholder(action === "serve" ? "Select orders to serve" : "Select an order to cancel")
+    .setCustomId(`noodle:pick:${action}_select:${userId}:${safePage}`)
+    .setPlaceholder(action === "serve" ? "Select orders to serve" : "Select orders to cancel")
     .setMinValues(1)
-    .setMaxValues(action === "serve" ? Math.min(5, opts.length) : 1)
+    .setMaxValues(action === "serve" ? Math.min(5, opts.length) : Math.min(25, opts.length))
     .addOptions(opts);
+
+  const navRow = totalPages > 1
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:${action}:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
+          .setLabel("Prev")
+          .setEmoji(getButtonEmoji("back"))
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:${action}:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
+          .setLabel("Next")
+          .setEmoji(getButtonEmoji("next"))
+          .setStyle(ButtonStyle.Secondary)
+      )
+    : null;
 
   const actionTitle = action === "serve"
     ? `${getIcon("bowl")} Serve Orders`
     : `${getIcon("cancel")} Cancel Order`;
   const actionDesc = action === "serve"
     ? "Select accepted orders to serve.\nWhen you're done selecting, if on Desktop, press **Esc** to continue."
-    : "Select an accepted order to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
+    : "Select accepted orders to cancel.\nWhen you're done selecting, if on Desktop, press **Esc** to continue.";
   const descWithMissing = missingLines.length
     ? `${actionDesc}\n\n${getIcon("basket")} Missing bowls\n${missingLines.join("\n")}`
     : actionDesc;
 
   const actionEmbed = buildMenuEmbed({ title: actionTitle, description: descWithMissing, user: ownerUser });
+  actionEmbed.setFooter({ text: `Page ${safePage + 1}/${totalPages}` });
   const showOrdersActions = action === "serve"
     ? resolveTutorialGateValue({ player: p, gate: "servePickerShowOrdersActions", fallbackValue: true })
     : true;
 
+  const components = [new ActionRowBuilder().addComponents(menu)];
+  if (action === "cancel") {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:cancel_commit:${userId}`)
+          .setLabel(`Cancel Selected (${cancelSelectedOrderIds.length})`)
+          .setStyle(cancelSelectedOrderIds.length > 0 ? ButtonStyle.Danger : ButtonStyle.Secondary)
+          .setDisabled(cancelSelectedOrderIds.length === 0),
+        new ButtonBuilder()
+          .setCustomId(`noodle:pick:cancel_clear:${userId}:${safePage}`)
+          .setLabel("Clear Selection")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(cancelSelectedOrderIds.length === 0)
+      )
+    );
+  }
+  if (navRow) components.push(navRow);
+  if (showOrdersActions) {
+    components.push(
+      action === "serve"
+        ? noodleOrdersActionRowWithBack(userId, {
+            highlightAccept: !hasAcceptedOrders,
+            disableServe: !hasAcceptedOrders,
+            showServeAll: true,
+            disableServeAll: !canServeAll
+          })
+        : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
+    );
+  }
+
   return {
     content: " ",
-    embeds: [actionEmbed],
-    components: [
-      new ActionRowBuilder().addComponents(menu),
-      ...(showOrdersActions
-        ? [
-            action === "serve"
-              ? noodleOrdersActionRowWithBack(userId, {
-                  highlightAccept: !hasAcceptedOrders,
-                  disableServe: !hasAcceptedOrders,
-                  showServeAll: true,
-                  disableServeAll: !canServeAll
-                })
-              : noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })
-          ]
-        : [])
-    ]
+    ...composeV2FromLegacyEmbeds([actionEmbed]),
+    components
   };
+}
+
+function buildAcceptPickerSceneEntries({ serverId, userId, p, s, page = 0, pageSize = 7 }) {
+  const set = buildSettingsMap(settingsCatalog, s.settings);
+  syncServerSeasonFromSettings(s, set);
+  const activeEventEffects = getActiveEventEffects(eventsContent, s);
+  const activeEventId = s.active_event_id ?? null;
+  rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
+  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+  applyHouse247OrderBoardOverride(p);
+
+  const acceptedOrderIds = new Set(Object.keys(p.orders?.accepted ?? {}).map((id) => String(id || "").trim()).filter(Boolean));
+  const { totalCount, consumedSet } = getOrdersMeta(p);
+  const totalBoardPages = Math.max(1, Math.ceil(Math.max(0, totalCount) / 25));
+  const availableBoardPages = [];
+  for (let idx = 0; idx < totalCount; idx += 1) {
+    if (consumedSet.has(idx)) continue;
+    const pageIdx = Math.floor(idx / 25);
+    if (!availableBoardPages.includes(pageIdx)) availableBoardPages.push(pageIdx);
+  }
+
+  const orderTokenByShortId = {};
+  const allEntries = [];
+  const pagesToScan = availableBoardPages.length > 0 ? availableBoardPages : Array.from({ length: totalBoardPages }, (_, idx) => idx);
+  for (const boardPage of pagesToScan) {
+    const pageData = generateOrderPageForPlayer({
+      playerState: p,
+      settings: set,
+      content,
+      activeSeason: s.season,
+      serverId,
+      userId,
+      activeEventId,
+      page: boardPage,
+      pageSize: 25
+    });
+    for (const o of pageData?.orders ?? []) {
+      const fullOrderId = String(o?.order_id || "").trim();
+      if (!fullOrderId || acceptedOrderIds.has(fullOrderId)) continue;
+      const shortId = shortOrderId(fullOrderId);
+      orderTokenByShortId[shortId] = fullOrderId;
+      const recipeName = content.recipes[o.recipe_id]?.name ?? "a dish";
+      const npcName = content.npcs[o.npc_archetype]?.name ?? "a customer";
+      const ready = getTotalBowlsForRecipe(p, o.recipe_id);
+      allEntries.push({
+        shortId,
+        recipeId: String(o.recipe_id || "").trim(),
+        line: `\`${shortId}\` • **${recipeName}** — *${npcName}* (${o.tier}) • ready bowls: **${ready}**`
+      });
+    }
+  }
+
+  allEntries.sort((a, b) => String(a.shortId).localeCompare(String(b.shortId)));
+  const safePageSize = Math.max(1, Math.floor(Number(pageSize) || 10));
+  const totalPages = Math.max(1, Math.ceil(allEntries.length / safePageSize));
+  const safePage = Math.max(0, Math.min(Math.floor(Number(page) || 0), totalPages - 1));
+  const entries = allEntries.slice(safePage * safePageSize, (safePage + 1) * safePageSize);
+
+  return { entries, orderTokenByShortId, page: safePage, totalPages };
+}
+
+export function normalizeAcceptPickerSelectedShortIds({ selectedShortIds = [], orderTokenByShortId = {} } = {}) {
+  const selectableShortIds = new Set(
+    Object.keys(orderTokenByShortId || {})
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  );
+  return (selectedShortIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => Boolean(id) && selectableShortIds.has(id) && arr.indexOf(id) === index);
+}
+
+function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortIds = [], statusLine = "", page = 0 }) {
+  const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
+  const { entries, orderTokenByShortId, page: safePage, totalPages } = buildAcceptPickerSceneEntries({ serverId, userId, p, s, page });
+  const allSelectableShortIds = new Set(Object.keys(orderTokenByShortId).map((id) => String(id || "").trim()).filter(Boolean));
+  const acceptedCount = Object.keys(p.orders?.accepted ?? {}).length;
+  const cap = getOrderAcceptCap(p, nowTs());
+  const remainingSlots = Math.max(0, cap - acceptedCount);
+
+  const scopedEntries = (() => {
+    if (!tutorialSingleAcceptMode) return entries;
+    const preferred = entries.find((entry) => String(entry?.recipeId ?? "") === "classic_soy_ramen");
+    if (preferred) return [preferred];
+    return entries.slice(0, 1);
+  })();
+
+  const scopedOrderTokenByShortId = scopedEntries.reduce((acc, entry) => {
+    const sid = String(entry?.shortId ?? "").trim();
+    const full = String(orderTokenByShortId?.[sid] ?? "").trim();
+    if (sid && full) acc[sid] = full;
+    return acc;
+  }, {});
+
+  const normalizedSelected = normalizeAcceptPickerSelectedShortIds({
+    selectedShortIds,
+    orderTokenByShortId: tutorialSingleAcceptMode ? scopedOrderTokenByShortId : orderTokenByShortId
+  }).slice(0, Math.max(0, remainingSlots));
+
+  const sceneState = putSceneState({
+    sceneKey: "orders.accept_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      orderTokenByShortId: scopedOrderTokenByShortId,
+      selectableOrderTokenByShortId: tutorialSingleAcceptMode ? scopedOrderTokenByShortId : orderTokenByShortId,
+      selectedShortIds: normalizedSelected,
+      page: safePage,
+      totalPages,
+      tutorialSingleAcceptMode
+    }
+  });
+
+  return buildAcceptPickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries: scopedEntries,
+    selectedShortIds: normalizedSelected,
+    statusLine,
+    currentPage: safePage,
+    totalPages: tutorialSingleAcceptMode ? 1 : totalPages,
+    directAcceptMode: tutorialSingleAcceptMode,
+    tutorialSingleAcceptMode,
+    maxSelectable: remainingSlots,
+    hasAcceptedOrders: acceptedCount > 0
+  });
+}
+
+function resolveTutorialCookRecipeId(player) {
+  const acceptedRecipeIds = Object.values(player?.orders?.accepted ?? {})
+    .map((entry) => String(entry?.order?.recipe_id || "").trim())
+    .filter(Boolean);
+
+  if (acceptedRecipeIds.includes("classic_soy_ramen")) return "classic_soy_ramen";
+  if (acceptedRecipeIds.length > 0) return acceptedRecipeIds[0];
+
+  const knownRecipeIds = getValidAvailableRecipeIds(player)
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  if (knownRecipeIds.includes("classic_soy_ramen")) return "classic_soy_ramen";
+  return knownRecipeIds[0] ?? "";
+}
+
+function buildCookRecipePickerSceneEntries({ p, s }) {
+  const available = getValidAvailableRecipeIds(p);
+  const seasonFiltered = available.filter((rid) => {
+    const recipe = content.recipes?.[rid] ?? null;
+    return isRecipeCookAvailableForCurrentSeasonEvent(recipe, s);
+  });
+
+  const sortKey = (rid) => {
+    const r = content.recipes?.[rid];
+    return (r?.name ?? displayItemName(rid, content) ?? "").toLowerCase();
+  };
+
+  const sorted = [...seasonFiltered].sort((a, b) => sortKey(a).localeCompare(sortKey(b), "en", { sensitivity: "base" }));
+
+  const neededByRecipe = {};
+  Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+    const recipeId = String(entry?.order?.recipe_id || "").trim();
+    if (!recipeId) return;
+    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+  });
+
+  return sorted.map((rid) => {
+    const recipeId = String(rid || "").trim();
+    const recipe = content.recipes?.[recipeId] ?? null;
+    const recipeName = recipe?.name ?? displayItemName(recipeId, content);
+    const relevantIngredients = getRelevantRecipeIngredients(p, recipe);
+    const maxCookable = relevantIngredients
+      .filter((ing) => !isIngredientOptionalForPlayer(p, ing) && (ing?.qty ?? 0) > 0)
+      .map((ing) => Math.floor((p.inv_ingredients?.[ing.item_id] ?? 0) / (ing.qty ?? 1)))
+      .reduce((min, cur) => Math.min(min, cur), Infinity);
+    const cookable = Number.isFinite(maxCookable) ? Math.max(0, maxCookable) : 0;
+    const need = neededByRecipe[recipeId] ?? 0;
+    const ready = getTotalBowlsForRecipe(p, recipeId);
+    const short = Math.max(0, need - ready);
+    const needLine = short > 0 ? ` • needs **${short}**` : "";
+
+    return {
+      recipeId,
+      recipeName,
+      tier: String(recipe?.tier ?? "standard"),
+      need,
+      ready,
+      short,
+      line: `**${recipeName}** (${recipe?.tier ?? "standard"}) • ready **${ready}** • max now **${cookable}**${needLine}`,
+      cookable
+    };
+  });
+}
+
+function buildCookAllPlanForAcceptedOrders(p) {
+  const neededByRecipe = {};
+  Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+    const recipeId = String(entry?.order?.recipe_id || "").trim();
+    if (!recipeId) return;
+    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+  });
+
+  const plan = Object.entries(neededByRecipe)
+    .map(([recipeId, need]) => {
+      const ready = getTotalBowlsForRecipe(p, recipeId);
+      const quantity = Math.max(0, need - ready);
+      return {
+        recipeId,
+        need,
+        ready,
+        quantity
+      };
+    })
+    .filter((row) => row.quantity > 0)
+    .sort((a, b) => b.quantity - a.quantity || String(a.recipeId).localeCompare(String(b.recipeId)));
+
+  const requiredByItem = {};
+  for (const row of plan) {
+    const recipe = content.recipes?.[row.recipeId] ?? null;
+    const relevantIngredients = getRelevantRecipeIngredients(p, recipe)
+      .filter((ing) => !isIngredientOptionalForPlayer(p, ing) && (ing?.qty ?? 0) > 0);
+    for (const ing of relevantIngredients) {
+      const perBowlQty = Math.max(0, Number(ing?.qty) || 0);
+      if (perBowlQty <= 0) continue;
+      requiredByItem[ing.item_id] = (requiredByItem[ing.item_id] ?? 0) + (perBowlQty * row.quantity);
+    }
+  }
+
+  const shortages = Object.entries(requiredByItem)
+    .map(([itemId, needed]) => {
+      const have = Math.max(0, Math.floor(Number(p.inv_ingredients?.[itemId] || 0) || 0));
+      const short = Math.max(0, needed - have);
+      return {
+        itemId,
+        needed,
+        have,
+        short
+      };
+    })
+    .filter((row) => row.short > 0)
+    .sort((a, b) => b.short - a.short || String(a.itemId).localeCompare(String(b.itemId)));
+
+  const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+  const bowlCap = getBowlCapacity(p, combinedEffects);
+  const bowlCount = getBowlCount(p);
+  const remainingBowls = Math.max(0, bowlCap - bowlCount);
+  const totalQuantity = plan.reduce((sum, row) => sum + row.quantity, 0);
+  const hasIngredients = shortages.length === 0;
+  const hasCapacity = remainingBowls >= totalQuantity;
+  const canCookAll = totalQuantity > 0 && hasIngredients && hasCapacity;
+
+  const summaryLines = plan.map((row) => {
+    const recipeName = displayRecipeName(row.recipeId);
+    return `• ${recipeName} — need **${row.need}**, ready **${row.ready}** (cook **${row.quantity}** more)`;
+  });
+
+  return {
+    plan,
+    totalQuantity,
+    shortages,
+    remainingBowls,
+    canCookAll,
+    summaryLines
+  };
+}
+
+function allocateSuccessBowlsAcrossPlan(plan = [], totalSuccess = 0) {
+  const safePlan = (plan || [])
+    .map((row) => ({
+      recipeId: String(row?.recipeId || "").trim(),
+      quantity: Math.max(0, Math.floor(Number(row?.quantity) || 0))
+    }))
+    .filter((row) => row.recipeId && row.quantity > 0);
+  const totalQuantity = safePlan.reduce((sum, row) => sum + row.quantity, 0);
+  const cappedSuccess = Math.max(0, Math.min(totalQuantity, Math.floor(Number(totalSuccess) || 0)));
+  if (safePlan.length <= 0 || totalQuantity <= 0 || cappedSuccess <= 0) {
+    return Object.fromEntries(safePlan.map((row) => [row.recipeId, 0]));
+  }
+
+  const allocations = safePlan.map((row, idx) => {
+    const exact = (row.quantity / totalQuantity) * cappedSuccess;
+    const floorVal = Math.floor(exact);
+    return {
+      idx,
+      recipeId: row.recipeId,
+      quantity: row.quantity,
+      value: floorVal,
+      remainder: exact - floorVal
+    };
+  });
+
+  let used = allocations.reduce((sum, row) => sum + row.value, 0);
+  let remaining = Math.max(0, cappedSuccess - used);
+  allocations.sort((a, b) => b.remainder - a.remainder || b.quantity - a.quantity || a.idx - b.idx);
+  for (const row of allocations) {
+    if (remaining <= 0) break;
+    row.value += 1;
+    remaining -= 1;
+  }
+
+  const byRecipe = {};
+  for (const row of allocations) {
+    byRecipe[row.recipeId] = Math.max(0, Math.min(row.quantity, row.value));
+  }
+  return byRecipe;
+}
+
+function buildCookRecipePickerScenePayload({ userId, p, s, selectedRecipeId, quantity = 1, page = null }) {
+  const allEntries = buildCookRecipePickerSceneEntries({ p, s });
+  const cookAllState = buildCookAllPlanForAcceptedOrders(p);
+  const pageSize = 25;
+  const selectedId = String(selectedRecipeId || "").trim();
+  const selectedExists = allEntries.some((entry) => String(entry?.recipeId || "") === selectedId);
+  const fallbackSelected = selectedExists
+    ? selectedId
+    : String(allEntries?.[0]?.recipeId || "").trim();
+  const safeQuantity = Math.max(1, Math.min(99, Math.floor(Number(quantity) || 1)));
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, allEntries.length) / pageSize));
+  const selectedIndex = fallbackSelected
+    ? allEntries.findIndex((entry) => String(entry?.recipeId || "") === fallbackSelected)
+    : -1;
+  const selectedPage = selectedIndex >= 0 ? Math.floor(selectedIndex / pageSize) : 0;
+  const requestedPage = Number.isFinite(Number(page)) ? Math.floor(Number(page)) : selectedPage;
+  const safePage = Math.max(0, Math.min(requestedPage, totalPages - 1));
+  const entries = allEntries.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const selectedOnPage = entries.some((entry) => String(entry?.recipeId || "") === fallbackSelected);
+  const effectiveSelected = selectedOnPage
+    ? fallbackSelected
+    : String(entries?.[0]?.recipeId || "").trim();
+
+  const needsByRecipe = allEntries
+    .filter((entry) => Number(entry?.short) > 0)
+    .sort((a, b) => Number(b?.short || 0) - Number(a?.short || 0));
+  const needLines = needsByRecipe.map((entry) => {
+    const recipeName = String(entry?.recipeName || entry?.recipeId || "Recipe");
+    return `• ${recipeName} — need **${entry.need}**, ready **${entry.ready}** (cook **${entry.short}** more)`;
+  });
+
+  const sceneState = putSceneState({
+    sceneKey: "cook.recipe_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      cookAllPlan: cookAllState.plan,
+      canCookAll: cookAllState.canCookAll,
+      cookAllTotalQuantity: cookAllState.totalQuantity,
+      selectedRecipeId: effectiveSelected || null,
+      quantity: safeQuantity,
+      page: safePage,
+      totalPages
+    }
+  });
+
+  return buildCookRecipePickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries,
+    selectedRecipeId: effectiveSelected || null,
+    quantity: safeQuantity,
+    currentPage: safePage,
+    totalPages,
+    needLines,
+    canCookAll: cookAllState.canCookAll,
+    cookAllQuantity: cookAllState.totalQuantity
+  });
+}
+
+function buildServePickerSceneEntries({ p, readyOnly = false }) {
+  const now = nowTs();
+  const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+  const orderTokenByShortId = {};
+  const onlyReady = Boolean(readyOnly);
+
+  const mappedEntries = acceptedEntries.map(([fullOrderId, accepted]) => {
+    const shortId = shortOrderId(fullOrderId);
+    orderTokenByShortId[shortId] = String(fullOrderId);
+    const order = accepted?.order ?? null;
+    const recipeId = String(order?.recipe_id || "").trim();
+    const recipeName = recipeId ? displayRecipeName(recipeId) : "Unknown recipe";
+    const npcName = order?.npc_archetype
+      ? (content.npcs?.[order.npc_archetype]?.name ?? order.npc_archetype)
+      : "customer";
+    const expired = Boolean(accepted?.expires_at && now > Number(accepted.expires_at));
+    const ready = !expired && recipeId ? getTotalBowlsForRecipe(p, recipeId) > 0 : false;
+    const status = expired ? "expired" : (ready ? "ready" : "missing bowl");
+
+    return {
+      shortId,
+      fullOrderId: String(fullOrderId),
+      recipeId,
+      ready,
+      expired,
+      line: `\`${shortId}\` • **${recipeName}** — *${npcName}* • ${status}`
+    };
+  });
+
+  const entries = onlyReady
+    ? mappedEntries.filter((entry) => entry.ready && !entry.expired)
+    : mappedEntries;
+
+  entries.sort((a, b) => {
+    if (a.ready !== b.ready) return a.ready ? -1 : 1;
+    if (a.expired !== b.expired) return a.expired ? 1 : -1;
+    return String(a.shortId).localeCompare(String(b.shortId));
+  });
+
+  return { entries, orderTokenByShortId };
+}
+
+function buildServePickerScenePayload({ userId, p, selectedShortIds = [], readyOnly = false, statusLine = "" } = {}) {
+  const onlyReady = Boolean(readyOnly);
+  const { entries, orderTokenByShortId } = buildServePickerSceneEntries({ p, readyOnly: onlyReady });
+  const canServeAll = canServeAllOrders(p);
+  const entryShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+  const normalizedSelected = (selectedShortIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
+
+  const sceneState = putSceneState({
+    sceneKey: "serve.order_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      orderTokenByShortId,
+      selectedShortIds: normalizedSelected,
+      readyOnly: onlyReady
+    }
+  });
+
+  return buildServePickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries,
+    selectedShortIds: normalizedSelected,
+    readyOnly: onlyReady,
+    statusLine,
+    canServeAll
+  });
+}
+
+function buildCancelPickerSceneEntries({ p }) {
+  const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+  const orderTokenByShortId = {};
+
+  const entries = acceptedEntries.map(([fullOrderId, accepted]) => {
+    const shortId = shortOrderId(fullOrderId);
+    orderTokenByShortId[shortId] = String(fullOrderId);
+    const order = accepted?.order ?? null;
+    const recipeId = String(order?.recipe_id || "").trim();
+    const recipeName = recipeId ? displayRecipeName(recipeId) : "Unknown recipe";
+    const npcName = order?.npc_archetype
+      ? (content.npcs?.[order.npc_archetype]?.name ?? order.npc_archetype)
+      : "customer";
+
+    return {
+      shortId,
+      fullOrderId: String(fullOrderId),
+      line: `\`${shortId}\` • **${recipeName}** — *${npcName}*`
+    };
+  });
+
+  entries.sort((a, b) => String(a.shortId).localeCompare(String(b.shortId)));
+
+  return { entries, orderTokenByShortId };
+}
+
+function buildCancelPickerScenePayload({ userId, p, selectedShortIds = [], statusLine = "" } = {}) {
+  const { entries, orderTokenByShortId } = buildCancelPickerSceneEntries({ p });
+  const entryShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+  const normalizedSelected = (selectedShortIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => Boolean(id) && entryShortIds.has(id) && arr.indexOf(id) === index);
+
+  const sceneState = putSceneState({
+    sceneKey: "orders.cancel_picker",
+    ownerId: userId,
+    state: {
+      entries,
+      orderTokenByShortId,
+      selectedShortIds: normalizedSelected
+    }
+  });
+
+  return buildCancelPickerV2Message({
+    userId,
+    token: sceneState.token,
+    entries,
+    selectedShortIds: normalizedSelected,
+    statusLine
+  });
+}
+
+function buildCookMinigameScenePayload({
+  userId,
+  recipeId,
+  recipeNameOverride = "",
+  quantity = 1,
+  turnIndex = 0,
+  totalTurns = 8,
+  score = 0,
+  misses = 0,
+  targetActions = [],
+  runToken = null,
+  turnMs = 10000,
+  graceMs = 0,
+  turnStartedAt = null,
+  lastTurnStatus = null,
+  counterCook = false,
+  returnSub = "orders",
+  tutorialMode = false,
+  coachingLine = "",
+  cookAllPlan = [],
+  nowMs = Date.now()
+} = {}) {
+  const safeRecipeId = String(recipeId || "").trim();
+  const safeQuantity = Math.max(1, Math.min(99, Math.floor(Number(quantity) || 1)));
+  const safeTotalTurns = Math.max(1, Math.min(20, Math.floor(Number(totalTurns) || 8)));
+  const safeRunToken = String(runToken || "").trim() || createCookRunToken({
+    userId,
+    recipeId: safeRecipeId,
+    quantity: safeQuantity,
+    nowMs
+  });
+  const safeTurnMs = Math.max(250, Math.floor(Number(turnMs) || 10000));
+  const safeGraceMs = Math.max(0, Math.floor(Number(graceMs) || 0));
+  const normalizedTargets = Array.isArray(targetActions) && targetActions.length
+    ? targetActions.map((action) => String(action || "").trim().toLowerCase()).filter(Boolean)
+    : buildCookMinigameTargetActions({ recipeId: safeRecipeId, runToken: safeRunToken, totalTurns: safeTotalTurns });
+  const targets = normalizedTargets.slice(0, safeTotalTurns);
+  while (targets.length < safeTotalTurns) {
+    targets.push("prep");
+  }
+  const safeTurnIndex = Math.max(0, Math.min(safeTotalTurns - 1, Math.floor(Number(turnIndex) || 0)));
+  const safeScore = Math.max(0, Math.min(safeTotalTurns, Math.floor(Number(score) || 0)));
+  const safeMisses = Math.max(0, Math.floor(Number(misses) || 0));
+  const safeTurnStartedAt = Math.max(0, Math.floor(Number(turnStartedAt || nowMs) || nowMs));
+  const safeLastTurnStatus = String(lastTurnStatus || "").trim().toLowerCase() || null;
+  const safeCounterCook = Boolean(counterCook);
+  const safeReturnSub = String(returnSub || "orders").trim() || "orders";
+  const safeTutorialMode = Boolean(tutorialMode);
+  const safeCoachingLine = String(coachingLine || "").trim();
+  const safeRecipeNameOverride = String(recipeNameOverride || "").trim();
+  const safeCookAllPlan = Array.isArray(cookAllPlan)
+    ? cookAllPlan
+      .map((row) => ({
+        recipeId: String(row?.recipeId || "").trim(),
+        quantity: Math.max(0, Math.floor(Number(row?.quantity) || 0))
+      }))
+      .filter((row) => row.recipeId && row.quantity > 0)
+    : [];
+
+  const sceneState = putSceneState({
+    sceneKey: "cook.minigame",
+    ownerId: userId,
+    state: {
+      recipeId: safeRecipeId,
+      quantity: safeQuantity,
+      turnIndex: safeTurnIndex,
+      totalTurns: safeTotalTurns,
+      score: safeScore,
+      misses: safeMisses,
+      targetActions: targets,
+      runToken: safeRunToken,
+      turnMs: safeTurnMs,
+      graceMs: safeGraceMs,
+      turnStartedAt: safeTurnStartedAt,
+      lastTurnStatus: safeLastTurnStatus,
+      counterCook: safeCounterCook,
+      returnSub: safeReturnSub,
+      tutorialMode: safeTutorialMode,
+      coachingLine: safeCoachingLine,
+      recipeNameOverride: safeRecipeNameOverride,
+      cookAllPlan: safeCookAllPlan
+    }
+  });
+
+  return buildCookMinigameV2Message({
+    userId,
+    token: sceneState.token,
+    recipeName: safeRecipeNameOverride || displayRecipeName(safeRecipeId),
+    quantity: safeQuantity,
+    turnIndex: safeTurnIndex,
+    totalTurns: safeTotalTurns,
+    score: safeScore,
+    misses: safeMisses,
+    targetAction: targets[safeTurnIndex] ?? "prep",
+    turnMs: safeTurnMs,
+    graceMs: safeGraceMs,
+    lastTurnStatus: safeLastTurnStatus,
+    tutorialMode: safeTutorialMode,
+    coachingLine: safeCoachingLine
+  });
 }
 
 function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
@@ -4184,7 +6371,10 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   const disableAccept = remainingOrders === 0;
   const highlightAccept = !hasAcceptedOrders && !disableAccept;
   const available = getValidAvailableRecipeIds(p);
-  const seasonFiltered = filterRecipeIdsByActiveSeasonEvent(available, s);
+  const seasonFiltered = available.filter((rid) => {
+    const recipe = content.recipes?.[rid] ?? null;
+    return isRecipeCookAvailableForCurrentSeasonEvent(recipe, s);
+  });
 
   const sortKey = (rid) => {
     const r = content.recipes?.[rid];
@@ -4325,7 +6515,7 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
   return {
     content: " ",
-    embeds: [cookEmbed],
+    ...composeV2FromLegacyEmbeds([cookEmbed]),
     components
   };
 }
@@ -4490,7 +6680,7 @@ function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0
     noodleMainMenuRowNoOrdersWithBack(userId)
   );
 
-  return { content: " ", embeds: [cookEmbed], components };
+  return { content: " ", ...composeV2FromLegacyEmbeds([cookEmbed]), components };
 }
 
 function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
@@ -4541,7 +6731,7 @@ function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
   const canCounterServe = needRows.some((entry) => entry.ready > 0);
   return {
     content: " ",
-    embeds: [serveEmbed],
+    ...composeV2FromLegacyEmbeds([serveEmbed]),
     components: [
       new ActionRowBuilder().addComponents(menu),
       noodleTakeoutActionRow(userId, {
@@ -4607,7 +6797,7 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
 
   return {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [
       ...(totalPages > 1
         ? [
@@ -4710,7 +6900,8 @@ function buildForageMenuPayload({
   kitchenJustUnlocked,
   fishingUnlocked,
   fishingJustUnlocked,
-  page = 0
+  page = 0,
+  selectedItemId = null
 }) {
   const gardenUnlocked = isGardenUnlocked(player);
   const now = nowTs();
@@ -4734,11 +6925,23 @@ function buildForageMenuPayload({
     randomPrimary: true,
     page
   });
+  const normalizedSelectedItemId = String(selectedItemId || "").trim();
+  const allowedForageIds = new Set(getAllowedForageIdsForPlayer(player));
+  const selectedForageItemId = allowedForageIds.has(normalizedSelectedItemId) ? normalizedSelectedItemId : null;
+  const forageQtyRow = selectedForageItemId
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:1:${safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:2:${safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:3:${safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:4:${safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:5:${safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+      )
+    : null;
   const forageBaseDescription = forageCount > 0
     ? [
         "Choose how you want to forage:",
         `• Take a forage stroll for surprise finds`,
-        `• **OR** Pick a specific ingredient, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Forager's level*`
+        `• **OR** Pick a specific ingredient, then tap a quantity button (**1-5**)\n\n**Final amount you receive is increased by your Forager's level*`
       ].join("\n")
     : "You haven’t unlocked any forageable ingredients yet. Unlock a recipe first.";
 
@@ -4756,7 +6959,7 @@ function buildForageMenuPayload({
 
   return {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: buildForageFishingNavRows({
       userId,
       active: "forage",
@@ -4765,7 +6968,7 @@ function buildForageMenuPayload({
       fishingJustUnlocked,
       kitchenUnlocked,
       kitchenJustUnlocked,
-      prependRows: [actionRow, pickerRow, ...(pageRow ? [pageRow] : [])]
+      prependRows: [actionRow, pickerRow, ...(forageQtyRow ? [forageQtyRow] : []), ...(pageRow ? [pageRow] : [])]
     })
   };
 }
@@ -4844,7 +7047,8 @@ function buildFishingMenuPayload({
   kitchenJustUnlocked,
   fishingUnlocked,
   fishingJustUnlocked,
-  page = 0
+  page = 0,
+  selectedItemId = null
 }) {
   const gardenUnlocked = isGardenUnlocked(player);
   const now = nowTs();
@@ -4864,12 +7068,24 @@ function buildFishingMenuPayload({
     randomPrimary: true,
     page
   });
+  const normalizedSelectedItemId = String(selectedItemId || "").trim();
+  const allowedFishingIds = new Set(getAllowedFishingIdsForPlayer(player));
+  const selectedFishingItemId = allowedFishingIds.has(normalizedSelectedItemId) ? normalizedSelectedItemId : null;
+  const fishingQtyRow = selectedFishingItemId
+    ? new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:1:${safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:2:${safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:3:${safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:4:${safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:5:${safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+      )
+    : null;
 
   const fishingBaseDescription = fishingCount > 0
     ? [
         "Choose how you want to fish:",
         "• Enjoy a casual fishing trip for surprise catches",
-        "• **OR** Pick a specific fish or seafood, then enter quantity (**1-5**)\n\n**Final amount you receive is increased by your Fisher Crew's level*"
+        "• **OR** Pick a specific fish or seafood, then tap a quantity button (**1-5**)\n\n**Final amount you receive is increased by your Fisher Crew's level*"
       ].join("\n")
     : "No fishing items are available right now.";
 
@@ -4888,7 +7104,7 @@ function buildFishingMenuPayload({
 
   return {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: buildForageFishingNavRows({
       userId,
       active: "fishing",
@@ -4897,7 +7113,7 @@ function buildFishingMenuPayload({
       fishingJustUnlocked,
       kitchenUnlocked,
       kitchenJustUnlocked,
-      prependRows: [actionRow, pickerRow, ...(pageRow ? [pageRow] : [])]
+      prependRows: [actionRow, pickerRow, ...(fishingQtyRow ? [fishingQtyRow] : []), ...(pageRow ? [pageRow] : [])]
     })
   };
 }
@@ -5015,8 +7231,6 @@ let unlockNoticePlayer = null;
 
 let seasonRolloverNotice = null;
 
-// Check commands that should defer ephemerally before heavy work/permission gates
-const subCmd = interaction.options?.getSubcommand?.();
 const shouldDeferEphemeral = group === "dev" && !isDevAdmin(userId);
 
 // Defer immediately for slash commands (chat input) to prevent timeout
@@ -5067,19 +7281,29 @@ const emitNavSubroutePhase = (subroute, phases = {}, extra = {}) => {
 const withSeasonNotice = (payload = {}) => {
   if (payload?.__seasonNoticeApplied) return payload;
   if (!seasonRolloverNotice?.message) return payload;
-  const updated = { ...payload };
+  let updated = { ...payload };
   const notice = seasonRolloverNotice.message;
 
-  const noticeEmbed = buildMenuEmbed({
+  const noticeCard = {
     title: `${getIcon("season")} Season Update`,
-    description: notice,
-    user: interaction.member ?? interaction.user
-  });
+    details: splitTextToV2Chunks(String(notice ?? "").trim()),
+    tone: "info"
+  };
 
-  if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
-    updated.embeds = [...updated.embeds, noticeEmbed];
+  const hasSourceNativeNoticeShape = Array.isArray(updated.mainComponents) || Array.isArray(updated.notices);
+
+  if (hasSourceNativeNoticeShape) {
+    updated.notices = [...(Array.isArray(updated.notices) ? updated.notices : []), noticeCard];
+  } else if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
+    const composed = composeV2FromLegacyEmbeds(updated.embeds);
+    const { embeds, ...rest } = updated;
+    updated = {
+      ...rest,
+      ...composed,
+      notices: [...(Array.isArray(composed.notices) ? composed.notices : []), noticeCard]
+    };
   } else {
-    updated.embeds = [noticeEmbed];
+    updated.notices = [noticeCard];
     if (updated.content === undefined) updated.content = " ";
   }
 
@@ -5089,14 +7313,51 @@ const withSeasonNotice = (payload = {}) => {
 };
 
 const commit = async (payload) => {
+  const isDevResponse = String(group || "").trim() === "dev";
   const unlockApplied = payload?.__unlockNoticeApplied;
-  if (!unlockApplied) {
+  if (!isDevResponse && !unlockApplied) {
     payload = applyUnlockNoticeEmbeds(payload, unlockNoticePlayer, interaction.member ?? interaction.user, {
       consumeSeatingNotice: false,
       consumeSubscriptionNotice: false
     });
   }
-  payload = withSeasonNotice(payload);
+  if (!isDevResponse) {
+    payload = withSeasonNotice(payload);
+  }
+
+  if (!isDevResponse) {
+    const persistentNoticePlayer = ensurePlayer(serverId, userId);
+    const persistentNoticeState = resolvePersistentV2NoticeCards(persistentNoticePlayer, `noodle:${sub}`);
+    if (persistentNoticeState.notices.length > 0) {
+      payload = applyPersistentNoticeCards(payload, persistentNoticeState.notices);
+    }
+    if (persistentNoticeState.changed && db) {
+      upsertPlayer(db, serverId, userId, persistentNoticePlayer, null, persistentNoticePlayer.schema_version);
+    }
+  }
+
+  const rolloutEnabledForUser = isComponentsV2Enabled({
+    guildId: serverId,
+    userId,
+    player: ensurePlayer(serverId, userId)
+  });
+  const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  const shouldUseV2ContainerPayload = shouldConvertLegacyPayloadToV2ForSub({
+    sub,
+    navSource: overrides?.navSource,
+    rolloutEnabled: rolloutEnabledForUser,
+    sourceMessageIsV2
+  });
+  const forceContainerForDev = String(group || "").trim() === "dev";
+  const hasSourceNativeNoticeShape = Array.isArray(payload?.mainComponents) || Array.isArray(payload?.notices);
+  if (shouldUseV2ContainerPayload || forceContainerForDev || hasSourceNativeNoticeShape) {
+    payload = convertLegacyEmbedPayloadToComponentsV2(payload);
+  }
+
+if (overrides?.silentResponse === true) {
+  return payload;
+}
 // Slash: use editReply since we deferred at the start
 if (interaction.isChatInputCommand?.()) {
 const { ephemeral, ...rest } = payload ?? {};
@@ -5122,10 +7383,19 @@ if (ephemeral && (interaction.deferred || interaction.replied)) {
 }
 const options = ephemeral ? { ...base, flags: MessageFlags.Ephemeral, ephemeral: true } : { ...base };
 if (options.components) {
-  options.components = normalizeComponents(options.components);
+  options.components = normalizeComponents(options.components, options.flags);
 }
 // If deferred, use editReply. Otherwise use reply (shouldn't happen but safety)
-if (interaction.deferred || interaction.replied) return interaction.editReply(options);
+if (interaction.deferred || interaction.replied) {
+  if (isComponentsV2Payload(options)) {
+    try {
+      return await rawWebhookEditOriginal(interaction, options);
+    } catch {
+      // Fall through to discord.js editReply fallback.
+    }
+  }
+  return interaction.editReply(options);
+}
 return interaction.reply(options);
 }
 
@@ -5134,12 +7404,24 @@ if (overrides?.messageId && !payload?.ephemeral) {
   try {
     const target = await interaction.channel?.messages?.fetch(overrides.messageId);
     if (target) {
+      const targetFlags = Number(target?.flags?.bitfield ?? target?.flags ?? 0);
+      const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
       // Convert components to JSON if they're builder objects
-      const editPayload = { ...payload };
-      if (editPayload.components) {
-        editPayload.components = normalizeComponents(editPayload.components);
+      let editPayload = { ...payload };
+      if (targetIsV2 && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+        editPayload = convertLegacyEmbedPayloadToComponentsV2(editPayload);
       }
-      const result = await target.edit(editPayload);
+      if (editPayload.components) {
+        editPayload.components = normalizeComponents(editPayload.components, editPayload.flags);
+      }
+      if (editPayload.embeds) {
+        editPayload.embeds = sanitizeEmbedsForDiscord(editPayload.embeds);
+      }
+      editPayload = normalizePayloadContent(editPayload);
+      editPayload = normalizeComponentsV2Payload(editPayload);
+      const result = isComponentsV2Payload(editPayload)
+        ? await rawChannelEditMessage(interaction, target.channelId ?? interaction.channelId, target.id, editPayload)
+        : await target.edit(editPayload);
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
           await interaction.deleteReply();
@@ -5166,12 +7448,13 @@ if (overrides?.messageId && !payload?.ephemeral) {
 }
 
 // Components: editReply flow
+payload = normalizeComponentsV2Payload(payload);
 return componentCommit(interaction, payload);
 };
 
 try {
 const owner = `discord:${interaction.id}`;
-const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "repair_party" || sub === "subscriptions" || sub === "giveaway_winner" || sub === "dashboard";
+const isDevSubcommand = sub === "reset_tutorial" || sub === "wipe_user" || sub === "repair_profile" || sub === "repair_party" || sub === "subscriptions" || sub === "giveaway_winner" || sub === "dashboard" || sub === "reminder_test";
 const inDevPath = group === "dev" || isDevSubcommand;
 
 const buildDevStatusEmbed = () => {
@@ -5255,30 +7538,38 @@ const buildDevStatusEmbed = () => {
   });
 };
 
-const buildDevMessageEmbed = ({ message, isError = false }) =>
+const buildDevMessageEmbed = ({ message, isError = false, title = null }) =>
   buildMenuEmbed({
-    title: isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`,
+    title: String(title || "").trim() || (isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`),
     description: message,
     user: interaction.member ?? interaction.user
   });
+
+const buildDevAdminNoticePayload = ({ message, isError = false } = {}) => buildComponentsV2NoticeCardPayload({
+  title: isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`,
+  details: [message],
+  tone: isError ? "error" : "success",
+  ownerId: userId,
+  ephemeral: true
+});
 
 if (inDevPath) {
   if (!isDevAdmin(userId)) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })]),
       ephemeral: true
     });
   }
   if (OFFICIAL_DEV_GUILD_ID && serverId !== OFFICIAL_DEV_GUILD_ID) {
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
           message: "Developer commands are only available in the official server.",
           isError: true
         })
-      ],
+      ]),
       ephemeral: true
     });
   }
@@ -5286,7 +7577,7 @@ if (inDevPath) {
 
   const server = ensureServer(serverId);
   const settings = buildSettingsMap(settingsCatalog, server.settings);
-  server.season = computeActiveSeason(settings);
+  syncServerSeasonFromSettings(server, settings);
   const activeEventEffects = getActiveEventEffects(eventsContent, server);
   rollMarket({ serverId, content, serverState: server, eventEffects: activeEventEffects });
 
@@ -5295,7 +7586,7 @@ if (inDevPath && sub === "reset_tutorial") {
   if (target?.bot || (interaction.client?.user?.id && target.id === interaction.client.user.id)) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Pick a real player account (non-bot) to reset.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Pick a real player account (non-bot) to reset.", isError: true })]),
       ephemeral: true
     });
   }
@@ -5303,7 +7594,7 @@ if (inDevPath && sub === "reset_tutorial") {
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -5337,12 +7628,222 @@ if (inDevPath && sub === "reset_tutorial") {
 
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
           message: `${getIcon("status_complete")} Complete reset for ${mention} (${target.id}) (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`
         })
-      ],
+      ]),
       ephemeral: true
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_stat") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const field = String(opt.getString("field") || "").trim();
+  const value = Math.max(0, Math.floor(Number(opt.getInteger("value") || 0)));
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!targetUserId) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Provide a user or user ID to update.", isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
+    const p = ensurePlayer(targetServerId, targetUserId);
+    let message;
+
+    if (field === "bowls_served") {
+      if (!p.lifetime) p.lifetime = {};
+      p.lifetime.bowls_served_total = value;
+      message = `${getIcon("status_complete")} Set bowls served for <@${targetUserId}> to **${value}**.`;
+    } else if (field === "level") {
+      const result = setPlayerShopLevel(p, value);
+      message = `${getIcon("status_complete")} Set level for <@${targetUserId}> to **${result.targetLevel}** (${result.totalRequiredSxp} SXP total).`;
+    } else if (field === "rep") {
+      p.rep = value;
+      message = `${getIcon("status_complete")} Set REP for <@${targetUserId}> to **${value}**.`;
+    } else {
+      return commit({
+        ...buildDevAdminNoticePayload({ message: `Unknown stat field: ${field}.`, isError: true })
+      });
+    }
+
+    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_spec") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const specId = opt.getString("spec_id")?.trim();
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!targetUserId || !specId) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Provide a user and specialization ID to unlock.", isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
+    const p = ensurePlayer(targetServerId, targetUserId);
+    const spec = getSpecializationById(specializationsContent, specId) ?? { spec_id: specId, name: specId };
+    const result = unlockSpecialization(p, specId);
+    if (result.added) {
+      enqueuePersistentV2NoticeCards(p, [buildSpecializationUnlockNoticeCard(spec, { hidden: Boolean(spec?.hidden_until_unlocked) })]);
+    }
+    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+
+    const message = result.added
+      ? `${getIcon("status_complete")} Unlocked specialization **${specId}** for <@${targetUserId}>.`
+      : `${getIcon("status_complete")} Specialization **${specId}** was already unlocked for <@${targetUserId}>.`;
+
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_recipe") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const requestedRecipeId = opt.getString("recipe_id")?.trim();
+  const recipeId = resolveCanonicalRecipeId(requestedRecipeId);
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!targetUserId || !recipeId) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Provide a user and recipe ID to unlock.", isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
+    const p = ensurePlayer(targetServerId, targetUserId);
+    const result = unlockRecipeForPlayer(p, content, recipeId);
+    if (!result.ok) {
+      return commit({
+        ...buildDevAdminNoticePayload({
+          message: `Could not unlock recipe **${recipeId}**: ${result.reason ?? "Unknown error."}`,
+          isError: true
+        })
+      });
+    }
+
+    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+    const recipeName = result.recipe?.name || displayRecipeName(result.recipeId);
+    const message = result.added
+      ? `${getIcon("status_complete")} Unlocked recipe **${recipeName}** (${result.recipeId}) for <@${targetUserId}>.`
+      : `${getIcon("status_complete")} Recipe **${recipeName}** (${result.recipeId}) was already unlocked for <@${targetUserId}>.`;
+
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
+    });
+  });
+}
+
+if (inDevPath && sub === "admin_season_event") {
+  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const eventId = opt.getString("event_id")?.trim();
+  const event = getEventById(eventsContent, eventId);
+
+  if (!db) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: "Database unavailable in this environment.", isError: true })
+    });
+  }
+
+  if (!event) {
+    return commit({
+      ...buildDevAdminNoticePayload({ message: `Unknown event ID: ${eventId}.`, isError: true })
+    });
+  }
+
+  return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+    const normalizeSeasonTag = (value) => {
+      const normalized = String(value ?? "").trim().toLowerCase();
+      return normalized || null;
+    };
+
+    const serverState = ensureServer(targetServerId);
+    const previousEventId = serverState.active_event_id ?? null;
+    const previousSeason = serverState.season ?? null;
+    serverState.active_event_id = event.event_id;
+    if (event.season) {
+      serverState.season = event.season;
+    }
+
+    let rolloverNotice = null;
+    const seasonLabel = String(serverState.season ?? "unknown");
+    const fromLabel = String(previousSeason ?? "unknown");
+    const normalizedPreviousSeason = normalizeSeasonTag(previousSeason);
+    const normalizedCurrentSeason = normalizeSeasonTag(serverState.season);
+    const seasonActuallyChanged = Boolean(
+      normalizedPreviousSeason
+      && normalizedCurrentSeason
+      && normalizedPreviousSeason !== normalizedCurrentSeason
+    );
+
+    if (event.season && seasonActuallyChanged) {
+      const adminPlayer = ensurePlayer(targetServerId, userId);
+      rolloverNotice = applySeasonRolloverReward(adminPlayer, serverState.season, {
+        eventRecipeSeasonIndex,
+        recipes: content?.recipes
+      });
+
+      if (rolloverNotice?.message) {
+        enqueuePersistentV2NoticeCards(adminPlayer, [{
+          title: `${getIcon("season")} Season Update`,
+          details: [
+            `Season changed from **${fromLabel}** to **${seasonLabel}**.`,
+            rolloverNotice.message
+          ],
+          tone: "info"
+        }]);
+      }
+
+      upsertPlayer(db, targetServerId, userId, adminPlayer, null, adminPlayer.schema_version);
+    }
+
+    serverState.audit_log.push({
+      ts: nowTs(),
+      actor_id: userId,
+      action: "dev_set_season_event",
+      details: {
+        previous: previousEventId,
+        next: event.event_id,
+        season: serverState.season ?? null,
+        previousSeason
+      }
+    });
+    upsertServer(db, targetServerId, serverState, null);
+
+    const message = `${getIcon("status_complete")} Activated event **${event.event_id}** on ${targetServerId}. Current season: **${seasonLabel}**.`;
+
+    return commit({
+      ...buildDevAdminNoticePayload({ message })
     });
   });
 }
@@ -5354,43 +7855,41 @@ if (inDevPath && sub === "wipe_user") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to wipe.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to wipe.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
 
   const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const storageServerId = getPlayerStorageServerId(targetServerId);
-    const result = db.prepare("DELETE FROM players WHERE server_id=? AND user_id=?").run(storageServerId, targetUserId);
-    const deleted = result?.changes ?? 0;
+    const deleted = deletePlayerProfiles(db, targetUserId, { serverId: targetServerId });
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
-            message: `${getIcon("error")} No profile found for ${mention} on server ${targetServerId}.`,
+            message: `${getIcon("error")} No profile found for ${mention}.`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
-          message: `${getIcon("status_complete")} Deleted ${deleted} profile(s) for ${mention} on server ${targetServerId}.`
+          message: `${getIcon("status_complete")} Deleted ${deleted} profile row(s) for ${mention} across all servers.`
         })
-      ],
+      ]),
       ephemeral: true
     });
   });
@@ -5403,14 +7902,14 @@ if (inDevPath && sub === "repair_profile") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to repair.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to repair.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -5423,12 +7922,12 @@ if (inDevPath && sub === "repair_profile") {
     if (!result.ok) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} Repair failed for ${mention}: ${result.reason}.`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
@@ -5436,25 +7935,25 @@ if (inDevPath && sub === "repair_profile") {
     if (!result.repaired) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} No repair needed for ${mention} (${result.reason}).`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
 
     return commit({
       content: " ",
-      embeds: [
+      ...composeV2FromLegacyEmbeds([
         buildDevMessageEmbed({
           message:
             `${getIcon("status_complete")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
             `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`
         })
-      ],
+      ]),
       ephemeral: true
     });
   });
@@ -5469,14 +7968,14 @@ if (inDevPath && sub === "repair_party") {
   if (!partyIdInput) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a party ID or prefix to repair.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a party ID or prefix to repair.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -5501,7 +8000,7 @@ if (inDevPath && sub === "repair_party") {
         summary.push(`Applied fixes: ${result.changes.join(", ")}`);
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })]),
           ephemeral: true
         });
       }
@@ -5509,18 +8008,18 @@ if (inDevPath && sub === "repair_party") {
       summary.push("No repair needed.");
       return commit({
         content: " ",
-        embeds: [buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })],
+        ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })]),
         ephemeral: true
       });
     } catch (err) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} Party repair failed: ${err?.message || "unknown error"}`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
@@ -5535,14 +8034,14 @@ if (inDevPath && sub === "subscriptions") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to inspect.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to inspect.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -5553,12 +8052,12 @@ if (inDevPath && sub === "subscriptions") {
     if (!targetPlayer) {
       return commit({
         content: " ",
-        embeds: [
+        ...composeV2FromLegacyEmbeds([
           buildDevMessageEmbed({
             message: `${getIcon("error")} No profile found for <@${targetUserId}> on server ${targetServerId}.`,
             isError: true
           })
-        ],
+        ]),
         ephemeral: true
       });
     }
@@ -5607,9 +8106,45 @@ if (inDevPath && sub === "subscriptions") {
 
     return commit({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       ephemeral: true
     });
+  });
+}
+
+if (inDevPath && sub === "reminder_test") {
+  const targetUser = opt.getUser("user");
+  const targetUserId = targetUser?.id || userId;
+  const force = opt.getBoolean("force") !== false;
+
+  const result = await triggerDailyRewardReminderTest(interaction.client, targetUserId, { force });
+  if (!result?.ok) {
+    const reason = String(result?.reason || "unknown_error");
+    return commit({
+      content: " ",
+      ...composeV2FromLegacyEmbeds([
+        buildDevMessageEmbed({
+          message: `${getIcon("error")} Reminder test failed for <@${targetUserId}>: ${reason}.`,
+          isError: true
+        })
+      ]),
+      ephemeral: true
+    });
+  }
+
+  return commit({
+    content: " ",
+    ...composeV2FromLegacyEmbeds([
+      buildDevMessageEmbed({
+        message: [
+          `${getIcon("status_complete")} Reminder DM test sent to <@${targetUserId}>.`,
+          `Mode: ${force ? "force" : "normal"}.`,
+          `Day key: ${result.todayKey}.`,
+          `Profile server: ${result.serverId}.`
+        ].join("\n")
+      })
+    ]),
+    ephemeral: true
   });
 }
 
@@ -5628,19 +8163,18 @@ if (inDevPath && sub === "giveaway_winner") {
   const durationDays = Number.isFinite(durationDaysRaw) && durationDaysRaw > 0
     ? Math.floor(durationDaysRaw)
     : 30;
-  const reason = String(opt.getString("reason") || "").trim();
 
   if (!targetUserId) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Provide a user or user ID to update.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to update.", isError: true })]),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
       ephemeral: true
     });
   }
@@ -5648,7 +8182,7 @@ if (inDevPath && sub === "giveaway_winner") {
   if (rewardType !== "perk" && rewardType !== "coin_pack" && rewardType !== "coins") {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "Invalid reward type. Use perk, coin_pack, or coins.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Invalid reward type. Use perk, coin_pack, or coins.", isError: true })]),
       ephemeral: true
     });
   }
@@ -5659,9 +8193,6 @@ if (inDevPath && sub === "giveaway_winner") {
     const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
     const now = nowTs();
     const rewardSummaryLines = [];
-    const rewardTypeLabel = rewardType === "coin_pack"
-      ? "Coin Pack"
-      : (rewardType === "coins" ? "Coins" : "Perk");
     let publicWinnerLine = "";
 
     if (rewardType === "perk") {
@@ -5673,7 +8204,7 @@ if (inDevPath && sub === "giveaway_winner") {
       } else {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: "For perk rewards, choose house_247, takeout_counter, or both.", isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For perk rewards, choose house_247, takeout_counter, or both.", isError: true })]),
           ephemeral: true
         });
       }
@@ -5705,20 +8236,20 @@ if (inDevPath && sub === "giveaway_winner") {
           totalGrant += Math.max(0, Math.floor(Number(grantResult.amount || 0) || 0));
         }
 
-        rewardSummaryLines.push(`• Granted perk: ${perkNames[perkId]} for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
+        rewardSummaryLines.push(`• ${perkNames[perkId]} for ${durationDays} day${durationDays === 1 ? "" : "s"}.`);
       }
 
-      rewardSummaryLines.push(`• Monthly subscription coins credited now: **${totalGrant}c**.`);
+      rewardSummaryLines.push(`• Coins credited: **${totalGrant}c**.`);
       const perkRewardIcon = selectedPerkIds.length === 1
         ? (selectedPerkIds[0] === SUBSCRIPTION_PERKS.HOUSE_247 ? getIcon("perk_house_247", getIcon("sparkle")) : getIcon("perk_takeout_counter", getIcon("orders")))
         : `${getIcon("perk_house_247", getIcon("sparkle"))} ${getIcon("perk_takeout_counter", getIcon("orders"))}`;
-      publicWinnerLine = `${perkRewardIcon} Giveaway winner reward sent to <@${targetUserId}>: **${selectedPerkIds.length > 1 ? "Perks" : "Perk"}** (${durationDays} day${durationDays === 1 ? "" : "s"}).`;
+      publicWinnerLine = `${perkRewardIcon} Reward sent to <@${targetUserId}>!`;
     } else if (rewardType === "coin_pack") {
       const pack = getStoreCoinPack(coinPackId);
       if (!pack) {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: "For coin pack rewards, choose a valid coin_pack option.", isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For coin pack rewards, choose a valid coin_pack option.", isError: true })]),
           ephemeral: true
         });
       }
@@ -5727,18 +8258,18 @@ if (inDevPath && sub === "giveaway_winner") {
       if (!grantResult?.ok) {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: `Failed to grant coin pack: ${grantResult?.reason || "unknown error"}.`, isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `Failed to grant coin pack: ${grantResult?.reason || "unknown error"}.`, isError: true })]),
           ephemeral: true
         });
       }
 
       rewardSummaryLines.push(`• Granted coin pack: ${pack.priceLabel} (${pack.coins.toLocaleString()}c).`);
-      publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${pack.coins.toLocaleString()}c** (${pack.priceLabel} pack).`;
+      publicWinnerLine = `${getIcon("coins")} Reward sent to <@${targetUserId}>!`;
     } else {
       if (coinAmount <= 0) {
         return commit({
           content: " ",
-          embeds: [buildDevMessageEmbed({ message: "For coin rewards, provide a coins value greater than 0.", isError: true })],
+          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For coin rewards, provide a coins value greater than 0.", isError: true })]),
           ephemeral: true
         });
       }
@@ -5749,25 +8280,24 @@ if (inDevPath && sub === "giveaway_winner") {
       }
       targetPlayer.lifetime.coins_earned = (Number(targetPlayer.lifetime.coins_earned) || 0) + coinAmount;
 
-      rewardSummaryLines.push(`• Granted direct coins: **${coinAmount.toLocaleString()}c**.`);
-      publicWinnerLine = `${getIcon("coins")} Giveaway winner reward sent to <@${targetUserId}>: **${coinAmount.toLocaleString()}c**.`;
+      rewardSummaryLines.push(`• Coins credited: **${coinAmount.toLocaleString()}c**.`);
+      publicWinnerLine = `${getIcon("coins")} Reward sent to <@${targetUserId}>!`;
     }
 
     upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
 
+    const detailedSummary = rewardSummaryLines.join("\n");
     const messageLines = [
-      `${getIcon("status_complete")} Giveaway reward delivered to <@${targetUserId}>.`,
-      `Reward type: ${rewardTypeLabel}`,
-      " ",
-      "Granted rewards:",
-      ...rewardSummaryLines,
-      reason ? `Reason: ${reason}` : null,
-      !existingPlayer ? "Note: Created a new player profile for this target." : null
+      publicWinnerLine,
+      detailedSummary ? `\n${detailedSummary}` : null
     ].filter(Boolean);
 
     return commit({
-      content: publicWinnerLine,
-      embeds: [buildDevMessageEmbed({ message: messageLines.join("\n") })],
+      content: " ",
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({
+        title: `${getIcon("status_complete")} Giveaway`,
+        message: messageLines.join("\n")
+      })]),
       ephemeral: false
     });
   });
@@ -5865,17 +8395,12 @@ if (inDevPath && sub === "dashboard") {
       .setCustomId(`noodle-dev:dashboard:nav:${userId}:0:${nextServerPage}`)
       .setLabel("Next")
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page !== 0 || totalServerPages <= 1),
-    new ButtonBuilder()
-      .setCustomId(`noodle-dev:dashboard:refresh:${userId}:${page}:${clampedServerPage}`)
-      .setLabel("Refresh")
-      .setEmoji(getButtonEmoji("refresh"))
-      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page !== 0 || totalServerPages <= 1)
   );
 
   return commit({
     content: " ",
-    embeds: [page === 0 ? serversEmbed : statusEmbed],
+    ...composeV2FromLegacyEmbeds([page === 0 ? serversEmbed : statusEmbed]),
     components: [navRow],
     ephemeral: false
   });
@@ -5889,6 +8414,37 @@ if (player) {
   if (touched && db) {
     upsertPlayer(db, serverId, userId, player, null, player.schema_version);
   }
+}
+
+const tutorialPlayer = inDevPath ? null : (player ?? ensurePlayer(serverId, userId));
+const isSlashLikeInvocation = !(
+  interaction.isButton?.()
+  || interaction.isSelectMenu?.()
+  || interaction.isModalSubmit?.()
+  || interaction.isAutocomplete?.()
+);
+if (shouldForceTutorialCommand({
+  player: tutorialPlayer,
+  sub,
+  isChatInput: isSlashLikeInvocation,
+  inDevPath
+})) {
+  const step = getCurrentTutorialStep(tutorialPlayer);
+  const tutorialEmbed = buildMenuEmbed({
+    title: `${getIcon("orders")} Tutorial`,
+    description: formatTutorialMessage(step) ?? "Welcome to your Noodle Story.",
+    user: interaction.member ?? interaction.user
+  });
+  const tutorialRows = getTutorialProgressRows(tutorialPlayer, userId, {
+    highlightAccept: true,
+    disableAccept: false
+  }) ?? [noodleTutorialMenuRow(userId)];
+
+  return commit({
+    content: " ",
+    ...composeV2FromLegacyEmbeds([tutorialEmbed]),
+    components: tutorialRows
+  });
 }
 
 seasonRolloverNotice = player
@@ -5923,7 +8479,7 @@ if (sub === "start") {
 
     return commit({
       content: " ",
-      embeds: [tutorialEmbed],
+      ...composeV2FromLegacyEmbeds([tutorialEmbed]),
       components: tutorialDone
         ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })]
         : [noodleTutorialMenuRow(userId)]
@@ -5941,7 +8497,7 @@ if (sub === "help") {
 
   return commit({
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components
   });
 }
@@ -5958,6 +8514,10 @@ if (sub === "profile") {
   const newsAvailable = viewingSelf && hasUnreadNewsUpdate(selfPlayer, newsContent);
   const showTakeoutProfileButton = viewingSelf && hasActivePerk(selfPlayer, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
   const party = getUserActiveParty(db, u.id);
+  const activeSharedOrder = (viewingSelf && party?.party_id && db)
+    ? getActiveSharedOrderByParty(db, party.party_id)
+    : null;
+  const partyHasActiveOrder = Boolean(activeSharedOrder);
   
   const embed = renderProfileEmbed(p, u.displayName, party?.party_name, interaction.member ?? interaction.user);
   const marketStockKnown = p.market_stock && Object.keys(p.market_stock).length > 0;
@@ -5970,15 +8530,38 @@ if (sub === "profile") {
     const marketRestockMs = parseYYYYMMDD(marketRestockDay) + (24 * 60 * 60 * 1000);
     const existingFooter = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
     const footerText = buildMarketRefreshFooterText(existingFooter, marketRestockMs);
-    embed.setFooter({ text: footerText });
+    if (typeof embed?.setFooter === "function") {
+      embed.setFooter({ text: footerText });
+    } else if (embed?.data && typeof embed.data === "object") {
+      embed.data.footer = { ...(embed.data.footer ?? {}), text: footerText };
+    } else if (embed && typeof embed === "object") {
+      embed.footer = { ...(embed.footer ?? {}), text: footerText };
+    }
   }
   const profileComponents = viewingSelf
-    ? [noodleMainMenuRowNoProfile(userId, { newsAvailable, showTakeout: showTakeoutProfileButton }), socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable })]
+    ? [
+      noodleMainMenuRowNoProfile(userId, { newsAvailable, showTakeout: showTakeoutProfileButton }),
+      socialMainMenuRowNoProfile(userId, { questsAvailable, specializationsAvailable, partyHasActiveOrder })
+    ]
     : [];
-  const embedsWithFooter = applyGreenButtonFooter([embed], profileComponents);
-  
+
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: selfPlayer })) {
+    return commit(buildProfileHomeV2Message({
+      userId,
+      embed,
+      viewingSelf,
+      showTakeout: showTakeoutProfileButton,
+      newsAvailable,
+      questsAvailable,
+      specializationsAvailable,
+      partyHasActiveOrder,
+      ownerId: userId,
+      buttonEmoji: getProfileV2ButtonEmoji()
+    }));
+  }
+
   return commit({
-    embeds: embedsWithFooter,
+    ...composeV2FromLegacyEmbeds([embed]),
     components: profileComponents
   });
 }
@@ -5996,33 +8579,34 @@ if (sub === "about") {
   }
 
   const aboutProfileImageUrl = getIconUrl("about_profile");
-  const aboutEmbed = buildMenuEmbed({
-    title: `${getIcon("sparkle")} About`,
-    description:
-      "**Creator:** *Erma Starling*\n\n" +
-      "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
-      "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
-      "And yes, she's obsessed with noodles... it's a problem.",
-    user: interaction.member ?? interaction.user,
-    color: theme.colors.info
-  });
-
-  aboutEmbed.addFields(
+  const aboutBodyText =
+    "**Creator:** *Erma Starling*\n\n" +
+    "Noodle Story is a cozy passion project that began in Jan. 2026, lovingly solo-developed as Erma's first game. " +
+    "It is built to feel warm, playful, and a little comforting after a long day.\n\n" +
+    "And yes, she's obsessed with noodles... it's a problem.";
+  const aboutMainComponents = [
+    { type: 10, content: `## ${getIcon("sparkle")} About` },
+    ...(aboutProfileImageUrl
+      ? [{
+          type: 9,
+          components: [{ type: 10, content: aboutBodyText }],
+          accessory: {
+            type: 11,
+            media: { url: aboutProfileImageUrl }
+          }
+        }]
+      : [{ type: 10, content: aboutBodyText }]),
     {
-      name: `${getIcon("group")} Servers`,
-      value: `\`\`${liveServerCount.toLocaleString("en-US")}\`\``,
-      inline: true
-    },
-    {
-      name: `${getIcon("profile")} Noodle Shops`,
-      value: `\`\`${liveShopCount === null ? "Unknown" : liveShopCount.toLocaleString("en-US")}\`\``,
-      inline: true
+      type: 10,
+      content: [
+        `### ${getIcon("group")} Servers`,
+        `\`\`${liveServerCount.toLocaleString("en-US")}\`\``,
+        "",
+        `### ${getIcon("profile")} Noodle Shops`,
+        `\`\`${liveShopCount === null ? "Unknown" : liveShopCount.toLocaleString("en-US")}\`\``
+      ].join("\n")
     }
-  );
-
-  if (aboutProfileImageUrl) {
-    aboutEmbed.setThumbnail(aboutProfileImageUrl);
-  }
+  ];
 
   const aboutSupportRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -6038,7 +8622,8 @@ if (sub === "about") {
 
   return commit({
     content: " ",
-    embeds: [aboutEmbed],
+    ownerId: userId,
+    mainComponents: aboutMainComponents,
     components: [noodleAboutNewsNavRow(userId, { active: "about" }), aboutSupportRow]
   });
 }
@@ -6066,58 +8651,39 @@ if (sub === "news") {
 
   const visibleEntries = getVisibleSortedNewsEntries(newsContent, { includeInternal: showInternalUpdates });
 
-  const latest = visibleEntries[0] ?? null;
-  const previous = visibleEntries[1] ?? null;
-
-  const latestVersion = latest
-    ? formatNewsVersion(latest.entry?.version, "v0.0.0")
-    : (includePinned ? formatNewsVersion(pinned?.version, "v0.0.0") : "v0.0.0");
-  const latestDate = latest
-    ? (String(latest.entry?.date ?? "TBD").trim() || "TBD")
-    : (includePinned ? (String(pinned?.date ?? "TBD").trim() || "TBD") : "TBD");
-  const latestClassLabel = latest
-    ? classificationLabel(normalizeNewsClassification(latest.entry?.classification))
-    : classificationLabel(includePinned ? pinnedClassification : "player_update");
-  const latestChanges = latest
-    ? (Array.isArray(latest.entry?.changes) ? latest.entry.changes : [])
+  const rawPage = opt.getInteger("page") ?? overrides?.integers?.page ?? 0;
+  const updatesPerPage = 1;
+  const updatesTotal = Math.max(1, visibleEntries.length || (includePinned ? 1 : 0));
+  const totalPages = Math.max(1, Math.ceil(updatesTotal / updatesPerPage));
+  const safePage = Math.min(Math.max(Number(rawPage) || 0, 0), totalPages - 1);
+  const pageUpdates = visibleEntries.length
+    ? visibleEntries.slice(safePage * updatesPerPage, (safePage + 1) * updatesPerPage)
     : [];
-  const latestSummary = latest
-    ? (latestChanges.length
-      ? latestChanges.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
-      : "• No changes listed.")
+
+  const updatesText = pageUpdates.length
+    ? pageUpdates.map(({ entry }) => {
+        const version = formatNewsVersion(entry?.version, "v0.0.0");
+        const date = String(entry?.date ?? "TBD").trim() || "TBD";
+        const classLabel = classificationLabel(normalizeNewsClassification(entry?.classification));
+        const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+        const changeText = changes.length
+          ? changes.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
+          : "• No changes listed.";
+        return [
+          `### ${version}`,
+          `*${date} · ${classLabel}*`,
+          changeText
+        ].join("\n");
+      }).join("\n\n")
     : (includePinned
-      ? (String(pinned?.summary ?? "No update summary yet.").trim() || "No update summary yet.")
+      ? [
+          `### ${formatNewsVersion(pinned?.version, "v0.0.0")}`,
+          `*${String(pinned?.date ?? "TBD").trim() || "TBD"} · ${classificationLabel(pinnedClassification)}*`,
+          String(pinned?.summary ?? "No update summary yet.").trim() || "No update summary yet."
+        ].join("\n")
       : "No player-facing updates yet.");
+
   const introText = String(newsContent?.intro ?? "*This feed is updated so players can quickly see what's changed.*").trim();
-  const clampFieldValue = (text, maxLen = 1024) => {
-    const value = String(text ?? "").trim();
-    if (!value) return "-";
-    if (value.length <= maxLen) return value;
-    return `${value.slice(0, Math.max(1, maxLen - 3))}...`;
-  };
-
-  const newsEmbed = buildMenuEmbed({
-    title: `${getIcon("new")} News`,
-    description: `${getIcon("idea")} ${introText}`,
-    user: interaction.member ?? interaction.user,
-    color: theme.colors.success
-  });
-
-  let previousSectionText = "**Previous Update**\nNo previous update yet.";
-  if (previous) {
-    const previousVersion = formatNewsVersion(previous.entry?.version, "v0.0.0");
-    const previousDate = String(previous.entry?.date ?? "TBD").trim() || "TBD";
-    const previousClassLabel = classificationLabel(normalizeNewsClassification(previous.entry?.classification));
-    const previousChanges = Array.isArray(previous.entry?.changes) ? previous.entry.changes : [];
-    const previousText = previousChanges.length
-      ? previousChanges.map((change) => `• ${String(change ?? "").trim()}`).join("\n")
-      : "• No changes listed.";
-    previousSectionText = [
-      "**Previous Update**",
-      `*${previousVersion} · ${previousDate} · ${previousClassLabel}*`,
-      previousText
-    ].join("\n");
-  }
 
   let upcomingSectionText = "**Upcoming**\nNo upcoming notes yet.";
   const upcomingSection = sections.find((section) => {
@@ -6173,38 +8739,31 @@ if (sub === "news") {
     `**${activeEventLabel}** ends: ${activeEndText}, **${nextEventLabel}** begins: ${nextStartText}`,
     "*Try to discover one or all of this season's event recipes before the season ends so you can earn the event badge!*"
   ].join("\n");
-  const dotColumnDivider = "· · · · · · ·";
 
-  newsEmbed.addFields({
-    name: `${getIcon("new")} Updates`,
-    value: clampFieldValue([
-      dotColumnDivider,
-      "**Latest Update**",
-      `*${latestVersion} · ${latestDate} · ${latestClassLabel}*`,
-      latestSummary,
-      "",
-      previousSectionText
-    ].join("\n")),
-    inline: true
-  });
+  const updatesChunks = splitTextToV2Chunks(updatesText);
+  const mainComponents = [
+    { type: 10, content: `## ${getIcon("new")} News` },
+    { type: 10, content: `${getIcon("idea")} ${introText}` },
+    { type: 10, content: `### ${getIcon("new")} Updates (${safePage + 1}/${totalPages})` },
+    ...(updatesChunks.length ? updatesChunks.map((chunk) => ({ type: 10, content: chunk })) : [{ type: 10, content: "No player-facing updates yet." }]),
+    { type: 10, content: `### ${getIcon("calendar")} Upcoming` },
+    { type: 10, content: upcomingSectionText.replace(/^\*\*Upcoming\*\*\n?/i, "") },
+    { type: 10, content: `### ${getIcon("event")} Seasonal Event Reminder` },
+    { type: 10, content: seasonalNotice }
+  ];
 
-  newsEmbed.addFields({
-    name: `${getIcon("calendar")} Upcoming & Seasonal`,
-    value: clampFieldValue([
-      "\u200b",
-      dotColumnDivider,
-      upcomingSectionText,
-      "",
-      `**${getIcon("event")} Seasonal Event Reminder**`,
-      seasonalNotice
-    ].join("\n")),
-    inline: true
-  });
+  const pageRow = noodleNewsPageRow(userId, safePage, totalPages);
+  const components = [
+    noodleAboutNewsNavRow(userId, { active: "news" }),
+    ...(pageRow ? [pageRow] : []),
+    noodleAboutNewsBackRow(userId)
+  ];
 
   return commit({
     content: " ",
-    embeds: [newsEmbed],
-    components: [noodleAboutNewsNavRow(userId, { active: "news" }), noodleAboutNewsBackRow(userId)]
+    ownerId: userId,
+    mainComponents,
+    components
   });
 }
 
@@ -6212,6 +8771,14 @@ if (sub === "news") {
 if (sub === "profile_edit") {
   const p = ensurePlayer(serverId, userId);
   const specializationsAvailable = getSpecializationAlert(p);
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    return commit(buildProfileEditV2Message({
+      userId,
+      specializationsAvailable,
+      ownerId: userId,
+      buttonEmoji: getProfileV2ButtonEmoji()
+    }));
+  }
   const embed = buildMenuEmbed({
     title: `${getIcon("customize")} Customize Profile`,
     description: [
@@ -6220,15 +8787,15 @@ if (sub === "profile_edit") {
       "• You unlock specializations as your shop levels up. Changing your active specialization updates your shop decor.",
       "",
       "• Check out the **Store** to browse all premium options:",
-      "• Premium Shop Specializations",
-      "• Coin Packs",
-      `• ${getTakeoutCounterLabel()} Subscription Perk`
+      "  - Premium Shop Specializations",
+      "  - Coin Packs",
+      `  - ${getTakeoutCounterLabel()} Subscription Perk`
     ].join("\n"),
     user: interaction.member ?? interaction.user
   });
   return commit({
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
@@ -6300,7 +8867,7 @@ if (sub === "store") {
 
   return commit({
     content: " ",
-    embeds: [storeEmbed],
+    ...composeV2FromLegacyEmbeds([storeEmbed]),
     components: [storeLinkRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
@@ -6326,7 +8893,7 @@ if (sub === "pantry") {
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
 
     const set = buildSettingsMap(settingsCatalog, s.settings);
-    s.season = computeActiveSeason(set);
+    syncServerSeasonFromSettings(s, set);
 
     const elapsedMs = Math.max(0, now - lastActiveAt);
     const spoilageTickHours = Number(set.SPOILAGE_TICK_HOURS ?? 1);
@@ -6566,12 +9133,13 @@ if (sub === "pantry") {
 
     return {
       content: " ",
-      embeds: [pantryEmbed],
+      ...composeV2FromLegacyEmbeds([pantryEmbed]),
       components: [
         pantryPageRow(userId, safePage, totalPages, ingredientPages),
         noodleForageGardenRow(userId, {
           active: "forage",
           gardenLocked: !gardenUnlocked,
+          gardenStyleOverride: ButtonStyle.Secondary,
           includeFishingButton: true,
           fishingUnlocked,
           fishingJustUnlocked,
@@ -6605,7 +9173,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
     const lastActiveAt = db ? (getLastActiveAt(db, serverId, userId) || now) : now;
 
     const set = buildSettingsMap(settingsCatalog, s.settings);
-    s.season = computeActiveSeason(set);
+    syncServerSeasonFromSettings(s, set);
 
     const elapsedMs = Math.max(0, now - lastActiveAt);
     const spoilageTickHours = Number(set.SPOILAGE_TICK_HOURS ?? 1);
@@ -6671,7 +9239,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       });
       return finalize({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         components: [
           noodleFeatureInfoRow(userId, {
             active: "kitchen",
@@ -6837,7 +9405,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       user: interaction.member ?? interaction.user,
       color: theme.colors.warning
     });
-    return commit({ content: " ", embeds: [unavailableEmbed], ephemeral: true });
+    return commit({ content: " ", ...composeV2FromLegacyEmbeds([unavailableEmbed]), ephemeral: true });
   }
 
   const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
@@ -6886,7 +9454,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       });
       return finalize({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         ephemeral: true
       });
     }
@@ -6941,7 +9509,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
     const buildAndStoreTakeoutQuote = ({ nowMs }) => {
       const set = buildSettingsMap(settingsCatalog, s.settings);
-      s.season = computeActiveSeason(set);
+      syncServerSeasonFromSettings(s, set);
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, s.active_event_id ?? null);
       applyHouse247OrderBoardOverride(p);
 
@@ -7136,7 +9704,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       return {
         content: " ",
-        embeds: firstCounterSetupEmbed ? [embed, firstCounterSetupEmbed] : [embed],
+        ...composeV2FromLegacyEmbeds(firstCounterSetupEmbed ? [embed, firstCounterSetupEmbed] : [embed]),
         components: [
           ...(menuPicker?.rows ?? []),
           noodleTakeoutActionRow(userId, {
@@ -7281,7 +9849,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
 
       const set = buildSettingsMap(settingsCatalog, s.settings);
-      s.season = computeActiveSeason(set);
+      syncServerSeasonFromSettings(s, set);
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, s.active_event_id ?? null);
       applyHouse247OrderBoardOverride(p);
 
@@ -7476,8 +10044,6 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       let seasonalServedCoins = 0;
       let leveledUp = false;
       const discoveryMessages = [];
-      const bowlLedgerCompletedBefore = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
-      const completedCollectionsBefore = new Set(p?.collections?.completed ?? []);
       const recipe = content.recipes?.[selectedRecipeId] ?? null;
       const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
       const activeEventEffects = getActiveEventEffects(eventsContent, s);
@@ -7569,23 +10135,19 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       }
 
       const remainingForRecipe = Math.max(0, Math.floor(Number(snapshotRow.visible_order_count || 0) || 0));
-      const serveSummary = [
-        `${getIcon("serve")} Served **${servedCount}× ${displayRecipeName(selectedRecipeId)}** from the takeout counter.`,
-        `${getIcon("coins")} +${totalCoins}c · ${getIcon("rep")} +${totalRep} rep · ${getIcon("sxp")} +${totalSxp} sxp`,
+      if (servedCount <= 0) {
+        return finalize(renderStatus(`${getIcon("basket")} You need a ready bowl of **${displayRecipeName(selectedRecipeId)}** first.`, { ephemeral: true }));
+      }
+
+      const serveResults = [
+        `Served **${servedCount}× ${displayRecipeName(selectedRecipeId)}** from ${getTakeoutCounterLabel()}.`,
         `${getIcon("orders")} Remaining counter orders for this recipe: **${remainingForRecipe}**`
       ];
+      if (leveledUp) {
+        serveResults.push(`${getIcon("level_up")} Level up! You're now **Level ${Math.max(1, Number(p.shop_level || 1))}**.`);
+      }
 
       if (servedCount > 0) {
-        const levelBeforeCollection = Number(p.shop_level || 1);
-        applyCollectionProgressOnServe(p, collectionsContent, content, {
-          npcArchetype: null,
-          recipeId: selectedRecipeId,
-          quality: null
-        });
-        if (Number(p.shop_level || 1) > levelBeforeCollection) {
-          leveledUp = true;
-        }
-
         applyQuestProgress(
           p,
           questsContent,
@@ -7606,62 +10168,17 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
             now
           );
         }
-
-        const newlyUnlockedBadgeIds = unlockBadges(p, badgesContent);
-        for (const badgeId of newlyUnlockedBadgeIds) {
-          const badge = getBadgeById(badgesContent, badgeId);
-          const icon = resolveIcon(badge?.icon, getIcon("badges"));
-          const badgeName = badge?.name ?? badgeId;
-          serveSummary.push(`${icon} **Badge unlocked:** ${badgeName}`);
-        }
-
-        const bowlLedgerCompletedAfter = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
-        const newlyCompletedBowls = [...bowlLedgerCompletedAfter]
-          .filter((entry) => !bowlLedgerCompletedBefore.has(entry))
-          .map((entry) => Number(entry))
-          .filter((value) => Number.isFinite(value))
-          .sort((a, b) => a - b);
-        for (const threshold of newlyCompletedBowls) {
-          serveSummary.push(`${getIcon("serve")} **Bowl milestone reached:** ${threshold.toLocaleString()} bowls served.`);
-        }
-
-        const collectionNameById = new Map((collectionsContent?.collections ?? [])
-          .filter((entry) => entry?.collection_id)
-          .map((entry) => [entry.collection_id, entry.name ?? entry.collection_id]));
-        const newlyCompletedCollectionIds = (p?.collections?.completed ?? [])
-          .filter((collectionId) => !completedCollectionsBefore.has(collectionId));
-        for (const collectionId of newlyCompletedCollectionIds) {
-          const collectionName = collectionNameById.get(collectionId) ?? collectionId;
-          serveSummary.push(`${getIcon("collections")} **Collection completed:** ${collectionName}`);
-        }
-
-        const specState = ensureSpecializationState(p);
-        const bowlsServedAfter = p.lifetime.bowls_served_total;
-        const newlyUnlockedSpecs = (specializationsContent?.specializations ?? []).filter((spec) => {
-          if (!spec?.spec_id) return false;
-          const req = spec?.requirements?.bowls_served_total;
-          if (!req || bowlsServedAfter < req) return false;
-          return !specState.unlocked_spec_ids.includes(spec.spec_id);
-        });
-        if (newlyUnlockedSpecs.length) {
-          for (const spec of newlyUnlockedSpecs) {
-            specState.unlocked_spec_ids.push(spec.spec_id);
-            const icon = resolveIcon(spec.icon, getIcon("sparkle"));
-            serveSummary.push(`${icon} **Specialization unlocked:** ${spec.name}`);
-          }
-        }
       }
 
-      if (leveledUp) {
-        serveSummary.push(`${getIcon("level_up")} Level up! You're now **Level ${Math.max(1, Number(p.shop_level || 1))}**.`);
-      }
-      if (discoveryMessages.length > 0) {
-        serveSummary.push(discoveryMessages.slice(0, 4).join("\n"));
-      }
-
+      const summary = `Rewards total: **+${totalCoins}c**, **+${totalSxp} SXP**, **+${totalRep} REP**.`;
+      const discoveryLine = discoveryMessages.length > 0 ? `\n\n${discoveryMessages.slice(0, 4).join("\n")}` : "";
       const confirmationEmbed = buildMenuEmbed({
-        title: `${getIcon("serve")} Counter Serve`,
-        description: serveSummary.join("\n"),
+        title: `${getIcon("serve")} Orders Served`,
+        description: [
+          serveResults.join("\n"),
+          "",
+          `${summary}${discoveryLine}`
+        ].join("\n"),
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
@@ -7670,7 +10187,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
       return finalize({
         content: " ",
-        embeds: [confirmationEmbed],
+        ...composeV2FromLegacyEmbeds([confirmationEmbed]),
         components: [
           noodleTakeoutActionRow(userId, {
             activeShift: true,
@@ -7838,7 +10355,7 @@ if (sub === "recipes") {
 
   return commit({
     content: " ",
-    embeds: [recipesEmbed],
+    ...composeV2FromLegacyEmbeds([recipesEmbed]),
     components: [navRow, noodleMainMenuRow(userId)]
   });
 }
@@ -7909,7 +10426,7 @@ if (sub === "regulars") {
 
   return commit({
     content: " ",
-    embeds: [regularsEmbed],
+    ...composeV2FromLegacyEmbeds([regularsEmbed]),
     components: totalPages > 1 ? [navRow, noodleMainMenuRow(userId)] : [noodleMainMenuRow(userId)]
   });
 }
@@ -7999,7 +10516,7 @@ if (sub === "season") {
 
   return commit({
     content: " ",
-    embeds: [seasonEmbed],
+    ...composeV2FromLegacyEmbeds([seasonEmbed]),
     components: [noodleAboutNewsNavRow(userId, { active: "season" }), backRow]
   });
 }
@@ -8009,23 +10526,42 @@ if (sub === "status") {
   if (!isDevAdmin(userId)) {
     return commit({
       content: " ",
-      embeds: [buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })],
+      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })]),
       ephemeral: true
     });
   }
+  const rolloutPlayer = ensurePlayer(serverId, userId);
   const statusEmbed = buildDevStatusEmbed();
-  const refreshRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle-dev:status:refresh:${userId}`)
-      .setLabel("Refresh")
-      .setEmoji(getButtonEmoji("refresh"))
-      .setStyle(ButtonStyle.Secondary)
-  );
+
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer })) {
+    const title = String(statusEmbed?.title ?? statusEmbed?.data?.title ?? `${getIcon("stats")} Status`).trim();
+    const description = String(statusEmbed?.description ?? statusEmbed?.data?.description ?? "").trim();
+    const lines = description ? description.split("\n") : ["Status unavailable."];
+    const payload = buildComponentsV2MenuPayload({
+      components: [
+        { type: 10, content: [`## ${title}`, lines.join("\n")].filter(Boolean).join("\n\n") },
+        {
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 2,
+              label: "Refresh",
+              custom_id: `noodle:nav:status:${userId}`
+            }
+          ]
+        }
+      ],
+      ownerId: userId,
+      accentColor: theme.colors.primary,
+      ephemeral: false
+    });
+    return replyOrEditInteraction(interaction, payload);
+  }
 
   return commit({
     content: " ",
-    embeds: [statusEmbed],
-    components: [refreshRow],
+    ...composeV2FromLegacyEmbeds([statusEmbed]),
     ephemeral: false
   });
 }
@@ -8112,7 +10648,7 @@ if (sub === "event") {
 
   return commit({
     content: " ",
-    embeds: [eventEmbed],
+    ...composeV2FromLegacyEmbeds([eventEmbed]),
     components: [noodleAboutNewsNavRow(userId, { active: "event" }), backRow]
   });
 }
@@ -8138,7 +10674,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   const now = nowTs();
   const set = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(set);
+  syncServerSeasonFromSettings(s, set);
   const activeEventId = s.active_event_id ?? null;
   const storyAnchor = activeEventId ? `story:${activeEventId}` : "story:default";
   const seasonAnchor = s.season ?? "seasonal:default";
@@ -8220,7 +10756,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     // If resilience granted temporary recipes, regenerate order board to include them
     if (resilience.applied && p.resilience?.temp_recipes?.length > 0) {
-      p.orders_day = null; // Force regeneration
+      // Refresh order metadata without resetting consumed progress for the current day.
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
       applyHouse247OrderBoardOverride(p);
     }
@@ -8267,8 +10803,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     clearTemporaryRecipes(p);
     const clearedTempRecipes = hadTempRecipes && (p.resilience?.temp_recipes?.length || 0) === 0;
     if (clearedTempRecipes) {
-      // Regenerate orders for normal play after recovery
-      p.orders_day = null;
+      // Refresh order metadata after recovery without resetting consumed progress.
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
       applyHouse247OrderBoardOverride(p);
     }
@@ -8339,21 +10874,42 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       finalEmbeds = undefined;
     }
 
-    const noticeApplied = withSeasonNotice({ ...replyWithUnlock, content: finalContent, embeds: finalEmbeds ?? replyWithUnlock.embeds });
+    const legacyBridgeSourceEmbeds = finalEmbeds ?? replyWithUnlock.embeds;
+    const legacyBridgePayload = Array.isArray(legacyBridgeSourceEmbeds) && legacyBridgeSourceEmbeds.length > 0
+      ? composeV2FromLegacyEmbeds(legacyBridgeSourceEmbeds)
+      : {};
+    const noticeApplied = withSeasonNotice({ ...replyWithUnlock, content: finalContent, ...legacyBridgePayload });
 
-    const out = {
+    let out = {
       ...noticeApplied,
       content: noticeApplied.content,
-      embeds: noticeApplied.embeds,
       ephemeral: noticeApplied.ephemeral ?? false,
       components: noticeApplied.ephemeral
         ? (noticeApplied.components ?? [])
         : (noticeApplied.components ?? [noodleMainMenuRow(userId)])
     };
+
+    const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
+    const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+    const shouldUseV2ContainerPayload = shouldConvertLegacyPayloadToV2ForSub({
+      sub,
+      navSource: overrides?.navSource,
+      rolloutEnabled: isComponentsV2Enabled({ guildId: serverId, userId, player: p }),
+      sourceMessageIsV2
+    });
+    const suppressGreenButtonTip = sub === "pantry" || sub === "store";
+    if (suppressGreenButtonTip) {
+      out.disableGreenButtonTip = true;
+    }
+
+    if (shouldUseV2ContainerPayload) {
+      out = convertLegacyEmbedPayloadToComponentsV2(out);
+    }
+
     if (out.embeds) {
       out.embeds = sanitizeEmbedsForDiscord(out.embeds);
     }
-    if (out.embeds) {
+    if (out.embeds && !suppressGreenButtonTip) {
       out.embeds = applyGreenButtonFooter(out.embeds, out.components);
     }
 
@@ -8481,7 +11037,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [questsEmbed],
+      ...composeV2FromLegacyEmbeds([questsEmbed]),
       components: [
         pageRow,
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
@@ -8505,8 +11061,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         : "Active")
       : "Not active";
     const house247Label = status.house247ExpiresAt
-      ? `${getHouse247Label()} remaining: expires **${house247Line}**`
-      : `${getHouse247Label()} remaining: **${house247Line}**`;
+      ? `${getHouse247Label()} expires **${house247Line}**`
+      : `${getHouse247Label()} **${house247Line}**`;
     const lastVoteLine = status.lastVoteAt ? `<t:${Math.floor(status.lastVoteAt / 1000)}:R>` : "Not detected yet";
     const maxButtonsPerRow = 5;
     const maxLinkRows = 3;
@@ -8563,6 +11119,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         voteLinks,
         "",
         `Per vote reward: ${rewardLine}`,
+        "Power vote bonus: **Rank.top power votes grant 4x rewards.**",
         `Per vote bonus: ${getHouse247Label()} **+12h** (unlimited orders + market stock)`,
         "",
         house247Label,
@@ -8575,7 +11132,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [voteEmbed],
+      ...composeV2FromLegacyEmbeds([voteEmbed]),
       components: [
         ...voteSiteRows,
         actionRow
@@ -8598,7 +11155,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
           noodleQuestsBackRow(userId)
@@ -8626,7 +11183,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
         noodleQuestsBackRow(userId)
@@ -8645,7 +11202,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleQuestsMenuRow(userId, {
             showClaim: hasClaimableQuests(p),
@@ -8670,7 +11227,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleQuestsMenuRow(userId, {
           showClaim: hasClaimableQuests(p),
@@ -8697,13 +11254,13 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const levelLine = result.leveledUp > 0 ? `\n${getIcon("level_up")} Level up! **+${result.leveledUp}**` : "";
     const embed = buildMenuEmbed({
-      title: `${getIcon("status_complete")} Quest Rewards`,
+      title: `${getIcon("quests")} Quests Claimed`,
       description: `${lines.join("\n")}${levelLine}`,
       user: interaction.member ?? interaction.user
     });
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
         noodleQuestsBackRow(userId)
@@ -8721,6 +11278,18 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     if (!specId) {
       const rawPage = opt.getInteger("page") ?? 0;
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        const { entries, page, totalPages } = buildSpecializationListData(p, now, rawPage, 5);
+        return commitState(buildSpecializationListV2Message({
+          userId,
+          entries,
+          page,
+          totalPages,
+          specializationsAvailable,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }));
+      }
       const { embed, page, totalPages } = buildSpecializationListEmbed(
         p,
         interaction.member ?? interaction.user,
@@ -8753,7 +11322,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       );
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components
       });
     }
@@ -8767,6 +11336,18 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
 
     if (!confirm) {
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return commitState(buildSpecializationConfirmV2Message({
+          userId,
+          specId,
+          specName: spec.name,
+          specDescription: spec.description,
+          specThumbnailUrl: getSpecializationThumbnailUrl(spec),
+          specializationsAvailable,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }));
+      }
       const embed = buildMenuEmbed({
         title: `${getIcon("sparkle")} Confirm Specialization`,
         description: `You're about to switch to **${spec.name}**. Re-run with confirm=true to proceed.`,
@@ -8774,7 +11355,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleSpecializeSelectRow(userId),
           noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -8797,9 +11378,19 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       description: `Active specialization: **${result.specialization?.name ?? specId}**.`,
       user: interaction.member ?? interaction.user
     });
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return commitState(buildSpecializationUpdatedV2Message({
+        userId,
+        specName: result.specialization?.name ?? specId,
+        specThumbnailUrl: getSpecializationThumbnailUrl(result.specialization ?? spec),
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }));
+    }
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [
         noodleSpecializeSelectRow(userId),
         noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -8816,6 +11407,22 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     grantUnlockedDecor(p, decorContent, s);
 
     const rawPage = opt.getInteger("page") ?? 0;
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      const { entries, page, totalPages } = buildDecorSetsViewData({
+        player: p,
+        view: "specialization",
+        page: rawPage,
+        pageSize: 5
+      });
+      return commitState(buildDecorSetsV2Message({
+        userId,
+        entries,
+        page,
+        totalPages,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }));
+    }
     const { embed, page, totalPages } = renderDecorSetsEmbedLocal({
       player: p,
       ownerUser: interaction.member ?? interaction.user,
@@ -8845,7 +11452,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components
     });
   }
@@ -8875,7 +11482,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle-social:nav:stats:${userId}`)
@@ -8888,11 +11495,16 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   /* ---------------- FORAGE MENU ---------------- */
   if (sub === "forage_menu") {
+    if (isTutorialStepFromRouting(p, "intro_forage")) {
+      return runNoodle(interaction, { sub: "forage", navSource: "forage_random" });
+    }
+
     const forageMenuStartMs = performance.now();
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+    const selectedItemId = String(opt.getString("item") ?? "").trim() || null;
     const payload = buildForageMenuPayload({
       userId,
       player: p,
@@ -8901,7 +11513,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       kitchenJustUnlocked,
       fishingUnlocked,
       fishingJustUnlocked,
-      page: pickerPage
+      page: pickerPage,
+      selectedItemId
     });
     emitNavSubroutePhase("nav:forage", {
       renderMs: performance.now() - forageMenuStartMs
@@ -8919,6 +11532,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const { unlocked: fishingUnlocked, justUnlocked: fishingJustUnlocked } = getFishingUnlockState(p);
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+    const itemId = opt.getString("item") ?? null;
+    const isExplicitRandomForage = navSource === "forage_random" || isTutorialStepFromRouting(p, "intro_forage");
     ensureGardenState(p);
     if (combinedEffects.garden_autoharvest) {
       autoHarvestReadyPlots(p, content, combinedEffects, {
@@ -8927,6 +11542,19 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
     const gardenState = getGardenActionState(p, combinedEffects);
     const foragePickerRows = buildForagePickerRows({ userId, player: p, randomPrimary: false, page: pickerPage });
+    const normalizedForageItemId = String(itemId || "").trim();
+    const selectedForageItemId = getAllowedForageIdsForPlayer(p).includes(normalizedForageItemId)
+      ? normalizedForageItemId
+      : null;
+    const forageQtyRow = selectedForageItemId
+      ? new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:1:${foragePickerRows.safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:2:${foragePickerRows.safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:3:${foragePickerRows.safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:4:${foragePickerRows.safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:forage_qty:${userId}:${selectedForageItemId}:5:${foragePickerRows.safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+        )
+      : null;
     const navRows = buildForageFishingNavRows({
       userId,
       active: "forage",
@@ -8938,9 +11566,24 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       prependRows: [
         foragePickerRows.actionRow,
         foragePickerRows.pickerRow,
+        ...(forageQtyRow ? [forageQtyRow] : []),
         ...(foragePickerRows.pageRow ? [foragePickerRows.pageRow] : [])
       ]
     });
+
+    if (!selectedForageItemId && !isExplicitRandomForage) {
+      return commitState(buildForageMenuPayload({
+        userId,
+        player: p,
+        ownerUser: interaction.member ?? interaction.user,
+        kitchenUnlocked,
+        kitchenJustUnlocked,
+        fishingUnlocked,
+        fishingJustUnlocked,
+        page: pickerPage,
+        selectedItemId: null
+      }));
+    }
 
     const baseCooldownMs = 2 * 60 * 1000;
     const cooldownMs = applyCooldownReduction(baseCooldownMs, combinedEffects);
@@ -8956,12 +11599,11 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [cooldownEmbed],
+        ...composeV2FromLegacyEmbeds([cooldownEmbed]),
         components: navRows
       });
     }
 
-    const itemId = opt.getString("item") ?? null;
     const qtyRaw = opt.getInteger("quantity") ?? 1;
     const quantity = Math.max(1, Math.min(5, qtyRaw));
     const bonusItems = Math.max(0, Math.floor(combinedEffects.forage_bonus_items || 0));
@@ -9060,7 +11702,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [forageFullEmbed],
+        ...composeV2FromLegacyEmbeds([forageFullEmbed]),
         components: navRows
       });
     }
@@ -9083,7 +11725,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [forageFullEmbed],
+        ...composeV2FromLegacyEmbeds([forageFullEmbed]),
         components: navRows
       });
     }
@@ -9186,7 +11828,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      embeds: [forageEmbed],
+      ...composeV2FromLegacyEmbeds([forageEmbed]),
       components
     });
   }
@@ -9198,6 +11840,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const { unlocked: kitchenUnlocked, justUnlocked: kitchenJustUnlocked } = getKitchenUnlockState(p);
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
+    const selectedItemId = String(opt.getString("item") ?? "").trim() || null;
 
     if (!fishingUnlocked) {
       const gardenUnlocked = isGardenUnlocked(p);
@@ -9212,7 +11855,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         components: [
           noodleFeatureInfoRow(userId, {
             active: "fishing",
@@ -9235,7 +11878,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       kitchenJustUnlocked,
       fishingUnlocked,
       fishingJustUnlocked,
-      page: pickerPage
+      page: pickerPage,
+      selectedItemId
     }));
   }
 
@@ -9250,10 +11894,24 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const rawPickerPage = Number(opt.getInteger("page") ?? 0);
     const pickerPage = Number.isFinite(rawPickerPage) ? Math.max(0, rawPickerPage) : 0;
     const itemId = opt.getString("item") ?? null;
+    const isExplicitRandomFishing = navSource === "fishing_random";
     const qtyRaw = opt.getInteger("quantity") ?? 1;
     const quantity = Math.max(1, Math.min(5, qtyRaw));
 
     const fishingPickerRows = buildFishingPickerRows({ userId, player: p, randomPrimary: false, page: pickerPage });
+    const normalizedFishingItemId = String(itemId || "").trim();
+    const selectedFishingItemId = getAllowedFishingIdsForPlayer(p).includes(normalizedFishingItemId)
+      ? normalizedFishingItemId
+      : null;
+    const fishingQtyRow = selectedFishingItemId
+      ? new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:1:${fishingPickerRows.safePage}`).setLabel("x1").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:2:${fishingPickerRows.safePage}`).setLabel("x2").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:3:${fishingPickerRows.safePage}`).setLabel("x3").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:4:${fishingPickerRows.safePage}`).setLabel("x4").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`noodle:pick:fishing_qty:${userId}:${selectedFishingItemId}:5:${fishingPickerRows.safePage}`).setLabel("x5").setStyle(ButtonStyle.Primary)
+        )
+      : null;
     const navRows = buildForageFishingNavRows({
       userId,
       active: "fishing",
@@ -9265,9 +11923,24 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       prependRows: [
         fishingPickerRows.actionRow,
         fishingPickerRows.pickerRow,
+        ...(fishingQtyRow ? [fishingQtyRow] : []),
         ...(fishingPickerRows.pageRow ? [fishingPickerRows.pageRow] : [])
       ]
     });
+
+    if (!selectedFishingItemId && !isExplicitRandomFishing) {
+      return commitState(buildFishingMenuPayload({
+        userId,
+        player: p,
+        ownerUser: interaction.member ?? interaction.user,
+        kitchenUnlocked,
+        kitchenJustUnlocked,
+        fishingUnlocked,
+        fishingJustUnlocked,
+        page: pickerPage,
+        selectedItemId: null
+      }));
+    }
 
     if (fishingUnlocked && !p.fishing.first_visit_ack) {
       p.fishing.first_visit_ack = true;
@@ -9285,7 +11958,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        embeds: [lockedEmbed],
+        ...composeV2FromLegacyEmbeds([lockedEmbed]),
         components: [
           noodleFeatureInfoRow(userId, {
             active: "fishing",
@@ -9313,7 +11986,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [cooldownEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([cooldownEmbed]), components: navRows });
     }
 
     const bonusItems = Math.max(0, Math.floor(combinedEffects.fishing_bonus_items || 0));
@@ -9401,7 +12074,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fullEmbed]), components: navRows });
     }
 
     const inventoryResult = applyFishingDrops(p, accepted);
@@ -9421,7 +12094,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [fullEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fullEmbed]), components: navRows });
     }
 
     const totalCaught = Object.values(inventoryResult.added).reduce((sum, qty) => sum + (qty || 0), 0);
@@ -9463,7 +12136,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       color: theme.colors.success
     });
 
-    return commitState({ content: " ", embeds: [fishingEmbed], components: navRows });
+    return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fishingEmbed]), components: navRows });
   }
 
   /* ---------------- GARDEN ---------------- */
@@ -9500,7 +12173,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         }),
         noodleMainMenuRow(userId)
       ];
-      return commitState({ content: " ", embeds: [lockedEmbed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([lockedEmbed]), components: navRows });
     }
 
     const view = buildGardenView({
@@ -9516,7 +12189,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [view.embed],
+      ...composeV2FromLegacyEmbeds([view.embed]),
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -9569,7 +12242,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (maxCraftable <= 0) {
       const description = `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
       const embed = buildMenuEmbed({ title: `${getIcon("compost_bag")} Compost`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
-      return commitState({ content: " ", embeds: [embed], components: navRows });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows });
     }
 
     if (bagsToMake <= 0) {
@@ -9579,7 +12252,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", embeds: [embed], components: navRows, ephemeral: true });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows, ephemeral: true });
     }
 
     const unitsNeeded = bagsToMake * COMPOST_PER_BAG;
@@ -9625,7 +12298,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (remaining > 0) {
       const description = `${getIcon("warning")} Not enough ${source === "fresh" ? "fresh forageables" : source === "spoiled" ? "spoiled items" : "items"} to craft ${bagsToMake} bag(s).`;
       const embed = buildMenuEmbed({ title: `${getIcon("garden")} Garden`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
-      return commitState({ content: " ", embeds: [embed], components: navRows, ephemeral: true });
+      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows, ephemeral: true });
     }
 
     garden.compost_bags = (garden.compost_bags || 0) + bagsToMake;
@@ -9654,7 +12327,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: navRows
     });
   }
@@ -9729,7 +12402,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      embeds: [view.embed],
+      ...composeV2FromLegacyEmbeds([view.embed]),
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -9806,7 +12479,7 @@ ${lines.join("\n")}`;
 
     return commitState({
       content: " ",
-      embeds: [view.embed],
+      ...composeV2FromLegacyEmbeds([view.embed]),
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -9917,7 +12590,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      embeds: [buyEmbed],
+      ...composeV2FromLegacyEmbeds([buyEmbed]),
       components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : undefined
     });
   }
@@ -9969,7 +12642,7 @@ ${lines.join("\n")}`;
       description: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.`,
       user: interaction.member ?? interaction.user
     });
-    return commitState({ content: " ", embeds: [sellEmbed] });
+    return commitState({ content: " ", ...composeV2FromLegacyEmbeds([sellEmbed]) });
   }
 
   /* ---------------- COOK ---------------- */
@@ -9977,14 +12650,19 @@ ${lines.join("\n")}`;
     const recipeId = opt.getString("recipe");
     const qty = opt.getInteger("quantity");
     const page = opt.getInteger("page") ?? 0;
+    const v2MinigameCook = opt.getBoolean("v2_minigame") === true;
+    const v2Score = Math.max(0, Math.floor(Number(opt.getInteger("v2_score") ?? 0) || 0));
+    const v2Turns = Math.max(1, Math.floor(Number(opt.getInteger("v2_turns") ?? 1) || 1));
+    const v2SuccessBowlsOverride = Number(opt.getInteger("v2_success_bowls") ?? null);
+    const v2QualityBias = String(opt.getString("v2_quality_bias") ?? "").trim().toLowerCase();
 
     if (!recipeId) {
-      const payload = buildCookPickerPayload({
+      const payload = buildCookRecipePickerScenePayload({
         userId,
         p,
         s,
-        ownerUser: interaction.member ?? interaction.user,
-        page
+        quantity: 1,
+        page: Number.isFinite(Number(page)) ? Number(page) : 0
       });
 
       return payload;
@@ -9999,7 +12677,11 @@ ${lines.join("\n")}`;
     }
     if (r.is_event_recipe) {
       const activeEventId = s?.active_event_id ?? null;
-      if (!activeEventId || r.event_id !== activeEventId) {
+      const recipeSeason = normalizeSeasonTag(r?.season ?? null);
+      const activeSeason = normalizeSeasonTag(s?.season ?? null);
+      const eventMatches = Boolean(activeEventId && r.event_id === activeEventId);
+      const seasonMatches = Boolean(activeSeason && recipeSeason && recipeSeason === activeSeason);
+      if (!eventMatches && !seasonMatches) {
         return commitState({
           content: "That recipe is only available during the active event.",
           ephemeral: true
@@ -10007,10 +12689,11 @@ ${lines.join("\n")}`;
       }
     }
     if (r.tier === "seasonal") {
-      const activeSeason = s?.season ?? null;
-      if (!activeSeason || r.season !== activeSeason) {
+      const activeSeason = normalizeSeasonTag(s?.season ?? null);
+      const recipeSeason = normalizeSeasonTag(r.season ?? null);
+      if (!activeSeason || !recipeSeason || recipeSeason !== activeSeason) {
         return commitState({
-          content: `That recipe can only be cooked during **${r.season ?? "its season"}**. The current season is **${activeSeason ?? "unknown"}**.`,
+          content: `That recipe can only be cooked during **${recipeSeason ?? "its season"}**. The current season is **${activeSeason ?? "unknown"}**.`,
           ephemeral: true
         });
       }
@@ -10092,14 +12775,23 @@ ${lines.join("\n")}`;
     const tutorialStep = getCurrentTutorialStep(p);
     const counterCookFlow = Boolean(opt.getBoolean("counter_cook"));
     const disableFailures = counterCookFlow || tutorialStep?.id === "intro_cook";
-    const outcome = rollCookBatchOutcome({
-      quantity: batchOutput,
-      tier: r.tier,
-      player: p,
-      effects: combinedEffects,
-      rng: cookRng,
-      blessing,
-      disableFailures
+    const outcome = resolveCookOutcomeForFlow({
+      v2MinigameCook,
+      batchOutput,
+      minigameScore: v2Score,
+      minigameTurns: v2Turns,
+      successBowlsOverride: v2SuccessBowlsOverride,
+      qualityBias: v2QualityBias,
+      rollBatchOutcomeFn: rollCookBatchOutcome,
+      rollBatchOutcomeArgs: {
+        quantity: batchOutput,
+        tier: r.tier,
+        player: p,
+        effects: combinedEffects,
+        rng: cookRng,
+        blessing,
+        disableFailures
+      }
     });
 
     const doubleCrafted = combinedEffects.double_craft_chance > 0 && rollDoubleCraft(combinedEffects, cookRng);
@@ -10148,8 +12840,11 @@ ${lines.join("\n")}`;
       .filter(Boolean)
       .join(" · ");
     const salvageLine = outcome.salvage > 0 ? ` Salvaged **${outcome.salvage}** bowl(s).` : "";
+    const failCause = v2MinigameCook
+      ? "Kitchen Line performance"
+      : "recipe tier risk";
     const failInfo = outcome.failed > 0
-      ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: recipe tier risk.${salvageLine}`
+      ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: ${failCause}.${salvageLine}`
       : null;
 
     const cookEmbed = buildMenuEmbed({
@@ -10181,7 +12876,7 @@ ${lines.join("\n")}`;
       const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
       return commitState({
         content: " ",
-        embeds: [cookEmbed],
+        ...composeV2FromLegacyEmbeds([cookEmbed]),
         components: [
           noodleTakeoutActionRow(userId, {
             activeShift: true,
@@ -10195,7 +12890,7 @@ ${lines.join("\n")}`;
 
     return commitState({
       content: " ",
-      embeds: [cookEmbed],
+      ...composeV2FromLegacyEmbeds([cookEmbed]),
       components: showTutorialServeRowAfterCook
         ? [noodleTutorialServeRow(userId)]
         : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })]
@@ -10209,6 +12904,14 @@ ${lines.join("\n")}`;
     const takeoutShiftActive = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, now2) && isTakeoutShiftActive(p, now2);
 
     const acceptedEntries = Object.entries(p.orders?.accepted ?? {});
+    const prepChefOrdersResult = runPrepChefAutoBuy({
+      p,
+      s,
+      acceptedOrdersNow: acceptedEntries.map(([, a]) => a?.order).filter(Boolean),
+      acceptedNow: 0,
+      triggerOnOrdersBoard: true,
+      includeFailureMessages: false
+    });
 
     // Aggregate ingredients needed across all accepted orders, subtracting bowls already cooked
     const neededCountsByRecipe = {};
@@ -10261,6 +12964,9 @@ ${lines.join("\n")}`;
       .filter(Boolean);
 
     const statusParts = [];
+    if (prepChefOrdersResult.messages.length > 0) {
+      statusParts.push(prepChefOrdersResult.messages.join("\n"));
+    }
     if (readyBowls.length > 0) {
       statusParts.push(`${getIcon("cook")} **Bowls Ready**\n${readyBowls.join("\n")}`);
     }
@@ -10278,7 +12984,7 @@ ${lines.join("\n")}`;
 
     const statusMsg = statusParts.join("\n\n");
 
-    const acceptedLines = acceptedEntries.map(([fullId, a]) => {
+    const acceptedDisplayEntries = acceptedEntries.map(([fullId, a]) => {
       const snap = a?.order ?? null;
 
       let timeLeft = "";
@@ -10290,14 +12996,26 @@ ${lines.join("\n")}`;
 
       const order = snap;
 
-      if (!order) return `${getIcon("status_complete")} \`${shortOrderId(fullId)}\`${timeLeft}`;
+      if (!order) {
+        return {
+          shortId: shortOrderId(fullId),
+          serveReady: false,
+          line: `${getIcon("status_complete")} \`${shortOrderId(fullId)}\`${timeLeft}`
+        };
+      }
 
       const npcName = content.npcs[order.npc_archetype]?.name ?? "a customer";
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const lt = order.is_limited_time ? getIcon("hourglass") : "•";
+      const serveReady = getTotalBowlsForRecipe(p, order.recipe_id) > 0;
 
-      return `${getIcon("status_complete")} \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`;
+      return {
+        shortId: shortOrderId(fullId),
+        serveReady,
+        line: `${getIcon("status_complete")} \`${shortOrderId(fullId)}\` ${lt} **${rName}** — *${npcName}* (${order.tier})${timeLeft}`
+      };
     });
+    const acceptedLines = acceptedDisplayEntries.map((entry) => entry.line);
 
     const parts = [];
     if (sweep2.warning) parts.push(sweep2.warning, "");
@@ -10331,23 +13049,25 @@ ${lines.join("\n")}`;
       );
     } else {
       parts.push(
-        `${getIcon("confetti")} You’ve completed all of today’s orders! New orders arrive ${nextOrdersResetText}.`,
-        `${getIcon("vote")} Want unlimited orders before reset? Vote in **/noodle quests_vote** to activate **${getHouse247Label()}** for **12 hours per vote**.`
+        `${getIcon("confetti")} You’ve completed all of today’s orders! Come back tomorrow for more.`,
+        `${getIcon("vote")} Want more orders now? Vote in **/noodle quests_vote** to activate **${getHouse247Label()}** for **12 hours per vote**.`
       );
     }
 
 
-    if (acceptedLines.length) {
-      parts.push(
-        "",
-        "**Your Accepted Orders**",
-        acceptedLines.join("\n"),
-        "",
-        statusMsg,
-        ""
-      );
-    } else {
-      parts.push("", "**Your Accepted Orders**", "_None right now._", "");
+    if (!takeoutShiftActive) {
+      if (acceptedLines.length) {
+        parts.push(
+          "",
+          "**Your Accepted Orders**",
+          acceptedLines.join("\n"),
+          "",
+          statusMsg,
+          ""
+        );
+      } else {
+        parts.push("", "**Your Accepted Orders**", "_None right now._", "");
+      }
     }
 
     const tutSuffix = tutorialSuffix(p);
@@ -10359,6 +13079,101 @@ ${lines.join("\n")}`;
     const disableCook = takeoutShiftActive;
     const disableServe = takeoutShiftActive || acceptedEntries.length === 0;
     const showTakeout = hasActivePerk(p, SUBSCRIPTION_PERKS.TAKEOUT_COUNTER, nowTs());
+
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      const sceneState = putSceneState({
+        sceneKey: "orders.board",
+        ownerId: userId,
+        state: {
+          acceptedOrderIds: acceptedDisplayEntries.map((entry) => entry.shortId),
+          readyServeOrderIds: acceptedDisplayEntries.filter((entry) => entry.serveReady).map((entry) => entry.shortId)
+        }
+      });
+
+      const headerLines = [
+        takeoutShiftActive
+          ? `${getTakeoutCounterLabel()} Your shop is idle on the main **Order Board** while your Take Out Counter shift is active. Serve orders from **${getTakeoutCounterLabel()}** until the shift ends.`
+          : (hasHouse247Perk(p)
+            ? `**${getHouse247Label()} active: unlimited orders.**`
+            : remaining > 0
+            ? `Open orders: **${remaining}**`
+            : "You’ve completed all of today’s orders! Come back tomorrow for more.")
+      ];
+      if (!takeoutShiftActive && remaining <= 0 && acceptedDisplayEntries.length === 0) {
+        headerLines.push(
+          `Want more orders now? Vote in **/noodle quests_vote** to activate **${getHouse247Label()}** for **12 hours per vote**.`
+        );
+      }
+      if (!takeoutShiftActive) {
+        headerLines.push(
+          acceptedDisplayEntries.length > 0
+            ? `Accepted: **${acceptedDisplayEntries.length}**`
+            : "Accepted: **0**"
+        );
+      }
+
+      const tutorialActionKey = resolveTutorialOrdersActionKey(p);
+      const tutorialQuickActions = tutorialActionKey
+        ? [
+            {
+              label: tutorialActionKey === "acc"
+                ? "Accept"
+                : tutorialActionKey === "buy"
+                  ? "Buy"
+                  : tutorialActionKey === "fg"
+                    ? "Forage"
+                    : tutorialActionKey === "ck"
+                      ? "Cook"
+                      : "Serve",
+              actionKey: tutorialActionKey,
+              style: 3,
+              disabled: tutorialActionKey === "acc"
+                ? disableAccept
+                : tutorialActionKey === "ck"
+                  ? disableCook
+                  : tutorialActionKey === "sv"
+                    ? disableServe
+                    : false,
+              emoji: tutorialActionKey === "acc"
+                ? getButtonEmoji("orders")
+                : tutorialActionKey === "buy"
+                  ? getButtonEmoji("cart")
+                  : tutorialActionKey === "fg"
+                    ? getButtonEmoji("forage")
+                    : tutorialActionKey === "ck"
+                      ? getButtonEmoji("cook")
+                      : getButtonEmoji("serve")
+            }
+          ]
+        : null;
+
+      const quickActions = tutorialQuickActions ?? [
+        { label: "Accept", actionKey: "acc", style: highlightAccept ? 3 : 1, disabled: disableAccept, emoji: getButtonEmoji("orders") },
+        { label: "Cook", actionKey: "ck", style: 2, disabled: disableCook, emoji: getButtonEmoji("cook") },
+        { label: "Serve", actionKey: "sv", style: disableServe ? 2 : 1, disabled: disableServe, emoji: getButtonEmoji("serve") },
+        { label: "Cancel", actionKey: "cnl", style: 2, disabled: !showCancel, emoji: getButtonEmoji("cancel") },
+        { label: "Main Menu", actionKey: "nm", style: 2, disabled: false, emoji: getButtonEmoji("back") },
+        { label: "Buy", actionKey: "buy", style: 2, disabled: false, emoji: getButtonEmoji("cart") },
+        { label: "Pantry", actionKey: "pn", style: 2, disabled: false, emoji: getButtonEmoji("pantry") },
+        { label: "Quests", actionKey: "qs", style: 2, disabled: false, emoji: getButtonEmoji("quests") },
+        ...(showTakeout
+          ? [{ label: "Takeout", actionKey: "tk", style: takeoutShiftActive ? 1 : 3, disabled: false, emoji: getButtonEmoji("orders") }]
+          : [])
+      ];
+
+      const v2Payload = buildOrdersBoardV2Message({
+        userId,
+        token: sceneState.token,
+        headerLines,
+        acceptedEntries: acceptedDisplayEntries,
+        acceptedSummaryLines: !takeoutShiftActive && acceptedDisplayEntries.length > 0 ? statusParts : [],
+        showAcceptedSection: !takeoutShiftActive,
+        quickActions
+      });
+
+      return commitState(v2Payload);
+    }
+
     const menuEmbed = buildMenuEmbed({
       title: `${getIcon("orders")} Orders`,
       description: parts.join("\n"),
@@ -10372,7 +13187,7 @@ ${lines.join("\n")}`;
     const tutorialRows = getTutorialProgressRows(p, userId, { highlightAccept, disableAccept });
     return commitState({
       content: " ",
-      embeds: [menuEmbed],
+      ...composeV2FromLegacyEmbeds([menuEmbed]),
       components: tutorialRows
         ? tutorialRows
         : [
@@ -10400,6 +13215,7 @@ ${lines.join("\n")}`;
       });
     }
 
+    const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
     const rawInput = String(opt.getString("order_id") ?? "").trim();
     if (!rawInput) {
       const payload = buildAcceptPickerPayload({
@@ -10436,7 +13252,6 @@ ${lines.join("\n")}`;
     const results = [];
     const unlockedRecipeNames = [];
     const readyBowlsByRecipe = new Map();
-    const acceptedCommitted = [];
     const acceptedOrdersNow = [];
     let acceptedNow = 0;
 
@@ -10469,10 +13284,13 @@ ${lines.join("\n")}`;
 
       const acceptedAt = nowTs();
       const baseSpeedWindowSeconds = order.speed_window_seconds ?? 180;
-      const speedWindowSeconds = order.is_limited_time
+      const isLimitedTimeOrder = tutorialSingleAcceptMode && acceptedNow === 0
+        ? false
+        : Boolean(order.is_limited_time);
+      const speedWindowSeconds = isLimitedTimeOrder
         ? getLimitedTimeWindowSeconds(p, baseSpeedWindowSeconds)
         : baseSpeedWindowSeconds;
-      const expiresAt = order.is_limited_time
+      const expiresAt = isLimitedTimeOrder
         ? acceptedAt + (speedWindowSeconds * 1000)
         : null;
 
@@ -10485,22 +13303,18 @@ ${lines.join("\n")}`;
           recipe_id: order.recipe_id,
           tier: order.tier,
           npc_archetype: order.npc_archetype,
-          is_limited_time: order.is_limited_time,
+          is_limited_time: isLimitedTimeOrder,
           speed_window_seconds: speedWindowSeconds,
           base_speed_window_seconds: baseSpeedWindowSeconds
         }
       };
-      acceptedCommitted.push({
-        orderId: order.order_id,
-        orderIndex: Number.isFinite(Number(order.order_index)) ? Number(order.order_index) : null
-      });
 
       const rName = content.recipes[order.recipe_id]?.name ?? "a dish";
       const timeNote = expiresAt
         ? `${getIcon("hourglass")} expires <t:${Math.floor(expiresAt / 1000)}:R>.`
         : `${getIcon("forage")} No rush.`;
 
-      const extendedNote = order.is_limited_time && speedWindowSeconds !== baseSpeedWindowSeconds
+      const extendedNote = isLimitedTimeOrder && speedWindowSeconds !== baseSpeedWindowSeconds
         ? ` ${getIcon("sparkle")} Extended to ${Math.ceil(speedWindowSeconds / 60)} min.`
         : "";
 
@@ -10515,154 +13329,16 @@ ${lines.join("\n")}`;
       acceptedNow += 1;
     }
 
-    const prepChefLevel = Math.max(0, Number(p.staff_levels?.prep_chef || 0));
-    if (prepChefLevel > 0 && acceptedOrdersNow.length > 0) {
-      const autoOrderCap = Math.min(acceptedOrdersNow.length, prepChefLevel);
-
-      const inventoryAvailable = { ...(p.inv_ingredients ?? {}) };
-      const stockRemaining = { ...(p.market_stock ?? {}) };
-      const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
-      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-      const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
-      const countsByType = getIngredientCountsByType(p);
-      const remainingByType = {
-        broth: Math.max(0, (perTypeCap.broth ?? 0) - (countsByType.broth ?? 0)),
-        noodles: Math.max(0, (perTypeCap.noodles ?? 0) - (countsByType.noodles ?? 0)),
-        spice: Math.max(0, (perTypeCap.spice ?? 0) - (countsByType.spice ?? 0)),
-        topping: Math.max(0, (perTypeCap.topping ?? 0) - (countsByType.topping ?? 0)),
-        protein: Math.max(0, (perTypeCap.protein ?? 0) - (countsByType.protein ?? 0))
-      };
-      const bowlsRemaining = {};
-      const coinsStart = Number(p.coins || 0);
-      let coinsRemaining = coinsStart;
-
-      for (const order of acceptedOrdersNow) {
-        bowlsRemaining[order.recipe_id] = getTotalBowlsForRecipe(p, order.recipe_id);
-      }
-
-      const purchasedByItem = {};
-      let totalAutoCost = 0;
-      let ordersCovered = 0;
-      let needsForageOnlyItems = false;
-      let blockedByCapacity = false;
-      let blockedByStock = false;
-      let blockedByCoins = false;
-      let missingMarketItems = false;
-      let allOrdersAlreadyReady = true;
-
-      for (const order of acceptedOrdersNow.slice(0, autoOrderCap)) {
-        const recipe = content.recipes?.[order.recipe_id];
-        if (!recipe?.ingredients) continue;
-
-        if ((bowlsRemaining[order.recipe_id] ?? 0) > 0) {
-          bowlsRemaining[order.recipe_id] -= 1;
-          ordersCovered += 1;
-          continue;
-        }
-
-        allOrdersAlreadyReady = false;
-
-        const allItems = [];
-        const neededItems = [];
-        let orderCost = 0;
-        let orderOk = true;
-
-        for (const ing of getRelevantRecipeIngredients(p, recipe)) {
-          const itemId = ing.item_id;
-          const need = Math.max(0, Number(ing.qty) || 0);
-          const have = Math.max(0, Number(inventoryAvailable[itemId] || 0));
-          const missing = Math.max(0, need - have);
-
-          const item = content.items?.[itemId];
-          if (!item) {
-            orderOk = false;
-            break;
-          }
-
-          const acqRaw = item?.acquisition;
-          const acqType = typeof acqRaw === "string" ? acqRaw : acqRaw?.type;
-          const isMarketItem = MARKET_ITEM_IDS.includes(itemId) || acqType === "market";
-          const type = normalizeIngredientType(itemId);
-          allItems.push({ itemId, need, have, missing, type, name: item.name });
-
-          if (missing > 0) {
-            if (!isMarketItem) {
-              needsForageOnlyItems = true;
-              continue;
-            }
-
-            missingMarketItems = true;
-
-            const remaining = remainingByType[type] ?? 0;
-            if (remaining < missing) {
-              blockedByCapacity = true;
-              orderOk = false;
-              break;
-            }
-
-            const stock = stockRemaining[itemId] ?? 0;
-            if (!unlimitedMarketStock && stock < missing) {
-              blockedByStock = true;
-              orderOk = false;
-              break;
-            }
-
-            const basePrice = s.market_prices?.[itemId] ?? item.base_price ?? 0;
-            const price = applyMarketDiscount(basePrice, combinedEffects);
-            orderCost += price * missing;
-            neededItems.push({ itemId, qty: missing, name: item.name, price, type });
-          }
-        }
-
-        if (!orderOk || coinsRemaining < orderCost) {
-          if (coinsRemaining < orderCost) {
-            blockedByCoins = true;
-          }
-          continue;
-        }
-
-        // Reserve inventory and apply purchases for this order
-        for (const item of allItems) {
-          const usedFromInventory = Math.min(item.need, item.have);
-          inventoryAvailable[item.itemId] = Math.max(0, (inventoryAvailable[item.itemId] || 0) - usedFromInventory);
-          // Free capacity for this type when we consume from inventory so capacity checks stay accurate for later orders
-          if (usedFromInventory > 0) {
-            const t = item.type;
-            remainingByType[t] = (remainingByType[t] ?? 0) + usedFromInventory;
-          }
-        }
-
-        for (const needItem of neededItems) {
-          remainingByType[needItem.type] = Math.max(0, (remainingByType[needItem.type] ?? 0) - needItem.qty);
-          if (!unlimitedMarketStock) {
-            stockRemaining[needItem.itemId] = Math.max(0, (stockRemaining[needItem.itemId] ?? 0) - needItem.qty);
-          }
-          purchasedByItem[needItem.itemId] = (purchasedByItem[needItem.itemId] ?? 0) + needItem.qty;
-        }
-
-        coinsRemaining -= orderCost;
-        totalAutoCost += orderCost;
-        ordersCovered += 1;
-      }
-
-      const purchasedItems = Object.entries(purchasedByItem)
-        .map(([id, qty]) => `**${qty}× ${displayItemName(id)}**`)
-        .join(" · ");
-
-      if (totalAutoCost > 0) {
-        if (!p.inv_ingredients) p.inv_ingredients = {};
-        if (!p.market_stock) p.market_stock = {};
-        for (const [id, qty] of Object.entries(purchasedByItem)) {
-          p.inv_ingredients[id] = (p.inv_ingredients[id] ?? 0) + qty;
-          if (!unlimitedMarketStock) {
-            p.market_stock[id] = (p.market_stock[id] ?? 0) - qty;
-          }
-        }
-        p.coins = coinsRemaining;
-        results.push(`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`);
-      } else if (blockedByCoins) {
-        results.push(`${getIcon("chef")} Prep Chef could not auto-buy: not enough coins.`);
-      }
+    const prepChefAcceptResult = runPrepChefAutoBuy({
+      p,
+      s,
+      acceptedOrdersNow,
+      acceptedNow,
+      triggerOnOrdersBoard: false,
+      includeFailureMessages: true
+    });
+    if (prepChefAcceptResult.messages.length > 0) {
+      results.push(...prepChefAcceptResult.messages);
     }
 
     if (acceptedNow > 0) advanceTutorial(p, "accept");
@@ -10739,17 +13415,6 @@ ${lines.join("\n")}`;
       user: interaction.member ?? interaction.user
     });
     const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
-    emitTelemetry("order_accept_commit", {
-      requestId: interaction.id,
-      serverId,
-      userId,
-      ordersDay: p.orders_day ?? dayKeyUTC(),
-      house247Active: hasHouse247Perk(p),
-      orderAcceptCap: cap,
-      acceptedCountBefore: acceptedCount,
-      acceptedCountAfter: hasAcceptedOrders ? Object.keys(p.orders?.accepted ?? {}).length : 0,
-      accepted: acceptedCommitted
-    });
     const showTutorialBuyRowAfterAccept = resolveTutorialGateValue({
       player: p,
       gate: "showTutorialBuyRowAfterAccept",
@@ -10757,7 +13422,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      embeds: [acceptEmbed],
+      ...composeV2FromLegacyEmbeds([acceptEmbed]),
       components: showTutorialBuyRowAfterAccept
         ? [noodleTutorialBuyRow(userId)]
         : [
@@ -10769,13 +13434,28 @@ ${lines.join("\n")}`;
 
   /* ---------------- CANCEL ---------------- */
   if (sub === "cancel") {
-    const input = String(opt.getString("order_id") ?? "").trim().toUpperCase();
-    if (!input) {
+    const rawInput = String(opt.getString("order_id") ?? "").trim();
+    const tokens = rawInput
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (tokens.length) {
+      clearCancelOrderDraftSelection({ serverId, userId });
+    }
+
+    if (!tokens.length) {
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return buildCancelPickerScenePayload({ userId, p });
+      }
+
       const payload = buildCancelServePickerPayload({
         action: "cancel",
         userId,
+        serverId,
         p,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page: Number(opt.getInteger("page") ?? 0) || 0
       });
 
       return payload;
@@ -10788,31 +13468,42 @@ ${lines.join("\n")}`;
     if (!p.orders.accepted) p.orders.accepted = {};
     const accepted = p.orders.accepted;
 
-    const fullId = Object.keys(accepted).find((id) => {
-      const full = String(id).toUpperCase();
-      const short = shortOrderId(id);
-      return full === input || short === input;
-    });
+    const results = [];
+    let canceled = 0;
+    for (const token of tokens) {
+      const fullId = Object.keys(accepted).find((id) => {
+        const full = String(id).toUpperCase();
+        const short = shortOrderId(id);
+        return full === token || short === token;
+      });
 
-    if (!fullId) return commitState({ content: "You don’t have that order accepted.", ephemeral: true });
+      if (!fullId) {
+        results.push(`${getIcon("question")} You don’t have order \`${token}\` accepted.`);
+        continue;
+      }
 
-    const entry = accepted[fullId];
-    const orderSnap = entry?.order ?? null;
+      const entry = accepted[fullId];
+      const orderSnap = entry?.order ?? null;
+      const rName = orderSnap ? (content.recipes[orderSnap.recipe_id]?.name ?? "a dish") : null;
+      const npcName = orderSnap ? (content.npcs[orderSnap.npc_archetype]?.name ?? orderSnap.npc_archetype) : null;
+      delete accepted[fullId];
+      canceled += 1;
+      results.push(`${getIcon("cancel")} Canceled \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`);
+    }
 
-    const rName = orderSnap ? (content.recipes[orderSnap.recipe_id]?.name ?? "a dish") : null;
-    const npcName = orderSnap ? (content.npcs[orderSnap.npc_archetype]?.name ?? orderSnap.npc_archetype) : null;
+    if (canceled <= 0) {
+      return commitState({ content: results.join("\n") || "You don’t have those orders accepted.", ephemeral: true });
+    }
 
-    delete accepted[fullId];
-
-    const cancelMsg = `${getIcon("cancel")} Canceled order \`${shortOrderId(fullId)}\`${rName ? ` — **${rName}**` : ""}${npcName ? ` for *${npcName}*` : ""}.`;
+    const cancelMsg = results.join("\n");
     const cancelEmbed = buildMenuEmbed({
-      title: `${getIcon("cancel")} Order Canceled`,
+      title: canceled === 1 ? `${getIcon("cancel")} Order Canceled` : `${getIcon("cancel")} Orders Canceled`,
       description: cancelMsg,
       user: interaction.member ?? interaction.user
     });
     return commitState({
       content: " ",
-      embeds: [cancelEmbed]
+      ...composeV2FromLegacyEmbeds([cancelEmbed])
     });
   }
 
@@ -10838,61 +13529,16 @@ ${lines.join("\n")}`;
       const payload = buildCancelServePickerPayload({
         action: "serve",
         userId,
+        serverId,
         p,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        page: Number(opt.getInteger("page") ?? 0) || 0
       });
 
       return payload;
     }
 
     const acceptedMap = p.orders?.accepted ?? {};
-    const consumedBeforeServe = Array.isArray(p.orders_consumed_indices)
-      ? p.orders_consumed_indices.length
-      : 0;
-    const serveAttemptResolved = [];
-
-    for (const tok of tokens) {
-      const matchedEntry = Object.entries(acceptedMap).find(([fullId]) => {
-        const full = String(fullId).toUpperCase();
-        const short = shortOrderId(fullId);
-        return full === tok || short === tok;
-      });
-      if (!matchedEntry) continue;
-
-      const [fullOrderId, acceptedEntry] = matchedEntry;
-      const resolvedOrder = acceptedEntry?.order ?? findOrderByToken({
-        playerState: p,
-        settings: set,
-        content,
-        activeSeason: s.season,
-        serverId,
-        userId,
-        activeEventId,
-        token: fullOrderId
-      });
-      const acceptedSnapshotIndex = Number(acceptedEntry?.order?.order_index);
-      const resolvedOrderIndex = Number(resolvedOrder?.order_index);
-      serveAttemptResolved.push({
-        token: tok,
-        fullOrderId,
-        acceptedSnapshotHasIndex: Number.isFinite(acceptedSnapshotIndex) && acceptedSnapshotIndex >= 0,
-        acceptedSnapshotIndex: Number.isFinite(acceptedSnapshotIndex) && acceptedSnapshotIndex >= 0 ? acceptedSnapshotIndex : null,
-        resolvedOrderIndex: Number.isFinite(resolvedOrderIndex) && resolvedOrderIndex >= 0 ? resolvedOrderIndex : null,
-        fallbackIndexFromOrderId: extractOrderIndexFromId(fullOrderId)
-      });
-    }
-
-    emitTelemetry("order_serve_attempt", {
-      requestId: interaction.id,
-      serverId,
-      userId,
-      ordersDay: p.orders_day ?? dayKeyUTC(),
-      house247Active: hasHouse247Perk(p),
-      tokens,
-      resolved: serveAttemptResolved,
-      consumedCountBefore: consumedBeforeServe
-    });
-
     // Ensure core stats and lifetime tracking exist
     p.coins = Number.isFinite(p.coins) ? p.coins : 0;
     p.rep = Number.isFinite(p.rep) ? p.rep : 0;
@@ -10923,9 +13569,6 @@ ${lines.join("\n")}`;
     let leveledUp = false;
     let recipeUnlocked = false;
     const unlockedRecipeNames = [];
-    const bowlLedgerCompletedBefore = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
-    const completedCollectionsBefore = new Set(p?.collections?.completed ?? []);
-    const serveCommitResults = [];
 
     for (const tok of tokens) {
       const matchEntry = Object.entries(acceptedMap).find(([fullId]) => {
@@ -10959,6 +13602,24 @@ ${lines.join("\n")}`;
         activeEventId,
         token: fullOrderId
       });
+
+      // Backfill legacy accepted snapshots that predate order_index storage.
+      if (order && !Number.isFinite(order.order_index)) {
+        const canonical = findOrderByToken({
+          playerState: p,
+          settings: set,
+          content,
+          activeSeason: s.season,
+          serverId,
+          userId,
+          activeEventId,
+          token: fullOrderId
+        });
+        if (Number.isFinite(canonical?.order_index)) {
+          order.order_index = canonical.order_index;
+        }
+      }
+
       if (!order) {
         delete acceptedMap[fullOrderId];
         results.push(`${getIcon("warning")} Order \`${shortOrderId(fullOrderId)}\` can't be found anymore.`);
@@ -11015,29 +13676,8 @@ ${lines.join("\n")}`;
       bowl.qty -= 1;
       if (bowl.qty <= 0) delete p.inv_bowls[selectedEntry?.key ?? order.recipe_id];
 
-      const consumedOrderIndex = resolveConsumedOrderIndex(fullOrderId, accepted.order, order);
-      const consumedBeforeMark = Array.isArray(p.orders_consumed_indices)
-        ? p.orders_consumed_indices
-        : [];
-      const consumedAlreadyContainedBefore = Number.isFinite(consumedOrderIndex)
-        ? consumedBeforeMark.includes(consumedOrderIndex)
-        : false;
       delete acceptedMap[fullOrderId];
-      markOrderConsumed(p, consumedOrderIndex);
-      const consumedAfterMark = Array.isArray(p.orders_consumed_indices)
-        ? p.orders_consumed_indices
-        : [];
-      const consumedContainsAfter = Number.isFinite(consumedOrderIndex)
-        ? consumedAfterMark.includes(consumedOrderIndex)
-        : false;
-      serveCommitResults.push({
-        fullOrderId,
-        served: true,
-        consumedIndexUsed: Number.isFinite(consumedOrderIndex) ? consumedOrderIndex : null,
-        markOrderConsumedCalled: true,
-        consumedAlreadyContainedBefore,
-        consumedContainsAfter
-      });
+      markOrderConsumed(p, order.order_index);
 
       p.coins += rewards.coins;
       p.rep += rewards.rep;
@@ -11238,7 +13878,11 @@ ${lines.join("\n")}`;
         description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
-      return commitState({ content: " ", embeds: [failEmbed] });
+      const failPayload = { content: " ", ...composeV2FromLegacyEmbeds([failEmbed]) };
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return commitState(convertLegacyEmbedPayloadToComponentsV2(failPayload));
+      }
+      return commitState(failPayload);
     }
 
     if (servedCount > 0) {
@@ -11263,66 +13907,23 @@ ${lines.join("\n")}`;
           now
         );
       }
-
-      const newlyUnlockedBadgeIds = unlockBadges(p, badgesContent);
-      for (const badgeId of newlyUnlockedBadgeIds) {
-        const badge = getBadgeById(badgesContent, badgeId);
-        const icon = resolveIcon(badge?.icon, getIcon("badges"));
-        const badgeName = badge?.name ?? badgeId;
-        results.push(`${icon} **Badge unlocked:** ${badgeName}`);
-      }
-
-      const bowlLedgerCompletedAfter = new Set(p?.collections?.progress?.bowl_ledger?.completed_entries ?? []);
-      const newlyCompletedBowls = [...bowlLedgerCompletedAfter]
-        .filter((entry) => !bowlLedgerCompletedBefore.has(entry))
-        .map((entry) => Number(entry))
-        .filter((value) => Number.isFinite(value))
-        .sort((a, b) => a - b);
-      for (const threshold of newlyCompletedBowls) {
-        results.push(`${getIcon("serve")} **Bowl milestone reached:** ${threshold.toLocaleString()} bowls served.`);
-      }
-
-      const collectionNameById = new Map((collectionsContent?.collections ?? [])
-        .filter((entry) => entry?.collection_id)
-        .map((entry) => [entry.collection_id, entry.name ?? entry.collection_id]));
-      const newlyCompletedCollectionIds = (p?.collections?.completed ?? [])
-        .filter((collectionId) => !completedCollectionsBefore.has(collectionId));
-      for (const collectionId of newlyCompletedCollectionIds) {
-        const collectionName = collectionNameById.get(collectionId) ?? collectionId;
-        results.push(`${getIcon("collections")} **Collection completed:** ${collectionName}`);
-      }
+      unlockBadges(p, badgesContent);
     }
-
-    emitTelemetry("order_serve_commit", {
-      requestId: interaction.id,
-      serverId,
-      userId,
-      ordersDay: p.orders_day ?? dayKeyUTC(),
-      house247Active: hasHouse247Perk(p),
-      results: serveCommitResults,
-      consumedCountBefore: consumedBeforeServe,
-      consumedCountAfter: Array.isArray(p.orders_consumed_indices)
-        ? p.orders_consumed_indices.length
-        : 0
-    });
 
     const state = ensureSpecializationState(p);
     const bowlsServedAfter = p.lifetime.bowls_served_total;
     const newlyUnlockedSpecs = (specializationsContent?.specializations ?? []).filter((spec) => {
-      if (!spec?.spec_id) return false;
+      if (!spec?.hidden_until_unlocked) return false;
       const req = spec?.requirements?.bowls_served_total;
       if (!req || bowlsServedAfter < req) return false;
       return !state.unlocked_spec_ids.includes(spec.spec_id);
     });
+    const hiddenSpecUnlockNotices = [];
     if (newlyUnlockedSpecs.length) {
       for (const spec of newlyUnlockedSpecs) {
         state.unlocked_spec_ids.push(spec.spec_id);
+        hiddenSpecUnlockNotices.push(buildSpecializationUnlockNoticeCard(spec, { hidden: true }));
       }
-      const unlockLines = newlyUnlockedSpecs.map((spec) => {
-        const icon = resolveIcon(spec.icon, getIcon("sparkle"));
-        return `${icon} **Specialization unlocked:** ${spec.name}`;
-      });
-      results.push(...unlockLines);
     }
     
     // If a recipe was unlocked, refresh order pool and let regulars know they can order it now
@@ -11366,11 +13967,16 @@ ${lines.join("\n")}`;
       user: interaction.member ?? interaction.user
     });
 
-    return commitState({
+    const servePayload = {
       content: " ",
       components,
-      embeds: [serveEmbed, ...embeds]
-    });
+      ...composeV2FromLegacyEmbeds([serveEmbed, ...embeds]),
+      notices: hiddenSpecUnlockNotices
+    };
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return commitState(convertLegacyEmbedPayloadToComponentsV2(servePayload));
+    }
+    return commitState(servePayload);
   }
 
   return commitState({ content: "That subcommand exists but isn’t implemented yet.", ephemeral: true });
@@ -11395,12 +14001,1344 @@ function getCustomIdPrefix(customId, maxSegments = 3) {
   return parts.slice(0, maxSegments).join(":");
 }
 
+function getV2SceneModule(sceneKey = "") {
+  const key = String(sceneKey || "").trim();
+  if (!key) return "unknown";
+  const [moduleKey] = key.split(".");
+  return moduleKey || "unknown";
+}
+
+function getV2LoopTrackerKey({ serverId, userId, loop = "" } = {}) {
+  return `${String(serverId || "")}:${String(userId || "")}:${String(loop || "")}`;
+}
+
+function startV2LoopTracker({ serverId, userId, loop } = {}) {
+  const key = getV2LoopTrackerKey({ serverId, userId, loop });
+  const now = nowTs();
+  v2LoopTracker.set(key, {
+    startedAt: now,
+    clicks: 0,
+    lastAt: now
+  });
+}
+
+function touchV2LoopTracker({ serverId, userId, loop } = {}) {
+  const key = getV2LoopTrackerKey({ serverId, userId, loop });
+  const now = nowTs();
+  const current = v2LoopTracker.get(key) ?? {
+    startedAt: now,
+    clicks: 0,
+    lastAt: now
+  };
+  current.clicks = Number(current.clicks || 0) + 1;
+  current.lastAt = now;
+  if (!Number.isFinite(Number(current.startedAt)) || Number(current.startedAt) <= 0) {
+    current.startedAt = now;
+  }
+  v2LoopTracker.set(key, current);
+  return {
+    clicks: current.clicks,
+    elapsedMs: Math.max(0, now - Number(current.startedAt || now))
+  };
+}
+
+function completeV2LoopTracker({ serverId, userId, loop } = {}) {
+  const key = getV2LoopTrackerKey({ serverId, userId, loop });
+  const now = nowTs();
+  const current = v2LoopTracker.get(key);
+  v2LoopTracker.delete(key);
+  if (!current) return { clicks: 0, elapsedMs: 0 };
+  return {
+    clicks: Number(current.clicks || 0),
+    elapsedMs: Math.max(0, now - Number(current.startedAt || now))
+  };
+}
+
+function collectStringLeaves(value, out = []) {
+  if (typeof value === "string") {
+    out.push(value);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringLeaves(item, out);
+    return out;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectStringLeaves(item, out);
+    return out;
+  }
+  return out;
+}
+
+function extractPrepChefMessagesFromPayload(payload) {
+  const allStrings = collectStringLeaves(payload, []);
+  const seen = new Set();
+  const messages = [];
+  for (const raw of allStrings) {
+    const text = String(raw || "");
+    if (!text || !text.includes("Prep Chef")) continue;
+    for (const line of text.split(/\r?\n/)) {
+      const idx = line.indexOf("Prep Chef");
+      if (idx < 0) continue;
+      const prepLine = line.slice(idx).trim();
+      if (!prepLine) continue;
+      if (seen.has(prepLine)) continue;
+      seen.add(prepLine);
+      messages.push(prepLine);
+    }
+  }
+  return messages;
+}
+
+function summarizePrepChefMessages(messages, { includeFailureMessages = true } = {}) {
+  const lines = Array.isArray(messages)
+    ? messages.map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+
+  const purchasedByItem = new Map();
+  let totalAutoCost = 0;
+  let fallbackFailure = "";
+
+  for (const line of lines) {
+    const normalized = line.replace(/\*\*/g, "").trim();
+    if (!normalized) continue;
+
+    const lower = normalized.toLowerCase();
+    if (lower.includes("prep chef auto-bought:")) {
+      const match = normalized.match(/prep chef auto-bought:\s*(.+?)(?:\s*\(total\s*\d+c\)\.?|$)/i);
+      const purchasedItems = String(match?.[1] || "").trim();
+      if (purchasedItems) {
+        for (const token of purchasedItems.split(/\s*·\s*/)) {
+          const entry = String(token || "").trim();
+          if (!entry) continue;
+          const normalizedEntry = entry.replace(/\*\*/g, "").trim();
+          const leadingQtyMatch = normalizedEntry.match(/^(\d+)\s*[x×]\s+(.+)$/i);
+          const trailingQtyMatch = normalizedEntry.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+          const qty = Math.max(
+            0,
+            Number(leadingQtyMatch?.[1] || trailingQtyMatch?.[2] || 1)
+          );
+          const itemName = String(leadingQtyMatch?.[2] || trailingQtyMatch?.[1] || normalizedEntry).trim();
+          if (!itemName) continue;
+          purchasedByItem.set(itemName, (purchasedByItem.get(itemName) ?? 0) + Math.max(0, qty));
+        }
+      }
+
+      const costMatch = normalized.match(/total\s*(\d+)c/i);
+      if (costMatch) {
+        totalAutoCost += Math.max(0, Math.floor(Number(costMatch[1]) || 0));
+      }
+      continue;
+    }
+
+    if (!includeFailureMessages || fallbackFailure) continue;
+    if (lower.includes("prep chef found only forage/fishing ingredients missing")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef found only forage/fishing ingredients missing (no market ingredients to auto-buy).`;
+      continue;
+    }
+    if (lower.includes("prep chef could not auto-buy: not enough coins")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef could not auto-buy: not enough coins.`;
+      continue;
+    }
+    if (lower.includes("prep chef could not auto-buy: market stock is sold out")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef could not auto-buy: market stock is sold out for one or more needed items.`;
+      continue;
+    }
+    if (lower.includes("prep chef could not auto-buy: pantry storage is full")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef could not auto-buy: pantry storage is full for one or more ingredient types.`;
+      continue;
+    }
+    if (lower.includes("prep chef skipped auto-buy")) {
+      fallbackFailure = `${getIcon("chef")} Prep Chef skipped auto-buy: accepted orders already have ready bowls.`;
+    }
+  }
+
+  if (purchasedByItem.size > 0) {
+    const purchasedItems = formatPrepChefPurchasedItems(
+      new Map([...purchasedByItem.entries()].sort((a, b) => a[0].localeCompare(b[0])))
+    ).replace(/\*\*/g, "");
+    return [`${getIcon("chef")} Prep Chef auto-bought: ${purchasedItems} (Total **${totalAutoCost}c**).`];
+  }
+
+  if (fallbackFailure) return [fallbackFailure];
+  return [];
+}
+
 async function handleComponent(interaction) {
 const customId = String(interaction.customId || "");
+const idParts = customId.split(":"); // noodle:<kind>:<action>:<ownerId>:...
+const idKind = idParts[1] ?? "";
+const idAction = idParts[2] ?? "";
 
 // Note: deferUpdate is already called in index.js for most components
 // We don't need to defer again here, just route to the appropriate handler
 const userId = interaction.user.id;
+const serverId = interaction.guildId;
+const isDmReminderToggle = idKind === "dm" && idAction === "reminders_toggle";
+if (!serverId && !isDmReminderToggle) {
+  return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
+}
+const v2Parsed = parseV2CustomId(customId);
+if (v2Parsed.isV2) {
+  const rolloutPlayer = ensurePlayer(serverId, userId);
+  if (!isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer })) {
+    emitTelemetry("v2_scene_error", {
+      module: "gate",
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: "v2_disabled"
+    });
+    return componentCommit(interaction, {
+      content: "This V2 menu is currently disabled. Use `/noodle` to reopen the V1 menu.",
+      ephemeral: true
+    });
+  }
+  if (!v2Parsed.valid) {
+    emitTelemetry("v2_scene_error", {
+      module: getV2SceneModule(v2Parsed.sceneKey),
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: String(v2Parsed.error || "invalid_route")
+    });
+    return componentCommit(interaction, {
+      content: "This menu expired or is invalid. Please reopen from /noodle.",
+      ephemeral: true
+    });
+  }
+  if (isV2OwnerMismatch(v2Parsed, userId)) {
+    emitTelemetry("v2_scene_error", {
+      module: getV2SceneModule(v2Parsed.sceneKey),
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: "owner_mismatch"
+    });
+    return componentCommit(interaction, {
+      content: "That menu isn’t for you.",
+      ephemeral: true
+    });
+  }
+
+  const sceneState = getSceneState({
+    sceneKey: v2Parsed.sceneKey,
+    token: v2Parsed.token,
+    ownerId: userId
+  });
+  if (!sceneState.ok && sceneState.stale) {
+    emitTelemetry("v2_scene_error", {
+      module: getV2SceneModule(v2Parsed.sceneKey),
+      sceneKey: String(v2Parsed.sceneKey || ""),
+      actionKey: String(v2Parsed.actionKey || ""),
+      reason: String(sceneState.reason || "stale")
+    });
+
+    if (v2Parsed.sceneKey === "orders.board" && (sceneState.reason === "missing_state" || sceneState.reason === "expired")) {
+      const action = String(v2Parsed.actionKey || "").trim();
+      const serveArg = String(v2Parsed.args?.[0] ?? "").trim();
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+
+      if (action === "acc") {
+        startV2LoopTracker({ serverId, userId, loop: "orders" });
+        const payload = buildAcceptPickerScenePayload({ serverId, userId, p, s });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "cnl") {
+        startV2LoopTracker({ serverId, userId, loop: "orders" });
+        const payload = buildCancelPickerScenePayload({ userId, p });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "sv") {
+        startV2LoopTracker({ serverId, userId, loop: "serve" });
+        const payload = serveArg
+          ? buildServePickerScenePayload({ userId, p, selectedShortIds: [serveArg], readyOnly: true })
+          : buildServePickerScenePayload({ userId, p });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "ck") {
+        startV2LoopTracker({ serverId, userId, loop: "cook" });
+        const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
+        return componentCommit(interaction, payload);
+      }
+      if (action === "fg") {
+        const forageSub = resolveForageNavSub(p);
+        if (forageSub === "forage") {
+          return runNoodle(interaction, { sub: "forage", navSource: "forage_random" });
+        }
+        return runNoodle(interaction, { sub: forageSub });
+      }
+      if (action === "buy") return runNoodle(interaction, { sub: "buy" });
+      if (action === "pn") return runNoodle(interaction, { sub: "pantry" });
+      if (action === "qs") return runNoodle(interaction, { sub: "quests" });
+      if (action === "tk") return runNoodle(interaction, { sub: "takeout" });
+      if (action === "rf") return runNoodle(interaction, { sub: "orders" });
+      if (action === "nm") return runNoodle(interaction, { sub: "profile" });
+    }
+
+    if (rolloutPlayer?.tutorial?.active === true) {
+      const recoverySub = resolveTutorialRecoverySub({ player: rolloutPlayer, fallbackSub: "orders" });
+      return runNoodle(interaction, { sub: recoverySub });
+    }
+    const acceptedCount = Object.keys(ensurePlayer(serverId, userId).orders?.accepted ?? {}).length;
+    if (v2Parsed.sceneKey === "serve.order_picker" || v2Parsed.sceneKey === "serve.result") {
+      return componentCommit(interaction, {
+        content: acceptedCount > 0
+          ? "This serve view expired. Reopen `/noodle orders`, then tap **Serve** again."
+          : "You need to accept an order before serving. Open `/noodle orders` and tap **Accept**.",
+        ephemeral: true
+      });
+    }
+    return componentCommit(interaction, {
+      content: "That view is stale. Run `/noodle orders` to reopen the orders board.",
+      ephemeral: true
+    });
+  }
+
+  const transition = touchV2LoopTracker({
+    serverId,
+    userId,
+    loop: getV2SceneModule(v2Parsed.sceneKey)
+  });
+  emitTelemetry("v2_scene_transition", {
+    module: getV2SceneModule(v2Parsed.sceneKey),
+    sceneKey: String(v2Parsed.sceneKey || ""),
+    actionKey: String(v2Parsed.actionKey || ""),
+    clickCount: transition.clicks,
+    loopElapsedMs: transition.elapsedMs,
+    argsCount: Array.isArray(v2Parsed.args) ? v2Parsed.args.length : 0
+  });
+
+  if (v2Parsed.sceneKey === "orders.board") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const serveArg = String(v2Parsed.args?.[0] ?? "").trim();
+
+    if (action === "acc") {
+      startV2LoopTracker({ serverId, userId, loop: "orders" });
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildAcceptPickerScenePayload({ serverId, userId, p, s });
+      return componentCommit(interaction, payload);
+    }
+    if (action === "ck") {
+      startV2LoopTracker({ serverId, userId, loop: "cook" });
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      if (isTutorialStepFromRouting(p, "intro_cook")) {
+        const tutorialRecipeId = resolveTutorialCookRecipeId(p);
+        if (tutorialRecipeId) {
+          const tutorialPayload = buildCookMinigameScenePayload({
+            userId,
+            recipeId: tutorialRecipeId,
+            quantity: 1,
+            totalTurns: 6,
+            turnIndex: 0,
+            score: 0,
+            misses: 0,
+            turnMs: 18000,
+            graceMs: 3000,
+            tutorialMode: true,
+            coachingLine: "Tutorial mode: generous timing is enabled for this step. Future kitchen turns use a **10s** order window."
+          });
+          return componentCommit(interaction, tutorialPayload);
+        }
+      }
+      const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
+      return componentCommit(interaction, payload);
+    }
+    if (action === "fg") {
+      const p = ensurePlayer(serverId, userId);
+      const forageSub = resolveForageNavSub(p);
+      if (forageSub === "forage") {
+        return runNoodle(interaction, { sub: "forage", navSource: "forage_random" });
+      }
+      return runNoodle(interaction, { sub: forageSub });
+    }
+    if (action === "buy") return runNoodle(interaction, { sub: "buy" });
+    if (action === "pn") return runNoodle(interaction, { sub: "pantry" });
+    if (action === "qs") return runNoodle(interaction, { sub: "quests" });
+    if (action === "tk") return runNoodle(interaction, { sub: "takeout" });
+    if (action === "rf") return runNoodle(interaction, { sub: "orders" });
+    if (action === "nm") return runNoodle(interaction, { sub: "profile" });
+    if (action === "cnl") {
+      startV2LoopTracker({ serverId, userId, loop: "orders" });
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCancelPickerScenePayload({ userId, p });
+      return componentCommit(interaction, payload);
+    }
+    if (action === "sv") {
+      startV2LoopTracker({ serverId, userId, loop: "serve" });
+      const p = ensurePlayer(serverId, userId);
+      if (!serveArg) {
+        const payload = buildServePickerScenePayload({ userId, p });
+        return componentCommit(interaction, payload);
+      }
+      const readyServeOrderIds = new Set((state.readyServeOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+      if (!readyServeOrderIds.has(serveArg)) {
+        return componentCommit(interaction, {
+          content: "That order is no longer ready. Reopen `/noodle orders` and try again.",
+          ephemeral: true
+        });
+      }
+      const payload = buildServePickerScenePayload({ userId, p, selectedShortIds: [serveArg], readyOnly: true });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  if (v2Parsed.sceneKey === "orders.accept_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const selectedShortId = String(v2Parsed.args?.[0] ?? "").trim();
+
+    if (action === "bk" || action === "cnl") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const selected = entries.find((entry) => String(entry?.shortId ?? "") === selectedShortId);
+      if (!selected) {
+        return componentCommit(interaction, {
+          content: "That order is no longer selectable. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const currentSelected = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      const selectedSet = new Set(currentSelected);
+      if (selectedSet.has(selectedShortId)) {
+        selectedSet.delete(selectedShortId);
+      } else {
+        const p = ensurePlayer(serverId, userId);
+        const cap = getOrderAcceptCap(p, nowTs());
+        const acceptedCount = Object.keys(p.orders?.accepted ?? {}).length;
+        const remainingSlots = Math.max(0, cap - acceptedCount);
+        if (selectedSet.size >= remainingSlots) {
+          const s = ensureServer(serverId);
+          const payload = buildAcceptPickerScenePayload({
+            serverId,
+            userId,
+            p,
+            s,
+            selectedShortIds: [...selectedSet],
+            statusLine: `${getIcon("warning")} You can accept up to **${cap}** order(s). Deselect one first.`
+          });
+          return componentCommit(interaction, payload);
+        }
+        selectedSet.add(selectedShortId);
+      }
+
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+      const payload = buildAcceptPickerScenePayload({
+        serverId,
+        userId,
+        p,
+        s,
+        selectedShortIds: [...selectedSet],
+        page: Number(state.page) || 0
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "pg") {
+      const arg = String(v2Parsed.args?.[0] ?? "").trim().toLowerCase();
+      const totalPages = Math.max(1, Math.floor(Number(state.totalPages) || 1));
+      const currentPage = Math.max(0, Math.min(Math.floor(Number(state.page) || 0), totalPages - 1));
+      const nextPage = arg === "prev"
+        ? (currentPage <= 0 ? totalPages - 1 : currentPage - 1)
+        : (currentPage >= totalPages - 1 ? 0 : currentPage + 1);
+      const currentSelected = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+      const payload = buildAcceptPickerScenePayload({
+        serverId,
+        userId,
+        p,
+        s,
+        selectedShortIds: currentSelected,
+        page: nextPage
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const requestedShortId = String(v2Parsed.args?.[0] ?? "").trim();
+      const selectedShortIds = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      const effectiveSelectedShortIds = requestedShortId ? [requestedShortId] : selectedShortIds;
+      if (effectiveSelectedShortIds.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Select one or more orders first.",
+          ephemeral: true
+        });
+      }
+
+      const orderTokenByShortId = state.orderTokenByShortId ?? {};
+      const selectableOrderTokenByShortId = state.selectableOrderTokenByShortId ?? orderTokenByShortId;
+      const validShortIds = new Set(Object.keys(selectableOrderTokenByShortId).map((id) => String(id || "").trim()).filter(Boolean));
+      const targets = effectiveSelectedShortIds.filter((shortId) => validShortIds.has(shortId));
+      if (targets.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Those selections are no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      let acceptedCount = 0;
+      let duplicateCount = 0;
+      let invalidCount = 0;
+      let capCount = 0;
+      const prepChefMessages = [];
+
+      for (const shortId of targets) {
+        const fullOrderId = String(selectableOrderTokenByShortId?.[shortId] ?? "").trim();
+        if (!fullOrderId) {
+          invalidCount += 1;
+          continue;
+        }
+
+        const beforePlayer = ensurePlayer(serverId, userId);
+        const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
+        const cap = getOrderAcceptCap(beforePlayer, nowTs());
+
+        if (beforeAcceptedOrderIds.length >= cap) {
+          capCount += 1;
+          continue;
+        }
+
+        const silentResult = await runNoodle(interaction, {
+          sub: "accept",
+          overrides: {
+            silentResponse: true,
+            strings: { order_id: fullOrderId }
+          }
+        });
+
+        const extracted = extractPrepChefMessagesFromPayload(silentResult);
+        for (const msg of extracted) {
+          if (!prepChefMessages.includes(msg)) prepChefMessages.push(msg);
+        }
+
+        const afterPlayer = ensurePlayer(serverId, userId);
+        const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+        const outcome = deriveAcceptOutcome({
+          targetOrderId: fullOrderId,
+          cap,
+          beforeAcceptedOrderIds,
+          afterAcceptedOrderIds
+        });
+
+        if (outcome.code === "accepted") acceptedCount += 1;
+        else if (outcome.code === "duplicate") duplicateCount += 1;
+        else if (outcome.code === "cap") capCount += 1;
+        else invalidCount += 1;
+      }
+
+      let statusLine = `${getIcon("warning")} No orders were accepted.`;
+      if (acceptedCount > 0 && duplicateCount === 0 && capCount === 0 && invalidCount === 0) {
+        statusLine = `${getIcon("status_complete")} Accepted ${acceptedCount} ${acceptedCount === 1 ? "order" : "orders"}.`;
+      } else {
+        const summaryParts = [];
+        if (acceptedCount > 0) summaryParts.push(`${getIcon("status_complete")} Accepted: **${acceptedCount}**`);
+        if (duplicateCount > 0) summaryParts.push(`${getIcon("warning")} Already Accepted: **${duplicateCount}**`);
+        if (capCount > 0) summaryParts.push(`${getIcon("warning")} Blocked By Cap: **${capCount}**`);
+        if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} Unavailable: **${invalidCount}**`);
+        if (summaryParts.length > 0) {
+          statusLine = summaryParts.join(" • ");
+        }
+      }
+      const prepChefSummaryLines = summarizePrepChefMessages(prepChefMessages, { includeFailureMessages: true });
+      if (prepChefSummaryLines.length > 0) {
+        statusLine = `${statusLine}\n${prepChefSummaryLines.join("\n")}`;
+      }
+
+      const p = ensurePlayer(serverId, userId);
+      const tutorialStepAfterAccept = resolveTutorialProgressRowKey(p);
+      if (acceptedCount > 0 && tutorialStepAfterAccept && tutorialStepAfterAccept !== "accept_only") {
+        return runNoodle(interaction, { sub: "orders" });
+      }
+
+      const s = ensureServer(serverId);
+      const payload = buildAcceptPickerScenePayload({
+        serverId,
+        userId,
+        p,
+        s,
+        selectedShortIds: [],
+        statusLine,
+        page: Number(state.page) || 0
+      });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  if (v2Parsed.sceneKey === "orders.accept_result") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const argShortId = String(v2Parsed.args?.[0] ?? "").trim();
+    const selectedShortId = argShortId || String(state.selectedShortId ?? "").trim();
+    const orderTokenByShortId = state.orderTokenByShortId ?? {};
+    const fullOrderId = String(orderTokenByShortId?.[selectedShortId] ?? "").trim();
+
+    if (action === "ord") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "bk") {
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildAcceptPickerScenePayload({ serverId, userId, p, s });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cnl") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "ck") {
+      const s = ensureServer(serverId);
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCookRecipePickerScenePayload({ userId, p, s, quantity: 1 });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      if (!fullOrderId) {
+        return componentCommit(interaction, {
+          content: "That order is no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const p = ensurePlayer(serverId, userId);
+      const beforeAcceptedOrderIds = Object.keys(p.orders?.accepted ?? {});
+      const cap = getOrderAcceptCap(p, nowTs());
+
+      const silentResult = await runNoodle(interaction, {
+        sub: "accept",
+        overrides: {
+          silentResponse: true,
+          strings: { order_id: fullOrderId }
+        }
+      });
+      const prepChefMessages = extractPrepChefMessagesFromPayload(silentResult);
+      const prepChefSummaryLines = summarizePrepChefMessages(prepChefMessages, { includeFailureMessages: true });
+
+      const afterPlayer = ensurePlayer(serverId, userId);
+      const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+      const outcome = deriveAcceptOutcome({
+        targetOrderId: fullOrderId,
+        cap,
+        beforeAcceptedOrderIds,
+        afterAcceptedOrderIds
+      });
+
+      const resultState = putSceneState({
+        sceneKey: "orders.accept_result",
+        ownerId: userId,
+        state: {
+          entries: state.entries ?? [],
+          orderTokenByShortId,
+          selectedShortId
+        }
+      });
+
+      const detailLine = outcome.code === "accepted"
+        ? `${getIcon("status_complete")} Accepted \`${shortOrderId(fullOrderId)}\`.`
+        : `${getIcon("warning")} ${outcome.message}`;
+      const detailLineWithPrepChef = prepChefSummaryLines.length > 0
+        ? `${detailLine}\n${prepChefSummaryLines.join("\n")}`
+        : detailLine;
+
+      const acceptLoop = completeV2LoopTracker({ serverId, userId, loop: "orders" });
+      emitTelemetry("v2_loop_summary", {
+        module: "orders",
+        loop: "accept",
+        outcomeCode: outcome.code,
+        clickCount: acceptLoop.clicks,
+        completionMs: acceptLoop.elapsedMs
+      });
+
+      return componentCommit(interaction, buildAcceptResultV2Message({
+        userId,
+        token: resultState.token,
+        outcomeCode: outcome.code,
+        detailLine: detailLineWithPrepChef
+      }));
+    }
+  }
+
+  if (v2Parsed.sceneKey === "orders.cancel_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const selectedShortId = String(v2Parsed.args?.[0] ?? "").trim();
+
+    if (action === "bk" || action === "cnl") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const selected = entries.find((entry) => String(entry?.shortId ?? "") === selectedShortId);
+      if (!selected) {
+        return componentCommit(interaction, {
+          content: "That order is no longer selectable. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const currentSelected = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      const selectedSet = new Set(currentSelected);
+      if (selectedSet.has(selectedShortId)) selectedSet.delete(selectedShortId);
+      else selectedSet.add(selectedShortId);
+
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCancelPickerScenePayload({
+        userId,
+        p,
+        selectedShortIds: [...selectedSet]
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const selectedShortIds = Array.isArray(state.selectedShortIds)
+        ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      if (selectedShortIds.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Select one or more orders first.",
+          ephemeral: true
+        });
+      }
+
+      const validShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+      const orderTokenByShortId = state.orderTokenByShortId ?? {};
+      const targets = selectedShortIds.filter((shortId) => validShortIds.has(shortId));
+      if (targets.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Those selections are no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      let canceledCount = 0;
+      let missingCount = 0;
+      let invalidCount = 0;
+
+      for (const shortId of targets) {
+        const fullOrderId = String(orderTokenByShortId?.[shortId] ?? "").trim();
+        if (!fullOrderId) {
+          invalidCount += 1;
+          continue;
+        }
+
+        const beforePlayer = ensurePlayer(serverId, userId);
+        const beforeAcceptedOrderIds = Object.keys(beforePlayer.orders?.accepted ?? {});
+
+        await runNoodle(interaction, {
+          sub: "cancel",
+          overrides: {
+            silentResponse: true,
+            strings: { order_id: fullOrderId }
+          }
+        });
+
+        const afterPlayer = ensurePlayer(serverId, userId);
+        const afterAcceptedOrderIds = Object.keys(afterPlayer.orders?.accepted ?? {});
+        const outcome = deriveCancelOutcome({
+          targetOrderId: fullOrderId,
+          beforeAcceptedOrderIds,
+          afterAcceptedOrderIds
+        });
+
+        if (outcome.code === "canceled") canceledCount += 1;
+        else if (outcome.code === "missing") missingCount += 1;
+        else invalidCount += 1;
+      }
+
+      const summaryParts = [];
+      if (canceledCount > 0) summaryParts.push(`${getIcon("status_complete")} Canceled: **${canceledCount}**`);
+      if (missingCount > 0) summaryParts.push(`${getIcon("warning")} Unavailable: **${missingCount}**`);
+      if (invalidCount > 0) summaryParts.push(`${getIcon("warning")} Failed: **${invalidCount}**`);
+      const statusLine = summaryParts.length > 0
+        ? summaryParts.join(" • ")
+        : `${getIcon("warning")} No orders were canceled.`;
+
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildCancelPickerScenePayload({
+        userId,
+        p,
+        selectedShortIds: [],
+        statusLine
+      });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  if (v2Parsed.sceneKey === "cook.recipe_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = v2Parsed.actionKey;
+    const entries = Array.isArray(state.entries) ? state.entries : [];
+    const selectedRecipeId = String(state.selectedRecipeId || "").trim() || String(entries?.[0]?.recipeId || "").trim();
+    const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+    const page = Math.max(0, Math.floor(Number(state.page) || 0));
+    const totalPages = Math.max(1, Math.floor(Number(state.totalPages) || 1));
+
+    if (action === "bk") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const nextRecipeId = String(interaction.values?.[0] ?? v2Parsed.args?.[0] ?? "").trim();
+      if (!entries.some((entry) => String(entry?.recipeId || "") === nextRecipeId)) {
+        return componentCommit(interaction, {
+          content: "That recipe is no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId: nextRecipeId,
+        quantity,
+        page
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "pg") {
+      const arg = String(v2Parsed.args?.[0] ?? "").trim().toLowerCase();
+      const nextPage = arg === "prev"
+        ? (page <= 0 ? totalPages - 1 : page - 1)
+        : (page >= totalPages - 1 ? 0 : page + 1);
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId,
+        quantity,
+        page: nextPage
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "qty") {
+      const arg = String(v2Parsed.args?.[0] ?? "").trim();
+      const deltas = { m5: -5, m1: -1, p1: 1, p5: 5 };
+      const delta = deltas[arg] ?? 0;
+      const nextQuantity = Math.max(1, Math.min(99, quantity + delta));
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId,
+        quantity: nextQuantity,
+        page
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfa") {
+      const p = ensurePlayer(serverId, userId);
+      const cookAllState = buildCookAllPlanForAcceptedOrders(p);
+      if (!cookAllState.canCookAll) {
+          const message = cookAllState.totalQuantity <= 0
+          ? `${getIcon("warning")} Cook All is unavailable: all accepted orders already have ready bowls.`
+          : (cookAllState.shortages.length > 0
+            ? `${getIcon("warning")} Cook All needs more ingredients first.`
+            : `${getIcon("warning")} Cook All needs **${cookAllState.totalQuantity}** bowl slots but only **${cookAllState.remainingBowls}** are available.`);
+          return componentCommit(interaction, {
+            content: message,
+            ephemeral: true
+          });
+      }
+
+      const totalQuantity = Math.max(1, Math.min(99, cookAllState.totalQuantity));
+      const totalTurns = deriveCookMinigameTotalTurns(totalQuantity);
+      const payload = buildCookMinigameScenePayload({
+        userId,
+        recipeId: String(cookAllState.plan?.[0]?.recipeId || selectedRecipeId || "").trim(),
+        recipeNameOverride: "All Accepted Orders",
+        quantity: totalQuantity,
+        totalTurns,
+        turnIndex: 0,
+        score: 0,
+        misses: 0,
+        cookAllPlan: cookAllState.plan
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "go") {
+      if (!selectedRecipeId) {
+        return componentCommit(interaction, {
+          content: "Select a recipe first.",
+          ephemeral: true
+        });
+      }
+
+      const selectedEntry = entries.find((entry) => String(entry?.recipeId || "") === selectedRecipeId);
+      const selectedCookable = Math.max(0, Math.floor(Number(selectedEntry?.cookable) || 0));
+      const p = ensurePlayer(serverId, userId);
+      const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
+      const bowlCap = getBowlCapacity(p, combinedEffects);
+      const bowlCount = getBowlCount(p);
+      const remainingBowls = Math.max(0, bowlCap - bowlCount);
+      if (remainingBowls <= 0) {
+        return componentCommit(interaction, {
+          content: `${getIcon("basket")} Your cooked bowls storage is full. Serve bowls or upgrade storage to make room.`,
+          ephemeral: true
+        });
+      }
+      if (selectedCookable <= 0) {
+        return componentCommit(interaction, {
+          content: `${getIcon("warning")} You don't have enough ingredients to cook this recipe yet.`,
+          ephemeral: true
+        });
+      }
+
+      const effectiveQuantity = Math.max(1, Math.min(quantity, selectedCookable, remainingBowls));
+      const payload = buildCookMinigameScenePayload({
+        userId,
+        recipeId: selectedRecipeId,
+        quantity: effectiveQuantity,
+        totalTurns: deriveCookMinigameTotalTurns(effectiveQuantity),
+        turnIndex: 0,
+        score: 0,
+        misses: 0
+      });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  if (v2Parsed.sceneKey === "cook.minigame") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const recipeId = String(state.recipeId || "").trim();
+    const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+    const totalTurns = Math.max(1, Math.min(20, Math.floor(Number(state.totalTurns) || 8)));
+    const turnIndex = Math.max(0, Math.min(totalTurns - 1, Math.floor(Number(state.turnIndex) || 0)));
+    const score = Math.max(0, Math.min(totalTurns, Math.floor(Number(state.score) || 0)));
+    const misses = Math.max(0, Math.floor(Number(state.misses) || 0));
+    const runToken = String(state.runToken || "").trim();
+    const turnMs = Math.max(250, Math.floor(Number(state.turnMs) || 10000));
+    const graceMs = Math.max(0, Math.floor(Number(state.graceMs) || 0));
+    const turnStartedAt = Math.max(0, Math.floor(Number(state.turnStartedAt) || Date.now()));
+    const counterCookFlow = Boolean(state.counterCook === true);
+    const returnSub = String(state.returnSub || "orders").trim() || "orders";
+    const tutorialMode = Boolean(state.tutorialMode === true);
+    const coachingLine = String(state.coachingLine || "").trim();
+      const recipeNameOverride = String(state.recipeNameOverride || "").trim();
+      const cookAllPlan = Array.isArray(state.cookAllPlan)
+        ? state.cookAllPlan
+          .map((row) => ({
+            recipeId: String(row?.recipeId || "").trim(),
+            quantity: Math.max(0, Math.floor(Number(row?.quantity) || 0))
+          }))
+          .filter((row) => row.recipeId && row.quantity > 0)
+        : [];
+      const cookAllMode = cookAllPlan.length > 0;
+    const targetActions = Array.isArray(state.targetActions)
+      ? state.targetActions.map((entry) => String(entry || "").trim().toLowerCase()).filter(Boolean)
+      : [];
+
+    if (!recipeId) {
+      return componentCommit(interaction, {
+        content: "This cook run is missing recipe context. Reopen `/noodle orders`.",
+        ephemeral: true
+      });
+    }
+
+    if (action === "bk") {
+      if (counterCookFlow) {
+        return runNoodle(interaction, { sub: "takeout_cook" });
+      }
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId: recipeId,
+        quantity
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "prep" || action === "heat" || action === "plate" || action === "serve") {
+      const target = String(targetActions[turnIndex] || "prep").trim().toLowerCase();
+      const turnResult = evaluateCookMinigameTurn({
+        action,
+        targetAction: target,
+        turnStartedAt,
+        turnMs,
+        graceMs,
+        nowMs: Date.now()
+      });
+      const nextTurnIndex = turnIndex + 1;
+      const nextScore = score + turnResult.scoreDelta;
+      const nextMisses = misses + turnResult.missDelta;
+
+      if (nextTurnIndex < totalTurns) {
+        const payload = buildCookMinigameScenePayload({
+          userId,
+          recipeId,
+          quantity,
+          totalTurns,
+          turnIndex: nextTurnIndex,
+          score: nextScore,
+          misses: nextMisses,
+          targetActions,
+          runToken,
+          turnMs,
+          graceMs,
+          turnStartedAt: Date.now(),
+          lastTurnStatus: turnResult.status,
+          counterCook: counterCookFlow,
+          returnSub,
+          tutorialMode,
+            coachingLine,
+            recipeNameOverride,
+            cookAllPlan
+        });
+        return componentCommit(interaction, payload);
+      }
+
+      const performance = deriveCookMinigamePerformance({
+        score: nextScore,
+        totalTurns,
+        quantity
+      });
+
+        const beforePlayer = ensurePlayer(serverId, userId);
+        const beforeTotalBowlCount = getBowlCount(beforePlayer);
+
+        if (cookAllMode) {
+          const successByRecipe = allocateSuccessBowlsAcrossPlan(cookAllPlan, performance.successBowls);
+          for (const row of cookAllPlan) {
+            const rowQty = Math.max(1, Math.floor(Number(row.quantity) || 1));
+            const rowSuccess = Math.max(0, Math.min(rowQty, Math.floor(Number(successByRecipe[row.recipeId]) || 0)));
+            await runNoodle(interaction, {
+              sub: "cook",
+              overrides: {
+                silentResponse: true,
+                strings: {
+                  recipe: row.recipeId,
+                  v2_quality_bias: performance.qualityBias
+                },
+                integers: {
+                  quantity: rowQty,
+                  v2_score: performance.score,
+                  v2_turns: performance.totalTurns,
+                  v2_success_bowls: rowSuccess
+                },
+                booleans: {
+                  v2_minigame: true,
+                  counter_cook: counterCookFlow
+                },
+                messageId: interaction.message?.id ?? null
+              }
+            });
+          }
+        } else {
+          await runNoodle(interaction, {
+            sub: "cook",
+            overrides: {
+              silentResponse: true,
+              strings: {
+                recipe: recipeId,
+                v2_quality_bias: performance.qualityBias
+              },
+              integers: {
+                quantity,
+                v2_score: performance.score,
+                v2_turns: performance.totalTurns,
+                v2_success_bowls: performance.successBowls
+              },
+              booleans: {
+                v2_minigame: true,
+                counter_cook: counterCookFlow
+              },
+              messageId: interaction.message?.id ?? null
+            }
+          });
+        }
+
+        const afterPlayer = ensurePlayer(serverId, userId);
+        const produced = Math.max(0, getBowlCount(afterPlayer) - beforeTotalBowlCount);
+
+      const resultState = putSceneState({
+        sceneKey: "cook.result",
+        ownerId: userId,
+        state: {
+          recipeId,
+          quantity,
+          score: performance.score,
+          totalTurns: performance.totalTurns,
+          successBowls: performance.successBowls,
+          failBowls: performance.failBowls,
+          qualityBias: performance.qualityBias,
+          runToken,
+          turnMs,
+          graceMs,
+          counterCook: counterCookFlow,
+          returnSub,
+          tutorialMode,
+          coachingLine
+        }
+      });
+
+      const summaryLines = [
+          cookAllMode
+            ? `${getIcon("cook")} Your accepted orders have been cooked!`
+            : `${getIcon("cook")} "${displayRecipeName(recipeId)}" has been cooked.`,
+        `Kitchen Line score: **${performance.score}/${performance.totalTurns}** (${performance.accuracyLabel}).`,
+        produced > 0
+          ? `${getIcon("status_complete")} Cooked **${produced}** bowl(s).`
+          : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`
+      ];
+      const tutorialStepAfterCook = tutorialMode ? getCurrentTutorialStep(afterPlayer) : null;
+      if (tutorialMode && tutorialStepAfterCook) {
+        summaryLines.push(`**Tutorial — ${tutorialStepAfterCook.title}**`);
+        summaryLines.push(String(tutorialStepAfterCook.text || "").trim() || "Continue to the next tutorial step.");
+      }
+
+      const cookLoop = completeV2LoopTracker({ serverId, userId, loop: "cook" });
+      emitTelemetry("v2_minigame_outcome", {
+        module: "cook",
+        outcome: performance.accuracyLabel,
+        score: performance.score,
+        totalTurns: performance.totalTurns,
+        qualityBias: performance.qualityBias,
+        successBowls: performance.successBowls,
+        failBowls: performance.failBowls
+      });
+      emitTelemetry("v2_loop_summary", {
+        module: "cook",
+        loop: "cook_minigame",
+        outcomeCode: performance.accuracyLabel,
+        clickCount: cookLoop.clicks,
+        completionMs: cookLoop.elapsedMs
+      });
+
+      return componentCommit(interaction, buildCookResultV2Message({
+        userId,
+        token: resultState.token,
+          title: "## Cook Result",
+        summaryLines,
+        tutorialNextOnly: tutorialMode,
+          tutorialNextLabel: "Serve",
+          preferServe: canServeAllOrders(afterPlayer)
+      }));
+    }
+  }
+
+  if (v2Parsed.sceneKey === "cook.result") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const recipeId = String(state.recipeId || "").trim();
+    const quantity = Math.max(1, Math.min(99, Math.floor(Number(state.quantity) || 1)));
+    const counterCookFlow = Boolean(state.counterCook === true);
+    const returnSub = String(state.returnSub || "orders").trim() || "orders";
+    const tutorialMode = Boolean(state.tutorialMode === true);
+
+    if (action === "nxt") {
+      if (counterCookFlow || !tutorialMode) {
+        return runNoodle(interaction, { sub: "orders" });
+      }
+      const p = ensurePlayer(serverId, userId);
+      const nextSub = resolveTutorialRecoverySub({ player: p, fallbackSub: "orders" });
+      return runNoodle(interaction, { sub: nextSub });
+    }
+
+    if (action === "ord") {
+      if (counterCookFlow) {
+        return runNoodle(interaction, { sub: returnSub === "orders" ? "orders" : "takeout" });
+      }
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "cook") {
+      if (counterCookFlow) {
+        return runNoodle(interaction, { sub: "takeout_cook" });
+      }
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p: ensurePlayer(serverId, userId),
+        s: ensureServer(serverId),
+        selectedRecipeId: recipeId,
+        quantity
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "serve") {
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildServePickerScenePayload({ userId, p });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  if (v2Parsed.sceneKey === "serve.order_picker") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const entries = Array.isArray(state.entries) ? state.entries : [];
+    const selectedShortIds = Array.isArray(state.selectedShortIds)
+      ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+    const stateReadyOnly = Boolean(state.readyOnly);
+
+    if (action === "bk") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "sel") {
+      const nextShortId = String(v2Parsed.args?.[0] ?? "").trim();
+      if (!entries.some((entry) => String(entry?.shortId || "") === nextShortId)) {
+        return componentCommit(interaction, {
+          content: "That order is no longer selectable. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+      const selectedSet = new Set(selectedShortIds);
+      if (selectedSet.has(nextShortId)) selectedSet.delete(nextShortId);
+      else selectedSet.add(nextShortId);
+
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildServePickerScenePayload({
+        userId,
+        p,
+        selectedShortIds: [...selectedSet],
+        readyOnly: stateReadyOnly
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cfm") {
+      if (selectedShortIds.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Select one or more orders first.",
+          ephemeral: true
+        });
+      }
+
+      const validShortIds = new Set(entries.map((entry) => String(entry?.shortId || "").trim()).filter(Boolean));
+      const targets = selectedShortIds.filter((shortId) => validShortIds.has(shortId));
+      if (targets.length <= 0) {
+        return componentCommit(interaction, {
+          content: "Those selections are no longer available. Reopen `/noodle orders`.",
+          ephemeral: true
+        });
+      }
+
+      // Use the same serve execution path as Serve All so results stay identical.
+      const orderTokens = targets.join(",");
+      return runNoodle(interaction, {
+        sub: "serve",
+        overrides: {
+          strings: { order_id: orderTokens },
+          messageId: interaction.message?.id ?? null
+        }
+      });
+    }
+
+    if (action === "sfa") {
+      const p = ensurePlayer(serverId, userId);
+      if (!canServeAllOrders(p)) {
+        const neededByRecipe = {};
+        Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
+          const recipeId = String(entry?.order?.recipe_id || "").trim();
+          if (!recipeId) return;
+          neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
+        });
+        const missingLines = Object.entries(neededByRecipe)
+          .map(([recipeId, need]) => {
+            const ready = getTotalBowlsForRecipe(p, recipeId);
+            if (ready >= need) return null;
+            const recipeName = displayRecipeName(recipeId);
+            const short = Math.max(0, need - ready);
+            return `${recipeName}: need **${need}**, ready **${ready}** (cook **${short}** more)`;
+          })
+          .filter(Boolean);
+
+        const statusLine = missingLines.length > 0
+          ? `${getIcon("warning")} Serve All unavailable. ${missingLines.join(" • ")}`
+          : `${getIcon("warning")} Serve All unavailable until all accepted orders are ready.`;
+        const payload = buildServePickerScenePayload({
+          userId,
+          p,
+          selectedShortIds,
+          readyOnly: stateReadyOnly,
+          statusLine
+        });
+        return componentCommit(interaction, payload);
+      }
+
+      const orderTokens = Object.keys(p.orders?.accepted ?? {})
+        .map((orderId) => shortOrderId(orderId))
+        .filter(Boolean)
+        .join(",");
+
+        return runNoodle(interaction, {
+        sub: "serve",
+        overrides: {
+          strings: { order_id: orderTokens },
+          messageId: interaction.message?.id ?? null
+        }
+      });
+    }
+
+  }
+
+  if (v2Parsed.sceneKey === "serve.result") {
+    const state = sceneState?.value?.state ?? {};
+    const action = String(v2Parsed.actionKey || "").trim();
+    const recipeId = String(state.recipeId || "").trim();
+
+    if (action === "ord") {
+      return runNoodle(interaction, { sub: "orders" });
+    }
+
+    if (action === "again") {
+      const p = ensurePlayer(serverId, userId);
+      const payload = buildServePickerScenePayload({
+        userId,
+        p,
+        readyOnly: Boolean(state.readyOnly)
+      });
+      return componentCommit(interaction, payload);
+    }
+
+    if (action === "cook") {
+      const p = ensurePlayer(serverId, userId);
+      const s = ensureServer(serverId);
+      const payload = buildCookRecipePickerScenePayload({
+        userId,
+        p,
+        s,
+        selectedRecipeId: recipeId || null,
+        quantity: 1
+      });
+      return componentCommit(interaction, payload);
+    }
+  }
+
+  return componentCommit(interaction, {
+    content: "This V2 scene is recognized but not wired yet.",
+    ephemeral: true
+  });
+}
 const id = String(interaction.customId || "");
 const parts = id.split(":"); // noodle:<kind>:<action>:<ownerId>:...
 
@@ -11424,7 +15362,7 @@ if (kind === "help" && action === "page") {
   });
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -11475,16 +15413,18 @@ if (kind === "dm" && action === "reminders_toggle") {
     optOut: nextOptOut
   });
 
-  return componentCommit(interaction, {
+  const legacyPayload = {
     content: " ",
-    embeds: [reminderEmbed],
-    components
-  });
-}
+    ...composeV2FromLegacyEmbeds([reminderEmbed]),
+    components,
+    targetMessageId: interaction.message?.id
+  };
 
-const serverId = interaction.guildId;
-if (!serverId) {
-  return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
+  if (isComponentsV2Enabled({ guildId: targetServerId, userId, player: p })) {
+    return componentCommit(interaction, convertLegacyEmbedPayloadToComponentsV2(legacyPayload));
+  }
+
+  return componentCommit(interaction, legacyPayload);
 }
 
 const componentPlayer = ensurePlayer(serverId, userId);
@@ -11593,6 +15533,19 @@ if (kind === "profile" && action === "specialize_select") {
     value: spec.spec_id
   }));
 
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    return componentCommit(interaction, {
+      ...buildSpecializationPickerV2Message({
+        userId,
+        options,
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }),
+      targetMessageId: interaction.message?.id
+    });
+  }
+
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`noodle:profile:specialize_pick:${userId}`)
     .setPlaceholder("Select a specialization")
@@ -11608,7 +15561,7 @@ if (kind === "profile" && action === "specialize_select") {
 
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [
       new ActionRowBuilder().addComponents(menu),
       noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -11624,6 +15577,21 @@ if (kind === "profile" && action === "specialize_cancel") {
   const p = ensurePlayer(serverId, userId);
   markSpecializationShopLevelSeen(p, specializationsContent);
   const specializationsAvailable = getSpecializationAlert(p);
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    const { entries, page, totalPages } = buildSpecializationListData(p, nowTs(), 0, 5);
+    return componentCommit(interaction, {
+      ...buildSpecializationListV2Message({
+        userId,
+        entries,
+        page,
+        totalPages,
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }),
+      targetMessageId: interaction.message?.id
+    });
+  }
   const { embed, page, totalPages } = buildSpecializationListEmbed(p, interaction.member ?? interaction.user, nowTs(), 0, 5);
   const components = [];
   if (totalPages > 1) {
@@ -11650,7 +15618,7 @@ if (kind === "profile" && action === "specialize_cancel") {
   );
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -11683,6 +15651,20 @@ if (kind === "profile" && action === "specialize_confirm") {
     upsertPlayer(db, serverId, userId, p, null, p.schema_version);
   }
 
+  if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+    return componentCommit(interaction, {
+      ...buildSpecializationUpdatedV2Message({
+        userId,
+        specName: result.specialization?.name ?? specId,
+        specThumbnailUrl: getSpecializationThumbnailUrl(result.specialization ?? spec),
+        specializationsAvailable,
+        ownerId: userId,
+        buttonEmoji: getProfileV2ButtonEmoji()
+      }),
+      targetMessageId: interaction.message?.id
+    });
+  }
+
   const embed = buildMenuEmbed({
     title: `${getIcon("sparkle")} Specialization Updated`,
     description: `Active specialization: **${result.specialization?.name ?? specId}**.`,
@@ -11691,7 +15673,7 @@ if (kind === "profile" && action === "specialize_confirm") {
 
   return componentCommit(interaction, {
     content: " ",
-    embeds: [embed],
+    ...composeV2FromLegacyEmbeds([embed]),
     components: [
       noodleSpecializeSelectRow(userId),
       noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -11830,7 +15812,7 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
   const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    embeds: [compostEmbed],
+    ...composeV2FromLegacyEmbeds([compostEmbed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -11956,7 +15938,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    embeds: [compostEmbed],
+    ...composeV2FromLegacyEmbeds([compostEmbed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -12135,7 +16117,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   return componentCommit(interaction, {
     content: " ",
-    embeds: [compostEmbed],
+    ...composeV2FromLegacyEmbeds([compostEmbed]),
     components,
     targetMessageId: interaction.message?.id
   });
@@ -12158,7 +16140,24 @@ try {
 
   const sourceMessageId = interaction.message?.id;
   const page = parts[4] ? Number(parts[4]) : null;
+  const sourceMessageFlags = Number(interaction.message?.flags?.bitfield ?? interaction.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
   const runStartMs = performance.now();
+
+  if (resolvedSub === "accept" && sourceMessageIsV2) {
+    const s = ensureServer(serverId);
+    const payload = buildAcceptPickerScenePayload({
+      serverId,
+      userId,
+      p,
+      s,
+      page: page !== null && Number.isFinite(page) ? Math.max(0, page) : 0
+    });
+    const result = await componentCommit(interaction, payload);
+    runMs = performance.now() - runStartMs;
+    return result;
+  }
+
   const result = await runNoodle(interaction, {
     sub: resolvedSub,
     group: null,
@@ -12203,7 +16202,11 @@ if (action === "forage_random") {
   const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   return runNoodle(interaction, {
     sub: "forage",
-    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      navSource: "forage_random",
+      integers: { page }
+    }
   });
 }
 
@@ -12221,7 +16224,11 @@ if (action === "fishing_random") {
   const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
   return runNoodle(interaction, {
     sub: "fishing",
-    overrides: { messageId: interaction.message?.id ?? null, integers: { page } }
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      navSource: "fishing_random",
+      integers: { page }
+    }
   });
 }
 
@@ -12234,10 +16241,65 @@ if (action === "fishing_page") {
   });
 }
 
+if (action === "forage_qty") {
+  const itemId = String(parts[4] ?? "").trim();
+  const rawQty = Number(parts[5] ?? 1);
+  const qty = Number.isFinite(rawQty) ? Math.max(1, Math.min(5, Math.floor(rawQty))) : 1;
+  const rawPage = Number(parts[6] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  if (!itemId || !getAllowedForageIdsForPlayer(ensurePlayer(serverId, userId)).includes(itemId)) {
+    return componentCommit(interaction, { content: "Pick a valid ingredient first.", ephemeral: true });
+  }
+  return runNoodle(interaction, {
+    sub: "forage",
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      strings: { item: itemId },
+      integers: { quantity: qty, page }
+    }
+  });
+}
+
+if (action === "fishing_qty") {
+  const itemId = String(parts[4] ?? "").trim();
+  const rawQty = Number(parts[5] ?? 1);
+  const qty = Number.isFinite(rawQty) ? Math.max(1, Math.min(5, Math.floor(rawQty))) : 1;
+  const rawPage = Number(parts[6] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  if (!itemId || !getAllowedFishingIdsForPlayer(ensurePlayer(serverId, userId)).includes(itemId)) {
+    return componentCommit(interaction, { content: "Pick a valid fishing target first.", ephemeral: true });
+  }
+  return runNoodle(interaction, {
+    sub: "fishing",
+    overrides: {
+      messageId: interaction.message?.id ?? null,
+      strings: { item: itemId },
+      integers: { quantity: qty, page }
+    }
+  });
+}
+
 if (action === "accept") {
   const s = ensureServer(serverId);
   const p = ensurePlayer(serverId, userId);
   const rawPage = Number(parts[4] ?? 0);
+  const sourceMessageFlags = Number(interaction.message?.flags?.bitfield ?? interaction.message?.flags ?? 0);
+  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+
+  if (sourceMessageIsV2) {
+    const payload = buildAcceptPickerScenePayload({
+      serverId,
+      userId,
+      p,
+      s,
+      page: Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0
+    });
+    return componentCommit(interaction, payload);
+  }
+
+  if (!parts[4]) {
+    clearAcceptOrderDraftSelection({ serverId, userId });
+  }
   const payload = buildAcceptPickerPayload({
     userId,
     serverId,
@@ -12247,6 +16309,69 @@ if (action === "accept") {
     page: rawPage
   });
 
+  return componentCommit(interaction, payload);
+}
+
+if (action === "accept_commit") {
+  const selectedOrderIds = readAcceptOrderDraftSelection({ serverId, userId });
+  if (!selectedOrderIds.length) {
+    return componentCommit(interaction, { content: "Select at least one order first.", ephemeral: true });
+  }
+
+  clearAcceptOrderDraftSelection({ serverId, userId });
+  return runNoodle(interaction, {
+    sub: "accept",
+    overrides: {
+      strings: { order_id: selectedOrderIds.join(",") },
+      messageId: interaction.message?.id ?? null
+    }
+  });
+}
+
+if (action === "accept_clear") {
+  clearAcceptOrderDraftSelection({ serverId, userId });
+  const s = ensureServer(serverId);
+  const p = ensurePlayer(serverId, userId);
+  const rawPage = Number(parts[4] ?? 0);
+  const payload = buildAcceptPickerPayload({
+    userId,
+    serverId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user,
+    page: Number.isFinite(rawPage) ? rawPage : 0
+  });
+  return componentCommit(interaction, payload);
+}
+
+if (action === "cancel_commit") {
+  const selectedOrderIds = readCancelOrderDraftSelection({ serverId, userId });
+  if (!selectedOrderIds.length) {
+    return componentCommit(interaction, { content: "Select at least one order first.", ephemeral: true });
+  }
+
+  clearCancelOrderDraftSelection({ serverId, userId });
+  return runNoodle(interaction, {
+    sub: "cancel",
+    overrides: {
+      strings: { order_id: selectedOrderIds.join(",") },
+      messageId: interaction.message?.id ?? null
+    }
+  });
+}
+
+if (action === "cancel_clear") {
+  clearCancelOrderDraftSelection({ serverId, userId });
+  const p = ensurePlayer(serverId, userId);
+  const rawPage = Number(parts[4] ?? 0);
+  const payload = buildCancelServePickerPayload({
+    action: "cancel",
+    userId,
+    serverId,
+    p,
+    ownerUser: interaction.member ?? interaction.user,
+    page: Number.isFinite(rawPage) ? rawPage : 0
+  });
   return componentCommit(interaction, payload);
 }
 
@@ -12277,6 +16402,7 @@ if (action === "serveall") {
     const payload = buildCancelServePickerPayload({
       action: "serve",
       userId,
+      serverId,
       p,
       ownerUser: interaction.member ?? interaction.user
     });
@@ -12303,19 +16429,45 @@ if (action === "serveall") {
 
 if (action === "cancel" || action === "serve") {
   const p = ensurePlayer(serverId, userId);
+  const rawPage = Number(parts[4] ?? 0);
+  if (action === "cancel" && !parts[4]) {
+    clearCancelOrderDraftSelection({ serverId, userId });
+  }
   const payload = buildCancelServePickerPayload({
     action,
     userId,
+    serverId,
     p,
-    ownerUser: interaction.member ?? interaction.user
+    ownerUser: interaction.member ?? interaction.user,
+    page: Number.isFinite(rawPage) ? rawPage : 0
   });
 
   return componentCommit(interaction, payload);
 }
 
 if (action === "cook") {
-  // select a recipe from known_recipes, then modal for qty
   const p = ensurePlayer(serverId, userId);
+  if (isTutorialStepFromRouting(p, "intro_cook")) {
+    const tutorialRecipeId = resolveTutorialCookRecipeId(p);
+    if (tutorialRecipeId) {
+      const tutorialPayload = buildCookMinigameScenePayload({
+        userId,
+        recipeId: tutorialRecipeId,
+        quantity: 1,
+        totalTurns: 6,
+        turnIndex: 0,
+        score: 0,
+        misses: 0,
+        turnMs: 18000,
+        graceMs: 3000,
+        tutorialMode: true,
+        coachingLine: "Tutorial mode: generous timing is enabled for this step. Future kitchen turns use a **10s** order window."
+      });
+      return componentCommit(interaction, tutorialPayload);
+    }
+  }
+
+  // select a recipe from known_recipes, then modal for qty
   const s = ensureServer(serverId);
   const rawPage = Number(parts[4] ?? 0);
   const payload = buildCookPickerPayload({
@@ -12371,7 +16523,7 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
   const p = ensurePlayer(serverId, interaction.user.id);
   const s = ensureServer(serverId);
   const settings = buildSettingsMap(settingsCatalog, s.settings);
-  s.season = computeActiveSeason(settings);
+  syncServerSeasonFromSettings(s, settings);
   const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
   const menuLimits = getTakeoutMenuLimits(availableRecipeIds.length);
   const currentDraftSelection = readTakeoutMenuDraftSelection({
@@ -12401,20 +16553,105 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
 
 // accept picker
 if (cid.startsWith("noodle:pick:accept_select:")) {
-  const orderIds = interaction.values ?? [];
-  return await runNoodle(interaction, {
-    sub: "accept",
-    overrides: { strings: { order_id: orderIds.join(",") } }
+  const parts2 = cid.split(":");
+  const rawPage = Number(parts2[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+
+  const s = ensureServer(serverId);
+  const p = ensurePlayer(serverId, userId);
+  const set = buildSettingsMap(settingsCatalog, s.settings);
+  syncServerSeasonFromSettings(s, set);
+  const activeEventEffects = getActiveEventEffects(eventsContent, s);
+  const activeEventId = s.active_event_id ?? null;
+  rollMarket({ serverId, content, serverState: s, eventEffects: activeEventEffects });
+  ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
+  applyHouse247OrderBoardOverride(p);
+
+  const pageSize = 25;
+  const { totalCount, consumedSet } = getOrdersMeta(p);
+  const availablePages = [];
+  for (let idx = 0; idx < totalCount; idx++) {
+    if (consumedSet.has(idx)) continue;
+    const pageIdx = Math.floor(idx / pageSize);
+    if (!availablePages.includes(pageIdx)) availablePages.push(pageIdx);
+  }
+
+  const loadPage = (pageNumber) => generateOrderPageForPlayer({
+    playerState: p,
+    settings: set,
+    content,
+    activeSeason: s.season,
+    serverId,
+    userId,
+    activeEventId,
+    page: pageNumber,
+    pageSize
   });
+
+  const availableOrderIds = [];
+  const pageData = loadPage(page);
+  const pageOrderIds = (pageData?.orders ?? []).map((o) => String(o.order_id));
+  for (const pg of availablePages.length ? availablePages : [page]) {
+    const data = Number(pg) === page ? pageData : loadPage(pg);
+    availableOrderIds.push(...((data?.orders ?? []).map((o) => String(o.order_id))));
+  }
+
+  const currentSelected = readAcceptOrderDraftSelection({ serverId, userId, availableOrderIds });
+  const merged = mergeAcceptOrderPageSelection({
+    availableOrderIds,
+    currentSelectedOrderIds: currentSelected,
+    pageOrderIds,
+    pageSelectedOrderIds: interaction.values ?? []
+  });
+  writeAcceptOrderDraftSelection({ serverId, userId, selectedOrderIds: merged });
+
+  const payload = buildAcceptPickerPayload({
+    userId,
+    serverId,
+    p,
+    s,
+    ownerUser: interaction.member ?? interaction.user,
+    page
+  });
+  return componentCommit(interaction, payload);
 }
 
 // cancel picker
 if (cid.startsWith("noodle:pick:cancel_select:")) {
-  const orderId = interaction.values?.[0];
-  return await runNoodle(interaction, {
-    sub: "cancel",
-    overrides: { strings: { order_id: orderId } }
+  const parts2 = cid.split(":");
+  const owner = parts2[3];
+  const rawPage = Number(parts2[4] ?? 0);
+  const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
+  if (owner && owner !== interaction.user.id) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+
+  const p = ensurePlayer(serverId, userId);
+  const accepted = Object.entries(p.orders?.accepted ?? {});
+  const pageSize = 25;
+  const safePage = Math.max(0, Math.min(page, Math.max(0, Math.ceil(accepted.length / pageSize) - 1)));
+  const pageOrderIds = accepted
+    .slice(safePage * pageSize, (safePage + 1) * pageSize)
+    .map(([oid]) => String(oid));
+  const availableOrderIds = accepted.map(([oid]) => String(oid));
+  const currentSelected = readCancelOrderDraftSelection({ serverId, userId, availableOrderIds });
+  const merged = mergeCancelOrderPageSelection({
+    availableOrderIds,
+    currentSelectedOrderIds: currentSelected,
+    pageOrderIds,
+    pageSelectedOrderIds: interaction.values ?? []
   });
+  writeCancelOrderDraftSelection({ serverId, userId, selectedOrderIds: merged });
+
+  const payload = buildCancelServePickerPayload({
+    action: "cancel",
+    userId,
+    serverId,
+    p,
+    ownerUser: interaction.member ?? interaction.user,
+    page: safePage
+  });
+  return componentCommit(interaction, payload);
 }
 
 // serve picker
@@ -12466,8 +16703,14 @@ if (cid.startsWith("noodle:pick:takeout_cook_select:")) {
   } catch (e) {
     console.log(`⚠️ showModal failed for takeout cook:`, e?.message);
     const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+    if (code === 10062 || e?.message?.includes("Unknown interaction")) {
       return;
+    }
+    if (e?.message?.includes("already been acknowledged")) {
+      return componentCommit(interaction, {
+        content: `${getIcon("warning")} Counter Cook menu timed out. Tap **Counter Cook** again.`,
+        ephemeral: true
+      });
     }
     return componentCommit(interaction, {
       content: `${getIcon("warning")} Discord couldn't show the modal. Try using Counter Cook again.`,
@@ -12509,8 +16752,14 @@ if (cid.startsWith("noodle:pick:cook_select:")) {
   } catch (e) {
     console.log(`⚠️ showModal failed for cook:`, e?.message);
     const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
+    if (code === 10062 || e?.message?.includes("Unknown interaction")) {
       return;
+    }
+    if (e?.message?.includes("already been acknowledged")) {
+      return componentCommit(interaction, {
+        content: `${getIcon("warning")} That cook menu timed out. Tap **Cook** again.`,
+        ephemeral: true
+      });
     }
     return componentCommit(interaction, {
       content: `${getIcon("warning")} Discord couldn't show the modal. Try using "/noodle cook" directly instead.`,
@@ -12529,37 +16778,14 @@ if (cid.startsWith("noodle:pick:forage_item_select:")) {
     return componentCommit(interaction, { content: "Pick an ingredient first.", ephemeral: true });
   }
 
-  if (interaction.deferred || interaction.replied) {
-    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-  }
-
-  const sourceMessageId = interaction.message?.id ?? "none";
-  const modal = new ModalBuilder()
-    .setCustomId(`noodle:pick:forage_qty:${userId}:${itemId}:${page}:${sourceMessageId}`)
-    .setTitle(`Forage ${displayItemName(itemId)}`);
-
-  const input = new TextInputBuilder()
-    .setCustomId("qty")
-    .setLabel("Quantity (1-5)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("1");
-
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-
-  try {
-    return await interaction.showModal(modal);
-  } catch (e) {
-    console.log(`⚠️ showModal failed for forage:`, e?.message);
-    const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
-      return;
+  return runNoodle(interaction, {
+    sub: "forage_menu",
+    overrides: {
+      strings: { item: itemId },
+      integers: { page },
+      messageId: interaction.message?.id ?? null
     }
-    return componentCommit(interaction, {
-      content: `${getIcon("warning")} Discord couldn't show the modal. Try again.`,
-      ephemeral: true
-    });
-  }
+  });
 }
 
 // fishing picker -> open qty modal
@@ -12572,37 +16798,14 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     return componentCommit(interaction, { content: "Pick a fishing target first.", ephemeral: true });
   }
 
-  if (interaction.deferred || interaction.replied) {
-    return componentCommit(interaction, { content: "That menu expired, tap again.", ephemeral: true });
-  }
-
-  const sourceMessageId = interaction.message?.id ?? "none";
-  const modal = new ModalBuilder()
-    .setCustomId(`noodle:pick:fishing_qty:${userId}:${itemId}:${page}:${sourceMessageId}`)
-    .setTitle(`Fish For ${displayItemName(itemId)}`);
-
-  const input = new TextInputBuilder()
-    .setCustomId("qty")
-    .setLabel("Quantity (1-5)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("1");
-
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-
-  try {
-    return await interaction.showModal(modal);
-  } catch (e) {
-    console.log(`⚠️ showModal failed for fishing:`, e?.message);
-    const code = e?.code ?? e?.message;
-    if (code === 10062 || e?.message?.includes("Unknown interaction") || e?.message?.includes("already been acknowledged")) {
-      return;
+  return runNoodle(interaction, {
+    sub: "fishing_menu",
+    overrides: {
+      strings: { item: itemId },
+      integers: { page },
+      messageId: interaction.message?.id ?? null
     }
-    return componentCommit(interaction, {
-      content: `${getIcon("warning")} Discord couldn't show the modal. Try again.`,
-      ephemeral: true
-    });
-  }
+  });
 }
 
 }
@@ -12669,15 +16872,21 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       }
     }
 
-    return runNoodle(interaction, {
-      sub: "cook",
-      overrides: {
-        strings: { recipe: recipeId },
-        integers: { quantity: qty },
-        booleans: { counter_cook: true },
-        messageId
-      }
+    const payload = buildCookMinigameScenePayload({
+      userId,
+      recipeId,
+      quantity: qty,
+      totalTurns: 8,
+      turnIndex: 0,
+      score: 0,
+      misses: 0,
+      counterCook: true,
+      returnSub: "takeout"
     });
+    if (messageId) {
+      payload.targetMessageId = messageId;
+    }
+    return componentCommit(interaction, payload);
   }
 
   /* ---------------- FORAGE QTY MODAL ---------------- */
@@ -12801,9 +17010,22 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       user: interaction.member ?? interaction.user
     });
 
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return componentCommit(interaction, {
+        ...buildProfileEditV2Message({
+          userId,
+          specializationsAvailable,
+          statusLine: `${getIcon("status_complete")} Shop name updated to **${trimmed}**.`,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }),
+        targetMessageId: messageId ?? interaction.message?.id
+      });
+    }
+
     return componentCommit(interaction, {
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
@@ -12853,9 +17075,22 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       user: interaction.member ?? interaction.user
     });
 
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return componentCommit(interaction, {
+        ...buildProfileEditV2Message({
+          userId,
+          specializationsAvailable,
+          statusLine: `${getIcon("status_complete")} Tagline updated: *${trimmed}*`,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }),
+        targetMessageId: messageId ?? interaction.message?.id
+      });
+    }
+
     return componentCommit(interaction, {
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
@@ -12917,7 +17152,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      embeds: [selectionEmbed],
+      ...composeV2FromLegacyEmbeds([selectionEmbed]),
       components: showSellButton ? [btnRow, sellButton] : [btnRow]
     });
   }
@@ -12940,6 +17175,23 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     const description = spec.description ? `\n_${spec.description}_` : "";
 
     if (!check.ok) {
+      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+        return componentCommit(interaction, {
+          ...buildSpecializationConfirmV2Message({
+            userId,
+            specId,
+            specName: spec.name,
+            specDescription: spec.description,
+            specThumbnailUrl: getSpecializationThumbnailUrl(spec),
+            specializationsAvailable,
+            ownerId: userId,
+            buttonEmoji: getProfileV2ButtonEmoji(),
+            lockedReason: `Reason: ${check.reason}`
+          }),
+          targetMessageId: interaction.message?.id
+        });
+      }
+
       const embed = buildMenuEmbed({
         title: `${getIcon("sparkle")} Specialization Locked`,
         description: `You can't select **${spec.name}** yet.\nReason: ${check.reason}${description}`,
@@ -12948,7 +17200,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
       return componentCommit(interaction, {
         content: " ",
-        embeds: [embed],
+        ...composeV2FromLegacyEmbeds([embed]),
         components: [
           noodleSpecializeSelectRow(userId),
           noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -12975,9 +17227,25 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       user: interaction.member ?? interaction.user
     });
 
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      return componentCommit(interaction, {
+        ...buildSpecializationConfirmV2Message({
+          userId,
+          specId,
+          specName: spec.name,
+          specDescription: spec.description,
+          specThumbnailUrl: getSpecializationThumbnailUrl(spec),
+          specializationsAvailable,
+          ownerId: userId,
+          buttonEmoji: getProfileV2ButtonEmoji()
+        }),
+        targetMessageId: interaction.message?.id
+      });
+    }
+
     return componentCommit(interaction, {
       content: " ",
-      embeds: [embed],
+      ...composeV2FromLegacyEmbeds([embed]),
       components: [confirmRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: interaction.message?.id
     });
@@ -13066,7 +17334,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       });
       return componentCommit(interaction, {
         content: " ",
-        embeds: [selectionEmbed],
+        ...composeV2FromLegacyEmbeds([selectionEmbed]),
         components: showSellButton ? [btnRow, sellButton] : [btnRow],
         targetMessageId: sourceId !== "none" ? sourceId : undefined
       });
@@ -13075,7 +17343,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     // All other button modes need DB queries first
     const serverState = ensureServer(serverId);
     const settings = buildSettingsMap(settingsCatalog, serverState.settings);
-    serverState.season = computeActiveSeason(settings);
+    syncServerSeasonFromSettings(serverState, settings);
     const activeEventEffects = getActiveEventEffects(eventsContent, serverState);
     rollMarket({ serverId, content, serverState, eventEffects: activeEventEffects });
 
@@ -13273,7 +17541,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const replyObj = {
           content: " ",
-          embeds: [buyEmbed],
+          ...composeV2FromLegacyEmbeds([buyEmbed]),
           components,
           targetMessageId: interaction.message?.id ?? sourceMessageId ?? null
         };
@@ -13326,16 +17594,13 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     });
     const btnRow = buildSellQuantityRow(interaction.user.id, picked, page, selectionToken);
 
-    const sellEmbed = buildMenuEmbed({
-      title: `${getIcon("coins")} Sell Items`,
-      description: `**Selected:** ${selectedNames}\nChoose how you want to sell:`,
-      user: interaction.member ?? interaction.user
-    });
-
     return componentCommit(interaction, {
-      content: " ",
-      embeds: [sellEmbed],
-      components: [btnRow],
+      ...buildSellMenuPayload({
+        title: `${getIcon("coins")} Sell Items`,
+        description: `**Selected:** ${selectedNames}\nChoose how you want to sell:`,
+        userId: interaction.user.id,
+        components: [btnRow]
+      }),
       targetMessageId: interaction.message?.id ?? null
     });
   }
@@ -13393,16 +17658,13 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       const selectedNames = formatSelectedItemNames(selectedIds);
       const btnRow = buildSellQuantityRow(interaction.user.id, selectedIds, page, selectionToken);
 
-      const sellEmbed = buildMenuEmbed({
-        title: `${getIcon("coins")} Sell Items`,
-        description: `**Selected:** ${selectedNames}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
-        user: interaction.member ?? interaction.user
-      });
-
       return componentCommit(interaction, {
-        content: " ",
-        embeds: [sellEmbed],
-        components: [btnRow],
+        ...buildSellMenuPayload({
+          title: `${getIcon("coins")} Sell Items`,
+          description: `**Selected:** ${selectedNames}\nQuantity entry has been removed. Use Sell 1/5/10 each instead.`,
+          userId: interaction.user.id,
+          components: [btnRow]
+        }),
         targetMessageId: interaction.message?.id ?? null
       });
     }
@@ -13489,7 +17751,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const replyObj = {
           content: pickerPayload.content ?? " ",
-          embeds: [sellEmbed],
+          ...composeV2FromLegacyEmbeds([sellEmbed]),
           components: pickerPayload.ephemeral
             ? (pickerPayload.components ?? [])
             : [buildSellQuantityRow(userId, selectedIds, page, selectionToken), ...(pickerPayload.components ?? [noodleMainMenuRow(userId)])],
@@ -13674,5 +17936,7 @@ export {
   noodleMainMenuRowNoProfile,
   displayItemName,
   renderProfileEmbed,
-  resolveComponentNavSub
+  resolveComponentNavSub,
+  applyPersistentNoticeCards as applyPersistentNoticeCardsForTest,
+  convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest
 };

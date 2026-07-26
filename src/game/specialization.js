@@ -31,6 +31,24 @@ export function getActiveSpecialization(player, specializationsContent) {
   return getSpecializationById(specializationsContent, state.active_spec_id);
 }
 
+export function unlockSpecialization(player, specId) {
+  const state = ensureSpecializationState(player);
+  const normalizedSpecId = String(specId ?? "").trim();
+  if (!normalizedSpecId) {
+    return { added: false, unlockedSpecIds: state.unlocked_spec_ids };
+  }
+
+  const beforeCount = state.unlocked_spec_ids.length;
+  if (!state.unlocked_spec_ids.includes(normalizedSpecId)) {
+    state.unlocked_spec_ids.push(normalizedSpecId);
+  }
+
+  return {
+    added: state.unlocked_spec_ids.length > beforeCount,
+    unlockedSpecIds: state.unlocked_spec_ids
+  };
+}
+
 function isPurchaseUnlocked(player, specId) {
   if (!specId) return false;
   const state = ensureSpecializationState(player);

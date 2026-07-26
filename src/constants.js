@@ -7,7 +7,7 @@ export const STARTER_PROFILE = {
   sxp_total: 0,
   sxp_progress: 0,
   known_recipes: ["classic_soy_ramen"],
-  inv_ingredients: { broth_soy: 1, noodles_wheat: 1, scallions: 1 },
+  inv_ingredients: {},
 };
 
 export const INGREDIENT_CAPACITY_BASE = 50;

@@ -17,7 +17,6 @@ import { theme } from "./ui/theme.js";
   
   const Client = Discord.Client;
   const Intents = Discord.Intents;
-  const MessageFlags = Discord.MessageFlags;
 
   if (!Client || !Intents) {
     console.error("❌ Failed to load discord.js properly");
@@ -32,6 +31,7 @@ import { theme } from "./ui/theme.js";
   const { startEventSyncScheduler } = await import("./jobs/eventSync.js");
   const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
   const { startDbMaintenanceScheduler } = await import("./jobs/dbMaintenance.js");
+  const { startV2TelemetryAlertScheduler } = await import("./jobs/v2TelemetryAlerts.js");
   const {
     loadContentBundle,
     loadSettingsCatalog,
@@ -82,16 +82,22 @@ import { theme } from "./ui/theme.js";
     registerVoteFromSource,
     VOTE_SOURCES
   } = await import("./game/voteRewards.js");
+  const {
+    buildComponentsV2PayloadWithNoticeCards,
+    isComponentsV2Payload,
+    isInvalidComponentTypeError,
+    rawWebhookEditOriginal
+  } = await import("./ui/componentsV2.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
   const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
+  const { sendRawDm } = await import("./util/rawDm.js");
 
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;
   const MAX_DESC = 4000;
-
   const chunkTextByLength = (text, maxLen = SAFE_SLICE) => {
     if (!text) return [];
     const lines = String(text).split("\n");
@@ -129,22 +135,19 @@ import { theme } from "./ui/theme.js";
       }));
     };
 
-    const EmbedCtor = Discord.EmbedBuilder || Discord.MessageEmbed || null;
-
     return embeds.map((embed) => {
       if (!embed) return embed;
-      const safe = embed.toJSON && EmbedCtor ? new EmbedCtor(embed) : embed;
+      const safe = embed?.toJSON ? embed.toJSON() : { ...(embed ?? {}) };
       const fields = safe?.data?.fields || safe?.fields || [];
       if (fields.length) {
         const newFields = fields.flatMap((f) => chunkField(f));
-        if (safe.spliceFields) safe.spliceFields(0, safe.fields?.length ?? fields.length, ...newFields);
-        else safe.fields = newFields;
+        safe.fields = newFields;
       }
 
       const desc = safe?.data?.description ?? safe?.description ?? "";
-      if (desc && desc.length > MAX_DESC && safe.setDescription) {
+      if (desc && desc.length > MAX_DESC) {
         const truncated = desc.slice(0, MAX_DESC);
-        safe.setDescription(`${truncated}\n\n(Description truncated)`);
+        safe.description = `${truncated}\n\n(Description truncated)`;
       }
 
       return safe;
@@ -261,7 +264,6 @@ import { theme } from "./ui/theme.js";
       return sanitizeForLog(arg);
     });
   }
-
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
   try {
@@ -509,7 +511,6 @@ import { theme } from "./ui/theme.js";
     const channelRef = interaction?.channelId ? `<#${interaction.channelId}>` : "that channel";
     const commandLabel = interaction?.commandName ? `/${interaction.commandName}` : "that action";
 
-    const EmbedCtor = Discord.EmbedBuilder || Discord.MessageEmbed || null;
     const description = [
       `I could not send a response for **${commandLabel}** in ${channelRef} on **${guildName}**.`,
       "",
@@ -517,23 +518,52 @@ import { theme } from "./ui/theme.js";
       "Please try another channel or ask a server admin to grant me **View Channel**, **Send Messages**, and **Embed Links** permissions.",
       ""
     ].join("\n");
-
-    const embed = EmbedCtor
-      ? new EmbedCtor()
-        .setTitle(`Access Alert ${getIcon("warning")}`)
-        .setDescription(description)
-        .setColor(theme.colors.primary)
-        .setFooter({ text: `Owner: ${user?.tag ?? user?.username ?? "Unknown"}` })
-      : null;
+    const dmPayload = buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [
+        { type: 10, content: `## Access Alert ${getIcon("warning")}` },
+        { type: 10, content: description },
+        { type: 10, content: `-# Owner: ${user?.tag ?? user?.username ?? "Unknown"}` }
+      ],
+      ownerId: user?.id,
+      ephemeral: false
+    });
+    const legacyContent = [
+      `Access Alert ${getIcon("warning")}`,
+      description,
+      `Owner: ${user?.tag ?? user?.username ?? "Unknown"}`
+    ].filter(Boolean).join("\n\n");
 
     try {
-      if (embed) {
-        await user.send({ embeds: [embed] });
-      } else {
-        await user.send({ content: description.replace(/\*\*/g, "") });
-      }
+      await sendRawDm(client, user.id, dmPayload);
       return true;
     } catch (error) {
+      if (isInvalidComponentTypeError(error)) {
+        try {
+          await user.send({ content: legacyContent });
+          return true;
+        } catch (fallbackError) {
+          emitTelemetry("hard_failure_dm_send", {
+            route: "index:missing_access_dm",
+            userId: user?.id ?? null,
+            guildId: interaction?.guildId ?? null,
+            channelId: interaction?.channelId ?? null,
+            errorCode: fallbackError?.code ?? null,
+            errorName: fallbackError?.name ?? null,
+            errorMessage: String(fallbackError?.message ?? fallbackError ?? "unknown_error")
+          });
+          console.error("Missing-access DM fallback failed:", fallbackError?.message ?? fallbackError);
+          return false;
+        }
+      }
+      emitTelemetry("hard_failure_dm_send", {
+        route: "index:missing_access_dm",
+        userId: user?.id ?? null,
+        guildId: interaction?.guildId ?? null,
+        channelId: interaction?.channelId ?? null,
+        errorCode: error?.code ?? null,
+        errorName: error?.name ?? null,
+        errorMessage: String(error?.message ?? error ?? "unknown_error")
+      });
       console.error("Missing-access DM fallback failed:", error?.message ?? error);
       return false;
     }
@@ -593,6 +623,8 @@ import { theme } from "./ui/theme.js";
   const officialShopCountLabel = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_LABEL || "Total Users").trim() || "Total Users";
   const officialMemberCountLabel = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_LABEL || "Server Members").trim() || "Server Members";
   const officialStatsCategoryId = String(process.env.NOODLE_OFFICIAL_STATS_CATEGORY_ID || "").trim();
+  const startupAvatarSyncEnabled = String(process.env.NOODLE_STARTUP_AVATAR_ENABLED || "0") === "1";
+  const startupAvatarGifUrl = String(process.env.NOODLE_STARTUP_AVATAR_GIF_URL || "").trim();
   const officialStatsChannelRefreshIntervalRaw = Number(process.env.NOODLE_OFFICIAL_STATS_CHANNEL_REFRESH_INTERVAL_MS || 10 * 60 * 1000);
   const officialStatsChannelRefreshIntervalMs = Number.isFinite(officialStatsChannelRefreshIntervalRaw)
     ? Math.max(60_000, Math.floor(officialStatsChannelRefreshIntervalRaw))
@@ -1285,7 +1317,14 @@ import { theme } from "./ui/theme.js";
     };
   }
 
-  async function sendDevAlert({ title, description, footerText = "", requireMention = true, color }) {
+  async function sendDevAlert({
+    title,
+    description,
+    footerText = "",
+    requireMention = true,
+    mentionUser = requireMention,
+    color
+  }) {
     if (!officialGuildId || !devAlertChannelId) return false;
     if (requireMention && !devAlertUserId) {
       console.error("⚠️ Dev alert skipped: NOODLE_DEV_ALERT_USER_ID is required for mention.");
@@ -1306,21 +1345,66 @@ import { theme } from "./ui/theme.js";
         return false;
       }
 
-      const ping = devAlertUserId ? ` <@${devAlertUserId}>` : "";
-      const content = `${title}${ping}`.slice(0, 2000);
+      const shouldMention = Boolean(mentionUser && devAlertUserId);
+      const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
+      const bodyLines = [
+        String(description || "").slice(0, 4096),
+        footerText ? `-# ${String(footerText).slice(0, 2048)}` : ""
+      ].filter(Boolean);
+      const payload = buildComponentsV2PayloadWithNoticeCards({
+        mainComponents: [
+          { type: 10, content: `## ${String(title || "Alert").slice(0, 200)}` },
+          { type: 10, content: bodyLines.join("\n\n") }
+        ],
+        ownerId: devAlertUserId || undefined,
+        accentColor: color,
+        ephemeral: false
+      });
       await alertChannel.send({
-        content,
-        allowedMentions: devAlertUserId ? { users: [devAlertUserId] } : undefined,
-        embeds: [
-          {
-            description: String(description || "").slice(0, 4096),
-            ...(typeof color === "number" ? { color } : {}),
-            ...(footerText ? { footer: { text: String(footerText).slice(0, 2048) } } : {})
-          }
-        ]
+        ...payload,
+        content: mentionLine || undefined,
+        allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
       });
       return true;
     } catch (error) {
+      if (isInvalidComponentTypeError(error)) {
+        try {
+          const shouldMention = Boolean(mentionUser && devAlertUserId);
+          const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
+          const legacyContent = [
+            mentionLine,
+            `**${String(title || "Alert").slice(0, 200)}**`,
+            String(description || "").slice(0, 4096),
+            footerText ? String(footerText).slice(0, 2048) : ""
+          ].filter(Boolean).join("\n\n");
+          await alertChannel.send({
+            content: legacyContent,
+            allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
+          });
+          return true;
+        } catch (fallbackError) {
+          emitTelemetry("hard_failure_alert_send", {
+            route: "index:dev_alert",
+            guildId: officialGuildId || null,
+            channelId: devAlertChannelId || null,
+            mentionUserId: devAlertUserId || null,
+            errorCode: fallbackError?.code ?? null,
+            errorName: fallbackError?.name ?? null,
+            errorMessage: String(fallbackError?.message ?? fallbackError ?? "unknown_error")
+          });
+          console.error("❌ Failed to send dev alert (legacy fallback):", fallbackError?.stack ?? fallbackError);
+          return false;
+        }
+      }
+      emitTelemetry("hard_failure_alert_send", {
+        route: "index:dev_alert",
+        guildId: officialGuildId || null,
+        channelId: devAlertChannelId || null,
+        mentionUserId: devAlertUserId || null,
+        errorCode: error?.code ?? null,
+        errorName: error?.name ?? null,
+        errorMessage: String(error?.message ?? error ?? "unknown_error")
+      });
       console.error("❌ Failed to send dev alert:", error?.stack ?? error);
       return false;
     }
@@ -1459,6 +1543,43 @@ import { theme } from "./ui/theme.js";
       return String(candidate).trim().length > 0;
     });
     return match == null ? "" : String(match).trim();
+  }
+
+  function parseStrictBoolean(value) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (value === 1) return true;
+      if (value === 0) return false;
+      return null;
+    }
+    if (typeof value !== "string") return null;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+    return null;
+  }
+
+  function isRankTopPowerVotePayload(payload) {
+    // Rank.top dashboard exposes a boolean power vote flag, so only trust explicit true/false fields.
+    const candidates = [
+      payload?.isPowerVote,
+      payload?.powerVote,
+      payload?.power_vote,
+      payload?.is_power_vote,
+      payload?.vote?.isPowerVote,
+      payload?.vote?.powerVote,
+      payload?.vote?.power_vote,
+      payload?.data?.isPowerVote,
+      payload?.data?.powerVote,
+      payload?.data?.power_vote
+    ];
+
+    for (const candidate of candidates) {
+      const parsed = parseStrictBoolean(candidate);
+      if (parsed !== null) return parsed;
+    }
+    return false;
   }
 
   function hasAnyConfiguredBotListStatsSync() {
@@ -2896,8 +3017,11 @@ import { theme } from "./ui/theme.js";
         let player = getPlayer(db, serverId, votedUserId);
         if (!player) player = newPlayerProfile(votedUserId);
 
+        const rankTopPowerVote = voteConfig.source === VOTE_SOURCES.RANKTOP
+          && isRankTopPowerVotePayload(effectiveVotePayload);
         const voteResult = registerVoteFromSource(player, voteConfig.source, Date.now(), {
-          duplicateWindowMode: voteDuplicateWindowMode
+          duplicateWindowMode: voteDuplicateWindowMode,
+          claimMultiplier: rankTopPowerVote ? 4 : undefined
         });
         if (!voteResult.duplicate || voteResult.shouldPersistDuplicate) {
           upsertPlayer(db, serverId, votedUserId, player, null, player.schema_version);
@@ -2910,7 +3034,9 @@ import { theme } from "./ui/theme.js";
             source: voteResult.source,
             serverId,
             pendingClaims: voteResult.pendingClaims,
-            duplicate: voteResult.duplicate
+            duplicate: voteResult.duplicate,
+            claimsAwarded: voteResult.claimsAwarded,
+            powerVote: rankTopPowerVote
           })
         );
 
@@ -2920,7 +3046,9 @@ import { theme } from "./ui/theme.js";
             ok: true,
             source: voteResult.source,
             pending_claims: voteResult.pendingClaims,
-            duplicate: voteResult.duplicate
+            duplicate: voteResult.duplicate,
+            claims_awarded: voteResult.claimsAwarded,
+            power_vote: rankTopPowerVote
           })
         );
         return;
@@ -3236,10 +3364,63 @@ import { theme } from "./ui/theme.js";
     });
   }
 
+  async function applyStartupAvatarIfConfigured(clientUser) {
+    if (!startupAvatarSyncEnabled) return false;
+
+    if (!startupAvatarGifUrl) {
+      console.log("INFO: Startup avatar sync skipped (NOODLE_STARTUP_AVATAR_GIF_URL not set).");
+      return false;
+    }
+
+    let parsedAvatarUrl = null;
+    try {
+      parsedAvatarUrl = new URL(startupAvatarGifUrl);
+    } catch {
+      console.error("⚠️ Startup avatar sync skipped (NOODLE_STARTUP_AVATAR_GIF_URL is not a valid URL).");
+      return false;
+    }
+
+    if (parsedAvatarUrl.protocol !== "https:") {
+      console.error("⚠️ Startup avatar sync skipped (NOODLE_STARTUP_AVATAR_GIF_URL must use https://).");
+      return false;
+    }
+
+    try {
+      const response = await fetch(parsedAvatarUrl.toString(), { method: "GET" });
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => "");
+        console.error(
+          `⚠️ Startup avatar sync download failed: ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 200)}` : ""}`
+        );
+        return false;
+      }
+
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (contentType && !contentType.includes("gif")) {
+        console.warn(`⚠️ Startup avatar source content-type is '${contentType}' (expected GIF for animation).`);
+      }
+
+      const avatarBytes = Buffer.from(await response.arrayBuffer());
+      if (!avatarBytes.length) {
+        console.error("⚠️ Startup avatar sync skipped (downloaded file was empty).");
+        return false;
+      }
+
+      await clientUser.setAvatar(avatarBytes);
+      console.log(`✅ Startup avatar updated from ${parsedAvatarUrl.host}${parsedAvatarUrl.pathname}`);
+      return true;
+    } catch (error) {
+      console.error("⚠️ Failed to apply startup avatar:", error?.message ?? error);
+      return false;
+    }
+  }
+
 
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
     logRankTopEnvDiagnostics({ clientUserId: c.user?.id || "" });
+
+    await applyStartupAvatarIfConfigured(c.user);
 
     if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled) {
       if (!officialMessageContentIntentEnabled) {
@@ -3314,6 +3495,7 @@ import { theme } from "./ui/theme.js";
     startEventSyncScheduler(getKnownServerIds);
     startDbBackupScheduler(db);
     startDbMaintenanceScheduler(db);
+    startV2TelemetryAlertScheduler({ sendAlert: sendDevAlert });
 
     const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";
     if (backupOnStart) {
@@ -3336,6 +3518,7 @@ import { theme } from "./ui/theme.js";
         title: "New Server Alert!",
         description:
           `New Server: ${String(guild?.name || "Unknown Server")}\n` +
+          `Server ID: ${String(guild?.id || "unknown")}\n` +
           `Members: ${memberCount.toLocaleString()}`,
         footerText: `Current Server Count: ${currentCounts.serverCount.toLocaleString()}`,
         color: theme.colors.success,
@@ -3354,9 +3537,13 @@ import { theme } from "./ui/theme.js";
       await refreshShardHealth({ reason: "guildDelete" });
 
       if (guild?.id === officialGuildId) return;
+      const memberCount = Number(guild?.memberCount ?? 0);
       await sendDevAlert({
         title: "Server Left Alert!",
-        description: `Left Server: ${String(guild?.name || "Unknown Server")}`,
+        description:
+          `Left Server: ${String(guild?.name || "Unknown Server")}\n` +
+          `Server ID: ${String(guild?.id || "unknown")}\n` +
+          `Members: ${memberCount.toLocaleString()}`,
         footerText: `Current Server Count: ${currentCounts.serverCount.toLocaleString()}`,
         color: theme.colors.warning,
         requireMention: true
@@ -3477,8 +3664,6 @@ import { theme } from "./ui/theme.js";
         // Check if this button/select will show a modal
           const willShowModal = cid?.includes("pick:cook_select:") ||
               cid?.includes("pick:takeout_cook_select:") ||
-              cid?.includes("pick:forage_item_select:") ||
-              cid?.includes("pick:fishing_item_select:") ||
               cid?.includes("action:party_create") ||
               cid?.includes("action:party_join") ||
               cid?.includes("action:party_invite") ||
@@ -3518,6 +3703,14 @@ import { theme } from "./ui/theme.js";
     if (interaction.isAutocomplete()) {
       telemetryRoute = "autocomplete";
       try {
+        if (interaction.commandName === "noodle-dev") {
+          telemetryRoute = "autocomplete:noodle-dev";
+          if (typeof noodleDevCommand.autocomplete === "function") {
+            return await noodleDevCommand.autocomplete(interaction);
+          }
+          return interaction.respond([]);
+        }
+
         if (interaction.commandName !== "noodle") return;
 
         const sub = interaction.options.getSubcommand(false);
@@ -3752,9 +3945,31 @@ import { theme } from "./ui/theme.js";
               return await interaction.reply({ ...result, ephemeral: true });
             }
             if (interaction.replied || interaction.deferred) {
-              return await interaction.editReply(result);
+              try {
+                return await interaction.editReply(result);
+              } catch (e) {
+                if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                  try {
+                    return await rawWebhookEditOriginal(interaction, result);
+                  } catch {
+                    throw e;
+                  }
+                }
+                throw e;
+              }
             }
-            return await interaction.update(result);
+            try {
+              return await interaction.update(result);
+            } catch (e) {
+              if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                try {
+                  return await rawWebhookEditOriginal(interaction, result);
+                } catch {
+                  throw e;
+                }
+              }
+              throw e;
+            }
           }
         }
         if (id.startsWith("noodle-upgrades:")) {
@@ -3768,9 +3983,31 @@ import { theme } from "./ui/theme.js";
               return await interaction.reply({ ...result, ephemeral: true });
             }
             if (interaction.replied || interaction.deferred) {
-              return await interaction.editReply(result);
+              try {
+                return await interaction.editReply(result);
+              } catch (e) {
+                if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                  try {
+                    return await rawWebhookEditOriginal(interaction, result);
+                  } catch {
+                    throw e;
+                  }
+                }
+                throw e;
+              }
             }
-            return await interaction.update(result);
+            try {
+              return await interaction.update(result);
+            } catch (e) {
+              if (isComponentsV2Payload(result) && isInvalidComponentTypeError(e)) {
+                try {
+                  return await rawWebhookEditOriginal(interaction, result);
+                } catch {
+                  throw e;
+                }
+              }
+              throw e;
+            }
           }
         }
       } catch (e) {

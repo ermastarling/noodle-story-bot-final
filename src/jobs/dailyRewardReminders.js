@@ -4,19 +4,19 @@ import { openDb, getPlayer, getLatestServerIdForUser, upsertPlayer } from "../db
 import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { hasUnlimitedMarketStock } from "../game/subscriptions.js";
-import { theme } from "../ui/theme.js";
-import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import { getIcon } from "../ui/icons.js";
+import { emitTelemetry } from "../infra/telemetry.js";
+import { buildComponentsV2PayloadWithNoticeCards } from "../ui/componentsV2.js";
+import { sendRawDm } from "../util/rawDm.js";
 
 const {
   MessageActionRow,
   MessageButton,
-  MessageEmbed,
   Constants
 } = discordPkg;
 
 const ActionRowBuilder = MessageActionRow;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
   Secondary: Constants?.MessageButtonStyles?.SECONDARY ?? 2,
@@ -30,9 +30,8 @@ const DEFAULT_MAX_INACTIVE_DAYS = 30;
 const db = openDb();
 let isRunning = false;
 
-function ownerFooterText(user) {
-  const tag = user?.tag ?? user?.username ?? "Unknown";
-  return `Owner: ${tag}`;
+function isSnowflake(value) {
+  return /^\d{17,20}$/.test(String(value || "").trim());
 }
 
 function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
@@ -54,27 +53,124 @@ function buildDmReminderComponents({ userId, serverId, channelUrl, optOut }) {
   return [row];
 }
 
-function buildReminderEmbed({ guildName, channelLine, claimLine, user, hasHouse247Active = false }) {
+function normalizeComponents(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function buildReminderV2Payload({ channelLine, claimLine, userId, components = [], player = null, now = Date.now() }) {
+  const hasHouse247Active = hasUnlimitedMarketStock(player, now);
   const openerLine = hasHouse247Active
-    ? `Your ${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House is active. Vote again in **/noodle quests_vote** to extend it.`
+    ? `Your ${getIcon("perk_house_247", getIcon("sparkle"))} 24/7 House is active. Vote again using \`/noodle quests_vote\` to extend it.`
     : `New orders are on the board today, come back to serve your regulars! ${getIcon("regulars")}`;
-  return new EmbedBuilder()
-    .setTitle(`Daily Noodle Mail ${getIcon("mail")}`)
-    .setDescription([
-      openerLine,
-      `\nYour daily reward is also ready!`,
-      channelLine ? `${channelLine}` : null,
-      claimLine,
-      "\nDisable reminders below."
-    ].filter(Boolean).join("\n"))
-    .setColor(theme.colors.primary)
-    .setFooter({ text: ownerFooterText(user) });
+  const compactReminderBlock = [
+    channelLine || null,
+    "Your daily reward is also ready!",
+    claimLine
+  ].filter(Boolean).join("\n");
+  const lines = ["Daily Noodle", openerLine, compactReminderBlock, "Disable reminders below."].filter(Boolean);
+
+  return buildComponentsV2PayloadWithNoticeCards({
+    mainComponents: [
+      { type: 10, content: `## ${lines[0]}` },
+      { type: 10, content: lines.slice(1).join("\n\n") },
+      ...normalizeComponents(components)
+    ],
+    ownerId: userId,
+    ephemeral: false
+  });
+}
+
+async function trySendReminderForUser(client, userId, {
+  preferredServerId,
+  now,
+  todayKey,
+  force = false
+} = {}) {
+  if (!isSnowflake(userId)) {
+    return { ok: false, reason: "invalid_user_id", serverId: preferredServerId || "global" };
+  }
+
+  const user = await client.users.fetch(String(userId)).catch(() => null);
+  if (!user) {
+    return { ok: false, reason: "user_not_found", serverId: preferredServerId || "global" };
+  }
+
+  const resolvedServerId = preferredServerId || getLatestServerIdForUser(db, userId) || "global";
+  const player = getPlayer(db, resolvedServerId, userId);
+  if (!player) return { ok: false, reason: "player_missing", serverId: resolvedServerId };
+
+  normalizeNotifications(player);
+
+  if (player.notifications.dm_reminders_opt_out === true && !force) {
+    return { ok: false, reason: "opted_out", serverId: resolvedServerId };
+  }
+  if (!hasDailyRewardAvailable(player, now) && !force) {
+    return { ok: false, reason: "daily_unavailable", serverId: resolvedServerId };
+  }
+  if (player.notifications.last_daily_reminder_day === todayKey && !force) {
+    return { ok: false, reason: "already_sent_today", serverId: resolvedServerId };
+  }
+
+  const lastGuildId = player.notifications.last_noodle_guild_id ?? resolvedServerId;
+  const channelId = player.notifications.last_noodle_channel_id ?? null;
+  const channelUrl = channelId && lastGuildId && lastGuildId !== "global"
+    ? `https://discord.com/channels/${lastGuildId}/${channelId}`
+    : null;
+  const channelLine = channelId ? `<#${channelId}>` : null;
+  const claimLine = force
+    ? "*Use `/noodle quests_daily` to claim it.*"
+    : "*Use `/noodle quests_daily` to claim it.*";
+  const components = buildDmReminderComponents({
+    userId,
+    serverId: lastGuildId || resolvedServerId,
+    channelUrl,
+    optOut: false
+  });
+  const payload = buildReminderV2Payload({ channelLine, claimLine, userId, components, player, now });
+
+  try {
+    await sendRawDm(client, user.id, payload);
+    player.notifications.last_daily_reminder_day = todayKey;
+    upsertPlayer(db, resolvedServerId, userId, player, null, player.schema_version ?? 1);
+    return { ok: true, reason: "sent", serverId: resolvedServerId };
+  } catch (error) {
+    emitTelemetry("hard_failure_dm_send", {
+      route: "jobs:daily_reward_reminder",
+      userId,
+      guildId: lastGuildId || resolvedServerId,
+      errorCode: error?.code ?? null,
+      errorName: error?.name ?? null,
+      errorMessage: String(error?.message ?? error ?? "unknown_error")
+    });
+    console.error("Daily reminder DM send failed", {
+      userId,
+      guildId: lastGuildId || resolvedServerId,
+      errorCode: error?.code ?? null,
+      errorMessage: error?.message ?? String(error)
+    });
+    return { ok: false, reason: "send_failed", serverId: resolvedServerId };
+  }
 }
 
 function normalizeNotifications(player) {
   if (!player.notifications) {
     player.notifications = {
       pending_pantry_messages: [],
+      pending_v2_notice_cards: [],
+      active_v2_notice_cards: [],
+      active_v2_notice_menu_key: null,
       dm_reminders_opt_out: false,
       last_daily_reminder_day: null,
       last_noodle_channel_id: null,
@@ -83,6 +179,18 @@ function normalizeNotifications(player) {
   }
   if (!Array.isArray(player.notifications.pending_pantry_messages)) {
     player.notifications.pending_pantry_messages = [];
+  }
+  if (!Array.isArray(player.notifications.pending_v2_notice_cards)) {
+    player.notifications.pending_v2_notice_cards = [];
+  }
+  if (!Array.isArray(player.notifications.active_v2_notice_cards)) {
+    player.notifications.active_v2_notice_cards = [];
+  }
+  if (
+    player.notifications.active_v2_notice_menu_key !== null
+    && typeof player.notifications.active_v2_notice_menu_key !== "string"
+  ) {
+    player.notifications.active_v2_notice_menu_key = null;
   }
   if (!Object.prototype.hasOwnProperty.call(player.notifications, "last_daily_reminder_day")) {
     player.notifications.last_daily_reminder_day = null;
@@ -121,48 +229,39 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
       if (row.last_active_at && row.last_active_at < inactiveCutoff) continue;
 
       const preferredServerId = getLatestServerIdForUser(db, userId) ?? "global";
-      const player = getPlayer(db, preferredServerId, userId);
-      if (!player) continue;
-
-      normalizeNotifications(player);
-
-      if (player.notifications.dm_reminders_opt_out === true) continue;
-      if (!hasDailyRewardAvailable(player, now)) continue;
-      if (player.notifications.last_daily_reminder_day === todayKey) continue;
-
-      const user = await client.users.fetch(userId).catch(() => null);
-      if (!user) continue;
-
-      const lastGuildId = player.notifications.last_noodle_guild_id ?? preferredServerId;
-      const guildName = lastGuildId && lastGuildId !== "global"
-        ? (client.guilds.cache.get(lastGuildId)?.name ?? "this server")
-        : "your last server";
-      const channelId = player.notifications.last_noodle_channel_id ?? null;
-      const channelUrl = channelId && lastGuildId && lastGuildId !== "global"
-        ? `https://discord.com/channels/${lastGuildId}/${channelId}`
-        : null;
-      const channelLine = channelId ? `<#${channelId}>` : null;
-      const claimLine = `Use /noodle quests_daily to claim your daily reward.`;
-      const hasHouse247Active = hasUnlimitedMarketStock(player, now);
-      const embed = buildReminderEmbed({ guildName, channelLine, claimLine, user, hasHouse247Active });
-      const components = buildDmReminderComponents({
-        userId,
-        serverId: lastGuildId || preferredServerId,
-        channelUrl,
-        optOut: false
+      await trySendReminderForUser(client, userId, {
+        preferredServerId,
+        now,
+        todayKey,
+        force: false
       });
-
-      try {
-        await user.send({ embeds: [embed], components });
-        player.notifications.last_daily_reminder_day = todayKey;
-        upsertPlayer(db, preferredServerId, userId, player, null, player.schema_version ?? 1);
-      } catch {
-        // ignore DM failures
-      }
     }
   } finally {
     isRunning = false;
   }
+}
+
+export async function triggerDailyRewardReminderTest(client, userId, { force = true } = {}) {
+  if (!db) return { ok: false, reason: "db_unavailable" };
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return { ok: false, reason: "missing_user_id" };
+
+  const now = nowTs();
+  const todayKey = dayKeyUTC(now);
+  const preferredServerId = getLatestServerIdForUser(db, normalizedUserId) ?? "global";
+  const result = await trySendReminderForUser(client, normalizedUserId, {
+    preferredServerId,
+    now,
+    todayKey,
+    force
+  });
+
+  return {
+    ...result,
+    userId: normalizedUserId,
+    force,
+    todayKey
+  };
 }
 
 export function startDailyRewardReminderScheduler(client, getKnownServerIds) {

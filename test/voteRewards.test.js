@@ -197,6 +197,28 @@ test("Vote rewards: Rank.top vote grants two pending claims and doubled payout",
   assert.equal(player.lifetime.coins_earned, 2000);
 });
 
+test("Vote rewards: Rank.top power vote can grant four pending claims", () => {
+  const now = 2_500_000;
+  const player = mockPlayer();
+
+  const rankTopPowerVote = registerVoteFromSource(player, VOTE_SOURCES.RANKTOP, now, {
+    claimMultiplier: 4
+  });
+  assert.equal(rankTopPowerVote.ok, true);
+  assert.equal(rankTopPowerVote.duplicate, false);
+  assert.equal(rankTopPowerVote.claimsAwarded, 4);
+  assert.equal(rankTopPowerVote.pendingClaims, 4);
+
+  const claim = claimVoteRewards(player, now + 1_000);
+  assert.equal(claim.ok, true);
+  assert.equal(claim.claimsClaimed, 4);
+  assert.deepEqual(claim.reward, {
+    coins: 4000,
+    sxp: 1200,
+    rep: 200
+  });
+});
+
 test("Vote rewards: display pages are Rank.top-first and respect limit", () => {
   const pages = getDisplayVotePlatformPages();
   assert.ok(pages.length > 0);

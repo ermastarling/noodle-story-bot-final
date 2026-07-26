@@ -28,10 +28,10 @@ while IFS= read -r file; do
       continue
     fi
 
-    if [[ ! "$uses_ref" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-fA-F]{40}$ ]]; then
+    if [[ ! "$uses_ref" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*@[0-9a-fA-F]{40}$ ]]; then
       echo "Policy check failed in $file"
       echo "  Invalid uses reference: $uses_ref"
-      echo "  Expected format: owner/repo@<40-char-commit-sha>"
+      echo "  Expected format: owner/repo[/path]@<40-char-commit-sha>"
       errors=1
     fi
   done < <(grep -nE '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]+' "$file" | sed 's/^[0-9]\+://')

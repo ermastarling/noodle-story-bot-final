@@ -1,11 +1,123 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { runNoodle } from "./noodle.js";
+import { loadContentBundle, loadEventsContent, loadSpecializationsContent } from "../content/index.js";
+import { withEventRecipes } from "../game/events.js";
+
+const content = loadContentBundle();
+const eventsContent = loadEventsContent();
+const contentWithEventRecipes = withEventRecipes(content, eventsContent);
+const specializationsContent = loadSpecializationsContent();
+
+function buildAutocompleteResults(entries, query) {
+  const q = String(query ?? "").trim().toLowerCase();
+  return entries
+    .filter((entry) => {
+      const id = String(entry.id ?? "").toLowerCase();
+      const name = String(entry.name ?? "").toLowerCase();
+      return !q || id.includes(q) || name.includes(q);
+    })
+    .slice(0, 25)
+    .map((entry) => ({
+      name: String(`${entry.name} (${entry.id})`).slice(0, 100),
+      value: String(entry.id).slice(0, 100)
+    }));
+}
+
+const specializationAutocompleteEntries = (specializationsContent?.specializations ?? []).map((spec) => ({
+  id: spec.spec_id,
+  name: spec.name ?? spec.spec_id
+}));
+
+const recipeAutocompleteEntries = Object.entries(contentWithEventRecipes?.recipes ?? {}).map(([id, recipe]) => ({
+  id,
+  name: recipe?.name ?? id
+}));
+
+const seasonEventAutocompleteEntries = (eventsContent?.events ?? []).map((event) => ({
+  id: event.event_id,
+  name: event.name ?? event.event_id
+}));
 
 const noodleDevData = new SlashCommandBuilder()
   .setName("noodle-dev")
   .setDescription("Developer tools for Noodle Story.")
   .addSubcommand((sc) => sc.setName("status").setDescription("Dev only."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("reminder_test")
+      .setDescription("Dev only.")
+      .addUserOption((o) => o.setName("user").setDescription("User to DM (defaults to you)").setRequired(false))
+      .addBooleanOption((o) =>
+        o
+          .setName("force")
+          .setDescription("Send even if daily is unavailable or already sent today")
+          .setRequired(false)
+      )
+  )
   .addSubcommand((sc) => sc.setName("dashboard").setDescription("Dev only."))
+  .addSubcommandGroup((sg) =>
+    sg
+      .setName("admin")
+      .setDescription("Dev only.")
+      .addSubcommand((sc) =>
+        sc
+          .setName("stat")
+          .setDescription("Dev only.")
+          .addStringOption((o) =>
+            o
+              .setName("field")
+              .setDescription("Stat to set")
+              .setRequired(true)
+              .addChoices(
+                { name: "Bowls Served", value: "bowls_served" },
+                { name: "Level", value: "level" },
+                { name: "REP", value: "rep" }
+              )
+          )
+          .addIntegerOption((o) =>
+            o
+              .setName("value")
+              .setDescription("Absolute value to apply")
+              .setRequired(true)
+              .setMinValue(0)
+              .setMaxValue(1000000000)
+          )
+          .addUserOption((o) => o.setName("user").setDescription("Target user").setRequired(false))
+          .addStringOption((o) => o.setName("user_id").setDescription("Target user ID").setRequired(false))
+          .addStringOption((o) => o.setName("server_id").setDescription("Override server ID").setRequired(false))
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("spec")
+          .setDescription("Dev only.")
+          .addStringOption((o) => o.setName("spec_id").setDescription("Specialization ID").setRequired(true).setAutocomplete(true))
+          .addUserOption((o) => o.setName("user").setDescription("Target user").setRequired(false))
+          .addStringOption((o) => o.setName("user_id").setDescription("Target user ID").setRequired(false))
+          .addStringOption((o) => o.setName("server_id").setDescription("Override server ID").setRequired(false))
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("recipe")
+          .setDescription("Dev only.")
+          .addStringOption((o) => o.setName("recipe_id").setDescription("Recipe ID").setRequired(true).setAutocomplete(true))
+          .addUserOption((o) => o.setName("user").setDescription("Target user").setRequired(false))
+          .addStringOption((o) => o.setName("user_id").setDescription("Target user ID").setRequired(false))
+          .addStringOption((o) => o.setName("server_id").setDescription("Override server ID").setRequired(false))
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("season_event")
+          .setDescription("Dev only.")
+          .addStringOption((o) =>
+            o
+              .setName("event_id")
+              .setDescription("Event ID to activate")
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption((o) => o.setName("server_id").setDescription("Override server ID").setRequired(false))
+      )
+  )
   .addSubcommand((sc) =>
     sc
       .setName("reset_tutorial")
@@ -160,8 +272,33 @@ const noodleDevData = new SlashCommandBuilder()
 export const noodleDevCommand = {
   data: noodleDevData,
   async execute(interaction) {
-    const sub = interaction.options.getSubcommand();
+    const rawGroup = interaction.options.getSubcommandGroup(false);
+    const rawSub = interaction.options.getSubcommand();
+    const sub = rawGroup === "admin" ? `admin_${rawSub}` : rawSub;
     return runNoodle(interaction, { sub, group: "dev" });
+  },
+
+  async autocomplete(interaction) {
+    const group = interaction.options.getSubcommandGroup(false);
+    const sub = interaction.options.getSubcommand(false);
+    const focused = interaction.options.getFocused(true);
+    const query = String(focused?.value ?? "");
+
+    if (group !== "admin") return interaction.respond([]);
+
+    if (sub === "spec" && focused?.name === "spec_id") {
+      return interaction.respond(buildAutocompleteResults(specializationAutocompleteEntries, query));
+    }
+
+    if (sub === "recipe" && focused?.name === "recipe_id") {
+      return interaction.respond(buildAutocompleteResults(recipeAutocompleteEntries, query));
+    }
+
+    if (sub === "season_event" && focused?.name === "event_id") {
+      return interaction.respond(buildAutocompleteResults(seasonEventAutocompleteEntries, query));
+    }
+
+    return interaction.respond([]);
   },
 
   async handleComponent(interaction) {

@@ -8,7 +8,6 @@ import { newServerState } from "../game/server.js";
 import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import {
   levelUpStaff,
-  getStaffLevels,
   getMaxStaffCapacity,
   getStaffSlotsUsed,
   calculateStaffCost,
@@ -17,14 +16,20 @@ import {
   isStaffEffectUnlocked
 } from "../game/staff.js";
 import { calculateUpgradeEffects } from "../game/upgrades.js";
-import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
+import {
+  buildComponentsV2PayloadWithNoticeCards,
+  isComponentsV2Payload,
+  isInvalidComponentTypeError,
+  rawWebhookEditOriginal
+} from "../ui/componentsV2.js";
+import { runNoodle } from "./noodle.js";
+import { shouldForceTutorialCommand } from "../game/tutorialRouting.js";
 
 const {
   MessageActionRow,
   MessageSelectMenu,
   MessageButton,
-  MessageEmbed,
   Constants
 } = discordPkg;
 
@@ -32,7 +37,6 @@ const {
 const ActionRowBuilder = MessageActionRow;
 const StringSelectMenuBuilder = MessageSelectMenu;
 const ButtonBuilder = MessageButton;
-const EmbedBuilder = MessageEmbed;
 
 const ButtonStyle = {
   Primary: Constants?.MessageButtonStyles?.PRIMARY ?? 1,
@@ -41,6 +45,7 @@ const ButtonStyle = {
   Danger: Constants?.MessageButtonStyles?.DANGER ?? 4,
   Link: Constants?.MessageButtonStyles?.LINK ?? 5
 };
+const MESSAGE_FLAG_EPHEMERAL = Constants?.MessageFlags?.EPHEMERAL ?? (1 << 6);
 
 const db = openDb();
 const staffContent = loadStaffContent();
@@ -48,22 +53,6 @@ const upgradesContent = loadUpgradesContent();
 
 function formatTwoDecimals(value) {
   return Number(Number(value ?? 0).toFixed(2));
-}
-
-function ownerFooterText(userOrMember) {
-  const member = userOrMember?.user ? userOrMember : null;
-  const fallbackUser = member?.user ?? userOrMember;
-  const displayName = member?.displayName ?? userOrMember?.displayName ?? userOrMember?.nickname ?? null;
-  const tag = fallbackUser?.tag ?? fallbackUser?.username ?? "Unknown";
-  const name = displayName ?? fallbackUser?.globalName ?? tag;
-  return `Owner: ${name}`;
-}
-
-function applyOwnerFooter(embed, user) {
-  if (embed && user) {
-    embed.setFooter({ text: ownerFooterText(user) });
-  }
-  return embed;
 }
 
 function hasGreenButton(components) {
@@ -97,6 +86,159 @@ function applyGreenButtonFooter(embeds, components) {
     }
     return embed;
   });
+}
+
+function normalizeComponents(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row.toJSON?.() ?? row;
+    const rawComponents = baseRow.components ?? row.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
+    }
+    if (footerText) {
+      const compactFooter = footerText
+        .split("\n")
+        .map((line) => String(line ?? "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      if (compactFooter) blocks.push(`-# ${compactFooter}`);
+    }
+    const compact = blocks.join("\n\n").trim();
+    if (compact) out.push({ type: 10, content: compact });
+  }
+  return out;
+}
+
+function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (isComponentsV2Payload(payload)) return payload;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+
+  const guildId = interaction?.guildId;
+  const userId = interaction?.user?.id;
+  if (!guildId || !userId) return payload;
+
+  const normalizedRows = normalizeComponents(payload.components);
+  const mainComponents = [
+    ...legacyEmbedsToV2TextComponents(payload.embeds.slice(0, 1)),
+    ...normalizedRows
+  ];
+  const notices = payload.embeds.slice(1).map((embed) => ({
+    title: String((embed?.toJSON?.() ?? embed ?? {})?.title ?? "Notice").trim() || "Notice",
+    details: legacyEmbedsToV2TextComponents([embed]).map((entry) => String(entry?.content ?? "").trim()).filter(Boolean),
+    tone: "info"
+  }));
+
+  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices,
+    ownerId: userId,
+    ephemeral: payload.ephemeral === true || ((Number(payload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0)
+  });
+
+  const { embeds, components, flags, ephemeral, ...rest } = payload;
+  return { ...rest, ...v2Payload };
+}
+
+function normalizePayloadForReply(interaction, payload = {}, player = null) {
+  const converted = convertPayloadToComponentsV2(interaction, payload, player);
+  if (converted?.embeds) {
+    converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
+  }
+  return converted;
+}
+
+async function sendStaffPayload(interaction, payload = {}) {
+  const finalPayload = payload ?? {};
+  const isV2 = isComponentsV2Payload(finalPayload);
+
+  if (!isV2) {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(finalPayload);
+    }
+    return interaction.reply(finalPayload);
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    try {
+      return await rawWebhookEditOriginal(interaction, finalPayload);
+    } catch {
+      try {
+        return await interaction.editReply(finalPayload);
+      } catch (e) {
+        if (isInvalidComponentTypeError(e)) {
+          return rawWebhookEditOriginal(interaction, finalPayload);
+        }
+        throw e;
+      }
+    }
+  }
+
+  const isEphemeral = finalPayload.ephemeral === true
+    || ((Number(finalPayload.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0);
+  try {
+    await interaction.deferReply({ ephemeral: isEphemeral });
+    return await rawWebhookEditOriginal(interaction, finalPayload);
+  } catch {
+    const canEditReply = interaction.deferred || interaction.replied;
+    try {
+      return canEditReply
+        ? await interaction.editReply(finalPayload)
+        : await interaction.reply(finalPayload);
+    } catch (e) {
+      if (isInvalidComponentTypeError(e)) {
+        if (!canEditReply) {
+          await interaction.deferReply({ ephemeral: isEphemeral });
+        }
+        return rawWebhookEditOriginal(interaction, finalPayload);
+      }
+      throw e;
+    }
+  }
 }
 
 function rarityEmoji(rarity) {
@@ -153,6 +295,30 @@ export const noodleStaffCommand = {
 export async function noodleStaffHandler(interaction) {
   const userId = interaction.user.id;
   const serverId = interaction.guild?.id ?? "DM";
+  const isSlashLikeInvocation = !(
+    interaction.isButton?.()
+    || interaction.isSelectMenu?.()
+    || interaction.isModalSubmit?.()
+    || interaction.isAutocomplete?.()
+  );
+
+  if (interaction.guildId) {
+    let tutorialPlayer = getPlayer(db, serverId, userId);
+    if (!tutorialPlayer) {
+      tutorialPlayer = newPlayerProfile(userId);
+      const rev = upsertPlayer(db, serverId, userId, tutorialPlayer, null);
+      tutorialPlayer.state_rev = rev;
+    }
+
+    if (shouldForceTutorialCommand({
+      player: tutorialPlayer,
+      sub: "profile",
+      isChatInput: isSlashLikeInvocation,
+      inDevPath: false
+    })) {
+      return runNoodle(interaction, { sub: "profile" });
+    }
+  }
 
   const idempKey = makeIdempotencyKey({
     serverId,
@@ -162,10 +328,8 @@ export async function noodleStaffHandler(interaction) {
   });
   const existing = getIdempotentResult(db, idempKey);
   if (existing) {
-    if (interaction.deferred || interaction.replied) {
-      return interaction.editReply(existing);
-    }
-    return interaction.reply(existing);
+    const normalizedExisting = normalizePayloadForReply(interaction, existing);
+    return sendStaffPayload(interaction, normalizedExisting);
   }
 
   const lockKey = `user:${userId}`;
@@ -191,33 +355,31 @@ export async function noodleStaffHandler(interaction) {
       p.state_rev = rev;
     }
 
-    const embed = buildStaffOverviewEmbed(p, s, interaction.user);
-    const components = buildStaffComponents(userId, p, s);
-
-    const response = {
-      embeds: [embed],
-      components,
+    const actionRows = buildStaffComponents(userId, p, s);
+    const normalizedResponse = buildStaffOverviewPayload({
+      player: p,
+      ownerId: userId,
+      actionRows,
       ephemeral: false
-    };
-    response.embeds = applyGreenButtonFooter(response.embeds, response.components);
+    });
 
-    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-staff", ttlSeconds: 900, result: response });
-    return response;
+    putIdempotentResult(db, { key: idempKey, userId, action: "noodle-staff", ttlSeconds: 900, result: normalizedResponse });
+    return normalizedResponse;
   });
 
-  if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(lockedResult);
-  }
-  return interaction.reply(lockedResult);
+  return sendStaffPayload(interaction, lockedResult);
 }
 
-export function buildStaffOverviewEmbed(player, server, user) {
+export function buildStaffOverviewComponents(player, server, user) {
+  void server;
+  void user;
+
+  return buildStaffOverviewTextComponents(player);
+}
+
+function buildStaffOverviewTextComponents(player) {
   const staffCap = getMaxStaffCapacity(player, staffContent);
   const usedSlots = getStaffSlotsUsed(player);
-  
-  const embed = new EmbedBuilder()
-    .setTitle(`${getIcon("staff_management")} Staff Management`)
-    .setColor(theme.colors.info);
 
   const upgradeEffects = calculateUpgradeEffects(player, upgradesContent);
   const staffMultiplier = 1 + (upgradeEffects.staff_effect_multiplier || 0);
@@ -294,16 +456,27 @@ export function buildStaffOverviewEmbed(player, server, user) {
     staffLines.push(`${prefix}**${staff.name}** — ${status}${bonusPart}`);
   }
 
-  embed.addFields({
-    name: `Your Staff`,
-    value: staffLines.length ? staffLines.join("\n") : "_No staff leveled yet._",
-    inline: false
+  return [
+    { type: 10, content: `## ${getIcon("staff_management")} Staff Management` },
+    { type: 10, content: `${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${usedSlots}/${staffCap}**` },
+    { type: 10, content: `**Your Staff**\n${staffLines.length ? staffLines.join("\n") : "_No staff leveled yet._"}` }
+  ];
+}
+
+function buildStaffOverviewPayload({ player, ownerId, actionRows = [], ephemeral = false, statusLine = "" } = {}) {
+  const safeStatusLine = String(statusLine || "").trim();
+  const mainComponents = [
+    ...buildStaffOverviewTextComponents(player),
+    ...(safeStatusLine ? [{ type: 10, content: safeStatusLine }] : []),
+    ...normalizeComponents(actionRows)
+  ];
+
+  return buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices: [],
+    ownerId: String(ownerId || "").trim() || undefined,
+    ephemeral: Boolean(ephemeral)
   });
-
-  embed.setDescription(`${getIcon("coins")} Coins: **${player.coins}**\n${getIcon("staff_slots")} Staff Slots: **${usedSlots}/${staffCap}**`);
-  applyOwnerFooter(embed, user);
-
-  return embed;
 }
 
 function buildStaffComponents(userId, player, server) {
@@ -408,27 +581,26 @@ export async function noodleStaffInteractionHandler(interaction) {
         upsertPlayer(db, serverId, userId, p, null, p.schema_version);
       }
 
-      const embed = buildStaffOverviewEmbed(p, s, interaction.user);
-      const components = buildStaffComponents(userId, p, s);
-
-      return {
-        content: result.message,
-        embeds: [embed],
-        components,
+      const actionRows = buildStaffComponents(userId, p, s);
+      return buildStaffOverviewPayload({
+        player: p,
+        ownerId: userId,
+        actionRows,
+        statusLine: result.message,
         ephemeral: !result.success
-      };
+      });
     }
 
     // Handle refresh
     if (action === "refresh") {
-      const embed = buildStaffOverviewEmbed(p, s, interaction.user);
-      const components = buildStaffComponents(userId, p, s);
-
-      return {
-        content: " ",
-        embeds: [embed],
-        components
-      };
+      const actionRows = buildStaffComponents(userId, p, s);
+      return buildStaffOverviewPayload({
+        player: p,
+        ownerId: userId,
+        actionRows,
+        statusLine: "",
+        ephemeral: false
+      });
     }
 
     return null;

@@ -6,6 +6,9 @@ import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import { calculateCombinedEffects, applyReputationBonus } from "./upgrades.js";
 import { calculateStaffEffects } from "./staff.js";
 import { getActiveBlessing, BLESSING_EFFECTS } from "./social.js";
+import { ensureGardenState, GARDEN_UNLOCK_LEVEL } from "./garden.js";
+import { ensureKitchenState, KITCHEN_UNLOCK_LEVEL } from "./kitchen.js";
+import { ensureFishingState, FISHING_UNLOCK_LEVEL } from "./fishing.js";
 
 const upgradesContent = loadUpgradesContent();
 const staffContent = loadStaffContent();
@@ -164,4 +167,36 @@ export function applySxpLevelUp(player) {
     leveled += 1;
   }
   return leveled;
+}
+
+export function setPlayerShopLevel(player, targetLevel) {
+  const safeTargetLevel = Math.max(1, Math.floor(Number(targetLevel) || 1));
+  let totalRequiredSxp = 0;
+  for (let level = 1; level < safeTargetLevel; level += 1) {
+    totalRequiredSxp += sxpToNext(level);
+  }
+
+  player.shop_level = 1;
+  player.sxp_total = totalRequiredSxp;
+  player.sxp_progress = totalRequiredSxp;
+  const leveled = applySxpLevelUp(player);
+
+  // Re-arm unlock notices when a level is lowered below a feature threshold.
+  const rearmUnlockSeenLevel = (state, unlockLevel) => {
+    if (!state || safeTargetLevel >= unlockLevel) return;
+    const currentSeenLevel = Number(state.unlock_seen_level);
+    const fallbackSeenLevel = Math.min(safeTargetLevel, unlockLevel - 1);
+    const normalizedSeenLevel = Number.isFinite(currentSeenLevel) ? currentSeenLevel : fallbackSeenLevel;
+    state.unlock_seen_level = Math.min(normalizedSeenLevel, safeTargetLevel);
+  };
+
+  rearmUnlockSeenLevel(ensureGardenState(player), GARDEN_UNLOCK_LEVEL);
+  rearmUnlockSeenLevel(ensureKitchenState(player), KITCHEN_UNLOCK_LEVEL);
+  rearmUnlockSeenLevel(ensureFishingState(player), FISHING_UNLOCK_LEVEL);
+
+  return {
+    targetLevel: safeTargetLevel,
+    leveled,
+    totalRequiredSxp
+  };
 }

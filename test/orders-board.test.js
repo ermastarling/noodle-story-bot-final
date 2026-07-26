@@ -3,7 +3,9 @@ import { test } from "node:test";
 
 import {
 	ensureDailyOrdersForPlayer,
+	ensureUnlimitedOrdersBuffer,
 	generateOrderPageForPlayer,
+	findOrderByToken,
 	getOrdersMeta,
 	markOrderConsumed
 } from "../src/game/orders.js";
@@ -157,4 +159,87 @@ test("Orders: consumed indices are trimmed to valid range when board count shrin
 	assert.deepEqual(playerState.orders_consumed_indices, [0, 1]);
 	markOrderConsumed(playerState, 99);
 	assert.deepEqual(playerState.orders_consumed_indices, [0, 1]);
+});
+
+test("Orders: temporary recipe pool changes keep consumed progress mid-day", () => {
+	const playerState = {
+		shop_level: 1,
+		rep: 0,
+		coins: 0,
+		known_recipes: ["classic_soy_ramen", "veggie_ramen"],
+		resilience: { temp_recipes: ["simple_broth"] },
+		orders_consumed_indices: []
+	};
+
+	ensureDailyOrdersForPlayer(playerState, settings, content, "spring", "s1", "u1");
+	markOrderConsumed(playerState, 0);
+	markOrderConsumed(playerState, 2);
+
+	const duringRescue = getOrdersMeta(playerState);
+	assert.equal(duringRescue.totalCount, 5);
+	assert.equal(duringRescue.availableCount, 3);
+
+	playerState.resilience.temp_recipes = [];
+	ensureDailyOrdersForPlayer(playerState, settings, content, "spring", "s1", "u1");
+
+	const afterRecovery = getOrdersMeta(playerState);
+	assert.equal(afterRecovery.totalCount, 5);
+	assert.equal(afterRecovery.availableCount, 3);
+	assert.deepEqual(playerState.orders_consumed_indices, [0, 2]);
+});
+
+test("Orders: depleted day marker keeps board complete for the rest of the day", () => {
+	const playerState = {
+		shop_level: 1,
+		rep: 0,
+		coins: 0,
+		known_recipes: ["classic_soy_ramen", "veggie_ramen"],
+		orders_consumed_indices: []
+	};
+
+	ensureDailyOrdersForPlayer(playerState, settings, content, "spring", "s1", "u1");
+	playerState.orders_depleted_day = playerState.orders_day;
+	playerState.orders_consumed_indices = [];
+
+	const meta = getOrdersMeta(playerState);
+	assert.equal(meta.availableCount, 0);
+
+	const page = generateOrderPageForPlayer({
+		playerState,
+		settings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "u1",
+		page: 0,
+		pageSize: 10
+	});
+	assert.equal(page.availableCount, 0);
+	assert.deepEqual(page.orders, []);
+
+	const tokenMatch = findOrderByToken({
+		playerState,
+		settings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "u1",
+		token: "ABCD"
+	});
+	assert.equal(tokenMatch, null);
+});
+
+test("Orders: unlimited buffer keeps at least 10 pages available", () => {
+	const playerState = {
+		orders_total_count: 260,
+		orders_consumed_indices: Array.from({ length: 30 }, (_, idx) => idx),
+		orders_day: "20260725",
+		orders_depleted_day: null
+	};
+
+	const result = ensureUnlimitedOrdersBuffer(playerState, { minVisibleOrders: 250 });
+
+	assert.equal(result.changed, true);
+	assert.equal(playerState.orders_total_count, 280);
+	assert.equal(result.availableCount, 250);
 });
