@@ -3723,9 +3723,7 @@ import { theme } from "./ui/theme.js";
               cid?.includes("select:shared_order_ingredient");
         
         // Buttons that update message immediately without database operations
-        const skipDeferButtons = cid?.includes("action:shared_order_confirm_complete") ||
-                cid?.includes("action:shared_order_abort_cancel") ||
-                cid?.includes("action:shared_order_cancel_complete");
+        const skipDeferButtons = cid?.includes("action:shared_order_confirm_complete");
         
         if (!willShowModal && !skipDeferButtons && !isNoodleStaff) {
           const deferStart = performance.now();

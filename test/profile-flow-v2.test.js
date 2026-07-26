@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildProfileHomeV2Message } from "../src/ui/profileFlowV2.js";
+import {
+  buildSpecializationListV2Message,
+  buildProfileEditV2Message,
+  buildProfileHomeV2Message,
+  buildSpecializationConfirmV2Message,
+  buildSpecializationUpdatedV2Message
+} from "../src/ui/profileFlowV2.js";
 
 test("Profile flow V2: button emojis are normalized to emoji objects", () => {
   const payload = buildProfileHomeV2Message({
@@ -40,4 +46,66 @@ test("Profile flow V2: button emojis are normalized to emoji objects", () => {
   assert.match(String(statBlock.content), /Bowls Served\s+\|\s+Level/);
   assert.match(String(statBlock.content), /REP\s+\|\s+Coins/);
   assert.equal(String(statBlock.content).includes("| Stat | Value |"), false);
+});
+
+test("Profile flow V2: customize menu keeps canonical wording", () => {
+  const payload = buildProfileEditV2Message({
+    userId: "123"
+  });
+
+  const container = payload.components?.[0]?.components ?? [];
+  const copyBlock = container.find((node) => node?.type === 10 && String(node?.content || "").includes("Change your shop name"));
+  assert.ok(copyBlock);
+  const text = String(copyBlock.content || "");
+  assert.match(text, /Change your shop name and tagline\./);
+  assert.match(text, /Change your shop specialization\./);
+  assert.match(text, /Check out the Store for premium specializations, coin packs, and subscription perks\./);
+});
+
+test("Profile flow V2: specialization confirm includes thumbnail accessory", () => {
+  const payload = buildSpecializationConfirmV2Message({
+    userId: "123",
+    specId: "festival_noodle_house",
+    specName: "Festival Noodle House",
+    specDescription: "A lively festival nook.",
+    specThumbnailUrl: "https://example.com/spec.png"
+  });
+
+  const container = payload.components?.[0]?.components ?? [];
+  const accessory = container.find((node) => Number(node?.type) === 9);
+  assert.ok(accessory);
+  const accessoryUrl = accessory?.accessory?.media?.url ?? "";
+  assert.equal(String(accessoryUrl), "https://example.com/spec.png");
+});
+
+test("Profile flow V2: specialization list includes thumbnail accessory", () => {
+  const payload = buildSpecializationListV2Message({
+    userId: "123",
+    entries: [{
+      name: "Festival Noodle House",
+      statusLine: "Available",
+      description: "A lively festival nook.",
+      thumbnailUrl: "https://example.com/list.png"
+    }]
+  });
+
+  const container = payload.components?.[0]?.components ?? [];
+  const accessory = container.find((node) => Number(node?.type) === 9);
+  assert.ok(accessory);
+  const accessoryUrl = accessory?.accessory?.media?.url ?? "";
+  assert.equal(String(accessoryUrl), "https://example.com/list.png");
+});
+
+test("Profile flow V2: specialization updated view keeps thumbnail gallery", () => {
+  const payload = buildSpecializationUpdatedV2Message({
+    userId: "123",
+    specName: "Festival Noodle House",
+    specThumbnailUrl: "https://example.com/spec.png"
+  });
+
+  const container = payload.components?.[0]?.components ?? [];
+  const gallery = container.find((node) => Number(node?.type) === 12);
+  assert.ok(gallery);
+  const galleryUrl = gallery?.items?.[0]?.media?.url ?? "";
+  assert.equal(String(galleryUrl), "https://example.com/spec.png");
 });
