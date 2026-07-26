@@ -3571,8 +3571,7 @@ import { theme } from "./ui/theme.js";
 
       if (guild?.id === officialGuildId) return;
       if (shouldSkipUntracked || isLikelyAvailabilityTransition) {
-        const expectedSkip = isLikelyAvailabilityTransition || shouldSkipUntracked;
-        const logFn = expectedSkip ? console.info : console.warn;
+        const logFn = isLikelyAvailabilityTransition ? console.info : console.warn;
         logFn("Skipping guildDelete dev alert for untracked or unavailable/unknown guild state", {
           guildId: guild?.id ?? null,
           guildTrackingPrimed,
