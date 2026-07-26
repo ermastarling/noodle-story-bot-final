@@ -34,6 +34,8 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_DEV_ALERT_CHANNEL_ID` - channel ID in the official guild for alerts
 - `NOODLE_DEV_ALERT_USER_ID` - user ID that is required for alert mention/ping behavior
 - `NOODLE_FORCE_UNICODE_EMOJI` - set `1` to force standard Unicode emoji instead of custom emoji (recommended for tester bot environments where custom emoji may be unavailable)
+- `NOODLE_STARTUP_AVATAR_ENABLED` - set `1` to enable startup avatar sync via Discord API (default disabled)
+- `NOODLE_STARTUP_AVATAR_GIF_URL` - HTTPS URL to the avatar asset to apply at startup (use a GIF for animated avatars)
 
 ## Gameplay Tuning Env Vars
 

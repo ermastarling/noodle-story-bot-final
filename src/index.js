@@ -623,6 +623,8 @@ import { theme } from "./ui/theme.js";
   const officialShopCountLabel = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_LABEL || "Total Users").trim() || "Total Users";
   const officialMemberCountLabel = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_LABEL || "Server Members").trim() || "Server Members";
   const officialStatsCategoryId = String(process.env.NOODLE_OFFICIAL_STATS_CATEGORY_ID || "").trim();
+  const startupAvatarSyncEnabled = String(process.env.NOODLE_STARTUP_AVATAR_ENABLED || "0") === "1";
+  const startupAvatarGifUrl = String(process.env.NOODLE_STARTUP_AVATAR_GIF_URL || "").trim();
   const officialStatsChannelRefreshIntervalRaw = Number(process.env.NOODLE_OFFICIAL_STATS_CHANNEL_REFRESH_INTERVAL_MS || 10 * 60 * 1000);
   const officialStatsChannelRefreshIntervalMs = Number.isFinite(officialStatsChannelRefreshIntervalRaw)
     ? Math.max(60_000, Math.floor(officialStatsChannelRefreshIntervalRaw))
@@ -3362,10 +3364,63 @@ import { theme } from "./ui/theme.js";
     });
   }
 
+  async function applyStartupAvatarIfConfigured(clientUser) {
+    if (!startupAvatarSyncEnabled) return false;
+
+    if (!startupAvatarGifUrl) {
+      console.log("INFO: Startup avatar sync skipped (NOODLE_STARTUP_AVATAR_GIF_URL not set).");
+      return false;
+    }
+
+    let parsedAvatarUrl = null;
+    try {
+      parsedAvatarUrl = new URL(startupAvatarGifUrl);
+    } catch {
+      console.error("⚠️ Startup avatar sync skipped (NOODLE_STARTUP_AVATAR_GIF_URL is not a valid URL).");
+      return false;
+    }
+
+    if (parsedAvatarUrl.protocol !== "https:") {
+      console.error("⚠️ Startup avatar sync skipped (NOODLE_STARTUP_AVATAR_GIF_URL must use https://).");
+      return false;
+    }
+
+    try {
+      const response = await fetch(parsedAvatarUrl.toString(), { method: "GET" });
+      if (!response.ok) {
+        const responseBody = await response.text().catch(() => "");
+        console.error(
+          `⚠️ Startup avatar sync download failed: ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 200)}` : ""}`
+        );
+        return false;
+      }
+
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (contentType && !contentType.includes("gif")) {
+        console.warn(`⚠️ Startup avatar source content-type is '${contentType}' (expected GIF for animation).`);
+      }
+
+      const avatarBytes = Buffer.from(await response.arrayBuffer());
+      if (!avatarBytes.length) {
+        console.error("⚠️ Startup avatar sync skipped (downloaded file was empty).");
+        return false;
+      }
+
+      await clientUser.setAvatar(avatarBytes);
+      console.log(`✅ Startup avatar updated from ${parsedAvatarUrl.host}${parsedAvatarUrl.pathname}`);
+      return true;
+    } catch (error) {
+      console.error("⚠️ Failed to apply startup avatar:", error?.message ?? error);
+      return false;
+    }
+  }
+
 
   client.once("ready", async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
     logRankTopEnvDiagnostics({ clientUserId: c.user?.id || "" });
+
+    await applyStartupAvatarIfConfigured(c.user);
 
     if (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled) {
       if (!officialMessageContentIntentEnabled) {
