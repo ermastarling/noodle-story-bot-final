@@ -4659,10 +4659,10 @@ const LEGACY_TO_V2_SUBS = new Set([
 
 function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
   if (sourceMessageIsV2) return true;
-  if (!rolloutEnabled) return false;
   const normalizedSub = String(sub || "").trim();
   const normalizedNavSource = String(navSource || "").trim();
-  return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource);
+  if (LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource)) return true;
+  return Boolean(rolloutEnabled);
 }
 
 function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
@@ -14245,19 +14245,12 @@ if (!serverId && !isDmReminderToggle) {
 const v2Parsed = parseV2CustomId(customId);
 if (v2Parsed.isV2) {
   const rolloutPlayer = ensurePlayer(serverId, userId);
-  const sourceMessageFlags = Number(interaction?.message?.flags?.bitfield ?? interaction?.message?.flags ?? 0);
-  const sourceMessageIsV2 = (sourceMessageFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
   const rolloutEnabled = isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer });
-  if (!rolloutEnabled && !sourceMessageIsV2) {
-    emitTelemetry("v2_scene_error", {
+  if (!rolloutEnabled) {
+    emitTelemetry("v2_scene_gate_bypass", {
       module: "gate",
       sceneKey: String(v2Parsed.sceneKey || ""),
-      actionKey: String(v2Parsed.actionKey || ""),
-      reason: "v2_disabled"
-    });
-    return componentCommit(interaction, {
-      content: "This V2 menu is currently disabled. Use `/noodle` to reopen the V1 menu.",
-      ephemeral: true
+      actionKey: String(v2Parsed.actionKey || "")
     });
   }
   if (!v2Parsed.valid) {
