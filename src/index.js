@@ -1366,6 +1366,7 @@ import { theme } from "./ui/theme.js";
       const shouldMention = Boolean(mentionUser && devAlertUserId);
       const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
       const bodyLines = [
+        mentionLine,
         String(description || "").slice(0, 4096),
         footerText ? `-# ${String(footerText).slice(0, 2048)}` : ""
       ].filter(Boolean);
@@ -1382,8 +1383,7 @@ import { theme } from "./ui/theme.js";
       ensureClientTokenHydrated("sendDevAlert");
       await rawChannelSendMessage(client, alertChannel.id ?? devAlertChannelId, {
         ...payload,
-        content: mentionLine || undefined,
-        allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
+        allowed_mentions: shouldMention ? { users: [devAlertUserId], parse: [] } : undefined
       });
       return true;
     } catch (error) {
