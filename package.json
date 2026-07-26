@@ -39,7 +39,7 @@
     "undici": "^6.23.0"
   },
   "devDependencies": {
-    "eslint": "^9.39.4",
+    "eslint": "^10.8.0",
     "nodemon": "^3.1.11"
   }
 }
