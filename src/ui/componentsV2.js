@@ -1,6 +1,7 @@
 import { theme } from "./theme.js";
 import { getSceneBannerUrl } from "./icons.js";
 import { normalizeRawContainerPayload } from "../util/rawPayload.js";
+import { REST } from "@discordjs/rest";
 
 const MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 export const MESSAGE_FLAG_IS_COMPONENTS_V2 = 1 << 15;
@@ -705,6 +706,51 @@ export function isInvalidComponentTypeError(error) {
   const message = String(error?.message ?? "");
   return String(error?.code ?? "") === "INVALID_TYPE"
     || message.includes("valid MessageComponentType");
+}
+
+export function isClientTokenUnavailableError(error) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return String(error?.code ?? "") === "TOKEN_MISSING"
+    || message.includes("token was unavailable to the client");
+}
+
+function resolveBotToken(client, explicitToken = "") {
+  const provided = String(explicitToken || "").trim();
+  if (provided) return provided;
+  const fromClient = String(client?.token || "").trim();
+  if (fromClient) return fromClient;
+  const fromEnv = String(process.env.DISCORD_TOKEN || "").trim();
+  return fromEnv;
+}
+
+export async function rawChannelSendMessage(client, channelId, payload, { botToken = "" } = {}) {
+  const resolvedChannelId = String(channelId || "").trim();
+  if (!resolvedChannelId) {
+    throw new Error("Raw channel message send unavailable: missing channelId");
+  }
+
+  const data = normalizeRawContainerPayload(payload, { ephemeralFlag: MESSAGE_FLAG_EPHEMERAL });
+  if ((Number(data.flags) & MESSAGE_FLAG_EPHEMERAL) !== 0) {
+    data.flags = Number(data.flags) & ~MESSAGE_FLAG_EPHEMERAL;
+  }
+
+  if (client?.api) {
+    try {
+      return await client.api.channels(resolvedChannelId).messages.post({ data });
+    } catch (error) {
+      if (!isClientTokenUnavailableError(error)) throw error;
+      const token = resolveBotToken(client, botToken);
+      if (!token) throw error;
+      client.token = token;
+    }
+  }
+
+  const token = resolveBotToken(client, botToken);
+  if (!token) {
+    throw new Error("Raw channel message send unavailable: missing bot token");
+  }
+  const rest = new REST({ version: "10" }).setToken(token);
+  return rest.post(`/channels/${resolvedChannelId}/messages`, { body: data });
 }
 
 export async function rawWebhookEditOriginal(interaction, payload) {

@@ -86,7 +86,9 @@ import { theme } from "./ui/theme.js";
     buildComponentsV2PayloadWithNoticeCards,
     isComponentsV2Payload,
     isInvalidComponentTypeError,
-    rawWebhookEditOriginal
+    rawWebhookEditOriginal,
+    rawChannelSendMessage,
+    isClientTokenUnavailableError
   } = await import("./ui/componentsV2.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
@@ -201,6 +203,15 @@ import { theme } from "./ui/theme.js";
   const SENSITIVE_LOG_KEY_RE = /(^|_|-)(token|secret|password|authorization|auth|cookie|signature|api[-_]?key|jwt|credential|webhook)s?($|_|-)/i;
   const LOG_REDACTED = "[REDACTED]";
 
+  function looksLikeSecretValue(value) {
+    const text = String(value ?? "").trim();
+    if (!text) return false;
+    if (text.length < 16) return false;
+    if (/^[A-Za-z0-9_-]{16,}$/.test(text)) return true;
+    if (/^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/.test(text)) return true;
+    return false;
+  }
+
   function redactSensitiveString(value, keyHint = "") {
     const text = String(value ?? "");
     if (SENSITIVE_LOG_KEY_RE.test(String(keyHint || ""))) {
@@ -208,7 +219,12 @@ import { theme } from "./ui/theme.js";
     }
 
     let out = text;
-    out = out.replace(/\b(bearer|token|apikey|api[-_ ]key|secret|password|jwt)\s+[^\s,;]+/ig, "$1 [REDACTED]");
+    out = out.replace(/\b(bearer|token|apikey|api[-_ ]key|secret|password|jwt)\s*[:=]\s*([^\s,;]+)/ig, (_m, label, candidate) => {
+      return looksLikeSecretValue(candidate) ? `${label}=[REDACTED]` : `${label}=${candidate}`;
+    });
+    out = out.replace(/\bBearer\s+([^\s,;]+)/ig, (_m, candidate) => {
+      return looksLikeSecretValue(candidate) ? "Bearer [REDACTED]" : `Bearer ${candidate}`;
+    });
     out = out.replace(/\b(authorization|x-api-key|x-topgg-signature|stripe-signature)\s*[:=]\s*[^\s,;]+/ig, "$1=[REDACTED]");
     out = out.replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, LOG_REDACTED);
     return out;
@@ -907,6 +923,15 @@ import { theme } from "./ui/theme.js";
 
   const client = new Client({ intents: clientIntents });
 
+  function ensureClientTokenHydrated(reason = "runtime") {
+    if (client?.token) return true;
+    const fallbackToken = String(token || "").trim() || String(process.env.DISCORD_TOKEN || "").trim();
+    if (!fallbackToken) return false;
+    client.token = fallbackToken;
+    console.warn(`⚠️ Restored missing Discord client token (${reason}).`);
+    return true;
+  }
+
   client.noodleShardHealth = {
     guildCount: 0,
     recommendedShardCount: null,
@@ -1063,14 +1088,6 @@ import { theme } from "./ui/theme.js";
 
     const applicationId = client.application?.id ?? client.user?.id;
     if (!applicationId) return { ids, applicationEmojiCount };
-
-    if (client.application) {
-      try {
-        await client.application.fetch();
-      } catch (error) {
-        console.error("⚠️ Unable to refresh application metadata:", error?.message ?? error);
-      }
-    }
 
     try {
       const rest = new REST({ version: "10" }).setToken(token);
@@ -1361,41 +1378,27 @@ import { theme } from "./ui/theme.js";
         accentColor: color,
         ephemeral: false
       });
-      await alertChannel.send({
+
+      ensureClientTokenHydrated("sendDevAlert");
+      await rawChannelSendMessage(client, alertChannel.id ?? devAlertChannelId, {
         ...payload,
         content: mentionLine || undefined,
         allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
       });
       return true;
     } catch (error) {
-      if (isInvalidComponentTypeError(error)) {
-        try {
-          const shouldMention = Boolean(mentionUser && devAlertUserId);
-          const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
-          const legacyContent = [
-            mentionLine,
-            `**${String(title || "Alert").slice(0, 200)}**`,
-            String(description || "").slice(0, 4096),
-            footerText ? String(footerText).slice(0, 2048) : ""
-          ].filter(Boolean).join("\n\n");
-          await alertChannel.send({
-            content: legacyContent,
-            allowedMentions: shouldMention ? { users: [devAlertUserId] } : undefined
-          });
-          return true;
-        } catch (fallbackError) {
-          emitTelemetry("hard_failure_alert_send", {
-            route: "index:dev_alert",
-            guildId: officialGuildId || null,
-            channelId: devAlertChannelId || null,
-            mentionUserId: devAlertUserId || null,
-            errorCode: fallbackError?.code ?? null,
-            errorName: fallbackError?.name ?? null,
-            errorMessage: String(fallbackError?.message ?? fallbackError ?? "unknown_error")
-          });
-          console.error("❌ Failed to send dev alert (legacy fallback):", fallbackError?.stack ?? fallbackError);
-          return false;
-        }
+      if (isClientTokenUnavailableError(error)) {
+        emitTelemetry("hard_failure_alert_send", {
+          route: "index:dev_alert",
+          guildId: officialGuildId || null,
+          channelId: devAlertChannelId || null,
+          mentionUserId: devAlertUserId || null,
+          errorCode: error?.code ?? null,
+          errorName: error?.name ?? null,
+          errorMessage: String(error?.message ?? error ?? "unknown_error")
+        });
+        console.error("❌ Failed to send dev alert (missing client token):", error?.stack ?? error);
+        return false;
       }
       emitTelemetry("hard_failure_alert_send", {
         route: "index:dev_alert",
@@ -3428,6 +3431,7 @@ import { theme } from "./ui/theme.js";
 
 
   client.once("ready", async (c) => {
+    ensureClientTokenHydrated("ready");
     console.log(`✅ Logged in as ${c.user.tag}`);
     logRankTopEnvDiagnostics({ clientUserId: c.user?.id || "" });
 

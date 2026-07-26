@@ -146,13 +146,16 @@ export function startV2TelemetryAlertScheduler({ sendAlert, env = process.env, l
         issues
       });
 
-      await sendAlert({
-        title,
-        description,
-        footerText: `Reason: ${reason} | minLoops=${thresholds.minLoops}`,
-        requireMention: highIssue,
-        mentionUser: highIssue
-      });
+      // Avoid replay-style startup chatter when there is no actionable telemetry issue.
+      if (reason !== "startup" || highIssue) {
+        await sendAlert({
+          title,
+          description,
+          footerText: `Reason: ${reason} | minLoops=${thresholds.minLoops}`,
+          requireMention: highIssue,
+          mentionUser: highIssue
+        });
+      }
     } catch (error) {
       logger.error("V2 telemetry report scheduler failed:", error?.stack ?? error);
     } finally {
@@ -160,7 +163,6 @@ export function startV2TelemetryAlertScheduler({ sendAlert, env = process.env, l
     }
   }
 
-  runOnce("startup");
   const handle = setInterval(() => {
     runOnce("interval");
   }, intervalMs);
