@@ -3463,6 +3463,7 @@ import { theme } from "./ui/theme.js";
         title: "New Server Alert!",
         description:
           `New Server: ${String(guild?.name || "Unknown Server")}\n` +
+          `Server ID: ${String(guild?.id || "unknown")}\n` +
           `Members: ${memberCount.toLocaleString()}`,
         footerText: `Current Server Count: ${currentCounts.serverCount.toLocaleString()}`,
         color: theme.colors.success,
@@ -3481,9 +3482,13 @@ import { theme } from "./ui/theme.js";
       await refreshShardHealth({ reason: "guildDelete" });
 
       if (guild?.id === officialGuildId) return;
+      const memberCount = Number(guild?.memberCount ?? 0);
       await sendDevAlert({
         title: "Server Left Alert!",
-        description: `Left Server: ${String(guild?.name || "Unknown Server")}`,
+        description:
+          `Left Server: ${String(guild?.name || "Unknown Server")}\n` +
+          `Server ID: ${String(guild?.id || "unknown")}\n` +
+          `Members: ${memberCount.toLocaleString()}`,
         footerText: `Current Server Count: ${currentCounts.serverCount.toLocaleString()}`,
         color: theme.colors.warning,
         requireMention: true

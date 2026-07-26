@@ -7813,14 +7813,16 @@ if (inDevPath && sub === "admin_season_event") {
         recipes: content?.recipes
       });
 
-      enqueuePersistentV2NoticeCards(adminPlayer, [{
-        title: `${getIcon("season")} Season Update`,
-        details: [
-          `Season changed from **${fromLabel}** to **${seasonLabel}**.`,
-          rolloverNotice?.message ?? "Seasonal bowls found cozy homes."
-        ],
-        tone: "info"
-      }]);
+      if (rolloverNotice?.message) {
+        enqueuePersistentV2NoticeCards(adminPlayer, [{
+          title: `${getIcon("season")} Season Update`,
+          details: [
+            `Season changed from **${fromLabel}** to **${seasonLabel}**.`,
+            rolloverNotice.message
+          ],
+          tone: "info"
+        }]);
+      }
 
       upsertPlayer(db, targetServerId, userId, adminPlayer, null, adminPlayer.schema_version);
     }
