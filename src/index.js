@@ -22,6 +22,20 @@ import { theme } from "./ui/theme.js";
     ?? Discord.Constants?.ChannelTypes?.GUILD_VOICE
     ?? 2
   );
+  const GUILD_VOICE_CHANNEL_TYPE_NAME = String(
+    Discord.ChannelTypes?.GUILD_VOICE
+    ?? Discord.Constants?.ChannelTypes?.GUILD_VOICE
+    ?? "GUILD_VOICE"
+  ).trim().toUpperCase();
+
+  function isGuildVoiceCounterChannelType(type) {
+    if (Number(type) === GUILD_VOICE_CHANNEL_TYPE) return true;
+    const normalizedType = String(type ?? "").trim().toUpperCase();
+    if (!normalizedType) return false;
+    return normalizedType === "GUILD_VOICE"
+      || normalizedType === String(GUILD_VOICE_CHANNEL_TYPE)
+      || normalizedType === GUILD_VOICE_CHANNEL_TYPE_NAME;
+  }
 
   if (!Client || !Intents) {
     console.error("❌ Failed to load discord.js properly");
@@ -1932,17 +1946,9 @@ import { theme } from "./ui/theme.js";
       .slice(0, 80) || "Stats";
   }
 
-  async function resolveOfficialStatsChannelByLabel(officialGuild, label) {
-    const resolved = await resolveOfficialStatsChannelTarget(officialGuild, null, {
-      label,
-      preferredCategoryId: officialStatsCategoryId
-    });
-    return resolved?.channel || null;
-  }
-
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
     const isSupportedStatsCounterChannel = (candidate) => (
-      Number(candidate?.type) === GUILD_VOICE_CHANNEL_TYPE
+      isGuildVoiceCounterChannelType(candidate?.type)
       && typeof candidate?.setName === "function"
       && typeof candidate?.permissionOverwrites?.edit === "function"
     );

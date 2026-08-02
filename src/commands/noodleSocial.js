@@ -429,13 +429,13 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
       mainComponents: [
         { type: 10, content: `## ${title}` },
         { type: 10, content: description },
-        { type: 10, content: `-# ${footerText}` }
+        { type: 10, content: `-# ${footerText}` },
+        ...normalizeComponents([navRow, typeRow, socialMainMenuRow(userId)])
       ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components: [navRow, typeRow, socialMainMenuRow(userId)]
+    })
   };
 }
 
@@ -515,13 +515,13 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
       mainComponents: [
         { type: 10, content: `## ${title}` },
         { type: 10, content: description },
-        { type: 10, content: `-# ${footerText}` }
+        { type: 10, content: `-# ${footerText}` },
+        ...normalizeComponents([navRow, typeRow])
       ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components: [navRow, typeRow]
+    })
   };
 }
 
@@ -1233,6 +1233,23 @@ function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
 }
 
 function convertPayloadToComponentsV2(interaction, payload = {}) {
+  if (isComponentsV2Payload(payload)) {
+    return payload;
+  }
+
+  const hasSourceNativeComponents = Array.isArray(payload?.mainComponents) || Array.isArray(payload?.notices);
+  if (hasSourceNativeComponents) {
+    const explicitMainComponents = Array.isArray(payload?.mainComponents) ? payload.mainComponents : [];
+    const normalizedRows = normalizeLegacyComponentRows(payload?.components);
+    const isEphemeral = payload?.ephemeral === true || ((Number(payload?.flags) & (1 << 6)) !== 0);
+    return buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [...explicitMainComponents, ...normalizedRows],
+      notices: Array.isArray(payload?.notices) ? payload.notices : [],
+      ownerId: interaction?.user?.id ?? payload?.ownerId,
+      ephemeral: isEphemeral
+    });
+  }
+
   if (payload && typeof payload === "object" && Array.isArray(payload.embeds) && payload.embeds.length > 0) {
     return buildLegacyEmbedsV2Payload(payload.embeds, {
       components: payload.components,
@@ -1254,7 +1271,7 @@ function composeV2FromLegacyEmbeds(embeds = [], ownerId = "") {
   });
 }
 
-function normalizePayloadForReply(interaction, payload = {}) {
+export function normalizePayloadForReply(interaction, payload = {}) {
   const serverId = interaction?.guildId;
   const userId = interaction?.user?.id;
   let sourcePayload = payload;

@@ -37,10 +37,10 @@ function formatMs(value) {
   return Number.isFinite(value) ? `${String(value)}ms` : safe(value);
 }
 
-function buildReportText({ summary, delta, recommendation, windowHours, issues = [] } = {}) {
+export function buildReportText({ summary, delta, recommendation, windowHours, issues = [] } = {}) {
   const lines = [
     `Window: last ${windowHours}h`,
-    "Metric: transitions - current activity count for V2 scene transitions.",
+    `Metric: transitions - ${safe(summary.transitions, "0")} transitions recorded in this window.`,
     `Metric: errors - ${safe(summary.errors, "0")} scene errors captured; meaning: runtime failures still need inspection if counts spike.`,
     `Metric: gate bypasses - ${safe(summary.bypasses, "0")} bypasses; meaning: rollout gating was skipped for these routes.`,
     `Metric: error rate - ${formatPct(summary.errorRatePct)}; meaning: the share of transitions that ended in error.`,

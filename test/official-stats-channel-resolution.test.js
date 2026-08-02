@@ -80,3 +80,53 @@ test("resolveOfficialStatsChannelTarget falls back to the guild when the preferr
   assert.equal(result.channel.id, fallbackMatch.id);
   assert.equal(result.source, "label-guild");
 });
+
+test("resolveOfficialStatsChannelTarget supports string channel type matches", async () => {
+  const stringTypeMatch = {
+    id: "member-channel-string-type",
+    name: "Server Members",
+    type: "GUILD_VOICE",
+    parentId: "stats-category",
+    position: 1
+  };
+  const guild = {
+    channels: {
+      cache: new Map([[stringTypeMatch.id, stringTypeMatch]]),
+      fetch: async () => null
+    }
+  };
+
+  const result = await resolveOfficialStatsChannelTarget(guild, null, {
+    label: "Server Members",
+    preferredCategoryId: "stats-category"
+  });
+
+  assert.ok(result);
+  assert.equal(result.channel.id, stringTypeMatch.id);
+  assert.equal(result.source, "label-category");
+});
+
+test("resolveOfficialStatsChannelTarget accepts configured channels with string voice type", async () => {
+  const configuredStringType = {
+    id: "configured-string-voice",
+    name: "Server Members",
+    type: "GUILD_VOICE",
+    parentId: "stats-category",
+    position: 1
+  };
+  const guild = {
+    channels: {
+      cache: new Map([[configuredStringType.id, configuredStringType]]),
+      fetch: async () => configuredStringType
+    }
+  };
+
+  const result = await resolveOfficialStatsChannelTarget(guild, configuredStringType.id, {
+    label: "Server Members",
+    preferredCategoryId: "stats-category"
+  });
+
+  assert.ok(result);
+  assert.equal(result.channel.id, configuredStringType.id);
+  assert.equal(result.source, "configured");
+});

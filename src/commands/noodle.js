@@ -5308,13 +5308,15 @@ export function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, 
     return {
       content: " ",
       ...buildComponentsV2PayloadWithNoticeCards({
-        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([emptyEmbed]),
+        mainComponents: [
+          ...legacyEmbedsToV2TextComponentsForLegacy([emptyEmbed]),
+          ...normalizeComponents([noodleMainMenuRow(userId)], 0)
+        ],
         notices: [],
         ownerId: userId,
         ephemeral: true,
         includeGreenButtonTip: false
-      }),
-      components: [noodleMainMenuRow(userId)]
+      })
     };
   }
 
@@ -5405,12 +5407,14 @@ export function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, 
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([buyEmbed]),
+      mainComponents: [
+        ...legacyEmbedsToV2TextComponentsForLegacy([buyEmbed]),
+        ...normalizeComponents(rows, 0)
+      ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components: rows
+    })
   };
 }
 
@@ -5479,13 +5483,15 @@ function buildSellMenuPayload({
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents,
+      mainComponents: [
+        ...mainComponents,
+        ...normalizeComponents(components, 0)
+      ],
       notices: Array.isArray(notices) ? notices : [],
       ownerId: userId,
       ephemeral,
       includeGreenButtonTip: false
     }),
-    components,
     ephemeral
   };
 }
@@ -5761,12 +5767,14 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([acceptEmbed]),
+      mainComponents: [
+        ...legacyEmbedsToV2TextComponentsForLegacy([acceptEmbed]),
+        ...normalizeComponents(rows, 0)
+      ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components: rows
+    })
   };
 }
 
@@ -5904,12 +5912,14 @@ function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser,
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([actionEmbed]),
+      mainComponents: [
+        ...legacyEmbedsToV2TextComponentsForLegacy([actionEmbed]),
+        ...normalizeComponents(components, 0)
+      ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components
+    })
   };
 }
 
@@ -6655,12 +6665,14 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]),
+      mainComponents: [
+        ...legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]),
+        ...normalizeComponents(components, 0)
+      ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components
+    })
   };
 }
 
@@ -6827,12 +6839,14 @@ function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]),
+      mainComponents: [
+        ...legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]),
+        ...normalizeComponents(components, 0)
+      ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components
+    })
   };
 }
 
@@ -6882,23 +6896,26 @@ function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
   });
 
   const canCounterServe = needRows.some((entry) => entry.ready > 0);
+  const rows = [
+    new ActionRowBuilder().addComponents(menu),
+    noodleTakeoutActionRow(userId, {
+      activeShift: true,
+      disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
+      disableServe: !canCounterServe
+    }),
+    noodleMainMenuRowNoOrdersWithBack(userId)
+  ];
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([serveEmbed]),
+      mainComponents: [
+        ...legacyEmbedsToV2TextComponentsForLegacy([serveEmbed]),
+        ...normalizeComponents(rows, 0)
+      ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components: [
-      new ActionRowBuilder().addComponents(menu),
-      noodleTakeoutActionRow(userId, {
-        activeShift: true,
-        disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
-        disableServe: !canCounterServe
-      }),
-      noodleMainMenuRowNoOrdersWithBack(userId)
-    ]
+    })
   };
 }
 
@@ -6953,38 +6970,42 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
     embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
   }
 
+  const rows = [
+    ...(totalPages > 1
+      ? [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`noodle:nav:takeout_needs:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
+              .setLabel("Prev")
+              .setEmoji(getButtonEmoji("back"))
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setCustomId(`noodle:nav:takeout_needs:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
+              .setLabel("Next")
+              .setEmoji(getButtonEmoji("next"))
+              .setStyle(ButtonStyle.Secondary)
+          )
+        ]
+      : []),
+    noodleTakeoutActionRow(userId, {
+      activeShift: true,
+      disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
+      disableServe: !canCounterServe
+    }),
+    noodleMainMenuRowNoOrdersWithBack(userId)
+  ];
+
   return {
     content: " ",
     ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]),
+      mainComponents: [
+        ...legacyEmbedsToV2TextComponentsForLegacy([embed]),
+        ...normalizeComponents(rows, 0)
+      ],
       notices: [],
       ownerId: userId,
       includeGreenButtonTip: false
-    }),
-    components: [
-      ...(totalPages > 1
-        ? [
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder()
-                .setCustomId(`noodle:nav:takeout_needs:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
-                .setLabel("Prev")
-                .setEmoji(getButtonEmoji("back"))
-                .setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder()
-                .setCustomId(`noodle:nav:takeout_needs:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
-                .setLabel("Next")
-                .setEmoji(getButtonEmoji("next"))
-                .setStyle(ButtonStyle.Secondary)
-            )
-          ]
-        : []),
-      noodleTakeoutActionRow(userId, {
-        activeShift: true,
-        disableClaim: Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) <= 0,
-        disableServe: !canCounterServe
-      }),
-      noodleMainMenuRowNoOrdersWithBack(userId)
-    ]
+    })
   };
 }
 

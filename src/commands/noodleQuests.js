@@ -84,6 +84,23 @@ function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
 }
 
 function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+  if (isComponentsV2Payload(payload)) {
+    return payload;
+  }
+
+  const hasSourceNativeComponents = Array.isArray(payload?.mainComponents) || Array.isArray(payload?.notices);
+  if (hasSourceNativeComponents) {
+    const explicitMainComponents = Array.isArray(payload?.mainComponents) ? payload.mainComponents : [];
+    const normalizedRows = normalizeLegacyComponentRows(payload?.components);
+    const isEphemeral = payload?.ephemeral === true || ((Number(payload?.flags) & (1 << 6)) !== 0);
+    return buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [...explicitMainComponents, ...normalizedRows],
+      notices: Array.isArray(payload?.notices) ? payload.notices : [],
+      ownerId: interaction?.user?.id ?? payload?.ownerId,
+      ephemeral: isEphemeral
+    });
+  }
+
   if (payload && typeof payload === "object" && Array.isArray(payload.embeds) && payload.embeds.length > 0) {
     return buildLegacyEmbedsV2Payload(payload.embeds, {
       components: payload.components,

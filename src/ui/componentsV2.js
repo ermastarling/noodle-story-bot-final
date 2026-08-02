@@ -542,19 +542,17 @@ export function legacyEmbedsToV2TextComponents(embeds = []) {
     if (compactFooter) {
       const footerLine = `-# ${compactFooter}`;
       if (chunks.length > 0) {
-        const reserved = footerLine.length + 4;
-        const allowedBodyLength = Math.max(0, 3800 - reserved);
-        const firstChunk = String(chunks[0] ?? "").trim();
-        if (firstChunk) {
-          const bodyForFirstChunk = splitTextToV2Chunks(firstChunk, allowedBodyLength)[0] ?? firstChunk;
-          const combined = `${bodyForFirstChunk}\n\n${footerLine}`.trim();
+        const lastIdx = chunks.length - 1;
+        const lastChunk = String(chunks[lastIdx] ?? "").trim();
+        if (lastChunk) {
+          const combined = `${lastChunk}\n\n${footerLine}`.trim();
           if (combined.length <= 3800) {
-            chunks[0] = combined;
+            chunks[lastIdx] = combined;
           } else {
-            chunks.unshift(footerLine);
+            chunks.push(footerLine);
           }
         } else {
-          chunks.unshift(footerLine);
+          chunks[lastIdx] = footerLine;
         }
       } else {
         chunks.push(footerLine);

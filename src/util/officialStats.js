@@ -5,6 +5,20 @@ const GUILD_VOICE_CHANNEL_TYPE = Number(
   ?? discordPkg?.Constants?.ChannelTypes?.GUILD_VOICE
   ?? 2
 );
+const GUILD_VOICE_CHANNEL_TYPE_NAME = String(
+  discordPkg?.ChannelTypes?.GUILD_VOICE
+  ?? discordPkg?.Constants?.ChannelTypes?.GUILD_VOICE
+  ?? "GUILD_VOICE"
+).trim().toUpperCase();
+
+function isGuildVoiceCounterChannelType(type) {
+  if (Number(type) === GUILD_VOICE_CHANNEL_TYPE) return true;
+  const normalizedType = String(type ?? "").trim().toUpperCase();
+  if (!normalizedType) return false;
+  return normalizedType === "GUILD_VOICE"
+    || normalizedType === String(GUILD_VOICE_CHANNEL_TYPE)
+    || normalizedType === GUILD_VOICE_CHANNEL_TYPE_NAME;
+}
 
 export async function resolveOfficialStatsChannelTarget(officialGuild, channelId, { label, preferredCategoryId } = {}) {
   const existingId = String(channelId || "").trim();
@@ -13,7 +27,7 @@ export async function resolveOfficialStatsChannelTarget(officialGuild, channelId
 
   const isVoiceCounterChannel = (candidate) => Boolean(
     candidate
-    && Number(candidate.type) === GUILD_VOICE_CHANNEL_TYPE
+    && isGuildVoiceCounterChannelType(candidate.type)
     && typeof candidate?.name === "string"
   );
 

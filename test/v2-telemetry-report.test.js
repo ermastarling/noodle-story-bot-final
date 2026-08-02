@@ -7,6 +7,7 @@ import {
   detectHighTelemetryIssues,
   summarizeTelemetryEvents
 } from "../src/infra/v2TelemetryReport.js";
+import { buildReportText } from "../src/jobs/v2TelemetryAlerts.js";
 
 test("V2 telemetry report: summarizes core loop, error, and minigame metrics", () => {
   const summary = summarizeTelemetryEvents({
@@ -127,4 +128,25 @@ test("V2 telemetry report: surfaces data-quality warnings for dropped telemetry"
   assert.equal(summary.dataQuality.totalDrops, 5);
   assert.equal(summary.dataQuality.warnings.length > 0, true);
   assert.match(summary.dataQuality.warnings[0], /drop/i);
+});
+
+test("V2 telemetry report: alert text includes transitions numeric metric", () => {
+  const text = buildReportText({
+    summary: {
+      transitions: 12,
+      errors: 1,
+      bypasses: 0,
+      errorRatePct: 8.3,
+      loops: 5,
+      clickAvg: 3,
+      loopTimeP50: 1200,
+      loopTimeP95: 2600
+    },
+    delta: null,
+    recommendation: "GO",
+    windowHours: 24,
+    issues: []
+  });
+
+  assert.match(text, /Metric: transitions - 12 transitions recorded in this window\./);
 });

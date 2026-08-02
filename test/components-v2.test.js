@@ -13,6 +13,7 @@ import {
   resolveComponentsV2TargetGuild
 } from "../src/ui/componentsV2.js";
 import { buildHelpPageV2Payload, buildMultiBuyPickerPayload } from "../src/commands/noodle.js";
+import { normalizePayloadForReply as normalizeSocialPayloadForReply } from "../src/commands/noodleSocial.js";
 import { normalizePayloadForReply as normalizeDecorPayloadForReply } from "../src/commands/noodleDecor.js";
 import { normalizePayloadForReply as normalizeQuestsPayloadForReply } from "../src/commands/noodleQuests.js";
 import { normalizePayloadForReply as normalizeStaffPayloadForReply } from "../src/commands/noodleStaff.js";
@@ -232,6 +233,57 @@ test("Components V2: multi-buy picker returns a direct V2 payload", () => {
   assert.equal(Array.isArray(payload.components), true);
   assert.equal(payload.mainComponents, undefined);
   assert.equal(payload.notices, undefined);
+  const nodes = payload.components?.flatMap((container) => container?.components ?? []) ?? [];
+  assert.equal(nodes.some((node) => Number(node?.type) === 10), true);
+  assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
+});
+
+test("Components V2: quests converter preserves prebuilt V2 payloads and native mainComponents/notices", () => {
+  const prebuilt = {
+    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
+    components: [{ type: 17, components: [{ type: 10, content: "## Keep me" }] }]
+  };
+  const untouched = normalizeQuestsPayloadForReply({ user: { id: "u2" } }, prebuilt);
+  assert.equal(untouched, prebuilt);
+
+  const nativePayload = {
+    mainComponents: [{ type: 10, content: "## Native" }],
+    notices: [{ title: "Notice", details: ["A"], tone: "info" }],
+    components: [
+      {
+        type: 1,
+        components: [{ type: 2, style: 2, label: "Back", custom_id: "noodle:nav:profile:u2" }]
+      }
+    ]
+  };
+  const normalizedNative = normalizeQuestsPayloadForReply({ user: { id: "u2" } }, nativePayload);
+  const nodes = normalizedNative.components?.flatMap((container) => container?.components ?? []) ?? [];
+  assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Native")), true);
+  assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
+});
+
+test("Components V2: social converter preserves prebuilt V2 payloads and native mainComponents/notices", () => {
+  const prebuilt = {
+    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
+    components: [{ type: 17, components: [{ type: 10, content: "## Keep social" }] }]
+  };
+  const untouched = normalizeSocialPayloadForReply({ user: { id: "u3" } }, prebuilt);
+  assert.equal(untouched, prebuilt);
+
+  const nativePayload = {
+    mainComponents: [{ type: 10, content: "## Social Native" }],
+    notices: [{ title: "Heads up", details: ["Info"], tone: "info" }],
+    components: [
+      {
+        type: 1,
+        components: [{ type: 2, style: 2, label: "Back", custom_id: "noodle-social:nav:menu:u3" }]
+      }
+    ]
+  };
+  const normalizedNative = normalizeSocialPayloadForReply({ user: { id: "u3" } }, nativePayload);
+  const nodes = normalizedNative.components?.flatMap((container) => container?.components ?? []) ?? [];
+  assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Social Native")), true);
+  assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
 });
 
 test("Components V2: owner/tip footer is inserted below media and before action rows", () => {
@@ -387,9 +439,10 @@ test("Components V2: legacy embed text conversion chunks long content and strips
 
   assert.equal(Array.isArray(components), true);
   assert.equal(components.length > 1, true);
-  assert.equal(components[0]?.content?.includes("Owner:"), false);
-  assert.equal(components[0]?.content?.includes("Keep this note"), true);
-  assert.equal(components[0]?.content?.includes("Status"), true);
+  assert.equal(components.some((entry) => String(entry?.content ?? "").includes("Owner:")), false);
+  assert.equal(components.some((entry) => String(entry?.content ?? "").includes("Keep this note")), true);
+  assert.equal(components.some((entry) => String(entry?.content ?? "").includes("Status")), true);
+  assert.equal(components.some((entry) => String(entry?.content ?? "").includes("Line two")), true);
 });
 
 test("Components V2: replyOrEditInteraction prefers raw webhook edit for deferred V2 payloads", async () => {
