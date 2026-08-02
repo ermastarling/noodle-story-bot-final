@@ -61,6 +61,7 @@ import { theme } from "../ui/theme.js";
 import { getIcon, getButtonEmoji } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
+  legacyEmbedsToV2TextComponents,
   MESSAGE_FLAG_IS_COMPONENTS_V2
 } from "../ui/componentsV2.js";
 
@@ -364,11 +365,9 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     })
     .join("\n");
 
-  const embed = createCard()
-    .setTitle(`${getIcon("leaderboard")} Server Leaderboard`)
-    .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
-    .setColor(theme.colors.info)
-    .setFooter({ text: `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}` });
+  const title = `${getIcon("leaderboard")} Server Leaderboard`;
+  const description = `**${type.title()}**\n\n${leaderboardText || "No entries yet."}`;
+  const footerText = `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}`;
 
   const typeCount = LEADERBOARD_TYPES.length;
   const canNavigate = typeCount > 1 || totalPages > 1;
@@ -426,7 +425,16 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
   );
 
   return {
-    ...composeV2FromLegacyEmbeds([embed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [
+        { type: 10, content: `## ${title}` },
+        { type: 10, content: description },
+        { type: 10, content: `-# ${footerText}` }
+      ],
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components: [navRow, typeRow, socialMainMenuRow(userId)]
   };
 }
@@ -443,11 +451,9 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
     })
     .join("\n");
 
-  const embed = createCard()
-    .setTitle(`${getIcon("leaderboard")} Global Leaderboard`)
-    .setDescription(`**${type.title()}**\n\n${leaderboardText || "No entries yet."}`)
-    .setColor(theme.colors.info)
-    .setFooter({ text: `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}` });
+  const title = `${getIcon("leaderboard")} Global Leaderboard`;
+  const description = `**${type.title()}**\n\n${leaderboardText || "No entries yet."}`;
+  const footerText = `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}`;
 
   const typeCount = LEADERBOARD_TYPES.length;
   const canNavigate = typeCount > 1 || totalPages > 1;
@@ -505,7 +511,16 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
   );
 
   return {
-    ...composeV2FromLegacyEmbeds([embed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: [
+        { type: 10, content: `## ${title}` },
+        { type: 10, content: description },
+        { type: 10, content: `-# ${footerText}` }
+      ],
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components: [navRow, typeRow]
   };
 }
@@ -1171,174 +1186,72 @@ function normalizeComponents(rows = []) {
   return normalized;
 }
 
-function sanitizeLegacyFooterForV2(footerText = "") {
-  const raw = String(footerText ?? "").trim();
-  if (!raw) return "";
-  return raw
-    .split("\n")
-    .map((line) => String(line ?? "").trim())
-    .map((line) => line
-      .split("•")
-      .map((segment) => String(segment ?? "").trim())
-      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
-      .join(" • ")
-      .trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
-function splitTextToChunks(text, maxLen = 3800) {
-  const raw = String(text ?? "");
-  if (!raw) return [];
-  const chunks = [];
-  let remaining = raw;
-  while (remaining.length > maxLen) {
-    let cut = remaining.lastIndexOf("\n", maxLen);
-    if (cut <= 0) cut = maxLen;
-    chunks.push(remaining.slice(0, cut).trim());
-    remaining = remaining.slice(cut).trimStart();
-  }
-  if (remaining.trim()) chunks.push(remaining.trim());
-  return chunks.filter(Boolean);
-}
-
-function legacyEmbedsToV2TextComponents(embeds = []) {
-  const out = [];
-  for (const embed of embeds || []) {
-    const raw = embed?.toJSON?.() ?? embed ?? {};
-    const title = String(raw?.title ?? "").trim();
-    const description = String(raw?.description ?? "").trim();
-    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
-    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
-    const imageUrl = String(raw?.image?.url ?? "").trim();
-    const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
-
-    const blocks = [];
-    if (title) blocks.push(`## ${title}`);
-    if (description) blocks.push(description);
-
-    for (const field of fields) {
-      const name = String(field?.name ?? "").trim();
-      const value = String(field?.value ?? "").trim();
-      if (!name && !value) continue;
-      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
-    }
-
-    if (imageUrl) blocks.push(`Image: ${imageUrl}`);
-    if (thumbnailUrl) blocks.push(`Thumbnail: ${thumbnailUrl}`);
-    if (footerText) {
-      const compactFooter = footerText
-        .split("\n")
-        .map((line) => String(line ?? "").trim())
-        .filter(Boolean)
-        .join(" • ");
-      if (compactFooter) blocks.push(`-# ${compactFooter}`);
-    }
-
-    const compact = blocks.join("\n\n").trim();
-    const chunks = splitTextToChunks(compact);
-    for (const chunk of chunks) out.push({ type: 10, content: chunk });
-  }
-  return out;
-}
-
-function detectOwnerIdFromComponents(components = []) {
-  const stack = Array.isArray(components) ? [...components] : [];
-  while (stack.length > 0) {
-    const node = stack.pop();
-    if (!node || typeof node !== "object") continue;
-    const customId = String(node.custom_id ?? node.customId ?? "").trim();
-    if (customId) {
-      const match = customId.match(/(?:^|:)(\d{17,20})(?::|$)/);
-      if (match?.[1]) return match[1];
-    }
-    if (Array.isArray(node.components) && node.components.length > 0) {
-      stack.push(...node.components);
-    }
-  }
-  return null;
-}
-
-function convertPayloadToComponentsV2(interaction, payload = {}) {
-  if (!payload || typeof payload !== "object") return payload;
-  if (isComponentsV2Payload(payload)) return payload;
-
-  const hasSourceNativeComponents = Array.isArray(payload.mainComponents) || Array.isArray(payload.notices);
-  if (hasSourceNativeComponents) {
-    const guildId = interaction?.guildId;
-    const userId = interaction?.user?.id;
-    if (!guildId || !userId) return payload;
-
-    const normalizedRows = normalizeComponents(payload.components);
-    const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
-    const ownerId = payload.ownerId || detectOwnerIdFromComponents(normalizedRows) || userId;
-    const mainComponents = [
-      ...(Array.isArray(payload.mainComponents) ? payload.mainComponents : []),
-      ...normalizedRows
-    ];
-    const notices = Array.isArray(payload.notices) ? payload.notices : [];
-
-    const v2Payload = buildComponentsV2PayloadWithNoticeCards({
-      mainComponents,
-      notices,
-      ownerId,
-      ephemeral: isEphemeral
-    });
-
-    const { mainComponents: _mainComponents, notices: _notices, ownerId: _ownerId, components, flags, ephemeral, ...rest } = payload;
-    return { ...rest, ...v2Payload };
-  }
-
-  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
-
-  const guildId = interaction?.guildId;
-  const userId = interaction?.user?.id;
-  if (!guildId || !userId) return payload;
-
-  const normalizedRows = normalizeComponents(payload.components);
-  const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
-  const ownerId = detectOwnerIdFromComponents(normalizedRows) || userId;
-
-  const primaryEmbed = payload.embeds[0];
-  const notificationEmbeds = payload.embeds.slice(1);
-  const mainComponents = [...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []), ...normalizedRows];
-  const notices = notificationEmbeds.map((embed) => {
-    const raw = embed?.toJSON?.() ?? embed ?? {};
-    const title = String(raw?.title ?? "").trim() || "Notification";
-    const details = legacyEmbedsToV2TextComponents([embed])
-      .map((entry) => String(entry?.content ?? "").trim())
+function normalizeLegacyComponentRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row?.toJSON?.() ?? row;
+    const rawComponents = baseRow?.components ?? row?.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
       .filter(Boolean);
-    return { title, details, tone: "info" };
-  });
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
 
-  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
+function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
+  const list = Array.isArray(embeds) ? embeds : [];
+  const ownerId = String(options?.ownerId ?? "").trim() || undefined;
+  const ephemeral = Boolean(options?.ephemeral === true || options?.ephemeral === 1 || options?.ephemeral === "true");
+  const components = Array.isArray(options?.components) ? options.components : [];
+  const primaryEmbed = list[0] ?? null;
+  const notificationEmbeds = list.slice(1);
+  const mainComponents = [
+    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
+    ...normalizeLegacyComponentRows(components)
+  ];
+  const notices = notificationEmbeds
+    .map((embed) => {
+      const raw = embed?.toJSON?.() ?? embed ?? {};
+      const title = String(raw?.title ?? "").trim() || "Notification";
+      const details = legacyEmbedsToV2TextComponents([embed])
+        .map((entry) => String(entry?.content ?? "").trim())
+        .filter(Boolean);
+      return details.length > 0 || title ? { title, details, tone: "info" } : null;
+    })
+    .filter(Boolean);
+
+  return buildComponentsV2PayloadWithNoticeCards({
     mainComponents,
     notices,
     ownerId,
-    ephemeral: isEphemeral
+    ephemeral
   });
-
-  const { embeds, components, flags, ephemeral, ...rest } = payload;
-  return { ...rest, ...v2Payload };
 }
 
-function composeV2FromLegacyEmbeds(embeds = []) {
-  const list = Array.isArray(embeds) ? embeds : [];
-  const primaryEmbed = list[0] ?? null;
-  const notices = list.slice(1).map((embed) => {
-    const raw = embed?.toJSON?.() ?? embed ?? {};
-    const title = String(raw?.title ?? "").trim() || "Notification";
-    const details = legacyEmbedsToV2TextComponents([embed])
-      .map((entry) => String(entry?.content ?? "").trim())
-      .filter(Boolean);
-    return { title, details, tone: "info" };
+function convertPayloadToComponentsV2(interaction, payload = {}) {
+  if (payload && typeof payload === "object" && Array.isArray(payload.embeds) && payload.embeds.length > 0) {
+    return buildLegacyEmbedsV2Payload(payload.embeds, {
+      components: payload.components,
+      ownerId: interaction?.user?.id ?? payload.ownerId,
+      ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
+    });
+  }
+  return buildComponentsV2PayloadWithNoticeCards({
+    mainComponents: Array.isArray(payload?.components) ? payload.components : [],
+    notices: [],
+    ownerId: interaction?.user?.id ?? payload.ownerId,
+    ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
   });
+}
 
-  return {
-    mainComponents: legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
-    notices
-  };
+function composeV2FromLegacyEmbeds(embeds = [], ownerId = "") {
+  return buildLegacyEmbedsV2Payload(embeds, {
+    ownerId: String(ownerId || "").trim() || undefined
+  });
 }
 
 function normalizePayloadForReply(interaction, payload = {}) {
@@ -1660,7 +1573,11 @@ async function errorReply(interaction, content) {
  * Format a party ID for display (first 8 characters)
  */
 function formatPartyId(partyId) {
-  return partyId.substring(0, 8);
+  return String(partyId || "").substring(0, 8);
+}
+
+function formatPartyIdDisplay(partyId) {
+  return `\`\`${formatPartyId(partyId)}\`\``;
 }
 
 function isOfficialPartyBridgeServer(serverId) {
@@ -1975,7 +1892,7 @@ async function handleParty(interaction) {
         .setTitle(`${getIcon("party")} Party Created!`)
         .setDescription(`You've created the party **${result.partyName}**`)
         .addFields(
-          { name: "Party ID", value: `${formatPartyId(result.partyId)}`, inline: true },
+          { name: "Party ID", value: formatPartyIdDisplay(result.partyId), inline: true },
           { name: "Leader", value: `<@${userId}>`, inline: true }
         )
         .setColor(theme.colors.success);
@@ -2061,7 +1978,7 @@ async function handleParty(interaction) {
 
       const embed = createCard()
         .setTitle(`${getIcon("party")} Party • ${currentParty.party_name}`)
-        .setDescription(`Party ID:\n\`\`\`${formatPartyId(currentParty.party_id)}\`\`\``)
+        .setDescription(`Party ID:\n${formatPartyIdDisplay(currentParty.party_id)}`)
         .addFields(
           { name: "Leader", value: `<@${currentParty.leader_user_id}>`, inline: true },
           { name: "Members", value: `${currentParty.members.length}/${currentParty.max_members}`, inline: true },
@@ -2690,7 +2607,7 @@ async function handleComponent(interaction) {
             .setTitle(`${getIcon("party")} Party Created!`)
             .setDescription(`You've created the party **${result.partyName}**`)
             .addFields(
-              { name: "Party ID", value: `\`\`\`${formatPartyId(result.partyId)}\`\`\``, inline: true },
+              { name: "Party ID", value: formatPartyIdDisplay(result.partyId), inline: true },
               { name: "Leader", value: `<@${userId}>`, inline: true }
             )
             .setColor(theme.colors.success);
@@ -3848,7 +3765,7 @@ async function handleComponent(interaction) {
 
       const embed = createCard()
         .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
-        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
+        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n${formatPartyIdDisplay(party.party_id)}`)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },
@@ -4351,7 +4268,7 @@ async function handleComponent(interaction) {
 
       const embed = createCard()
         .setTitle(`${getIcon("party")} Party • ${party.party_name}`)
-        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n\`\`\`${formatPartyId(party.party_id)}\`\`\``)
+        .setDescription(`**Party Name**: ${party.party_name}\nParty ID:\n${formatPartyIdDisplay(party.party_id)}`)
         .addFields(
           { name: "Leader", value: `<@${party.leader_user_id}>`, inline: true },
           { name: "Members", value: `${party.members.length}/${party.max_members}`, inline: true },

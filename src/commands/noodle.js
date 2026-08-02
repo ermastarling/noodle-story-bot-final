@@ -261,10 +261,14 @@ import {
   buildComponentsV2PayloadWithNoticeCards,
   buildComponentsV2NoticeCardPayload,
   isComponentsV2Enabled,
+  legacyEmbedsToV2TextComponents,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
   replyOrEditInteraction,
-  rawChannelSendMessage
+  rawChannelSendMessage,
+  sanitizeLegacyFooterForV2,
+  splitTextToV2Chunks
 } from "../ui/componentsV2.js";
+import { resolvePreferredGuildId } from "../util/guildConfig.js";
 import { isV2OwnerMismatch, parseV2CustomId } from "../ui/sceneRoutingV2.js";
 import { getSceneState, putSceneState } from "../ui/sceneStateV2.js";
 import { buildOrdersBoardV2Message } from "../ui/ordersBoardV2.js";
@@ -985,7 +989,7 @@ const db = openDb();
 const HERALD_BADGE_ID = "seasonal_herald";
 const HERALD_BADGE_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEV_ADMIN_USER_ID = "705521883335885031";
-const OFFICIAL_DEV_GUILD_ID = process.env.NOODLE_DEV_GUILD_ID || process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
+const OFFICIAL_DEV_GUILD_ID = resolvePreferredGuildId(process.env);
 const DISCORD_STORE_URL = "https://noodlestory.lol/home/store/";
 const DEFAULT_SUPPORT_SERVER_URL = "https://discord.gg/uue7K92pwj";
 const SUPPORT_SERVER_URL_ALLOWED_HOSTS = new Set([
@@ -1250,6 +1254,21 @@ function attachLegacyEmbedCompatMethods(embed) {
     });
   }
 
+  if (typeof embed.setTimestamp !== "function") {
+    Object.defineProperty(embed, "setTimestamp", {
+      enumerable: false,
+      value(timestamp = Date.now()) {
+        const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+        if (Number.isNaN(date?.getTime?.())) {
+          this.timestamp = null;
+          return this;
+        }
+        this.timestamp = date.toISOString();
+        return this;
+      }
+    });
+  }
+
   return embed;
 }
 
@@ -1388,6 +1407,50 @@ function applyHouse247OrderBoardOverride(player) {
   const orderCap = Math.max(0, Math.floor(Number(getOrderAcceptCap(player, nowTs()) || 0) || 0));
   const minimumVisibleOrders = Math.max(orderCap || 0, 25 * 10);
   ensureUnlimitedOrdersBuffer(player, { minVisibleOrders: minimumVisibleOrders });
+}
+
+export function buildHelpPageV2Payload({
+  title = "Help",
+  description = "",
+  footerText = "",
+  fields = [],
+  ownerId,
+  components = [],
+  env = process.env
+} = {}) {
+  const contentComponents = [];
+  const safeTitle = String(title ?? "").trim();
+  if (safeTitle) {
+    contentComponents.push({ type: 10, content: `## ${safeTitle}` });
+  }
+
+  const safeDescription = String(description ?? "").trim();
+  if (safeDescription) {
+    contentComponents.push({ type: 10, content: safeDescription });
+  }
+
+  const safeFields = Array.isArray(fields) ? fields : [];
+  for (const field of safeFields) {
+    const name = String(field?.name ?? "").trim();
+    const value = String(field?.value ?? "").trim();
+    if (!name && !value) continue;
+    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+    if (block) {
+      contentComponents.push({ type: 10, content: block });
+    }
+  }
+
+  const safeFooterText = String(footerText ?? "").trim();
+  if (safeFooterText) {
+    contentComponents.push({ type: 10, content: `-# ${safeFooterText}` });
+  }
+
+  return buildComponentsV2MenuPayload({
+    components: [...contentComponents, ...(Array.isArray(components) ? components : [])],
+    ownerId,
+    includeGreenButtonTip: false,
+    env
+  });
 }
 
 function buildHelpPage({ page, userId, user }) {
@@ -4236,21 +4299,6 @@ function normalizeComponentsV2Payload(payload = {}) {
   return rest;
 }
 
-function splitTextToV2Chunks(text, maxLen = 3800) {
-  const raw = String(text ?? "");
-  if (!raw) return [];
-  const chunks = [];
-  let remaining = raw;
-  while (remaining.length > maxLen) {
-    let cut = remaining.lastIndexOf("\n", maxLen);
-    if (cut <= 0) cut = maxLen;
-    chunks.push(remaining.slice(0, cut).trim());
-    remaining = remaining.slice(cut).trimStart();
-  }
-  if (remaining.trim()) chunks.push(remaining.trim());
-  return chunks.filter(Boolean);
-}
-
 function normalizeEmbedFieldName(name = "") {
   return String(name ?? "")
     .toLowerCase()
@@ -4364,25 +4412,7 @@ function isProfileEmbedForV2(raw = {}) {
     && normalized.has("coins");
 }
 
-function sanitizeLegacyFooterForV2(footerText = "") {
-  const raw = String(footerText ?? "").trim();
-  if (!raw) return "";
-
-  return raw
-    .split("\n")
-    .map((line) => String(line ?? "").trim())
-    .map((line) => line
-      .split("•")
-      .map((segment) => String(segment ?? "").trim())
-      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
-      .join(" • ")
-      .trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
-function legacyEmbedsToV2TextComponents(embeds = []) {
+function legacyEmbedsToV2TextComponentsForLegacy(embeds = []) {
   const out = [];
   for (const embed of embeds || []) {
     const raw = embed?.toJSON?.() ?? embed ?? {};
@@ -4584,7 +4614,7 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
 
   const primaryEmbed = payload.embeds[0];
   const notificationEmbeds = payload.embeds.slice(1);
-  const primaryTextComponents = legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []);
+  const primaryTextComponents = legacyEmbedsToV2TextComponentsForLegacy(primaryEmbed ? [primaryEmbed] : []);
   const notices = notificationEmbeds
     .map((embed) => legacyEmbedToNoticeCardSpec(embed))
     .filter((notice) => (Array.isArray(notice?.details) && notice.details.length > 0) || notice?.title);
@@ -4604,16 +4634,31 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
   };
 }
 
-function composeV2FromLegacyEmbeds(embeds = []) {
+function composeV2FromLegacyEmbeds(embeds = [], ownerId = "") {
   const list = Array.isArray(embeds) ? embeds : [];
   const primaryEmbed = list[0] ?? null;
   const notificationEmbeds = list.slice(1);
-  return {
-    mainComponents: legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
-    notices: notificationEmbeds
-      .map((embed) => legacyEmbedToNoticeCardSpec(embed))
-      .filter((notice) => (Array.isArray(notice?.details) && notice.details.length > 0) || notice?.title)
-  };
+  const mainComponents = [
+    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
+    ...normalizeLegacyComponentRows([])
+  ];
+  const notices = notificationEmbeds
+    .map((embed) => {
+      const raw = embed?.toJSON?.() ?? embed ?? {};
+      const title = String(raw?.title ?? "").trim() || "Notification";
+      const details = legacyEmbedsToV2TextComponents([embed])
+        .map((entry) => String(entry?.content ?? "").trim())
+        .filter(Boolean);
+      return details.length > 0 || title ? { title, details, tone: "info" } : null;
+    })
+    .filter(Boolean);
+
+  return buildComponentsV2PayloadWithNoticeCards({
+    mainComponents,
+    notices,
+    ownerId: String(ownerId || "").trim() || undefined,
+    includeGreenButtonTip: true
+  });
 }
 
 const LEGACY_TO_V2_SUBS = new Set([
@@ -4850,6 +4895,10 @@ if (rest.embeds) {
 }
 rest = normalizePayloadContent(rest);
 rest = normalizeComponentsV2Payload(rest);
+if ((Number(rest.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && Array.isArray(rest.embeds) && rest.embeds.length > 0) {
+  const { embeds, ...restWithoutEmbeds } = rest;
+  rest = restWithoutEmbeds;
+}
 
 // Force ephemeral responses for modal submits when requested
 if (interaction.isModalSubmit?.() && ephemeral === true) {
@@ -5032,18 +5081,17 @@ if (finalOptions.embeds) {
     finalOptions.embeds = applyGreenButtonFooter(finalOptions.embeds, finalOptions.components);
   }
 }
+if ((Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && Array.isArray(finalOptions.embeds) && finalOptions.embeds.length > 0) {
+  const { embeds, ...restFinal } = finalOptions;
+  finalOptions = restFinal;
+}
 // Convert EmbedBuilder objects to JSON
 if (finalOptions.embeds) {
   finalOptions.embeds = finalOptions.embeds.map(embed => embed.toJSON?.() ?? embed);
 }
 finalOptions = normalizePayloadContent(finalOptions);
 finalOptions = normalizeComponentsV2Payload(finalOptions);
-if ((Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && finalOptions.embeds) {
-  const { embeds, ...restFinal } = finalOptions;
-  finalOptions = restFinal;
-}
-
-// Use editReply for components that were deferred  
+// Use editReply for components that were deferred
 if (interaction.deferred || interaction.replied) {
   const isV2FinalPayload = isComponentsV2Payload(finalOptions);
   if (isV2FinalPayload) {
@@ -5209,7 +5257,7 @@ function computeMarketShoppingShortages(player, _serverState) {
   };
 }
 
-function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSellButton = true }) {
+export function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSellButton = true }) {
   if (!s.market_prices) s.market_prices = {};
   if (!p.market_stock) p.market_stock = {};
   const unlimitedMarketStock = hasUnlimitedMarketStock(p, nowTs());
@@ -5259,9 +5307,14 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
     }
     return {
       content: " ",
-      ...composeV2FromLegacyEmbeds([emptyEmbed]),
-      components: [noodleMainMenuRow(userId)],
-      ephemeral: true
+      ...buildComponentsV2PayloadWithNoticeCards({
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([emptyEmbed]),
+        notices: [],
+        ownerId: userId,
+        ephemeral: true,
+        includeGreenButtonTip: false
+      }),
+      components: [noodleMainMenuRow(userId)]
     };
   }
 
@@ -5351,7 +5404,12 @@ function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, showSel
 
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([buyEmbed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([buyEmbed]),
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components: rows
   };
 }
@@ -5420,9 +5478,13 @@ function buildSellMenuPayload({
 
   return {
     content: " ",
-    ownerId: userId,
-    mainComponents,
-    notices: Array.isArray(notices) ? notices : [],
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents,
+      notices: Array.isArray(notices) ? notices : [],
+      ownerId: userId,
+      ephemeral,
+      includeGreenButtonTip: false
+    }),
     components,
     ephemeral
   };
@@ -5698,7 +5760,12 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
 
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([acceptEmbed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([acceptEmbed]),
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components: rows
   };
 }
@@ -5836,7 +5903,12 @@ function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser,
 
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([actionEmbed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([actionEmbed]),
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components
   };
 }
@@ -6582,7 +6654,12 @@ function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
 
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([cookEmbed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]),
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components
   };
 }
@@ -6747,7 +6824,16 @@ function buildTakeoutCookPickerPayload({ userId, p, takeout, ownerUser, page = 0
     noodleMainMenuRowNoOrdersWithBack(userId)
   );
 
-  return { content: " ", ...composeV2FromLegacyEmbeds([cookEmbed]), components };
+  return {
+    content: " ",
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]),
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
+    components
+  };
 }
 
 function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
@@ -6798,7 +6884,12 @@ function buildTakeoutServePickerPayload({ userId, p, takeout, ownerUser }) {
   const canCounterServe = needRows.some((entry) => entry.ready > 0);
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([serveEmbed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([serveEmbed]),
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components: [
       new ActionRowBuilder().addComponents(menu),
       noodleTakeoutActionRow(userId, {
@@ -6864,7 +6955,12 @@ function buildTakeoutNeedsPayload({ userId, p, takeout, ownerUser, page = 0 }) {
 
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    ...buildComponentsV2PayloadWithNoticeCards({
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]),
+      notices: [],
+      ownerId: userId,
+      includeGreenButtonTip: false
+    }),
     components: [
       ...(totalPages > 1
         ? [
@@ -14273,15 +14369,6 @@ if (v2Parsed.isV2) {
       ephemeral: true
     });
   }
-  if (!rolloutEnabled) {
-    emitTelemetry("v2_scene_gate_bypass", {
-      module: getV2SceneModule(v2Parsed.sceneKey),
-      sceneKey: String(v2Parsed.sceneKey || ""),
-      actionKey: String(v2Parsed.actionKey || ""),
-      reason: "rollout_disabled"
-    });
-  }
-
   const sceneState = getSceneState({
     sceneKey: v2Parsed.sceneKey,
     token: v2Parsed.token,
@@ -15419,15 +15506,24 @@ if (kind === "help" && action === "page") {
     return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
   }
   const page = Number(parts[4] ?? 0);
-  const { embed, components } = buildHelpPage({
+  const helpView = buildHelpPage({
     page,
     userId,
     user: interaction.member ?? interaction.user
   });
+  const footerText = helpView?.embed?.footer?.text ?? "";
+  const v2Payload = buildHelpPageV2Payload({
+    title: helpView?.embed?.title ?? "Help",
+    description: helpView?.embed?.description ?? "",
+    footerText,
+    fields: helpView?.embed?.fields ?? [],
+    ownerId: userId,
+    components: helpView?.components ?? [],
+    env: process.env
+  });
   return componentCommit(interaction, {
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
-    components,
+    ...v2Payload,
     targetMessageId: interaction.message?.id
   });
 }
@@ -15462,33 +15558,41 @@ if (kind === "dm" && action === "reminders_toggle") {
   const channelId = p.notifications.last_noodle_channel_id ?? null;
   const channelUrl = channelId ? `https://discord.com/channels/${targetServerId}/${channelId}` : null;
 
-  const reminderEmbed = buildMenuEmbed({
-    title: `${getIcon("mail")} Daily Rewards Reminder`,
-    description: nextOptOut
-      ? `Reminders are now **off** for **${guildName}**.`
-      : `Reminders are now **on** for **${guildName}**.`,
-    user: interaction.user
-  });
+  const reminderText = nextOptOut
+    ? `Reminders are now **off** for **${guildName}**.`
+    : `Reminders are now **on** for **${guildName}**.`;
 
-  const components = buildDmReminderComponents({
+  const reminderComponents = buildDmReminderComponents({
     userId,
     serverId: targetServerId,
     channelUrl,
     optOut: nextOptOut
   });
 
-  const legacyPayload = {
-    content: " ",
-    ...composeV2FromLegacyEmbeds([reminderEmbed]),
-    components,
-    targetMessageId: interaction.message?.id
-  };
+  const v2Payload = buildComponentsV2MenuPayload({
+    components: [
+      { type: 10, content: `## ${getIcon("mail")} Daily Rewards Reminder` },
+      { type: 10, content: reminderText },
+      ...reminderComponents
+    ],
+    ownerId: userId,
+    ephemeral: false,
+    includeGreenButtonTip: false
+  });
 
   if (isComponentsV2Enabled({ guildId: targetServerId, userId, player: p })) {
-    return componentCommit(interaction, convertLegacyEmbedPayloadToComponentsV2(legacyPayload));
+    return componentCommit(interaction, {
+      content: " ",
+      ...v2Payload,
+      targetMessageId: interaction.message?.id
+    });
   }
 
-  return componentCommit(interaction, legacyPayload);
+  return componentCommit(interaction, {
+    content: " ",
+    components: reminderComponents,
+    targetMessageId: interaction.message?.id
+  });
 }
 
 const componentPlayer = ensurePlayer(serverId, userId);
@@ -16901,6 +17005,23 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       }
     }
 
+    const p = ensurePlayer(serverId, userId);
+    if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
+      const payload = buildCookMinigameScenePayload({
+        userId,
+        recipeId,
+        quantity: qty,
+        totalTurns: deriveCookMinigameTotalTurns(qty),
+        turnIndex: 0,
+        score: 0,
+        misses: 0
+      });
+      if (messageId) {
+        payload.targetMessageId = messageId;
+      }
+      return componentCommit(interaction, payload);
+    }
+
     const result = await runNoodle(interaction, {
       sub: "cook",
       overrides: { strings: { recipe: recipeId }, integers: { quantity: qty }, messageId }
@@ -16940,7 +17061,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       userId,
       recipeId,
       quantity: qty,
-      totalTurns: 8,
+      totalTurns: deriveCookMinigameTotalTurns(qty),
       turnIndex: 0,
       score: 0,
       misses: 0,

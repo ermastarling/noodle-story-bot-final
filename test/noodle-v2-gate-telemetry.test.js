@@ -20,16 +20,9 @@ test("Noodle V2 gate telemetry: bypass emit occurs after route/owner validation"
 
   assert.notEqual(invalidGuardIdx, -1, "Missing invalid-route guard");
   assert.notEqual(ownerGuardIdx, -1, "Missing owner-mismatch guard");
-  assert.notEqual(bypassIdx, -1, "Missing bypass telemetry emit");
-
   assert.equal(
-    bypassIdx > invalidGuardIdx,
-    true,
-    "Bypass telemetry should be emitted after invalid-route guard"
-  );
-  assert.equal(
-    bypassIdx > ownerGuardIdx,
-    true,
-    "Bypass telemetry should be emitted after owner-mismatch guard"
+    bypassIdx,
+    -1,
+    "V2 rollout bypass telemetry should no longer be emitted"
   );
 });

@@ -3,13 +3,14 @@ import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolvePreferredGuildId } from "./util/guildConfig.js";
 
 // Skip loading native SQLite bindings during command registration to improve startup performance and avoid unnecessary dependencies.
 process.env.NOODLE_SKIP_DB = process.env.NOODLE_SKIP_DB || "1";
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
-const guildId = process.env.NOODLE_DEV_GUILD_ID || process.env.DISCORD_GUILD_ID || "";
+const guildId = resolvePreferredGuildId(process.env);
 const guildRegistrationMode = String(process.env.NOODLE_GUILD_REGISTRATION_MODE || "dev-overrides").toLowerCase();
 const guildOverrideNames = new Set(
   String(process.env.NOODLE_GUILD_OVERRIDE_COMMANDS || "noodle-dev")

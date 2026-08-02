@@ -17,6 +17,11 @@ import { theme } from "./ui/theme.js";
   
   const Client = Discord.Client;
   const Intents = Discord.Intents;
+  const GUILD_VOICE_CHANNEL_TYPE = Number(
+    Discord.ChannelTypes?.GUILD_VOICE
+    ?? Discord.Constants?.ChannelTypes?.GUILD_VOICE
+    ?? 2
+  );
 
   if (!Client || !Intents) {
     console.error("❌ Failed to load discord.js properly");
@@ -96,6 +101,7 @@ import { theme } from "./ui/theme.js";
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
   const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
   const { sendRawDm } = await import("./util/rawDm.js");
+  const { resolveOfficialStatsChannelTarget } = await import("./util/officialStats.js");
 
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;
@@ -635,9 +641,9 @@ import { theme } from "./ui/theme.js";
   let officialServerCountChannelId = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_CHANNEL_ID || "").trim();
   let officialShopCountChannelId = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_CHANNEL_ID || "").trim();
   let officialMemberCountChannelId = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_CHANNEL_ID || "").trim();
+  const officialMemberCountLabel = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_LABEL || "Server Members").trim() || "Server Members";
   const officialServerCountLabel = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_LABEL || "Total Servers").trim() || "Total Servers";
   const officialShopCountLabel = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_LABEL || "Total Users").trim() || "Total Users";
-  const officialMemberCountLabel = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_LABEL || "Server Members").trim() || "Server Members";
   const officialStatsCategoryId = String(process.env.NOODLE_OFFICIAL_STATS_CATEGORY_ID || "").trim();
   const startupAvatarSyncEnabled = String(process.env.NOODLE_STARTUP_AVATAR_ENABLED || "0") === "1";
   const startupAvatarGifUrl = String(process.env.NOODLE_STARTUP_AVATAR_GIF_URL || "").trim();
@@ -1926,9 +1932,17 @@ import { theme } from "./ui/theme.js";
       .slice(0, 80) || "Stats";
   }
 
+  async function resolveOfficialStatsChannelByLabel(officialGuild, label) {
+    const resolved = await resolveOfficialStatsChannelTarget(officialGuild, null, {
+      label,
+      preferredCategoryId: officialStatsCategoryId
+    });
+    return resolved?.channel || null;
+  }
+
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
     const isSupportedStatsCounterChannel = (candidate) => (
-      candidate?.type === "GUILD_VOICE"
+      Number(candidate?.type) === GUILD_VOICE_CHANNEL_TYPE
       && typeof candidate?.setName === "function"
       && typeof candidate?.permissionOverwrites?.edit === "function"
     );
@@ -1968,6 +1982,22 @@ import { theme } from "./ui/theme.js";
           configuredStatsChannelLoggedMarkers.add(marker);
           console.log(`ℹ️ Using configured stats channel ${existingId} for ${marker}; applying expected counter settings.`);
         }
+      }
+    }
+
+    if (!channel && existingId) {
+      if (!unresolvedStatsChannelLoggedMarkers.has(marker)) {
+        unresolvedStatsChannelLoggedMarkers.add(marker);
+        console.warn(`⚠️ Unable to resolve configured stats channel ${existingId} for ${marker}; attempting label-based discovery.`);
+      }
+      const discoveredTarget = await resolveOfficialStatsChannelTarget(officialGuild, null, {
+        label,
+        preferredCategoryId: officialStatsCategoryId
+      });
+      channel = discoveredTarget?.channel || null;
+      if (channel) {
+        const discoverySource = discoveredTarget?.source || "label-guild";
+        console.log(`ℹ️ Resolved stats channel for ${marker} via ${discoverySource}: ${channel.name}`);
       }
     }
 
@@ -3597,6 +3627,24 @@ import { theme } from "./ui/theme.js";
       });
     } catch (error) {
       console.error("❌ Failed to send guild leave alert:", error?.stack ?? error);
+    }
+  });
+
+  client.on("guildMemberAdd", async (member) => {
+    try {
+      if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
+      await updateOfficialStatsChannels(null, { reason: "memberAdd" });
+    } catch (error) {
+      console.error("❌ Failed to refresh official stats channels after member join:", error?.stack ?? error);
+    }
+  });
+
+  client.on("guildMemberRemove", async (member) => {
+    try {
+      if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
+      await updateOfficialStatsChannels(null, { reason: "memberRemove" });
+    } catch (error) {
+      console.error("❌ Failed to refresh official stats channels after member leave:", error?.stack ?? error);
     }
   });
 

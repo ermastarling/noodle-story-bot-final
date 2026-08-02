@@ -436,6 +436,171 @@ function withGreenButtonFooterTip(components = []) {
   return appendFooterSegment(components, "Tip: Tap the green button(s) to continue.");
 }
 
+export function sanitizeLegacyFooterForV2(footerText = "") {
+  const raw = String(footerText ?? "").trim();
+  if (!raw) return "";
+
+  return raw
+    .split("\n")
+    .map((line) => String(line ?? "").trim())
+    .map((line) => line
+      .split("•")
+      .map((segment) => String(segment ?? "").trim())
+      .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+      .join(" • ")
+      .trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+export function splitTextToV2Chunks(text, maxLen = 3800) {
+  const raw = String(text ?? "");
+  if (!raw) return [];
+
+  const lines = raw.split("\n");
+  const chunks = [];
+  let current = "";
+
+  const flushCurrent = () => {
+    const trimmed = current.trim();
+    if (trimmed) chunks.push(trimmed);
+    current = "";
+  };
+
+  for (const line of lines) {
+    const candidate = current ? `${current}\n${line}` : line;
+    if (candidate.length > maxLen) {
+      if (current) {
+        flushCurrent();
+      }
+
+      if (String(line ?? "").length > maxLen) {
+        let remaining = String(line ?? "");
+        while (remaining.length > maxLen) {
+          let cut = remaining.lastIndexOf(" ", maxLen);
+          if (cut <= 0) cut = maxLen;
+          const segment = remaining.slice(0, cut).trim();
+          if (segment) chunks.push(segment);
+          remaining = remaining.slice(cut).trimStart();
+        }
+        if (remaining.trim()) chunks.push(remaining.trim());
+      } else {
+        current = String(line ?? "");
+      }
+    } else {
+      current = candidate;
+    }
+  }
+
+  flushCurrent();
+
+  for (let idx = chunks.length - 1; idx > 0; idx -= 1) {
+    const chunk = String(chunks[idx] ?? "").trim();
+    if (!chunk || !/^-#\s+/.test(chunk)) break;
+    const previous = String(chunks[idx - 1] ?? "").trim();
+    const merged = previous ? `${previous}\n${chunk}`.trim() : chunk;
+    if (merged.length <= maxLen) {
+      chunks[idx - 1] = merged;
+      chunks.splice(idx, 1);
+    } else {
+      break;
+    }
+  }
+
+  return chunks.filter(Boolean);
+}
+
+export function legacyEmbedsToV2TextComponents(embeds = []) {
+  const out = [];
+  for (const embed of embeds || []) {
+    const raw = embed?.toJSON?.() ?? embed ?? {};
+    const title = String(raw?.title ?? "").trim();
+    const description = String(raw?.description ?? "").trim();
+    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
+    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
+
+    const blocks = [];
+    if (title) blocks.push(`## ${title}`);
+    if (description) blocks.push(description);
+
+    for (const field of fields) {
+      const name = String(field?.name ?? "").trim();
+      const value = String(field?.value ?? "").trim();
+      if (!name && !value) continue;
+      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
+    }
+
+    const compactBody = blocks.join("\n\n").trim();
+    const compactFooter = footerText
+      .split("\n")
+      .map((line) => String(line ?? "").trim())
+      .filter(Boolean)
+      .join(" • ");
+
+    const chunks = splitTextToV2Chunks(compactBody);
+    if (compactFooter) {
+      const footerLine = `-# ${compactFooter}`;
+      if (chunks.length > 0) {
+        const reserved = footerLine.length + 4;
+        const allowedBodyLength = Math.max(0, 3800 - reserved);
+        const firstChunk = String(chunks[0] ?? "").trim();
+        if (firstChunk) {
+          const bodyForFirstChunk = splitTextToV2Chunks(firstChunk, allowedBodyLength)[0] ?? firstChunk;
+          const combined = `${bodyForFirstChunk}\n\n${footerLine}`.trim();
+          if (combined.length <= 3800) {
+            chunks[0] = combined;
+          } else {
+            chunks.unshift(footerLine);
+          }
+        } else {
+          chunks.unshift(footerLine);
+        }
+      } else {
+        chunks.push(footerLine);
+      }
+    }
+
+    for (const chunk of chunks) out.push({ type: 10, content: chunk });
+  }
+  return out;
+}
+
+function normalizeLegacyComponentRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row?.toJSON?.() ?? row;
+    const rawComponents = baseRow?.components ?? row?.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
+function inferLegacyNoticeTone(embed = {}) {
+  const raw = embed?.toJSON?.() ?? embed ?? {};
+  const title = String(raw?.title ?? "").trim().toLowerCase();
+  const description = String(raw?.description ?? "").trim().toLowerCase();
+  const haystack = `${title}\n${description}`;
+  if (/warning|failed|error|lock|cooldown|missing/.test(haystack)) return "warning";
+  if (/complete|unlocked|started|success|claimed/.test(haystack)) return "success";
+  return "info";
+}
+
+function buildLegacyNoticeSpec(embed) {
+  const raw = embed?.toJSON?.() ?? embed ?? {};
+  const title = String(raw?.title ?? "").trim() || "Notification";
+  const details = legacyEmbedsToV2TextComponents([embed])
+    .map((entry) => String(entry?.content ?? "").trim())
+    .filter(Boolean);
+  return { title, details, tone: inferLegacyNoticeTone(embed) };
+}
+
 export function buildComponentsV2MenuPayload({
   components = [],
   ephemeral = false,
@@ -634,7 +799,7 @@ function isTutorialActive(player) {
 }
 
 export function resolveComponentsV2TargetGuild(env = process.env) {
-  return normalizeSnowflake(env?.NOODLE_DEV_GUILD_ID || env?.DISCORD_GUILD_ID || "");
+  return normalizeSnowflake(env?.NOODLE_OFFICIAL_GUILD_ID || env?.NOODLE_DEV_GUILD_ID || env?.DISCORD_GUILD_ID || "");
 }
 
 function isGuildAllowed(guildId, env = process.env) {
@@ -675,6 +840,45 @@ export function isComponentsV2Enabled({ guildId, userId, player, env = process.e
   }
 
   return true;
+}
+
+export function buildComponentsV2TextPayload({
+  title = "",
+  description = "",
+  fields = [],
+  components = [],
+  ownerId,
+  ephemeral = false,
+  env = process.env
+} = {}) {
+  const contentComponents = [];
+  const safeTitle = String(title ?? "").trim();
+  if (safeTitle) {
+    contentComponents.push({ type: 10, content: `## ${safeTitle}` });
+  }
+
+  const safeDescription = String(description ?? "").trim();
+  if (safeDescription) {
+    contentComponents.push({ type: 10, content: safeDescription });
+  }
+
+  for (const field of Array.isArray(fields) ? fields : []) {
+    const name = String(field?.name ?? "").trim();
+    const value = String(field?.value ?? "").trim();
+    if (!name && !value) continue;
+    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
+    if (block) {
+      contentComponents.push({ type: 10, content: block });
+    }
+  }
+
+  return buildComponentsV2MenuPayload({
+    components: [...contentComponents, ...(Array.isArray(components) ? components : [])],
+    ownerId,
+    ephemeral,
+    includeGreenButtonTip: false,
+    env
+  });
 }
 
 export function buildComponentsV2ContainerMessage({ title, lines = [], accentColor, ephemeral = false } = {}) {

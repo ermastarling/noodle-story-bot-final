@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
   buildSpecializationListV2Message,
@@ -108,4 +110,11 @@ test("Profile flow V2: specialization updated view keeps thumbnail gallery", () 
   assert.ok(gallery);
   const galleryUrl = gallery?.items?.[0]?.media?.url ?? "";
   assert.equal(String(galleryUrl), "https://example.com/spec.png");
+});
+
+test("Profile flow V2: runtime specialization routes use the restored V2 builders", () => {
+  const noodleSource = fs.readFileSync(path.resolve(process.cwd(), "src/commands/noodle.js"), "utf8");
+  assert.match(noodleSource, /return commit\(buildProfileEditV2Message\(/);
+  assert.match(noodleSource, /return commitState\(buildSpecializationConfirmV2Message\(/);
+  assert.match(noodleSource, /return commitState\(buildSpecializationUpdatedV2Message\(/);
 });
