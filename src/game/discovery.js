@@ -197,9 +197,6 @@ export function rollRecipeDiscovery({
     scrollChance += bonus?.scrollBonus ?? 0;
   }
 
-  // Check discoverable recipes first
-  const _discoverableRecipes = getDiscoverableRecipes(player, content, { activeSeason, activeEventId });
-
   // Curious Apprentice: +1% discovery chance to next roll (applies to both)
   if (player.buffs?.apprentice_bonus_pending) {
     clueChance += 0.01;

@@ -13,6 +13,17 @@ source .git-workflow.sh
 
 Follow this exact sequence for every piece of work to keep `main` clean:
 
+0. **Create and maintain a live change plan (required)**
+```bash
+cp docs/CHANGE_PLAN_TEMPLATE.md docs/plans/YYYY-MM-DD-short-change-title.md
+```
+
+Required tracking rules:
+- update the plan after every code change
+- add one Change Log entry per edit step with validation evidence
+- do not advance phases until current phase exit criteria are complete
+- include final self-audit and command outcomes before handoff/PR
+
 1. **Start from latest main**
 ```bash
 cleanstart fix/my-change      # creates branch from updated origin/main
