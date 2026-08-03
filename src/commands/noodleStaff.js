@@ -150,8 +150,10 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
       ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
     });
   }
+  const safeContent = String(payload?.content ?? "").trim();
+  const contentComponent = safeContent ? [{ type: 10, content: safeContent }] : [];
   return buildComponentsV2PayloadWithNoticeCards({
-    mainComponents: Array.isArray(payload?.components) ? payload.components : [],
+    mainComponents: [...contentComponent, ...(Array.isArray(payload?.components) ? payload.components : [])],
     notices: [],
     ownerId: interaction?.user?.id ?? payload.ownerId,
     ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
