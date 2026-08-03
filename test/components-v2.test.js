@@ -352,7 +352,7 @@ test("Components V2: decor converter preserves prebuilt V2 payloads without re-w
   assert.equal(decorResult, prebuiltDecorPayload);
 });
 
-test("Components V2: owner/tip footer is inserted below media and before action rows", () => {
+test("Components V2: owner metadata is not injected as plain-text body footer", () => {
   const payload = buildComponentsV2MenuPayload({
     ownerId: "123456789012345678",
     components: [
@@ -366,13 +366,7 @@ test("Components V2: owner/tip footer is inserted below media and before action 
   });
 
   const nodes = payload.components?.[0]?.components ?? [];
-  const mediaIdx = nodes.findIndex((node) => node?.type === 12);
-  const footerIdx = nodes.findIndex((node) => node?.type === 10 && /menu owner:/i.test(String(node?.content || "")));
-  const rowIdx = nodes.findIndex((node) => node?.type === 1);
-
-  assert.equal(mediaIdx >= 0, true);
-  assert.equal(footerIdx > mediaIdx, true);
-  assert.equal(rowIdx > footerIdx, true);
+  assert.equal(nodes.some((node) => node?.type === 10 && /menu owner:/i.test(String(node?.content || ""))), false);
 });
 
 test("Components V2: decor, quests, staff, and upgrades modules normalize legacy replies into shared V2 payloads", () => {

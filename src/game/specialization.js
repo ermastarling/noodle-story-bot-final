@@ -112,7 +112,7 @@ export function selectSpecialization(player, specializationsContent, specId, _no
 
   const state = ensureSpecializationState(player);
   state.active_spec_id = specId;
-  state.chosen_at = now;
+  state.chosen_at = _now;
   state.change_cooldown_expires_at = null;
 
   return { ok: true, specialization: getSpecializationById(specializationsContent, specId) };

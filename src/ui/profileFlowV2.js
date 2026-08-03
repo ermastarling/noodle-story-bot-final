@@ -17,28 +17,17 @@ function padRight(text, width) {
 
 function formatProfileStatsGrid(rows = []) {
   const safeRows = Array.isArray(rows) ? rows : [];
-  const leftColWidth = Math.max(14, ...safeRows.map((row) => {
-    const labelLen = String(row?.leftLabel ?? "").length;
-    const valueLen = String(row?.leftValue ?? "").length;
-    return Math.max(labelLen, valueLen);
-  }));
-  const rightColWidth = Math.max(10, ...safeRows.map((row) => {
-    const labelLen = String(row?.rightLabel ?? "").length;
-    const valueLen = String(row?.rightValue ?? "").length;
-    return Math.max(labelLen, valueLen);
-  }));
+  const leftColWidth = Math.max(20, ...safeRows.map((row) => String(`${row?.leftLabel ?? "-"}: ${row?.leftValue ?? "-"}`).length));
+  const rightColWidth = Math.max(16, ...safeRows.map((row) => String(`${row?.rightLabel ?? "-"}: ${row?.rightValue ?? "-"}`).length));
   const divider = "  |  ";
   const separator = `${"-".repeat(leftColWidth)}${divider}${"-".repeat(rightColWidth)}`;
 
   const lines = [];
   for (let idx = 0; idx < safeRows.length; idx += 1) {
     const row = safeRows[idx];
-    const leftLabel = padRight(row?.leftLabel ?? "-", leftColWidth);
-    const rightLabel = padRight(row?.rightLabel ?? "-", rightColWidth);
-    const leftValue = padRight(row?.leftValue ?? "-", leftColWidth);
-    const rightValue = padRight(row?.rightValue ?? "-", rightColWidth);
-    lines.push(`${leftLabel}${divider}${rightLabel}`);
-    lines.push(`${leftValue}${divider}${rightValue}`);
+    const leftCell = padRight(`${row?.leftLabel ?? "-"}: ${row?.leftValue ?? "-"}`, leftColWidth);
+    const rightCell = `${row?.rightLabel ?? "-"}: ${row?.rightValue ?? "-"}`;
+    lines.push(`${leftCell}${divider}${rightCell}`);
     if (idx < safeRows.length - 1) lines.push(separator);
   }
 
@@ -47,8 +36,10 @@ function formatProfileStatsGrid(rows = []) {
 
 function normalizeFieldName(name = "") {
   return String(name ?? "")
+    .replace(/<a?:[^:>]+:\d+>/g, " ")
     .toLowerCase()
     .replace(/:[a-z0-9_+-]+:/gi, " ")
+    .replace(/\b\d{5,}\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }

@@ -45,8 +45,10 @@ test("Profile flow V2: button emojis are normalized to emoji objects", () => {
   const statBlock = container.find((node) => node?.type === 10 && String(node?.content || "").includes("Bowls Served"));
   assert.ok(statBlock);
   assert.match(String(statBlock.content), /```/);
-  assert.match(String(statBlock.content), /Bowls Served\s+\|\s+Level/);
-  assert.match(String(statBlock.content), /REP\s+\|\s+Coins/);
+  assert.match(String(statBlock.content), /Bowls Served:\s*-/);
+  assert.match(String(statBlock.content), /Level:\s*-/);
+  assert.match(String(statBlock.content), /REP:\s*-/);
+  assert.match(String(statBlock.content), /Coins:\s*-/);
   assert.equal(String(statBlock.content).includes("| Stat | Value |"), false);
 });
 
@@ -117,4 +119,30 @@ test("Profile flow V2: runtime specialization routes use the restored V2 builder
   assert.match(noodleSource, /return commit\(buildProfileEditV2Message\(/);
   assert.match(noodleSource, /return commitState\(buildSpecializationConfirmV2Message\(/);
   assert.match(noodleSource, /return commitState\(buildSpecializationUpdatedV2Message\(/);
+});
+
+test("Profile flow V2: stat extraction handles custom-emoji field prefixes", () => {
+  const payload = buildProfileHomeV2Message({
+    userId: "123",
+    viewingSelf: false,
+    embed: {
+      title: "Noodle Story",
+      description: "desc",
+      fields: [
+        { name: "<:serve:147111111111111111> Bowls Served", value: "12503" },
+        { name: "<:level:147222222222222222> Level", value: "151" },
+        { name: "<:rep:147333333333333333> REP", value: "91630" },
+        { name: "<:coins:147444444444444444> Coins", value: "343897c" }
+      ]
+    }
+  });
+
+  const container = payload.components?.[0]?.components ?? [];
+  const statBlock = container.find((node) => node?.type === 10 && String(node?.content || "").includes("Bowls Served"));
+  assert.ok(statBlock);
+  const text = String(statBlock?.content ?? "");
+  assert.match(text, /Bowls Served:\s*12503/);
+  assert.match(text, /Level:\s*151/);
+  assert.match(text, /REP:\s*91630/);
+  assert.match(text, /Coins:\s*343897c/);
 });
