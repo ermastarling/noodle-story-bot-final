@@ -98,7 +98,7 @@ function buildDecorV2Message({ title, description, ownerId, components = [] } = 
   });
 }
 
-export function normalizePayloadForReply(interaction, payload = {}, player = null) {
+export function normalizePayloadForReply(interaction, payload = {}, _player = null) {
   const source = payload ?? {};
 
   if (source && typeof source === "object") {

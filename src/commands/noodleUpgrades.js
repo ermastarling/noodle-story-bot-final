@@ -156,7 +156,7 @@ function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
   });
 }
 
-function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+function convertPayloadToComponentsV2(interaction, payload = {}, _player = null) {
   if (isComponentsV2Payload(payload)) {
     return payload;
   }
@@ -177,8 +177,8 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
   });
 }
 
-export function normalizePayloadForReply(interaction, payload = {}, player = null) {
-  return convertPayloadToComponentsV2(interaction, payload, player);
+export function normalizePayloadForReply(interaction, payload = {}, _player = null) {
+  return convertPayloadToComponentsV2(interaction, payload, _player);
 }
 
 function isInvalidComponentTypeError(error) {

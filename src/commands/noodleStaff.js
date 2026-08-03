@@ -139,7 +139,7 @@ function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
   });
 }
 
-function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+function convertPayloadToComponentsV2(interaction, payload = {}, _player = null) {
   if (isComponentsV2Payload(payload)) {
     return payload;
   }
@@ -160,8 +160,8 @@ function convertPayloadToComponentsV2(interaction, payload = {}, player = null) 
   });
 }
 
-export function normalizePayloadForReply(interaction, payload = {}, player = null) {
-  const converted = convertPayloadToComponentsV2(interaction, payload, player);
+export function normalizePayloadForReply(interaction, payload = {}, _player = null) {
+  const converted = convertPayloadToComponentsV2(interaction, payload, _player);
   if (converted?.embeds) {
     converted.embeds = applyGreenButtonFooter(converted.embeds, converted.components);
   }
