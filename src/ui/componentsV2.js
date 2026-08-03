@@ -538,7 +538,8 @@ export function legacyEmbedsToV2TextComponents(embeds = []) {
       .filter(Boolean)
       .join(" • ");
 
-    const chunks = splitTextToV2Chunks(compactBody);
+    const textChunkMaxLen = 3800;
+    const chunks = splitTextToV2Chunks(compactBody, textChunkMaxLen);
     if (compactFooter) {
       const footerLine = `-# ${compactFooter}`;
       if (chunks.length > 0) {
@@ -546,7 +547,7 @@ export function legacyEmbedsToV2TextComponents(embeds = []) {
         const lastChunk = String(chunks[lastIdx] ?? "").trim();
         if (lastChunk) {
           const combined = `${lastChunk}\n\n${footerLine}`.trim();
-          if (combined.length <= 3800) {
+          if (combined.length <= textChunkMaxLen) {
             chunks[lastIdx] = combined;
           } else {
             chunks.push(footerLine);
