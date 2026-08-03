@@ -288,6 +288,19 @@ test("Components V2: social converter preserves prebuilt V2 payloads and native 
   assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Social native notice detail")), true);
 });
 
+test("Components V2: social converter strips embeds from prebuilt V2 payloads", () => {
+  const prebuiltWithEmbeds = {
+    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
+    components: [{ type: 17, components: [{ type: 10, content: "## Keep social" }] }],
+    embeds: [{ title: "legacy" }]
+  };
+
+  const normalized = normalizeSocialPayloadForReply({ user: { id: "u3" } }, prebuiltWithEmbeds);
+  assert.equal(normalized.embeds, undefined);
+  assert.equal(Array.isArray(normalized.components), true);
+  assert.equal(normalized.components[0]?.type, 17);
+});
+
 test("Components V2: social converter retains target metadata for commit routing", () => {
   const normalized = normalizeSocialPayloadForReply({ user: { id: "u8" } }, {
     mainComponents: [{ type: 10, content: "## Metadata test" }],
@@ -352,7 +365,7 @@ test("Components V2: decor converter preserves prebuilt V2 payloads without re-w
   assert.equal(decorResult, prebuiltDecorPayload);
 });
 
-test("Components V2: owner metadata is not injected as plain-text body footer", () => {
+test("Components V2: owner footer segment is restored in shared menu payload", () => {
   const payload = buildComponentsV2MenuPayload({
     ownerId: "123456789012345678",
     components: [
@@ -366,7 +379,7 @@ test("Components V2: owner metadata is not injected as plain-text body footer", 
   });
 
   const nodes = payload.components?.[0]?.components ?? [];
-  assert.equal(nodes.some((node) => node?.type === 10 && /menu owner:/i.test(String(node?.content || ""))), false);
+  assert.equal(nodes.some((node) => node?.type === 10 && /menu owner:\s*<@123456789012345678>/i.test(String(node?.content || ""))), true);
 });
 
 test("Components V2: decor, quests, staff, and upgrades modules normalize legacy replies into shared V2 payloads", () => {

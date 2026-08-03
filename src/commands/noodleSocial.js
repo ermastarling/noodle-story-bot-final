@@ -1237,9 +1237,17 @@ function normalizeLegacyComponentRows(rows = []) {
   return normalizeComponents(rows);
 }
 
+function stripEmbedsFromComponentsV2Payload(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (!isComponentsV2Payload(payload)) return payload;
+  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+  const { embeds, ...rest } = payload;
+  return rest;
+}
+
 function convertPayloadToComponentsV2(interaction, payload = {}) {
   if (isComponentsV2Payload(payload)) {
-    return payload;
+    return stripEmbedsFromComponentsV2Payload(payload);
   }
 
   const hasSourceNativeComponents = Array.isArray(payload?.mainComponents) || Array.isArray(payload?.notices);
@@ -1258,12 +1266,12 @@ function convertPayloadToComponentsV2(interaction, payload = {}) {
       ownerId: interaction?.user?.id ?? payload?.ownerId,
       ephemeral: isEphemeral
     });
-    return {
+    return stripEmbedsFromComponentsV2Payload({
       ...built,
       targetMessageId: payload?.targetMessageId,
       targetChannelId: payload?.targetChannelId,
       ephemeral: payload?.ephemeral === true
-    };
+    });
   }
 
   const built = buildComponentsV2PayloadWithNoticeCards({
@@ -1272,12 +1280,12 @@ function convertPayloadToComponentsV2(interaction, payload = {}) {
     ownerId: interaction?.user?.id ?? payload.ownerId,
     ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
   });
-  return {
+  return stripEmbedsFromComponentsV2Payload({
     ...built,
     targetMessageId: payload?.targetMessageId,
     targetChannelId: payload?.targetChannelId,
     ephemeral: payload?.ephemeral === true
-  };
+  });
 }
 
 export function normalizePayloadForReply(interaction, payload = {}) {
@@ -3240,10 +3248,7 @@ async function handleComponent(interaction) {
   const parts = customId.split(":"); // noodle-social:<kind>:<action>:<ownerId>
 
   if (parts[0] !== "noodle-social") {
-    return componentCommit(interaction, { 
-      content: "Unknown component.", 
-      ephemeral: true 
-    });
+    return errorReply(interaction, "Unknown component.");
   }
 
   const kind = parts[1] ?? "";
@@ -3252,10 +3257,7 @@ async function handleComponent(interaction) {
 
   // Lock UI to owner when ownerId is present
   if (ownerId && ownerId !== userId) {
-    return componentCommit(interaction, { 
-      content: "That menu isn't for you.", 
-      ephemeral: true 
-    });
+    return errorReply(interaction, "That menu isn't for you.");
   }
 
   /* ---------------- SELECT MENUS ---------------- */

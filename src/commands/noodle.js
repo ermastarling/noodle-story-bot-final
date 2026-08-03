@@ -4799,7 +4799,7 @@ if (rest.embeds) {
 }
 rest = normalizePayloadContent(rest);
 rest = normalizeComponentsV2Payload(rest);
-if ((Number(rest.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && Array.isArray(rest.embeds) && rest.embeds.length > 0) {
+if (isComponentsV2Payload(rest) && Array.isArray(rest.embeds) && rest.embeds.length > 0) {
   const { embeds, ...restWithoutEmbeds } = rest;
   rest = restWithoutEmbeds;
 }
@@ -4851,7 +4851,7 @@ if (targetMessageId && !ephemeral) {
       const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
       // Convert components to JSON if they're builder objects
       let editPayload = { ...rest };
-      if (targetIsV2 && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+      if ((targetIsV2 || isComponentsV2Payload(editPayload)) && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
         editPayload = convertLegacyEmbedPayloadToComponentsV2(editPayload);
       }
       if (editPayload.components) {
@@ -4862,6 +4862,10 @@ if (targetMessageId && !ephemeral) {
       }
       editPayload = normalizePayloadContent(editPayload);
       editPayload = normalizeComponentsV2Payload(editPayload);
+      if (isComponentsV2Payload(editPayload) && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+        const { embeds, ...restWithoutEmbeds } = editPayload;
+        editPayload = restWithoutEmbeds;
+      }
       // Dismiss the modal response only for modal submits
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
@@ -5005,12 +5009,12 @@ if (!finalOptions.embeds && rest.embeds) {
   finalOptions.embeds = rest.embeds;
 }
 if (finalOptions.embeds) {
-  const isComponentsV2 = (Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
+  const isComponentsV2 = isComponentsV2Payload(finalOptions);
   if (!isComponentsV2) {
     finalOptions.embeds = applyGreenButtonFooter(finalOptions.embeds, finalOptions.components);
   }
 }
-if ((Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && Array.isArray(finalOptions.embeds) && finalOptions.embeds.length > 0) {
+if (isComponentsV2Payload(finalOptions) && Array.isArray(finalOptions.embeds) && finalOptions.embeds.length > 0) {
   const { embeds, ...restFinal } = finalOptions;
   finalOptions = restFinal;
 }
@@ -7538,7 +7542,7 @@ if (overrides?.messageId && !payload?.ephemeral) {
       const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
       // Convert components to JSON if they're builder objects
       let editPayload = { ...payload };
-      if (targetIsV2 && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+      if ((targetIsV2 || isComponentsV2Payload(editPayload)) && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
         editPayload = convertLegacyEmbedPayloadToComponentsV2(editPayload);
       }
       if (editPayload.components) {
@@ -7549,6 +7553,10 @@ if (overrides?.messageId && !payload?.ephemeral) {
       }
       editPayload = normalizePayloadContent(editPayload);
       editPayload = normalizeComponentsV2Payload(editPayload);
+      if (isComponentsV2Payload(editPayload) && Array.isArray(editPayload.embeds) && editPayload.embeds.length > 0) {
+        const { embeds, ...restWithoutEmbeds } = editPayload;
+        editPayload = restWithoutEmbeds;
+      }
       const result = isComponentsV2Payload(editPayload)
         ? await rawChannelEditMessage(interaction, target.channelId ?? interaction.channelId, target.id, editPayload)
         : await target.edit(editPayload);

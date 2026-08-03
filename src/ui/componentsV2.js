@@ -424,9 +424,10 @@ function hasGreenButtonInComponents(components = []) {
 }
 
 function withOwnerFooter(components = [], ownerId = "") {
+  const sanitizedComponents = stripLegacyOwnerFromFooterLines(components);
   const safeOwnerId = String(ownerId ?? "").trim();
-  if (!safeOwnerId || hasOwnerFooter(components)) return components;
-  return components;
+  if (!safeOwnerId || hasOwnerFooter(sanitizedComponents)) return sanitizedComponents;
+  return appendFooterSegment(sanitizedComponents, `Menu owner: <@${safeOwnerId}>`);
 }
 
 function withGreenButtonFooterTip(components = []) {
