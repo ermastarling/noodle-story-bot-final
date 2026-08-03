@@ -916,6 +916,9 @@ import { theme } from "./ui/theme.js";
   let nextOfficialStatsSyncAllowedAt = 0;
   let officialStatsUpdateQueue = Promise.resolve(false);
   let officialStatsUpdateInFlight = false;
+  let memberStatsRefreshPending = false;
+  let memberStatsRefreshRunning = false;
+  let memberStatsRefreshReason = "memberChange";
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -2226,6 +2229,31 @@ import { theme } from "./ui/theme.js";
       });
     officialStatsUpdateQueue = queuedRun.then(() => false, () => false);
     return queuedRun;
+  }
+
+  function requestOfficialMemberStatsRefresh(reason = "memberChange") {
+    if (!officialStatsChannelsEnabled || !officialGuildId) return;
+
+    memberStatsRefreshPending = true;
+    memberStatsRefreshReason = String(reason || memberStatsRefreshReason || "memberChange");
+    if (memberStatsRefreshRunning) return;
+    memberStatsRefreshRunning = true;
+
+    void (async () => {
+      try {
+        while (memberStatsRefreshPending) {
+          memberStatsRefreshPending = false;
+          await updateOfficialStatsChannels(null, { reason: memberStatsRefreshReason });
+        }
+      } catch (error) {
+        console.error("❌ Failed to refresh official stats channels after member churn:", error?.stack ?? error);
+      } finally {
+        memberStatsRefreshRunning = false;
+        if (memberStatsRefreshPending) {
+          requestOfficialMemberStatsRefresh(memberStatsRefreshReason);
+        }
+      }
+    })();
   }
 
   function getMessageSearchBlob(message) {
@@ -3636,22 +3664,14 @@ import { theme } from "./ui/theme.js";
     }
   });
 
-  client.on("guildMemberAdd", async (member) => {
-    try {
-      if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
-      await updateOfficialStatsChannels(null, { reason: "memberAdd" });
-    } catch (error) {
-      console.error("❌ Failed to refresh official stats channels after member join:", error?.stack ?? error);
-    }
+  client.on("guildMemberAdd", (member) => {
+    if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
+    requestOfficialMemberStatsRefresh("memberAdd");
   });
 
-  client.on("guildMemberRemove", async (member) => {
-    try {
-      if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
-      await updateOfficialStatsChannels(null, { reason: "memberRemove" });
-    } catch (error) {
-      console.error("❌ Failed to refresh official stats channels after member leave:", error?.stack ?? error);
-    }
+  client.on("guildMemberRemove", (member) => {
+    if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
+    requestOfficialMemberStatsRefresh("memberRemove");
   });
 
   client.on("messageCreate", async (message) => {

@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import discordPkg from "discord.js";
 
 import { resolvePreferredGuildId } from "../src/util/guildConfig.js";
@@ -129,4 +131,17 @@ test("resolveOfficialStatsChannelTarget accepts configured channels with string 
   assert.ok(result);
   assert.equal(result.channel.id, configuredStringType.id);
   assert.equal(result.source, "configured");
+});
+
+test("official stats member events coalesce refresh requests instead of awaiting per-event updates", () => {
+  const source = fs.readFileSync(path.resolve(process.cwd(), "src/index.js"), "utf8");
+
+  assert.match(source, /let\s+memberStatsRefreshPending\s*=\s*false;/);
+  assert.match(source, /let\s+memberStatsRefreshRunning\s*=\s*false;/);
+  assert.match(source, /function\s+requestOfficialMemberStatsRefresh\s*\(/);
+  assert.match(source, /while\s*\(memberStatsRefreshPending\)\s*{/);
+  assert.match(source, /client\.on\("guildMemberAdd",\s*\(member\)\s*=>\s*{[\s\S]*requestOfficialMemberStatsRefresh\("memberAdd"\);/m);
+  assert.match(source, /client\.on\("guildMemberRemove",\s*\(member\)\s*=>\s*{[\s\S]*requestOfficialMemberStatsRefresh\("memberRemove"\);/m);
+  assert.doesNotMatch(source, /client\.on\("guildMemberAdd",\s*async\s*\(member\)[\s\S]*await\s+updateOfficialStatsChannels\(/m);
+  assert.doesNotMatch(source, /client\.on\("guildMemberRemove",\s*async\s*\(member\)[\s\S]*await\s+updateOfficialStatsChannels\(/m);
 });

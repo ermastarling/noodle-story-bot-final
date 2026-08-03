@@ -152,6 +152,9 @@ function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
 }
 
 function convertPayloadToComponentsV2(interaction, payload = {}, player = null) {
+  if (isComponentsV2Payload(payload)) {
+    return payload;
+  }
   if (payload && typeof payload === "object" && Array.isArray(payload.embeds) && payload.embeds.length > 0) {
     return buildLegacyEmbedsV2Payload(payload.embeds, {
       components: payload.components,

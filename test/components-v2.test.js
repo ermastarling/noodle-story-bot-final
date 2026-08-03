@@ -286,6 +286,25 @@ test("Components V2: social converter preserves prebuilt V2 payloads and native 
   assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
 });
 
+test("Components V2: staff and upgrades converters preserve prebuilt V2 payloads without re-wrapping", () => {
+  const prebuiltStaffPayload = {
+    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
+    components: [{ type: 17, components: [{ type: 10, content: "## Keep staff V2" }] }],
+    trace: "staff-v2"
+  };
+  const prebuiltUpgradesPayload = {
+    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
+    components: [{ type: 17, components: [{ type: 10, content: "## Keep upgrades V2" }] }],
+    trace: "upgrades-v2"
+  };
+
+  const staffResult = normalizeStaffPayloadForReply({ user: { id: "u5" } }, prebuiltStaffPayload);
+  const upgradesResult = normalizeUpgradesPayloadForReply({ user: { id: "u6" } }, prebuiltUpgradesPayload);
+
+  assert.equal(staffResult, prebuiltStaffPayload);
+  assert.equal(upgradesResult, prebuiltUpgradesPayload);
+});
+
 test("Components V2: owner/tip footer is inserted below media and before action rows", () => {
   const payload = buildComponentsV2MenuPayload({
     ownerId: "123456789012345678",
