@@ -286,6 +286,15 @@ test("Components V2: social converter preserves prebuilt V2 payloads and native 
   assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
 });
 
+test("Components V2: social converter preserves plain text replies", () => {
+  const normalized = normalizeSocialPayloadForReply({ user: { id: "u4" } }, {
+    content: "Database unavailable in this environment."
+  });
+
+  const nodes = normalized.components?.flatMap((container) => container?.components ?? []) ?? [];
+  assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Database unavailable in this environment.")), true);
+});
+
 test("Components V2: staff and upgrades converters preserve prebuilt V2 payloads without re-wrapping", () => {
   const prebuiltStaffPayload = {
     flags: MESSAGE_FLAG_IS_COMPONENTS_V2,

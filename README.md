@@ -109,6 +109,7 @@ For a brand-new branch publish (no PR yet), the first push is allowed and the ho
 - Current dev subcommands: `status`, `dashboard`, `reset_tutorial`, `wipe_user`, `repair_profile`.
 - `/noodle-dev dashboard` now paginates the bot server list and includes Prev/Next navigation to stay within Discord embed limits.
 - Default guild registration mode is `dev-overrides`, which keeps `/noodle` global and applies guild-only overrides for dev tooling.
+- When registering commands in guild mode, the workflow-provided `DISCORD_GUILD_ID` is the explicit target; runtime official-guild logic still uses `NOODLE_OFFICIAL_GUILD_ID` first.
 
 ## Configuration
 

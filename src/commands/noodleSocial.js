@@ -1238,12 +1238,14 @@ function convertPayloadToComponentsV2(interaction, payload = {}) {
   }
 
   const hasSourceNativeComponents = Array.isArray(payload?.mainComponents) || Array.isArray(payload?.notices);
+  const safeContent = String(payload?.content ?? "").trim();
+  const contentComponent = safeContent ? [{ type: 10, content: safeContent }] : [];
   if (hasSourceNativeComponents) {
     const explicitMainComponents = Array.isArray(payload?.mainComponents) ? payload.mainComponents : [];
     const normalizedRows = normalizeLegacyComponentRows(payload?.components);
     const isEphemeral = payload?.ephemeral === true || ((Number(payload?.flags) & (1 << 6)) !== 0);
     return buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: [...explicitMainComponents, ...normalizedRows],
+      mainComponents: [...contentComponent, ...explicitMainComponents, ...normalizedRows],
       notices: Array.isArray(payload?.notices) ? payload.notices : [],
       ownerId: interaction?.user?.id ?? payload?.ownerId,
       ephemeral: isEphemeral
@@ -1258,7 +1260,7 @@ function convertPayloadToComponentsV2(interaction, payload = {}) {
     });
   }
   return buildComponentsV2PayloadWithNoticeCards({
-    mainComponents: Array.isArray(payload?.components) ? payload.components : [],
+    mainComponents: [...contentComponent, ...(Array.isArray(payload?.components) ? payload.components : [])],
     notices: [],
     ownerId: interaction?.user?.id ?? payload.ownerId,
     ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
