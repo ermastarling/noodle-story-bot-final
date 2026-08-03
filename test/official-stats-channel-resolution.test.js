@@ -7,11 +7,11 @@ import discordPkg from "discord.js";
 import { resolvePreferredGuildId } from "../src/util/guildConfig.js";
 import { resolveOfficialStatsChannelTarget } from "../src/util/officialStats.js";
 
-const GUILD_VOICE_CHANNEL_TYPE = Number(
-  discordPkg?.ChannelTypes?.GUILD_VOICE
-  ?? discordPkg?.Constants?.ChannelTypes?.GUILD_VOICE
-  ?? 2
-);
+const GUILD_VOICE_CHANNEL_TYPE_SOURCE = discordPkg?.ChannelTypes?.GUILD_VOICE
+  ?? discordPkg?.Constants?.ChannelTypes?.GUILD_VOICE;
+const GUILD_VOICE_CHANNEL_TYPE = typeof GUILD_VOICE_CHANNEL_TYPE_SOURCE === "number"
+  ? GUILD_VOICE_CHANNEL_TYPE_SOURCE
+  : 2;
 
 test("resolvePreferredGuildId keeps the official-first precedence contract", () => {
   const env = {
@@ -135,6 +135,7 @@ test("resolveOfficialStatsChannelTarget accepts configured channels with string 
 
 test("official stats member events coalesce refresh requests instead of awaiting per-event updates", () => {
   const source = fs.readFileSync(path.resolve(process.cwd(), "src/index.js"), "utf8");
+  const officialStatsSource = fs.readFileSync(path.resolve(process.cwd(), "src/util/officialStats.js"), "utf8");
 
   assert.match(source, /let\s+memberStatsRefreshPending\s*=\s*false;/);
   assert.match(source, /let\s+memberStatsRefreshRunning\s*=\s*false;/);
@@ -144,4 +145,8 @@ test("official stats member events coalesce refresh requests instead of awaiting
   assert.match(source, /client\.on\("guildMemberRemove",\s*\(member\)\s*=>\s*{[\s\S]*requestOfficialMemberStatsRefresh\("memberRemove"\);/m);
   assert.doesNotMatch(source, /client\.on\("guildMemberAdd",\s*async\s*\(member\)[\s\S]*await\s+updateOfficialStatsChannels\(/m);
   assert.doesNotMatch(source, /client\.on\("guildMemberRemove",\s*async\s*\(member\)[\s\S]*await\s+updateOfficialStatsChannels\(/m);
+  assert.match(source, /GUILD_VOICE_CHANNEL_TYPE_SOURCE/);
+  assert.match(source, /typeof\s+GUILD_VOICE_CHANNEL_TYPE_SOURCE\s*===\s*"number"/);
+  assert.match(officialStatsSource, /GUILD_VOICE_CHANNEL_TYPE_SOURCE/);
+  assert.match(officialStatsSource, /typeof\s+GUILD_VOICE_CHANNEL_TYPE_SOURCE\s*===\s*"number"/);
 });

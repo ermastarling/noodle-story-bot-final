@@ -17,14 +17,13 @@ import { theme } from "./ui/theme.js";
   
   const Client = Discord.Client;
   const Intents = Discord.Intents;
-  const GUILD_VOICE_CHANNEL_TYPE = Number(
-    Discord.ChannelTypes?.GUILD_VOICE
-    ?? Discord.Constants?.ChannelTypes?.GUILD_VOICE
-    ?? 2
-  );
+  const GUILD_VOICE_CHANNEL_TYPE_SOURCE = Discord.ChannelTypes?.GUILD_VOICE
+    ?? Discord.Constants?.ChannelTypes?.GUILD_VOICE;
+  const GUILD_VOICE_CHANNEL_TYPE = typeof GUILD_VOICE_CHANNEL_TYPE_SOURCE === "number"
+    ? GUILD_VOICE_CHANNEL_TYPE_SOURCE
+    : 2;
   const GUILD_VOICE_CHANNEL_TYPE_NAME = String(
-    Discord.ChannelTypes?.GUILD_VOICE
-    ?? Discord.Constants?.ChannelTypes?.GUILD_VOICE
+    GUILD_VOICE_CHANNEL_TYPE_SOURCE
     ?? "GUILD_VOICE"
   ).trim().toUpperCase();
 

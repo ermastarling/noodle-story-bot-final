@@ -13,6 +13,7 @@ import {
   resolveComponentsV2TargetGuild
 } from "../src/ui/componentsV2.js";
 import { buildHelpPageV2Payload, buildMultiBuyPickerPayload } from "../src/commands/noodle.js";
+import { composeV2FromLegacyEmbedsForTest } from "../src/commands/noodle.js";
 import { normalizePayloadForReply as normalizeSocialPayloadForReply } from "../src/commands/noodleSocial.js";
 import { normalizePayloadForReply as normalizeDecorPayloadForReply } from "../src/commands/noodleDecor.js";
 import { normalizePayloadForReply as normalizeQuestsPayloadForReply } from "../src/commands/noodleQuests.js";
@@ -471,6 +472,36 @@ test("Components V2: legacy embed text conversion chunks long content and strips
   assert.equal(components.some((entry) => String(entry?.content ?? "").includes("Keep this note")), true);
   assert.equal(components.some((entry) => String(entry?.content ?? "").includes("Status")), true);
   assert.equal(components.some((entry) => String(entry?.content ?? "").includes("Line two")), true);
+});
+
+test("Components V2: legacy embed composer returns a merge-safe spec", () => {
+  const payload = composeV2FromLegacyEmbedsForTest([
+    {
+      toJSON() {
+        return {
+          title: "Status",
+          description: "Ready",
+          footer: { text: "Owner: chef" }
+        };
+      }
+    },
+    {
+      toJSON() {
+        return {
+          title: "Notice",
+          description: "Heads up"
+        };
+      }
+    }
+  ], " 123 ");
+
+  assert.equal(Array.isArray(payload.mainComponents), true);
+  assert.equal(Array.isArray(payload.notices), true);
+  assert.equal(payload.components, undefined);
+  assert.equal(payload.flags, undefined);
+  assert.equal(payload.ownerId, undefined);
+  assert.equal(payload.mainComponents.some((entry) => String(entry?.content ?? "").includes("Status")), true);
+  assert.equal(payload.notices.some((notice) => String(notice?.title ?? "").includes("Notice")), true);
 });
 
 test("Components V2: replyOrEditInteraction prefers raw webhook edit for deferred V2 payloads", async () => {

@@ -4639,8 +4639,7 @@ function composeV2FromLegacyEmbeds(embeds = [], ownerId = "") {
   const primaryEmbed = list[0] ?? null;
   const notificationEmbeds = list.slice(1);
   const mainComponents = [
-    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
-    ...normalizeLegacyComponentRows([])
+    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : [])
   ];
   const notices = notificationEmbeds
     .map((embed) => {
@@ -4653,12 +4652,10 @@ function composeV2FromLegacyEmbeds(embeds = [], ownerId = "") {
     })
     .filter(Boolean);
 
-  return buildComponentsV2PayloadWithNoticeCards({
+  return {
     mainComponents,
-    notices,
-    ownerId: String(ownerId || "").trim() || undefined,
-    includeGreenButtonTip: true
-  });
+    notices
+  };
 }
 
 const LEGACY_TO_V2_SUBS = new Set([
@@ -18142,6 +18139,7 @@ export {
   noodleMainMenuRowNoProfile,
   displayItemName,
   renderProfileEmbed,
+  composeV2FromLegacyEmbeds as composeV2FromLegacyEmbedsForTest,
   resolveComponentNavSub,
   applyPersistentNoticeCards as applyPersistentNoticeCardsForTest,
   convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest

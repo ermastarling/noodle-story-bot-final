@@ -1,13 +1,12 @@
 import discordPkg from "discord.js";
 
-const GUILD_VOICE_CHANNEL_TYPE = Number(
-  discordPkg?.ChannelTypes?.GUILD_VOICE
-  ?? discordPkg?.Constants?.ChannelTypes?.GUILD_VOICE
-  ?? 2
-);
+const GUILD_VOICE_CHANNEL_TYPE_SOURCE = discordPkg?.ChannelTypes?.GUILD_VOICE
+  ?? discordPkg?.Constants?.ChannelTypes?.GUILD_VOICE;
+const GUILD_VOICE_CHANNEL_TYPE = typeof GUILD_VOICE_CHANNEL_TYPE_SOURCE === "number"
+  ? GUILD_VOICE_CHANNEL_TYPE_SOURCE
+  : 2;
 const GUILD_VOICE_CHANNEL_TYPE_NAME = String(
-  discordPkg?.ChannelTypes?.GUILD_VOICE
-  ?? discordPkg?.Constants?.ChannelTypes?.GUILD_VOICE
+  GUILD_VOICE_CHANNEL_TYPE_SOURCE
   ?? "GUILD_VOICE"
 ).trim().toUpperCase();
 
