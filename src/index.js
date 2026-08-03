@@ -93,8 +93,8 @@ import { theme } from "./ui/theme.js";
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
-  const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
-  const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
+  const { noodleStaffCommand: _noodleStaffCommand, noodleStaffHandler: _noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
+  const { noodleUpgradesCommand: _noodleUpgradesCommand, noodleUpgradesHandler: _noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
   const { sendRawDm } = await import("./util/rawDm.js");
   const {
     resolveOfficialStatsChannelTarget,
@@ -301,7 +301,7 @@ import { theme } from "./ui/theme.js";
         origError("Command error log stream disabled:", safeLogMessage(error?.message ?? error));
       }
     });
-  } catch (error) {
+  } catch (_error) {
     errorLogEnabled = false;
     errorLog = null;
     errorLogNeedsDrain = false;
@@ -954,7 +954,7 @@ import { theme } from "./ui/theme.js";
   const baseContent = loadContentBundle(1);
   const eventsContent = loadEventsContent();
   const content = withEventRecipes(baseContent, eventsContent);
-  const settingsCatalog = loadSettingsCatalog();
+  const _settingsCatalog = loadSettingsCatalog();
   const badgesContent = loadBadgesContent();
   const specializationsContent = loadSpecializationsContent();
   const decorSetsContent = loadDecorSetsContent();
@@ -3747,7 +3747,7 @@ import { theme } from "./ui/theme.js";
     // Note: Discord.js v13 uses isSelectMenu(), not isStringSelectMenu()
     const isBtn = interaction.isButton?.();
     const isSelect = interaction.isSelectMenu?.();
-    const isModal = interaction.isModalSubmit?.();
+    const _isModal = interaction.isModalSubmit?.();
     const cid = interaction.customId;
     telemetryCustomIdPrefix = getCustomIdPrefix(cid);
     const isNoodle = cid?.startsWith("noodle:");

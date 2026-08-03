@@ -39,7 +39,7 @@ function shouldShowDivider(value, fallback = true) {
   return raw === "1" || raw.toLowerCase() === "true";
 }
 
-export function resolveComponentsV2MenuGuide(env = process.env, overrides = {}) {
+function resolveComponentsV2MenuGuide(env = process.env, overrides = {}) {
   const accentColor = parseMenuColor(
     overrides.accentColor ?? env?.NOODLE_COMPONENTS_V2_MENU_ACCENT_COLOR,
     DEFAULT_MENU_ACCENT_COLOR
@@ -509,95 +509,6 @@ export function splitTextToV2Chunks(text, maxLen = 3800) {
   }
 
   return chunks.filter(Boolean);
-}
-
-export function legacyEmbedsToV2TextComponents(embeds = []) {
-  const out = [];
-  for (const embed of embeds || []) {
-    const raw = embed?.toJSON?.() ?? embed ?? {};
-    const title = String(raw?.title ?? "").trim();
-    const description = String(raw?.description ?? "").trim();
-    const fields = Array.isArray(raw?.fields) ? raw.fields : [];
-    const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
-
-    const blocks = [];
-    if (title) blocks.push(`## ${title}`);
-    if (description) blocks.push(description);
-
-    for (const field of fields) {
-      const name = String(field?.name ?? "").trim();
-      const value = String(field?.value ?? "").trim();
-      if (!name && !value) continue;
-      blocks.push([name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n"));
-    }
-
-    const compactBody = blocks.join("\n\n").trim();
-    const compactFooter = footerText
-      .split("\n")
-      .map((line) => String(line ?? "").trim())
-      .filter(Boolean)
-      .join(" • ");
-
-    const textChunkMaxLen = 3800;
-    const chunks = splitTextToV2Chunks(compactBody, textChunkMaxLen);
-    if (compactFooter) {
-      const footerLine = `-# ${compactFooter}`;
-      if (chunks.length > 0) {
-        const lastIdx = chunks.length - 1;
-        const lastChunk = String(chunks[lastIdx] ?? "").trim();
-        if (lastChunk) {
-          const combined = `${lastChunk}\n\n${footerLine}`.trim();
-          if (combined.length <= textChunkMaxLen) {
-            chunks[lastIdx] = combined;
-          } else {
-            chunks.push(footerLine);
-          }
-        } else {
-          chunks[lastIdx] = footerLine;
-        }
-      } else {
-        chunks.push(footerLine);
-      }
-    }
-
-    for (const chunk of chunks) out.push({ type: 10, content: chunk });
-  }
-  return out;
-}
-
-function normalizeLegacyComponentRows(rows = []) {
-  if (!Array.isArray(rows)) return [];
-  const normalized = [];
-  for (const row of rows) {
-    if (!row) continue;
-    const baseRow = row?.toJSON?.() ?? row;
-    const rawComponents = baseRow?.components ?? row?.components ?? [];
-    const mapped = (rawComponents || [])
-      .map((comp) => comp?.toJSON?.() ?? comp)
-      .filter(Boolean);
-    if (!mapped.length) continue;
-    normalized.push({ type: 1, components: mapped });
-  }
-  return normalized;
-}
-
-function inferLegacyNoticeTone(embed = {}) {
-  const raw = embed?.toJSON?.() ?? embed ?? {};
-  const title = String(raw?.title ?? "").trim().toLowerCase();
-  const description = String(raw?.description ?? "").trim().toLowerCase();
-  const haystack = `${title}\n${description}`;
-  if (/warning|failed|error|lock|cooldown|missing/.test(haystack)) return "warning";
-  if (/complete|unlocked|started|success|claimed/.test(haystack)) return "success";
-  return "info";
-}
-
-function buildLegacyNoticeSpec(embed) {
-  const raw = embed?.toJSON?.() ?? embed ?? {};
-  const title = String(raw?.title ?? "").trim() || "Notification";
-  const details = legacyEmbedsToV2TextComponents([embed])
-    .map((entry) => String(entry?.content ?? "").trim())
-    .filter(Boolean);
-  return { title, details, tone: inferLegacyNoticeTone(embed) };
 }
 
 export function buildComponentsV2MenuPayload({

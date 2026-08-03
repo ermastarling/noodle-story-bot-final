@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
 import { performance } from "perf_hooks";
 import {
@@ -244,7 +243,7 @@ function simulateDay({
   badgesContent,
   questsContent,
   players,
-  rng,
+  rng: _rng,
   ordersPerDay,
   onTimeChance,
   upgradeSpendFraction,

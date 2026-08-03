@@ -6,7 +6,7 @@ import {
   checkCooldownCatchup,
   generateWelcomeBackMessage,
   applyTimeCatchup,
-  getSpoilageAmount
+  getSpoilageAmount as _getSpoilageAmount
 } from "../src/game/timeCatchup.js";
 
 // Time constants for tests

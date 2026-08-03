@@ -7,13 +7,12 @@ import {
   buildComponentsV2NoticeCardPayload,
   buildComponentsV2TextPayload,
   isComponentsV2Enabled,
-  legacyEmbedsToV2TextComponents,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
   replyOrEditInteraction,
   resolveComponentsV2TargetGuild
 } from "../src/ui/componentsV2.js";
 import { buildHelpPageV2Payload, buildMultiBuyPickerPayload } from "../src/commands/noodle.js";
-import { composeV2FromLegacyEmbedsForTest } from "../src/commands/noodle.js";
+import { buildMainAndNoticesFromEmbedsForTest } from "../src/commands/noodle.js";
 import { normalizePayloadForReply as normalizeSocialPayloadForReply } from "../src/commands/noodleSocial.js";
 import { normalizePayloadForReply as normalizeDecorPayloadForReply } from "../src/commands/noodleDecor.js";
 import { normalizePayloadForReply as normalizeQuestsPayloadForReply } from "../src/commands/noodleQuests.js";
@@ -249,7 +248,7 @@ test("Components V2: quests converter preserves prebuilt V2 payloads and native 
 
   const nativePayload = {
     mainComponents: [{ type: 10, content: "## Native" }],
-    notices: [{ title: "Notice", details: ["A"], tone: "info" }],
+    notices: [{ title: "Notice", details: ["Quest native notice detail"], tone: "info" }],
     components: [
       {
         type: 1,
@@ -261,6 +260,7 @@ test("Components V2: quests converter preserves prebuilt V2 payloads and native 
   const nodes = normalizedNative.components?.flatMap((container) => container?.components ?? []) ?? [];
   assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Native")), true);
   assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
+  assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Quest native notice detail")), true);
 });
 
 test("Components V2: social converter preserves prebuilt V2 payloads and native mainComponents/notices", () => {
@@ -273,7 +273,7 @@ test("Components V2: social converter preserves prebuilt V2 payloads and native 
 
   const nativePayload = {
     mainComponents: [{ type: 10, content: "## Social Native" }],
-    notices: [{ title: "Heads up", details: ["Info"], tone: "info" }],
+    notices: [{ title: "Heads up", details: ["Social native notice detail"], tone: "info" }],
     components: [
       {
         type: 1,
@@ -284,6 +284,32 @@ test("Components V2: social converter preserves prebuilt V2 payloads and native 
   const normalizedNative = normalizeSocialPayloadForReply({ user: { id: "u3" } }, nativePayload);
   const nodes = normalizedNative.components?.flatMap((container) => container?.components ?? []) ?? [];
   assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Social Native")), true);
+  assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
+  assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Social native notice detail")), true);
+});
+
+test("Components V2: social converter retains target metadata for commit routing", () => {
+  const normalized = normalizeSocialPayloadForReply({ user: { id: "u8" } }, {
+    mainComponents: [{ type: 10, content: "## Metadata test" }],
+    notices: [{ title: "Routing", details: ["Target edit metadata should persist"], tone: "info" }],
+    components: [
+      {
+        type: 1,
+        components: [{ type: 2, style: 2, label: "Back", custom_id: "noodle-social:nav:menu:u8" }]
+      }
+    ],
+    targetMessageId: "msg-123",
+    targetChannelId: "chan-456",
+    ephemeral: true
+  });
+
+  assert.equal(normalized.targetMessageId, "msg-123");
+  assert.equal(normalized.targetChannelId, "chan-456");
+  assert.equal(normalized.ephemeral, true);
+
+  const nodes = normalized.components?.flatMap((container) => container?.components ?? []) ?? [];
+  assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Metadata test")), true);
+  assert.equal(nodes.some((node) => Number(node?.type) === 10 && String(node?.content ?? "").includes("Target edit metadata should persist")), true);
   assert.equal(nodes.some((node) => Number(node?.type) === 1), true);
 });
 
@@ -313,6 +339,17 @@ test("Components V2: staff and upgrades converters preserve prebuilt V2 payloads
 
   assert.equal(staffResult, prebuiltStaffPayload);
   assert.equal(upgradesResult, prebuiltUpgradesPayload);
+});
+
+test("Components V2: decor converter preserves prebuilt V2 payloads without re-wrapping", () => {
+  const prebuiltDecorPayload = {
+    flags: MESSAGE_FLAG_IS_COMPONENTS_V2,
+    components: [{ type: 17, components: [{ type: 10, content: "## Keep decor V2" }] }],
+    trace: "decor-v2"
+  };
+
+  const decorResult = normalizeDecorPayloadForReply({ user: { id: "u9" } }, prebuiltDecorPayload);
+  assert.equal(decorResult, prebuiltDecorPayload);
 });
 
 test("Components V2: owner/tip footer is inserted below media and before action rows", () => {
@@ -453,8 +490,8 @@ test("Components V2: explicit notice image keeps unlock title below the banner",
   assert.equal(String(nodes[2]?.content ?? "").includes("Simmer gold-star broths"), true);
 });
 
-test("Components V2: legacy embed text conversion chunks long content and strips owner footers", () => {
-  const components = legacyEmbedsToV2TextComponents([
+test("Components V2: legacy embed conversion chunks long content and strips owner footers", () => {
+  const payload = buildMainAndNoticesFromEmbedsForTest([
     {
       toJSON() {
         return {
@@ -465,6 +502,7 @@ test("Components V2: legacy embed text conversion chunks long content and strips
       }
     }
   ]);
+  const components = Array.isArray(payload?.mainComponents) ? payload.mainComponents : [];
 
   assert.equal(Array.isArray(components), true);
   assert.equal(components.length > 1, true);
@@ -475,7 +513,7 @@ test("Components V2: legacy embed text conversion chunks long content and strips
 });
 
 test("Components V2: legacy embed composer returns a merge-safe spec", () => {
-  const payload = composeV2FromLegacyEmbedsForTest([
+  const payload = buildMainAndNoticesFromEmbedsForTest([
     {
       toJSON() {
         return {

@@ -9,7 +9,7 @@ import { noodleMainMenuRow, runNoodle } from "./noodle.js";
 import { shouldForceTutorialCommand } from "../game/tutorialRouting.js";
 import { buildStaffOverviewComponents } from "./noodleStaff.js";
 import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../game/kitchen.js";
-import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL } from "../game/garden.js";
+import { isGardenUnlocked, GARDEN_UNLOCK_LEVEL as _GARDEN_UNLOCK_LEVEL } from "../game/garden.js";
 import { isFishingUnlocked, FISHING_UNLOCK_LEVEL } from "../game/fishing.js";
 import {
   purchaseUpgrade,
@@ -22,7 +22,6 @@ import { getIcon, getButtonEmoji, resolveIcon } from "../ui/icons.js";
 import { normalizeRawContainerPayload } from "../util/rawPayload.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
-  legacyEmbedsToV2TextComponents,
   MESSAGE_FLAG_IS_COMPONENTS_V2
 } from "../ui/componentsV2.js";
 
@@ -63,39 +62,6 @@ function formatTwoDecimals(value) {
   return Number(Number(value ?? 0).toFixed(2));
 }
 
-function hasGreenButton(components) {
-  const rows = Array.isArray(components) ? components : (components ? [components] : []);
-  for (const row of rows) {
-    const rowJson = row?.toJSON ? row.toJSON() : row;
-    const comps = row?.components ?? rowJson?.components ?? [];
-    for (const comp of comps) {
-      const style = comp?.style ?? comp?.data?.style;
-      if (style === ButtonStyle.Success) return true;
-    }
-  }
-  return false;
-}
-
-function applyGreenButtonFooter(embeds, components) {
-  if (!Array.isArray(embeds) || embeds.length === 0) return embeds;
-  if (!hasGreenButton(components)) return embeds;
-
-  const note = "Tip: Tap the green button(s) to continue.";
-  return embeds.map((embed) => {
-    const footerText = embed?.footer?.text ?? embed?.data?.footer?.text ?? "";
-    if (footerText.includes("green button")) return embed;
-    const nextText = footerText ? `${footerText} • ${note}` : note;
-    if (typeof embed?.setFooter === "function") {
-      embed.setFooter({ text: nextText });
-    } else if (embed?.data) {
-      embed.data.footer = { ...(embed.data.footer ?? {}), text: nextText };
-    } else if (embed) {
-      embed.footer = { ...(embed.footer ?? {}), text: nextText };
-    }
-    return embed;
-  });
-}
-
 function isComponentsV2Payload(payload = {}) {
   if (!payload || typeof payload !== "object") return false;
   if ((Number(payload.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0) return true;
@@ -126,46 +92,9 @@ function normalizeLegacyComponentRows(rows = []) {
   return normalized;
 }
 
-function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
-  const list = Array.isArray(embeds) ? embeds : [];
-  const ownerId = String(options?.ownerId ?? "").trim() || undefined;
-  const ephemeral = Boolean(options?.ephemeral === true || options?.ephemeral === 1 || options?.ephemeral === "true");
-  const components = Array.isArray(options?.components) ? options.components : [];
-  const primaryEmbed = list[0] ?? null;
-  const notificationEmbeds = list.slice(1);
-  const mainComponents = [
-    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
-    ...normalizeLegacyComponentRows(components)
-  ];
-  const notices = notificationEmbeds
-    .map((embed) => {
-      const raw = embed?.toJSON?.() ?? embed ?? {};
-      const title = String(raw?.title ?? "").trim() || "Notification";
-      const details = legacyEmbedsToV2TextComponents([embed])
-        .map((entry) => String(entry?.content ?? "").trim())
-        .filter(Boolean);
-      return details.length > 0 || title ? { title, details, tone: "info" } : null;
-    })
-    .filter(Boolean);
-
-  return buildComponentsV2PayloadWithNoticeCards({
-    mainComponents,
-    notices,
-    ownerId,
-    ephemeral
-  });
-}
-
 function convertPayloadToComponentsV2(interaction, payload = {}, _player = null) {
   if (isComponentsV2Payload(payload)) {
     return payload;
-  }
-  if (payload && typeof payload === "object" && Array.isArray(payload.embeds) && payload.embeds.length > 0) {
-    return buildLegacyEmbedsV2Payload(payload.embeds, {
-      components: payload.components,
-      ownerId: interaction?.user?.id ?? payload.ownerId,
-      ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
-    });
   }
   const safeContent = String(payload?.content ?? "").trim();
   const contentComponent = safeContent ? [{ type: 10, content: safeContent }] : [];
@@ -299,7 +228,7 @@ function composeUpgradesViewComponents({ title = "", description = "", sections 
 function buildUpgradesPayload({ content = " ", ownerId, bodyComponents = [], actionRows = [], ephemeral = false } = {}) {
   const mainComponents = [
     ...(Array.isArray(bodyComponents) ? bodyComponents : []),
-    ...normalizeComponents(actionRows)
+    ...normalizeLegacyComponentRows(actionRows)
   ];
 
   return buildComponentsV2PayloadWithNoticeCards({
@@ -351,7 +280,7 @@ function buildStaffPickerEffectSummary(player, staff) {
   return parts.join(", ");
 }
 
-function rarityEmoji(rarity) {
+function rarityEmoji(_rarity) {
   return "";
 }
 
@@ -513,7 +442,7 @@ function buildUpgradesOverviewComponents(player) {
   const effects = calculateUpgradeEffects(player, upgradesContent);
   const upgradesByCategory = getUpgradesByCategory(player, upgradesContent);
   const { unlocked: kitchenUnlocked } = getKitchenUnlockState(player);
-  const gardenUnlocked = isGardenUnlocked(player);
+  const _gardenUnlocked = isGardenUnlocked(player);
   const fishingUnlocked = isFishingUnlocked(player);
 
   const sections = [];

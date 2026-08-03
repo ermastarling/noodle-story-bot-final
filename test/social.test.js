@@ -12,6 +12,7 @@ let SQLITE_AVAILABLE = true;
 try {
   Database = (await import("better-sqlite3")).default;
 } catch (err) {
+  const _err = err;
   SQLITE_AVAILABLE = false;
 }
 
@@ -20,7 +21,7 @@ const dbTestOpts = { skip: !SQLITE_AVAILABLE };
 import {
   grantBlessing,
   hasActiveBlessing,
-  getActiveBlessing,
+  getActiveBlessing as _getActiveBlessing,
   clearExpiredBlessings,
   createParty,
   joinParty,
@@ -35,10 +36,10 @@ import {
   getNpcAffinity,
   updateCommunityEvent,
   checkEventMilestones,
-  BLESSING_DURATION_HOURS,
-  BLESSING_COOLDOWN_HOURS,
-  MIN_TIP_AMOUNT,
-  MAX_TIP_AMOUNT
+  BLESSING_DURATION_HOURS as _BLESSING_DURATION_HOURS,
+  BLESSING_COOLDOWN_HOURS as _BLESSING_COOLDOWN_HOURS,
+  MIN_TIP_AMOUNT as _MIN_TIP_AMOUNT,
+  MAX_TIP_AMOUNT as _MAX_TIP_AMOUNT
 } from "../src/game/social.js";
 import { nowTs } from "../src/util/time.js";
 

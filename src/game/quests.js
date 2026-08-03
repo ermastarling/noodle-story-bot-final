@@ -44,7 +44,7 @@ function getMonthKey(ts) {
   return dayKeyUTC(monthStart.getTime());
 }
 
-function buildWeightedPool(templates) {
+function _buildWeightedPool(templates) {
   return Object.fromEntries(
     templates.map((q) => [q.quest_id, Math.max(0.01, Number(q.weight ?? 1))])
   );

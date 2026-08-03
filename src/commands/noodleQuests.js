@@ -10,7 +10,6 @@ import { claimCompletedQuests, getQuestSummary } from "../game/quests.js";
 import { getIcon } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
-  legacyEmbedsToV2TextComponents,
   isComponentsV2Payload,
   isInvalidComponentTypeError,
   rawWebhookEditOriginal
@@ -53,36 +52,6 @@ function normalizeLegacyComponentRows(rows = []) {
   return normalized;
 }
 
-function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
-  const list = Array.isArray(embeds) ? embeds : [];
-  const ownerId = String(options?.ownerId ?? "").trim() || undefined;
-  const ephemeral = Boolean(options?.ephemeral === true || options?.ephemeral === 1 || options?.ephemeral === "true");
-  const components = Array.isArray(options?.components) ? options.components : [];
-  const primaryEmbed = list[0] ?? null;
-  const notificationEmbeds = list.slice(1);
-  const mainComponents = [
-    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
-    ...normalizeLegacyComponentRows(components)
-  ];
-  const notices = notificationEmbeds
-    .map((embed) => {
-      const raw = embed?.toJSON?.() ?? embed ?? {};
-      const title = String(raw?.title ?? "").trim() || "Notification";
-      const details = legacyEmbedsToV2TextComponents([embed])
-        .map((entry) => String(entry?.content ?? "").trim())
-        .filter(Boolean);
-      return details.length > 0 || title ? { title, details, tone: "info" } : null;
-    })
-    .filter(Boolean);
-
-  return buildComponentsV2PayloadWithNoticeCards({
-    mainComponents,
-    notices,
-    ownerId,
-    ephemeral
-  });
-}
-
 function convertPayloadToComponentsV2(interaction, payload = {}, _player = null) {
   if (isComponentsV2Payload(payload)) {
     return payload;
@@ -101,13 +70,6 @@ function convertPayloadToComponentsV2(interaction, payload = {}, _player = null)
     });
   }
 
-  if (payload && typeof payload === "object" && Array.isArray(payload.embeds) && payload.embeds.length > 0) {
-    return buildLegacyEmbedsV2Payload(payload.embeds, {
-      components: payload.components,
-      ownerId: interaction?.user?.id ?? payload.ownerId,
-      ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
-    });
-  }
   return buildComponentsV2PayloadWithNoticeCards({
     mainComponents: Array.isArray(payload?.components) ? payload.components : [],
     notices: [],

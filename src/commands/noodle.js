@@ -14,7 +14,7 @@ import {
 import { addIngredientsToInventory, removeIngredientsFromInventory, checkIngredientCapacity } from "../game/inventory.js";
 import {
   advanceTutorial,
-  ensureTutorial,
+  ensureTutorial as _ensureTutorial,
   getCurrentTutorialStep,
   formatTutorialMessage,
   formatTutorialCompletionMessage,
@@ -81,8 +81,8 @@ import {
   INGREDIENT_CAPACITY_BASE,
   BOWL_STORAGE_CAPACITY_BASE,
   PROFILE_DEFAULT_TAGLINE,
-  PROFILE_BADGES_SHOWN,
-  PROFILE_COLLECTIONS_SHOWN
+  PROFILE_BADGES_SHOWN as _PROFILE_BADGES_SHOWN,
+  PROFILE_COLLECTIONS_SHOWN as _PROFILE_COLLECTIONS_SHOWN
 } from "../constants.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
 import { normalizeRawContainerPayload } from "../util/rawPayload.js";
@@ -94,7 +94,7 @@ import {
   markNewsAsSeen,
   normalizeNewsClassification,
 } from "../util/news.js";
-import { socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
+import { socialMainMenuRow as _socialMainMenuRow, socialMainMenuRowNoProfile } from "./noodleSocial.js";
 import {
   getUserActiveParty,
   getActiveBlessing,
@@ -132,7 +132,7 @@ import {
   clearTemporaryRecipes,
   getPityDiscount,
   consumeFailStreakRelief,
-  checkRepFloorBonus,
+  checkRepFloorBonus as _checkRepFloorBonus,
   updateFailStreak
 } from "../game/resilience.js";
 import { applyTimeCatchup } from "../game/timeCatchup.js";
@@ -155,7 +155,7 @@ import {
   applyCollectionProgressOnCook,
   ensureCollectionsState,
   ensureCollectionProgress,
-  getCollectionsSummary,
+  getCollectionsSummary as _getCollectionsSummary,
   resolveCollectionEntries,
   backfillRecipeCollections,
   revalidateCollections
@@ -175,7 +175,7 @@ import {
 import {
   ensureDecorState,
   grantUnlockedDecor,
-  buildDecorOwnershipSummary,
+  buildDecorOwnershipSummary as _buildDecorOwnershipSummary,
   getDecorItemById,
   getOwnedDecorItems
 } from "../game/decor.js";
@@ -193,7 +193,7 @@ import {
   rollDoubleCraft
 } from "../game/upgrades.js";
 import { setPlayerShopLevel } from "../game/serve.js";
-import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap, getEventById } from "../game/events.js";
+import { getActiveEvent, getActiveEventEffects, getEventWindow, getActiveEventRecipes as _getActiveEventRecipes, withEventRecipes, buildEventRecipeSeasonMap, getEventById } from "../game/events.js";
 import { calculateStaffEffects } from "../game/staff.js";
 import {
   ensureGardenState,
@@ -207,7 +207,7 @@ import {
   harvestGardenPlots,
   autoHarvestReadyPlots,
   getCompostableForageables,
-  craftCompostBags,
+  craftCompostBags as _craftCompostBags,
   getSeedIdForIngredient,
   getSeedDisplayName,
   getSeedYieldMap,
@@ -261,7 +261,6 @@ import {
   buildComponentsV2PayloadWithNoticeCards,
   buildComponentsV2NoticeCardPayload,
   isComponentsV2Enabled,
-  legacyEmbedsToV2TextComponents,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
   replyOrEditInteraction,
   rawChannelSendMessage,
@@ -273,7 +272,7 @@ import { isV2OwnerMismatch, parseV2CustomId } from "../ui/sceneRoutingV2.js";
 import { getSceneState, putSceneState } from "../ui/sceneStateV2.js";
 import { buildOrdersBoardV2Message } from "../ui/ordersBoardV2.js";
 import {
-  buildAcceptConfirmV2Message,
+  buildAcceptConfirmV2Message as _buildAcceptConfirmV2Message,
   buildAcceptPickerV2Message,
   buildAcceptResultV2Message,
   deriveAcceptOutcome
@@ -311,7 +310,6 @@ const {
   MessageActionRow,
   MessageSelectMenu,
   MessageButton,
-  MessageEmbed,
   MessageFlags,
   Modal,
   TextInputComponent,
@@ -429,9 +427,9 @@ function clearAcceptOrderDraftSelection({ serverId, userId } = {}) {
   acceptOrderSelectionCache.delete(key);
 }
 
-function mergeAcceptOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
+function mergeAcceptOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], _pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
   const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
-  const pageSet = new Set((pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSet = new Set((_pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
   const pageSelectedSet = new Set((pageSelectedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
 
   const merged = [];
@@ -498,9 +496,9 @@ function clearCancelOrderDraftSelection({ serverId, userId } = {}) {
   cancelOrderSelectionCache.delete(key);
 }
 
-function mergeCancelOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
+function mergeCancelOrderPageSelection({ availableOrderIds = [], currentSelectedOrderIds = [], _pageOrderIds = [], pageSelectedOrderIds = [] } = {}) {
   const availableSet = new Set((availableOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
-  const pageSet = new Set((pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  const pageSet = new Set((_pageOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
   const pageSelectedSet = new Set((pageSelectedOrderIds || []).map((id) => String(id || "").trim()).filter(Boolean));
 
   const merged = [];
@@ -874,7 +872,7 @@ function applyPersistentNoticeCards(payload = {}, notices = []) {
   }
 
   if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
-    const composed = composeV2FromLegacyEmbeds(updated.embeds);
+    const composed = buildMainAndNoticesFromEmbeds(updated.embeds);
     const { embeds, ...rest } = updated;
     updated = {
       ...rest,
@@ -1091,7 +1089,7 @@ function applyDecorSetForSpecialization(player, specId) {
   return true;
 }
 
-function getDecorItemRequiredSpecId(item) {
+function _getDecorItemRequiredSpecId(item) {
   if (!item?.set_id) return null;
   return getDecorSetSpecId(item.set_id);
 }
@@ -1376,17 +1374,17 @@ function buildMarketRefreshFooterText(existingFooterText, marketRestockMs, nowMs
 
   const diffMs = marketRestockMs - nowMs;
   const absMinutes = Math.round(Math.abs(diffMs) / 60000);
-  let relativeText = "";
+  let _relativeText = "";
   if (absMinutes === 0) {
-    relativeText = "now";
+    _relativeText = "now";
   } else if (absMinutes < 60) {
-    relativeText = `${absMinutes} min ${diffMs >= 0 ? "from now" : "ago"}`;
+    _relativeText = `${absMinutes} min ${diffMs >= 0 ? "from now" : "ago"}`;
   } else {
     const hours = Math.round(absMinutes / 60);
     const mins = absMinutes % 60;
     const hourPart = `${hours} hr${hours === 1 ? "" : "s"}`;
     const minPart = mins ? ` ${mins} min` : "";
-    relativeText = `${hourPart}${minPart} ${diffMs >= 0 ? "from now" : "ago"}`;
+    _relativeText = `${hourPart}${minPart} ${diffMs >= 0 ? "from now" : "ago"}`;
   }
 
   const marketText = `New Orders Arrive: ${dateText}`;
@@ -1751,7 +1749,7 @@ function renderDecorSetsEmbedLocal({ player, ownerUser, view = "specialization",
   return { embed, page: safePage, totalPages };
 }
 
-function formatDecorUnlockRequirement(item) {
+function _formatDecorUnlockRequirement(item) {
   if (!item) return "Unknown requirement";
   const rule = item.unlock_rule ?? {};
   switch (item.unlock_source) {
@@ -2091,16 +2089,16 @@ function pantryPageRow(userId, page = 0, totalPages = 1, ingredientPages = 1) {
 function buildGardenView({ player, combinedEffects, user, userId, kitchenUnlocked = false, kitchenJustUnlocked = false, page = 0, autoHarvestResult = null }) {
   const garden = ensureGardenState(player);
   const plots = ensureGardenPlots(player, combinedEffects);
-  const gardenState = getGardenActionState(player, combinedEffects);
+  const _gardenState = getGardenActionState(player, combinedEffects);
   const allowedIngredients = getUnlockedIngredientIds(player, content);
-  const compostCount = gardenState.compostCount;
-  const spoiledTotal = gardenState.spoiledTotal;
-  const pantryTotal = gardenState.pantryTotal;
-  const canCraft = gardenState.canCraft;
-  const readyPlots = gardenState.readyPlots;
+  const compostCount = _gardenState.compostCount;
+  const spoiledTotal = _gardenState.spoiledTotal;
+  const pantryTotal = _gardenState.pantryTotal;
+  const canCraft = _gardenState.canCraft;
+  const readyPlots = _gardenState.readyPlots;
 
   const seedSection = formatSeedLines(garden.seeds, content);
-  const spoiledSection = formatSpoiledLines(garden.spoiled, content);
+  const _spoiledSection = formatSpoiledLines(garden.spoiled, content);
   const plotsSection = formatPlotLines(player, content, combinedEffects);
 
   const hasHarvestable = readyPlots.length > 0;
@@ -2388,7 +2386,7 @@ function noodleSpecializeSelectRow(userId) {
   );
 }
 
-function noodleDecorMenuRow() {
+function _noodleDecorMenuRow() {
   return null;
 }
 
@@ -2399,7 +2397,7 @@ function noodleDecorBackRow(userId) {
 }
 
 
-function noodleQuestsActionRow(userId, { dailyAvailable = true } = {}) {
+function _noodleQuestsActionRow(userId, { dailyAvailable = true } = {}) {
 return new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId(`noodle:action:quests_daily:${userId}`).setLabel("Daily Reward").setEmoji(getButtonEmoji("daily_reward")).setStyle(dailyAvailable ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!dailyAvailable),
 new ButtonBuilder().setCustomId(`noodle:action:quests_claim:${userId}`).setLabel("Claim Quests").setEmoji(getButtonEmoji("status_complete")).setStyle(ButtonStyle.Success)
@@ -2900,7 +2898,7 @@ function runPrepChefAutoBuy({
 
   const purchasedByItem = {};
   let totalAutoCost = 0;
-  let ordersCovered = 0;
+  let _ordersCovered = 0;
   let needsForageOnlyItems = false;
   let blockedByCapacity = false;
   let blockedByStock = false;
@@ -2916,7 +2914,7 @@ function runPrepChefAutoBuy({
 
     if ((bowlsRemaining[order.recipe_id] ?? 0) > 0) {
       bowlsRemaining[order.recipe_id] -= 1;
-      ordersCovered += 1;
+      _ordersCovered += 1;
       continue;
     }
 
@@ -3001,7 +2999,7 @@ function runPrepChefAutoBuy({
 
     coinsRemaining -= orderCost;
     totalAutoCost += orderCost;
-    ordersCovered += 1;
+    _ordersCovered += 1;
   }
 
   const purchasedItems = formatPrepChefPurchasedItems(purchasedByItem);
@@ -3267,7 +3265,7 @@ function applyIngredientCapacityToDrops(drops, player, effects, options = {}) {
   return { accepted, rejected, evicted, current, capacity: capacityByType, remainingByType };
 }
 
-function getKitchenBrothItems(player) {
+function getKitchenBrothItems(_player) {
   const tierOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
   const byTierThenName = (a, b) => {
     const aTier = tierOrder[String(a?.tier ?? "common").toLowerCase()] ?? 99;
@@ -3358,7 +3356,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
   });
 
   const craftableMax = recipePlans.reduce((max, entry) => Math.max(max, entry.craftableCount ?? 0), 0);
-  const bestCraftable = recipePlans.reduce((best, entry) => {
+  const _bestCraftable = recipePlans.reduce((best, entry) => {
     if (!best) return entry;
     if ((entry?.craftableCount ?? 0) > (best?.craftableCount ?? 0)) return entry;
     return best;
@@ -3495,7 +3493,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     }
   }
 
-  const options = pagePlans.map(({ item, plan, recipe, craftableCount }) => {
+  const options = pagePlans.map(({ item, plan: _plan, recipe, craftableCount }) => {
     const ingTokens = (recipe ?? []).map((ing) => {
       const have = Math.max(0, Number(player?.inv_ingredients?.[ing.item_id] ?? 0));
       const name = displayItemName(ing.item_id);
@@ -3575,7 +3573,7 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     embed.setFooter({ text: existingFooter ? `${pageLabel} • ${existingFooter}` : pageLabel });
   }
 
-  return { content: " ", ...composeV2FromLegacyEmbeds([embed]), components };
+  return { content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [], components };
 }
 
 function getLimitedTimeWindowSeconds(player, baseSeconds) {
@@ -3821,7 +3819,7 @@ function ensurePlayer(serverId, userId) {
   return p;
 }
 
-function isTutorialStep(player, stepId) {
+function _isTutorialStep(player, stepId) {
   return isTutorialStepFromRouting(player, stepId);
 }
 
@@ -3897,7 +3895,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   const decorSet = decorSetId
     ? (decorSetsContent?.sets ?? []).find((set) => set.set_id === decorSetId)
     : null;
-  const decorSetName = decorSet?.name ?? (decorSetId ? decorSetId : null);
+  const _decorSetName = decorSet?.name ?? (decorSetId ? decorSetId : null);
   const decorSetValue = "\u200b";
   const decorSetImageUrl = activeSpecId
     ? (
@@ -4146,7 +4144,7 @@ function getRelevantRecipeIngredients(player, recipe) {
   return (recipe?.ingredients ?? []).filter((ing) => ing?.item_id && !isFishingIngredientLocked(player, ing.item_id));
 }
 
-function formatRecipeNeeds({ recipeId, content: contentBundle, player }) {
+function _formatRecipeNeeds({ recipeId, content: contentBundle, player }) {
 const r = contentBundle.recipes?.[recipeId];
 if (!r) return "";
 
@@ -4260,14 +4258,17 @@ function normalizePayloadContent(payload = {}) {
 
   if (payload.content.trim().length > 0) return payload;
 
-  const hasEmbeds = Array.isArray(payload.embeds)
-    ? payload.embeds.length > 0
-    : Boolean(payload.embeds);
+  const hasMainComponents = Array.isArray(payload.mainComponents)
+    ? payload.mainComponents.length > 0
+    : Boolean(payload.mainComponents);
+  const hasNotices = Array.isArray(payload.notices)
+    ? payload.notices.length > 0
+    : Boolean(payload.notices);
   const hasComponents = Array.isArray(payload.components)
     ? payload.components.length > 0
     : Boolean(payload.components);
 
-  if (hasEmbeds || hasComponents) {
+  if (hasMainComponents || hasNotices || hasComponents) {
     const { content, ...rest } = payload;
     return rest;
   }
@@ -4291,12 +4292,7 @@ function normalizeComponentsV2Payload(payload = {}) {
       if (Array.isArray(node.components)) stack.push(...node.components);
     }
   }
-  if (!isV2Payload) return payload;
-  if (!payload.embeds) return payload;
-
-  // Discord rejects embeds when MessageFlags.IS_COMPONENTS_V2 is set.
-  const { embeds, ...rest } = payload;
-  return rest;
+  return payload;
 }
 
 function normalizeEmbedFieldName(name = "") {
@@ -4501,55 +4497,6 @@ function detectOwnerIdFromComponents(components = []) {
   return null;
 }
 
-function inferNoticeToneFromEmbed(raw = {}) {
-  const title = String(raw?.title ?? "").trim().toLowerCase();
-  const description = String(raw?.description ?? "").trim().toLowerCase();
-  const haystack = `${title}\n${description}`;
-  if (/warning|failed|error|lock|cooldown|missing/.test(haystack)) return "warning";
-  if (/complete|unlocked|started|success|claimed/.test(haystack)) return "success";
-  return "info";
-}
-
-function legacyEmbedToNoticeCardSpec(embed) {
-  const raw = embed?.toJSON?.() ?? embed ?? {};
-  const title = String(raw?.title ?? "").trim() || "Notification";
-  const description = String(raw?.description ?? "").trim();
-  const fields = Array.isArray(raw?.fields) ? raw.fields : [];
-  const footerText = sanitizeLegacyFooterForV2(raw?.footer?.text ?? "");
-  const imageUrl = String(raw?.image?.url ?? "").trim();
-  const thumbnailUrl = String(raw?.thumbnail?.url ?? "").trim();
-
-  const detailBlocks = [];
-  if (description) detailBlocks.push(description);
-
-  for (const field of fields) {
-    const name = String(field?.name ?? "").trim();
-    const value = String(field?.value ?? "").trim();
-    if (!name && !value) continue;
-    const block = [name ? `**${name}**` : "", value || "-"].filter(Boolean).join("\n");
-    if (block) detailBlocks.push(block);
-  }
-
-  if (imageUrl) detailBlocks.push(`Image: ${imageUrl}`);
-  if (thumbnailUrl) detailBlocks.push(`Thumbnail: ${thumbnailUrl}`);
-  if (footerText) {
-    const compactFooter = footerText
-      .split("\n")
-      .map((line) => String(line ?? "").trim())
-      .filter(Boolean)
-      .join(" • ");
-    if (compactFooter) detailBlocks.push(`-# ${compactFooter}`);
-  }
-
-  const compact = detailBlocks.join("\n\n").trim();
-  const details = splitTextToV2Chunks(compact);
-  return {
-    title,
-    details,
-    tone: inferNoticeToneFromEmbed(raw)
-  };
-}
-
 function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
   if (!payload || typeof payload !== "object") return payload;
   const hasSourceNativeComponents = Array.isArray(payload.mainComponents) || Array.isArray(payload.notices);
@@ -4603,49 +4550,21 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
     };
   }
 
-  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
-  if (isComponentsV2Payload(payload)) return payload;
-
-  const normalizedComponentRows = normalizeComponents(payload.components, payload.flags);
-  const normalizedRows = (Array.isArray(normalizedComponentRows) ? normalizedComponentRows : [])
-    .filter((row) => Number(row?.type) === 1);
-  const isEphemeral = payload.ephemeral === true || ((Number(payload.flags) & MessageFlags.Ephemeral) !== 0);
-  const ownerId = detectOwnerIdFromComponents(normalizedRows);
-
-  const primaryEmbed = payload.embeds[0];
-  const notificationEmbeds = payload.embeds.slice(1);
-  const primaryTextComponents = legacyEmbedsToV2TextComponentsForLegacy(primaryEmbed ? [primaryEmbed] : []);
-  const notices = notificationEmbeds
-    .map((embed) => legacyEmbedToNoticeCardSpec(embed))
-    .filter((notice) => (Array.isArray(notice?.details) && notice.details.length > 0) || notice?.title);
-
-  const v2Payload = buildComponentsV2PayloadWithNoticeCards({
-    mainComponents: [...primaryTextComponents, ...normalizedRows],
-    notices,
-    ownerId,
-    ephemeral: isEphemeral,
-    includeGreenButtonTip: payload.disableGreenButtonTip !== true
-  });
-
-  const { embeds, components, flags, ephemeral, disableGreenButtonTip, ...rest } = payload;
-  return {
-    ...rest,
-    ...v2Payload
-  };
+  return payload;
 }
 
-function composeV2FromLegacyEmbeds(embeds = [], _ownerId = "") {
+function buildMainAndNoticesFromEmbeds(embeds = []) {
   const list = Array.isArray(embeds) ? embeds : [];
   const primaryEmbed = list[0] ?? null;
   const notificationEmbeds = list.slice(1);
   const mainComponents = [
-    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : [])
+    ...legacyEmbedsToV2TextComponentsForLegacy(primaryEmbed ? [primaryEmbed] : [])
   ];
   const notices = notificationEmbeds
     .map((embed) => {
       const raw = embed?.toJSON?.() ?? embed ?? {};
       const title = String(raw?.title ?? "").trim() || "Notification";
-      const details = legacyEmbedsToV2TextComponents([embed])
+      const details = legacyEmbedsToV2TextComponentsForLegacy([embed])
         .map((entry) => String(entry?.content ?? "").trim())
         .filter(Boolean);
       return details.length > 0 || title ? { title, details, tone: "info" } : null;
@@ -4699,9 +4618,9 @@ const LEGACY_TO_V2_SUBS = new Set([
   "kitchen_collect"
 ]);
 
-function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
+function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", _rolloutEnabled = false, sourceMessageIsV2 = false } = {}) {
   if (sourceMessageIsV2) return true;
-  if (!rolloutEnabled) return false;
+  if (!_rolloutEnabled) return false;
   const normalizedSub = String(sub || "").trim();
   const normalizedNavSource = String(navSource || "").trim();
   return LEGACY_TO_V2_SUBS.has(normalizedSub) || LEGACY_TO_V2_SUBS.has(normalizedNavSource);
@@ -4709,7 +4628,6 @@ function shouldConvertLegacyPayloadToV2ForSub({ sub = "", navSource = "", rollou
 
 function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
   if (!interaction || !payload || typeof payload !== "object") return false;
-  if (!Array.isArray(payload.embeds) || payload.embeds.length === 0) return false;
   if (isComponentsV2Payload(payload)) return false;
 
   const customId = String(interaction?.customId ?? "").trim();
@@ -4883,7 +4801,7 @@ if (shouldAutoConvertCommerceComponentPayload(interaction, sourcePayload)) {
   sourcePayload = convertLegacyEmbedPayloadToComponentsV2(sourcePayload);
 }
 
-const { ephemeral, targetMessageId, ...rawRest } = sourcePayload;
+const { ephemeral, targetMessageId, targetChannelId, ...rawRest } = sourcePayload;
 let rest = normalizePayloadContent(rawRest);
 rest = normalizeComponentsV2Payload(rest);
 
@@ -4918,7 +4836,27 @@ if (interaction.isModalSubmit?.() && ephemeral === true) {
 // If targetMessageId is provided and not ephemeral, edit that message instead
 if (targetMessageId && !ephemeral) {
   try {
-    const target = await interaction.channel?.messages?.fetch(targetMessageId);
+    let target = null;
+
+    if (interaction.channel?.messages?.fetch) {
+      try {
+        target = await interaction.channel.messages.fetch(targetMessageId);
+      } catch {
+        target = null;
+      }
+    }
+
+    if (!target && targetChannelId && interaction.client?.channels?.fetch) {
+      try {
+        const targetChannel = await interaction.client.channels.fetch(targetChannelId);
+        if (targetChannel?.messages?.fetch) {
+          target = await targetChannel.messages.fetch(targetMessageId);
+        }
+      } catch {
+        target = null;
+      }
+    }
+
     if (target) {
       const targetFlags = Number(target?.flags?.bitfield ?? target?.flags ?? 0);
       const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
@@ -4939,12 +4877,17 @@ if (targetMessageId && !ephemeral) {
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
           await interaction.deleteReply();
-        } catch (e) {
+        } catch (_e) {
           // Ignore if already deleted
         }
       }
       if (isComponentsV2Payload(editPayload)) {
-        return await rawChannelEditMessage(interaction, target.channelId ?? interaction.channelId, targetMessageId, editPayload);
+        return await rawChannelEditMessage(
+          interaction,
+          target.channelId ?? targetChannelId ?? interaction.channelId,
+          target.id,
+          editPayload
+        );
       }
       return await target.edit(editPayload);
     }
@@ -5048,7 +4991,7 @@ if (interaction.isChatInputCommand?.()) {
 if (!interaction.deferred && !interaction.replied) {
   try {
     await interaction.deferReply({ ephemeral: shouldBeEphemeral });
-  } catch (e) {
+  } catch (_e) {
     // Mark as deferred to prevent retry
     interaction.deferred = true;
   }
@@ -5082,7 +5025,7 @@ if ((Number(finalOptions.flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0 && Array.
   const { embeds, ...restFinal } = finalOptions;
   finalOptions = restFinal;
 }
-// Convert EmbedBuilder objects to JSON
+// Convert embed-like builder objects to JSON
 if (finalOptions.embeds) {
   finalOptions.embeds = finalOptions.embeds.map(embed => embed.toJSON?.() ?? embed);
 }
@@ -5163,7 +5106,7 @@ try {
 /*  Multi-buy helpers (moved from index.js)                            */
 /* ------------------------------------------------------------------ */
 
-function resolveSelectedItemId(input, selectedIds, contentBundle) {
+function _resolveSelectedItemId(input, selectedIds, contentBundle) {
 const norm = (s) =>
 String(s ?? "")
 .toLowerCase()
@@ -5493,7 +5436,7 @@ function buildSellMenuPayload({
   };
 }
 
-function buildSellPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
+function buildSellPickerPayload({ userId, p, s, ownerUser: _ownerUser, page = 0 }) {
   const ownedItems = Object.entries(p.inv_ingredients ?? {})
     .filter(([id, q]) => q > 0 && SELLABLE_ITEM_IDS.has(id))
     .map(([id, ownedQty]) => {
@@ -5659,9 +5602,9 @@ function buildAcceptPickerPayload({ userId, serverId, p, s, ownerUser, page = 0 
   const pagesToScan = availablePages.length > 0 ? availablePages : [safePage];
   for (const pg of pagesToScan) {
     const data = Number(pg) === safePage ? pageData : loadPage(pg);
-    const pageOrderIds = (data?.orders ?? []).map((o) => String(o.order_id));
-    pageOrderIdsByPage.set(Number(pg), pageOrderIds);
-    availableOrderIds.push(...pageOrderIds);
+    const _pageOrderIds = (data?.orders ?? []).map((o) => String(o.order_id));
+    pageOrderIdsByPage.set(Number(pg), _pageOrderIds);
+    availableOrderIds.push(..._pageOrderIds);
   }
 
   const selectedOrderIds = readAcceptOrderDraftSelection({
@@ -5785,7 +5728,7 @@ function buildCancelServePickerPayload({ action, userId, serverId, p, ownerUser,
   const totalPages = Math.max(1, Math.ceil(Math.max(0, accepted.length) / pageSize));
   const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
   const pagedAccepted = accepted.slice(safePage * pageSize, (safePage + 1) * pageSize);
-  const pageOrderIds = pagedAccepted.map(([oid]) => String(oid));
+  const _pageOrderIds = pagedAccepted.map(([oid]) => String(oid));
   const cancelSelectedOrderIds = action === "cancel"
     ? readCancelOrderDraftSelection({ serverId, userId, availableOrderIds })
     : [];
@@ -5993,7 +5936,7 @@ export function normalizeAcceptPickerSelectedShortIds({ selectedShortIds = [], o
 function buildAcceptPickerScenePayload({ serverId, userId, p, s, selectedShortIds = [], statusLine = "", page = 0 }) {
   const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
   const { entries, orderTokenByShortId, page: safePage, totalPages } = buildAcceptPickerSceneEntries({ serverId, userId, p, s, page });
-  const allSelectableShortIds = new Set(Object.keys(orderTokenByShortId).map((id) => String(id || "").trim()).filter(Boolean));
+  const _allSelectableShortIds = new Set(Object.keys(orderTokenByShortId).map((id) => String(id || "").trim()).filter(Boolean));
   const acceptedCount = Object.keys(p.orders?.accepted ?? {}).length;
   const cap = getOrderAcceptCap(p, nowTs());
   const remainingSlots = Math.max(0, cap - acceptedCount);
@@ -7140,7 +7083,7 @@ function buildForageMenuPayload({
 
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components: buildForageFishingNavRows({
       userId,
       active: "forage",
@@ -7285,7 +7228,7 @@ function buildFishingMenuPayload({
 
   return {
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components: buildForageFishingNavRows({
       userId,
       active: "fishing",
@@ -7423,7 +7366,7 @@ if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !intera
     } else {
       await interaction.deferReply();
     }
-  } catch (e) {
+  } catch (_e) {
     // If defer fails, mark as deferred to avoid double-reply attempts
     interaction.deferred = true;
   }
@@ -7476,12 +7419,10 @@ const withSeasonNotice = (payload = {}) => {
   if (hasSourceNativeNoticeShape) {
     updated.notices = [...(Array.isArray(updated.notices) ? updated.notices : []), noticeCard];
   } else if (Array.isArray(updated.embeds) && updated.embeds.length > 0) {
-    const composed = composeV2FromLegacyEmbeds(updated.embeds);
-    const { embeds, ...rest } = updated;
+    const converted = convertLegacyEmbedPayloadToComponentsV2(updated);
     updated = {
-      ...rest,
-      ...composed,
-      notices: [...(Array.isArray(composed.notices) ? composed.notices : []), noticeCard]
+      ...converted,
+      notices: [...(Array.isArray(converted.notices) ? converted.notices : []), noticeCard]
     };
   } else {
     updated.notices = [noticeCard];
@@ -7527,7 +7468,7 @@ const commit = async (payload) => {
   const shouldUseV2ContainerPayload = shouldConvertLegacyPayloadToV2ForSub({
     sub,
     navSource: overrides?.navSource,
-    rolloutEnabled: rolloutEnabledForUser,
+    _rolloutEnabled: rolloutEnabledForUser,
     sourceMessageIsV2
   });
   const forceContainerForDev = String(group || "").trim() === "dev";
@@ -7557,7 +7498,7 @@ if (ephemeral && (interaction.deferred || interaction.replied)) {
   }
   try {
     await interaction.deleteReply();
-  } catch (e) {
+  } catch (_e) {
     // Ignore errors if already deleted
   }
   return interaction.followUp({ ...base, flags: MessageFlags.Ephemeral, ephemeral: true });
@@ -7583,7 +7524,26 @@ return interaction.reply(options);
 // If a modal submit supplied a target message id, edit that message directly
 if (overrides?.messageId && !payload?.ephemeral) {
   try {
-    const target = await interaction.channel?.messages?.fetch(overrides.messageId);
+    let target = null;
+    if (interaction.channel?.messages?.fetch) {
+      try {
+        target = await interaction.channel.messages.fetch(overrides.messageId);
+      } catch {
+        target = null;
+      }
+    }
+
+    if (!target && payload?.targetChannelId && interaction.client?.channels?.fetch) {
+      try {
+        const targetChannel = await interaction.client.channels.fetch(payload.targetChannelId);
+        if (targetChannel?.messages?.fetch) {
+          target = await targetChannel.messages.fetch(overrides.messageId);
+        }
+      } catch {
+        target = null;
+      }
+    }
+
     if (target) {
       const targetFlags = Number(target?.flags?.bitfield ?? target?.flags ?? 0);
       const targetIsV2 = (targetFlags & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
@@ -7606,7 +7566,7 @@ if (overrides?.messageId && !payload?.ephemeral) {
       if (interaction.isModalSubmit?.() && (interaction.deferred || interaction.replied)) {
         try {
           await interaction.deleteReply();
-        } catch (e) {
+        } catch (_e) {
           // ignore
         }
       }
@@ -7719,12 +7679,20 @@ const buildDevStatusEmbed = () => {
   });
 };
 
-const buildDevMessageEmbed = ({ message, isError = false, title = null }) =>
+const buildDevMessageSpec = ({ message, isError = false, title = null }) =>
   buildMenuEmbed({
     title: String(title || "").trim() || (isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`),
     description: message,
     user: interaction.member ?? interaction.user
   });
+
+const buildDevMessageV2Payload = ({ message, isError = false, title = null } = {}) => {
+  const embed = buildDevMessageSpec({ message, isError, title });
+  return {
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]),
+    notices: []
+  };
+};
 
 const buildDevAdminNoticePayload = ({ message, isError = false } = {}) => buildComponentsV2NoticeCardPayload({
   title: isError ? `${getIcon("error")} Dev Command` : `${getIcon("status_complete")} Dev Command`,
@@ -7738,19 +7706,17 @@ if (inDevPath) {
   if (!isDevAdmin(userId)) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "You don’t have access to that command.", isError: true }),
       ephemeral: true
     });
   }
   if (OFFICIAL_DEV_GUILD_ID && serverId !== OFFICIAL_DEV_GUILD_ID) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([
-        buildDevMessageEmbed({
+      ...buildDevMessageV2Payload({
           message: "Developer commands are only available in the official server.",
           isError: true
-        })
-      ]),
+        }),
       ephemeral: true
     });
   }
@@ -7767,7 +7733,7 @@ if (inDevPath && sub === "reset_tutorial") {
   if (target?.bot || (interaction.client?.user?.id && target.id === interaction.client.user.id)) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Pick a real player account (non-bot) to reset.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Pick a real player account (non-bot) to reset.", isError: true }),
       ephemeral: true
     });
   }
@@ -7775,7 +7741,7 @@ if (inDevPath && sub === "reset_tutorial") {
   if (!db) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
       ephemeral: true
     });
   }
@@ -7809,11 +7775,9 @@ if (inDevPath && sub === "reset_tutorial") {
 
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([
-        buildDevMessageEmbed({
+      ...buildDevMessageV2Payload({
           message: `${getIcon("status_complete")} Complete reset for ${mention} (${target.id}) (${Math.max(resetCount, 1)} profile row${Math.max(resetCount, 1) === 1 ? "" : "s"}).${tut ? `\n\n${tut}` : ""}`
-        })
-      ]),
+        }),
       ephemeral: true
     });
   });
@@ -7822,7 +7786,7 @@ if (inDevPath && sub === "reset_tutorial") {
 if (inDevPath && sub === "admin_stat") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
   const field = String(opt.getString("field") || "").trim();
   const value = Math.max(0, Math.floor(Number(opt.getInteger("value") || 0)));
 
@@ -7839,7 +7803,7 @@ if (inDevPath && sub === "admin_stat") {
   }
 
   return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
-    const p = ensurePlayer(targetServerId, targetUserId);
+    const p = ensurePlayer(_targetServerId, targetUserId);
     let message;
 
     if (field === "bowls_served") {
@@ -7858,7 +7822,7 @@ if (inDevPath && sub === "admin_stat") {
       });
     }
 
-    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+    upsertPlayer(db, _targetServerId, targetUserId, p, null, p.schema_version);
     return commit({
       ...buildDevAdminNoticePayload({ message })
     });
@@ -7868,7 +7832,7 @@ if (inDevPath && sub === "admin_stat") {
 if (inDevPath && sub === "admin_spec") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
   const specId = opt.getString("spec_id")?.trim();
 
   if (!db) {
@@ -7884,13 +7848,13 @@ if (inDevPath && sub === "admin_spec") {
   }
 
   return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
-    const p = ensurePlayer(targetServerId, targetUserId);
+    const p = ensurePlayer(_targetServerId, targetUserId);
     const spec = getSpecializationById(specializationsContent, specId) ?? { spec_id: specId, name: specId };
     const result = unlockSpecialization(p, specId);
     if (result.added) {
       enqueuePersistentV2NoticeCards(p, [buildSpecializationUnlockNoticeCard(spec, { hidden: Boolean(spec?.hidden_until_unlocked) })]);
     }
-    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+    upsertPlayer(db, _targetServerId, targetUserId, p, null, p.schema_version);
 
     const message = result.added
       ? `${getIcon("status_complete")} Unlocked specialization **${specId}** for <@${targetUserId}>.`
@@ -7905,7 +7869,7 @@ if (inDevPath && sub === "admin_spec") {
 if (inDevPath && sub === "admin_recipe") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
   const requestedRecipeId = opt.getString("recipe_id")?.trim();
   const recipeId = resolveCanonicalRecipeId(requestedRecipeId);
 
@@ -7922,7 +7886,7 @@ if (inDevPath && sub === "admin_recipe") {
   }
 
   return await withLock(db, `lock:user:${targetUserId}`, owner, 8000, async () => {
-    const p = ensurePlayer(targetServerId, targetUserId);
+    const p = ensurePlayer(_targetServerId, targetUserId);
     const result = unlockRecipeForPlayer(p, content, recipeId);
     if (!result.ok) {
       return commit({
@@ -7933,7 +7897,7 @@ if (inDevPath && sub === "admin_recipe") {
       });
     }
 
-    upsertPlayer(db, targetServerId, targetUserId, p, null, p.schema_version);
+    upsertPlayer(db, _targetServerId, targetUserId, p, null, p.schema_version);
     const recipeName = result.recipe?.name || displayRecipeName(result.recipeId);
     const message = result.added
       ? `${getIcon("status_complete")} Unlocked recipe **${recipeName}** (${result.recipeId}) for <@${targetUserId}>.`
@@ -7946,7 +7910,7 @@ if (inDevPath && sub === "admin_recipe") {
 }
 
 if (inDevPath && sub === "admin_season_event") {
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
   const eventId = opt.getString("event_id")?.trim();
   const event = getEventById(eventsContent, eventId);
 
@@ -7968,7 +7932,7 @@ if (inDevPath && sub === "admin_season_event") {
       return normalized || null;
     };
 
-    const serverState = ensureServer(targetServerId);
+    const serverState = ensureServer(_targetServerId);
     const previousEventId = serverState.active_event_id ?? null;
     const previousSeason = serverState.season ?? null;
     serverState.active_event_id = event.event_id;
@@ -7988,7 +7952,7 @@ if (inDevPath && sub === "admin_season_event") {
     );
 
     if (event.season && seasonActuallyChanged) {
-      const adminPlayer = ensurePlayer(targetServerId, userId);
+      const adminPlayer = ensurePlayer(_targetServerId, userId);
       rolloverNotice = applySeasonRolloverReward(adminPlayer, serverState.season, {
         eventRecipeSeasonIndex,
         recipes: content?.recipes
@@ -8005,7 +7969,7 @@ if (inDevPath && sub === "admin_season_event") {
         }]);
       }
 
-      upsertPlayer(db, targetServerId, userId, adminPlayer, null, adminPlayer.schema_version);
+      upsertPlayer(db, _targetServerId, userId, adminPlayer, null, adminPlayer.schema_version);
     }
 
     serverState.audit_log.push({
@@ -8019,9 +7983,9 @@ if (inDevPath && sub === "admin_season_event") {
         previousSeason
       }
     });
-    upsertServer(db, targetServerId, serverState, null);
+    upsertServer(db, _targetServerId, serverState, null);
 
-    const message = `${getIcon("status_complete")} Activated event **${event.event_id}** on ${targetServerId}. Current season: **${seasonLabel}**.`;
+    const message = `${getIcon("status_complete")} Activated event **${event.event_id}** on ${_targetServerId}. Current season: **${seasonLabel}**.`;
 
     return commit({
       ...buildDevAdminNoticePayload({ message })
@@ -8032,45 +7996,41 @@ if (inDevPath && sub === "admin_season_event") {
 if (inDevPath && sub === "wipe_user") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim();
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
   if (!targetUserId) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to wipe.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Provide a user or user ID to wipe.", isError: true }),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
       ephemeral: true
     });
   }
 
   const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const deleted = deletePlayerProfiles(db, targetUserId, { serverId: targetServerId });
+    const deleted = deletePlayerProfiles(db, targetUserId, { serverId: _targetServerId });
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
       return commit({
         content: " ",
-        ...composeV2FromLegacyEmbeds([
-          buildDevMessageEmbed({
+        ...buildDevMessageV2Payload({
             message: `${getIcon("error")} No profile found for ${mention}.`,
             isError: true
-          })
-        ]),
+          }),
         ephemeral: true
       });
     }
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([
-        buildDevMessageEmbed({
+      ...buildDevMessageV2Payload({
           message: `${getIcon("status_complete")} Deleted ${deleted} profile row(s) for ${mention} across all servers.`
-        })
-      ]),
+        }),
       ephemeral: true
     });
   });
@@ -8083,14 +8043,14 @@ if (inDevPath && sub === "repair_profile") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to repair.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Provide a user or user ID to repair.", isError: true }),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
       ephemeral: true
     });
   }
@@ -8103,12 +8063,10 @@ if (inDevPath && sub === "repair_profile") {
     if (!result.ok) {
       return commit({
         content: " ",
-        ...composeV2FromLegacyEmbeds([
-          buildDevMessageEmbed({
+        ...buildDevMessageV2Payload({
             message: `${getIcon("error")} Repair failed for ${mention}: ${result.reason}.`,
             isError: true
-          })
-        ]),
+          }),
         ephemeral: true
       });
     }
@@ -8116,25 +8074,21 @@ if (inDevPath && sub === "repair_profile") {
     if (!result.repaired) {
       return commit({
         content: " ",
-        ...composeV2FromLegacyEmbeds([
-          buildDevMessageEmbed({
+        ...buildDevMessageV2Payload({
             message: `${getIcon("error")} No repair needed for ${mention} (${result.reason}).`,
             isError: true
-          })
-        ]),
+          }),
         ephemeral: true
       });
     }
 
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([
-        buildDevMessageEmbed({
+      ...buildDevMessageV2Payload({
           message:
             `${getIcon("status_complete")} Repaired ${mention} from legacy server ${result.sourceServerId}. ` +
             `(legacyScore=${result.legacyScore}, globalScore=${result.globalScore}).`
-        })
-      ]),
+        }),
       ephemeral: true
     });
   });
@@ -8143,20 +8097,20 @@ if (inDevPath && sub === "repair_profile") {
 if (inDevPath && sub === "repair_party") {
   const partyIdInput = opt.getString("party_id")?.trim();
   const serverOverride = opt.getString("server_id")?.trim() || "";
-  const targetServerId = serverOverride || serverId;
+  const _targetServerId = serverOverride || serverId;
   const scopedServerId = serverOverride || null;
 
   if (!partyIdInput) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a party ID or prefix to repair.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Provide a party ID or prefix to repair.", isError: true }),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
       ephemeral: true
     });
   }
@@ -8181,7 +8135,7 @@ if (inDevPath && sub === "repair_party") {
         summary.push(`Applied fixes: ${result.changes.join(", ")}`);
         return commit({
           content: " ",
-          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })]),
+          ...buildDevMessageV2Payload({ message: `${getIcon("status_complete")} ${summary.join("\n")}` }),
           ephemeral: true
         });
       }
@@ -8189,18 +8143,16 @@ if (inDevPath && sub === "repair_party") {
       summary.push("No repair needed.");
       return commit({
         content: " ",
-        ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `${getIcon("status_complete")} ${summary.join("\n")}` })]),
+        ...buildDevMessageV2Payload({ message: `${getIcon("status_complete")} ${summary.join("\n")}` }),
         ephemeral: true
       });
     } catch (err) {
       return commit({
         content: " ",
-        ...composeV2FromLegacyEmbeds([
-          buildDevMessageEmbed({
+        ...buildDevMessageV2Payload({
             message: `${getIcon("error")} Party repair failed: ${err?.message || "unknown error"}`,
             isError: true
-          })
-        ]),
+          }),
         ephemeral: true
       });
     }
@@ -8210,35 +8162,33 @@ if (inDevPath && sub === "repair_party") {
 if (inDevPath && sub === "subscriptions") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
 
   if (!targetUserId) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to inspect.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Provide a user or user ID to inspect.", isError: true }),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
       ephemeral: true
     });
   }
 
   const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const targetPlayer = getPlayer(db, targetServerId, targetUserId);
+    const targetPlayer = getPlayer(db, _targetServerId, targetUserId);
     if (!targetPlayer) {
       return commit({
         content: " ",
-        ...composeV2FromLegacyEmbeds([
-          buildDevMessageEmbed({
-            message: `${getIcon("error")} No profile found for <@${targetUserId}> on server ${targetServerId}.`,
+        ...buildDevMessageV2Payload({
+            message: `${getIcon("error")} No profile found for <@${targetUserId}> on server ${_targetServerId}.`,
             isError: true
-          })
-        ]),
+          }),
         ephemeral: true
       });
     }
@@ -8273,7 +8223,7 @@ if (inDevPath && sub === "subscriptions") {
 
     const description = [
       `User: <@${targetUserId}> (${targetUserId})`,
-      `Server: ${targetServerId}`,
+      `Server: ${_targetServerId}`,
       `Coins: ${Number(targetPlayer.coins || 0).toLocaleString()}`,
       "",
       ...perkLines
@@ -8287,7 +8237,7 @@ if (inDevPath && sub === "subscriptions") {
 
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       ephemeral: true
     });
   });
@@ -8303,28 +8253,24 @@ if (inDevPath && sub === "reminder_test") {
     const reason = String(result?.reason || "unknown_error");
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([
-        buildDevMessageEmbed({
+      ...buildDevMessageV2Payload({
           message: `${getIcon("error")} Reminder test failed for <@${targetUserId}>: ${reason}.`,
           isError: true
-        })
-      ]),
+        }),
       ephemeral: true
     });
   }
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([
-      buildDevMessageEmbed({
+    ...buildDevMessageV2Payload({
         message: [
           `${getIcon("status_complete")} Reminder DM test sent to <@${targetUserId}>.`,
           `Mode: ${force ? "force" : "normal"}.`,
           `Day key: ${result.todayKey}.`,
           `Profile server: ${result.serverId}.`
         ].join("\n")
-      })
-    ]),
+      }),
     ephemeral: true
   });
 }
@@ -8332,7 +8278,7 @@ if (inDevPath && sub === "reminder_test") {
 if (inDevPath && sub === "giveaway_winner") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim() || userId;
-  const targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
   const rewardType = String(opt.getString("reward_type") || "").trim().toLowerCase();
   const perkSelection = String(opt.getString("perk") || "").trim().toLowerCase();
   const coinPackId = String(opt.getString("coin_pack") || "").trim().toLowerCase();
@@ -8348,14 +8294,14 @@ if (inDevPath && sub === "giveaway_winner") {
   if (!targetUserId) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Provide a user or user ID to update.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Provide a user or user ID to update.", isError: true }),
       ephemeral: true
     });
   }
   if (!db) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Database unavailable in this environment.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
       ephemeral: true
     });
   }
@@ -8363,14 +8309,14 @@ if (inDevPath && sub === "giveaway_winner") {
   if (rewardType !== "perk" && rewardType !== "coin_pack" && rewardType !== "coins") {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "Invalid reward type. Use perk, coin_pack, or coins.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "Invalid reward type. Use perk, coin_pack, or coins.", isError: true }),
       ephemeral: true
     });
   }
 
   const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const existingPlayer = getPlayer(db, targetServerId, targetUserId);
+    const existingPlayer = getPlayer(db, _targetServerId, targetUserId);
     const targetPlayer = existingPlayer || newPlayerProfile(targetUserId);
     const now = nowTs();
     const rewardSummaryLines = [];
@@ -8385,7 +8331,7 @@ if (inDevPath && sub === "giveaway_winner") {
       } else {
         return commit({
           content: " ",
-          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For perk rewards, choose house_247, takeout_counter, or both.", isError: true })]),
+          ...buildDevMessageV2Payload({ message: "For perk rewards, choose house_247, takeout_counter, or both.", isError: true }),
           ephemeral: true
         });
       }
@@ -8430,7 +8376,7 @@ if (inDevPath && sub === "giveaway_winner") {
       if (!pack) {
         return commit({
           content: " ",
-          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For coin pack rewards, choose a valid coin_pack option.", isError: true })]),
+          ...buildDevMessageV2Payload({ message: "For coin pack rewards, choose a valid coin_pack option.", isError: true }),
           ephemeral: true
         });
       }
@@ -8439,7 +8385,7 @@ if (inDevPath && sub === "giveaway_winner") {
       if (!grantResult?.ok) {
         return commit({
           content: " ",
-          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: `Failed to grant coin pack: ${grantResult?.reason || "unknown error"}.`, isError: true })]),
+          ...buildDevMessageV2Payload({ message: `Failed to grant coin pack: ${grantResult?.reason || "unknown error"}.`, isError: true }),
           ephemeral: true
         });
       }
@@ -8450,7 +8396,7 @@ if (inDevPath && sub === "giveaway_winner") {
       if (coinAmount <= 0) {
         return commit({
           content: " ",
-          ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "For coin rewards, provide a coins value greater than 0.", isError: true })]),
+          ...buildDevMessageV2Payload({ message: "For coin rewards, provide a coins value greater than 0.", isError: true }),
           ephemeral: true
         });
       }
@@ -8465,7 +8411,7 @@ if (inDevPath && sub === "giveaway_winner") {
       publicWinnerLine = `${getIcon("coins")} Reward sent to <@${targetUserId}>!`;
     }
 
-    upsertPlayer(db, targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
+    upsertPlayer(db, _targetServerId, targetUserId, targetPlayer, null, targetPlayer.schema_version);
 
     const detailedSummary = rewardSummaryLines.join("\n");
     const messageLines = [
@@ -8475,10 +8421,10 @@ if (inDevPath && sub === "giveaway_winner") {
 
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({
+      ...buildDevMessageV2Payload({
         title: `${getIcon("status_complete")} Giveaway`,
         message: messageLines.join("\n")
-      })]),
+      }),
       ephemeral: false
     });
   });
@@ -8581,7 +8527,7 @@ if (inDevPath && sub === "dashboard") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([page === 0 ? serversEmbed : statusEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([page === 0 ? serversEmbed : statusEmbed]), notices: [],
     components: [navRow],
     ephemeral: false
   });
@@ -8623,7 +8569,7 @@ if (shouldForceTutorialCommand({
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([tutorialEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([tutorialEmbed]), notices: [],
     components: tutorialRows
   });
 }
@@ -8660,7 +8606,7 @@ if (sub === "start") {
 
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([tutorialEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([tutorialEmbed]), notices: [],
       components: tutorialDone
         ? [noodleMainMenuRow(userId), noodleSecondaryMenuRow(userId, { questsAvailable })]
         : [noodleTutorialMenuRow(userId)]
@@ -8678,7 +8624,7 @@ if (sub === "help") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components
   });
 }
@@ -8742,7 +8688,7 @@ if (sub === "profile") {
   }
 
   return commit({
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components: profileComponents
   });
 }
@@ -8976,7 +8922,7 @@ if (sub === "profile_edit") {
   });
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
@@ -9048,7 +8994,7 @@ if (sub === "store") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([storeEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([storeEmbed]), notices: [],
     components: [storeLinkRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
 }
@@ -9118,7 +9064,7 @@ if (sub === "pantry") {
 
     const perTypeCap = getIngredientCapacitiesByType(p, combinedEffects);
     const countsByType = getIngredientCountsByType(p);
-    const typeOrder = ["broth", "noodles", "spice", "topping", "protein"];
+    const _typeOrder = ["broth", "noodles", "spice", "topping", "protein"];
     const typeLabels = {
       broth: "Broth",
       noodles: "Noodles",
@@ -9314,7 +9260,7 @@ if (sub === "pantry") {
 
     return {
       content: " ",
-      ...composeV2FromLegacyEmbeds([pantryEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([pantryEmbed]), notices: [],
       components: [
         pantryPageRow(userId, safePage, totalPages, ingredientPages),
         noodleForageGardenRow(userId, {
@@ -9420,7 +9366,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       });
       return finalize({
         content: " ",
-        ...composeV2FromLegacyEmbeds([lockedEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([lockedEmbed]), notices: [],
         components: [
           noodleFeatureInfoRow(userId, {
             active: "kitchen",
@@ -9586,7 +9532,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       user: interaction.member ?? interaction.user,
       color: theme.colors.warning
     });
-    return commit({ content: " ", ...composeV2FromLegacyEmbeds([unavailableEmbed]), ephemeral: true });
+    return commit({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([unavailableEmbed]), notices: [], ephemeral: true });
   }
 
   const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
@@ -9635,7 +9581,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       });
       return finalize({
         content: " ",
-        ...composeV2FromLegacyEmbeds([lockedEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([lockedEmbed]), notices: [],
         ephemeral: true
       });
     }
@@ -9885,7 +9831,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
 
       return {
         content: " ",
-        ...composeV2FromLegacyEmbeds(firstCounterSetupEmbed ? [embed, firstCounterSetupEmbed] : [embed]),
+        ...buildMainAndNoticesFromEmbeds(firstCounterSetupEmbed ? [embed, firstCounterSetupEmbed] : [embed]),
         components: [
           ...(menuPicker?.rows ?? []),
           noodleTakeoutActionRow(userId, {
@@ -10368,7 +10314,7 @@ if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub
       const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
       return finalize({
         content: " ",
-        ...composeV2FromLegacyEmbeds([confirmationEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([confirmationEmbed]), notices: [],
         components: [
           noodleTakeoutActionRow(userId, {
             activeShift: true,
@@ -10469,8 +10415,8 @@ if (sub === "recipes") {
     })
     .sort((a, b) => a.localeCompare(b));
 
-  const baseRecipeCount = allRecipes.filter((recipe) => !recipe?.event_id).length;
-  const unlockedEventRecipeCount = (p.known_recipes || []).filter((id) => content.recipes?.[id]?.event_id).length;
+  const _baseRecipeCount = allRecipes.filter((recipe) => !recipe?.event_id).length;
+  const _unlockedEventRecipeCount = (p.known_recipes || []).filter((id) => content.recipes?.[id]?.event_id).length;
 
   const recipesPerPage = 5;
   const recipePages = Math.max(1, Math.ceil((knownLines.length || 0) / recipesPerPage));
@@ -10536,7 +10482,7 @@ if (sub === "recipes") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([recipesEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([recipesEmbed]), notices: [],
     components: [navRow, noodleMainMenuRow(userId)]
   });
 }
@@ -10607,7 +10553,7 @@ if (sub === "regulars") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([regularsEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([regularsEmbed]), notices: [],
     components: totalPages > 1 ? [navRow, noodleMainMenuRow(userId)] : [noodleMainMenuRow(userId)]
   });
 }
@@ -10697,7 +10643,7 @@ if (sub === "season") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([seasonEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([seasonEmbed]), notices: [],
     components: [noodleAboutNewsNavRow(userId, { active: "season" }), backRow]
   });
 }
@@ -10707,7 +10653,7 @@ if (sub === "status") {
   if (!isDevAdmin(userId)) {
     return commit({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buildDevMessageEmbed({ message: "You don’t have access to that command.", isError: true })]),
+      ...buildDevMessageV2Payload({ message: "You don’t have access to that command.", isError: true }),
       ephemeral: true
     });
   }
@@ -10742,7 +10688,7 @@ if (sub === "status") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([statusEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([statusEmbed]), notices: [],
     ephemeral: false
   });
 }
@@ -10829,7 +10775,7 @@ if (sub === "event") {
 
   return commit({
     content: " ",
-    ...composeV2FromLegacyEmbeds([eventEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([eventEmbed]), notices: [],
     components: [noodleAboutNewsNavRow(userId, { active: "event" }), backRow]
   });
 }
@@ -11057,7 +11003,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     const legacyBridgeSourceEmbeds = finalEmbeds ?? replyWithUnlock.embeds;
     const legacyBridgePayload = Array.isArray(legacyBridgeSourceEmbeds) && legacyBridgeSourceEmbeds.length > 0
-      ? composeV2FromLegacyEmbeds(legacyBridgeSourceEmbeds)
+      ? buildMainAndNoticesFromEmbeds(legacyBridgeSourceEmbeds)
       : {};
     const noticeApplied = withSeasonNotice({ ...replyWithUnlock, content: finalContent, ...legacyBridgePayload });
 
@@ -11075,7 +11021,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const shouldUseV2ContainerPayload = shouldConvertLegacyPayloadToV2ForSub({
       sub,
       navSource: overrides?.navSource,
-      rolloutEnabled: isComponentsV2Enabled({ guildId: serverId, userId, player: p }),
+      _rolloutEnabled: isComponentsV2Enabled({ guildId: serverId, userId, player: p }),
       sourceMessageIsV2
     });
     const suppressGreenButtonTip = sub === "pantry" || sub === "store";
@@ -11218,7 +11164,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([questsEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([questsEmbed]), notices: [],
       components: [
         pageRow,
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
@@ -11313,7 +11259,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([voteEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([voteEmbed]), notices: [],
       components: [
         ...voteSiteRows,
         actionRow
@@ -11336,7 +11282,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([embed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
         components: [
           noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
           noodleQuestsBackRow(userId)
@@ -11364,7 +11310,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now), showQuests: true }),
         noodleQuestsBackRow(userId)
@@ -11383,7 +11329,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([embed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
         components: [
           noodleQuestsMenuRow(userId, {
             showClaim: hasClaimableQuests(p),
@@ -11408,7 +11354,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [
         noodleQuestsMenuRow(userId, {
           showClaim: hasClaimableQuests(p),
@@ -11441,7 +11387,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [
         noodleQuestsMenuRow(userId, { showClaim: hasClaimableQuests(p), showDaily: hasDailyRewardAvailable(p, now) }),
         noodleQuestsBackRow(userId)
@@ -11503,7 +11449,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       );
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([embed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
         components
       });
     }
@@ -11536,7 +11482,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([embed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
         components: [
           noodleSpecializeSelectRow(userId),
           noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -11571,7 +11517,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [
         noodleSpecializeSelectRow(userId),
         noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -11633,7 +11579,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components
     });
   }
@@ -11663,7 +11609,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`noodle-social:nav:stats:${userId}`)
@@ -11721,7 +11667,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
       });
     }
-    const gardenState = getGardenActionState(p, combinedEffects);
+    const _gardenState = getGardenActionState(p, combinedEffects);
     const foragePickerRows = buildForagePickerRows({ userId, player: p, randomPrimary: false, page: pickerPage });
     const normalizedForageItemId = String(itemId || "").trim();
     const selectedForageItemId = getAllowedForageIdsForPlayer(p).includes(normalizedForageItemId)
@@ -11780,7 +11726,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([cooldownEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cooldownEmbed]), notices: [],
         components: navRows
       });
     }
@@ -11883,7 +11829,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([forageFullEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([forageFullEmbed]), notices: [],
         components: navRows
       });
     }
@@ -11906,7 +11852,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([forageFullEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([forageFullEmbed]), notices: [],
         components: navRows
       });
     }
@@ -12009,7 +11955,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     });
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([forageEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([forageEmbed]), notices: [],
       components
     });
   }
@@ -12036,7 +11982,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([lockedEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([lockedEmbed]), notices: [],
         components: [
           noodleFeatureInfoRow(userId, {
             active: "fishing",
@@ -12139,7 +12085,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([lockedEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([lockedEmbed]), notices: [],
         components: [
           noodleFeatureInfoRow(userId, {
             active: "fishing",
@@ -12167,7 +12113,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([cooldownEmbed]), components: navRows });
+      return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cooldownEmbed]), notices: [], components: navRows });
     }
 
     const bonusItems = Math.max(0, Math.floor(combinedEffects.fishing_bonus_items || 0));
@@ -12190,7 +12136,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         allowedItemIds: [...allowedFishing],
         effects: combinedEffects
       });
-    } catch (err) {
+    } catch (_err) {
       const unlockedFishingIds = [...allowedFishing];
       if (!unlockedFishingIds.length) {
         return commitState({
@@ -12255,7 +12201,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fullEmbed]), components: navRows });
+      return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([fullEmbed]), notices: [], components: navRows });
     }
 
     const inventoryResult = applyFishingDrops(p, accepted);
@@ -12275,7 +12221,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fullEmbed]), components: navRows });
+      return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([fullEmbed]), notices: [], components: navRows });
     }
 
     const totalCaught = Object.values(inventoryResult.added).reduce((sum, qty) => sum + (qty || 0), 0);
@@ -12317,7 +12263,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       color: theme.colors.success
     });
 
-    return commitState({ content: " ", ...composeV2FromLegacyEmbeds([fishingEmbed]), components: navRows });
+    return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([fishingEmbed]), notices: [], components: navRows });
   }
 
   /* ---------------- GARDEN ---------------- */
@@ -12354,7 +12300,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         }),
         noodleMainMenuRow(userId)
       ];
-      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([lockedEmbed]), components: navRows });
+      return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([lockedEmbed]), notices: [], components: navRows });
     }
 
     const view = buildGardenView({
@@ -12370,7 +12316,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([view.embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([view.embed]), notices: [],
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -12384,7 +12330,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
       });
     }
-    const gardenState = getGardenActionState(p, combinedEffects);
+    const _gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
       noodleForageGardenRow(userId, {
         active: "compost",
@@ -12394,8 +12340,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         kitchenUnlocked,
         kitchenJustUnlocked,
         showGardenActions: true,
-        canCompost: gardenState.canCraft,
-        canHarvest: gardenState.hasHarvestable
+        canCompost: _gardenState.canCraft,
+        canHarvest: _gardenState.hasHarvestable
       }),
       noodleMainMenuRow(userId)
     ];
@@ -12423,7 +12369,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (maxCraftable <= 0) {
       const description = `${getIcon("warning")} Not enough compostable items. (${COMPOST_PER_BAG} needed per bag.)`;
       const embed = buildMenuEmbed({ title: `${getIcon("compost_bag")} Compost`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
-      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows });
+      return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [], components: navRows });
     }
 
     if (bagsToMake <= 0) {
@@ -12433,7 +12379,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         user: interaction.member ?? interaction.user,
         color: theme.colors.success
       });
-      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows, ephemeral: true });
+      return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [], components: navRows, ephemeral: true });
     }
 
     const unitsNeeded = bagsToMake * COMPOST_PER_BAG;
@@ -12479,7 +12425,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     if (remaining > 0) {
       const description = `${getIcon("warning")} Not enough ${source === "fresh" ? "fresh forageables" : source === "spoiled" ? "spoiled items" : "items"} to craft ${bagsToMake} bag(s).`;
       const embed = buildMenuEmbed({ title: `${getIcon("garden")} Garden`, description, user: interaction.member ?? interaction.user, color: theme.colors.success });
-      return commitState({ content: " ", ...composeV2FromLegacyEmbeds([embed]), components: navRows, ephemeral: true });
+      return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [], components: navRows, ephemeral: true });
     }
 
     garden.compost_bags = (garden.compost_bags || 0) + bagsToMake;
@@ -12508,7 +12454,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: navRows
     });
   }
@@ -12522,7 +12468,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
       });
     }
-    const gardenState = getGardenActionState(p, combinedEffects);
+    const _gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
       noodleForageGardenRow(userId, {
         active: "garden",
@@ -12532,8 +12478,8 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         kitchenUnlocked,
         kitchenJustUnlocked,
         showGardenActions: true,
-        canCompost: gardenState.canCraft,
-        canHarvest: gardenState.hasHarvestable
+        canCompost: _gardenState.canCraft,
+        canHarvest: _gardenState.hasHarvestable
       }),
       noodleMainMenuRow(userId)
     ];
@@ -12583,7 +12529,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([view.embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([view.embed]), notices: [],
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -12596,15 +12542,15 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         capacityLimiter: (drops) => applyIngredientCapacityToDrops(drops, p, combinedEffects)
       });
     }
-    const gardenState = getGardenActionState(p, combinedEffects);
+    const _gardenState = getGardenActionState(p, combinedEffects);
     const navRows = [
       noodleForageGardenRow(userId, {
         active: "garden",
         gardenLocked: !gardenUnlocked,
         includeGardenButton: false,
         showGardenActions: true,
-        canCompost: gardenState.canCraft,
-        canHarvest: gardenState.hasHarvestable
+        canCompost: _gardenState.canCraft,
+        canHarvest: _gardenState.hasHarvestable
       }),
       noodleMainMenuRow(userId)
     ];
@@ -12660,7 +12606,7 @@ ${lines.join("\n")}`;
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([view.embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([view.embed]), notices: [],
       components: [view.rows.navRow, view.rows.pageRow, view.rows.plantRow, view.rows.harvestSelectRow, noodleMainMenuRow(userId)]
     });
   }
@@ -12771,7 +12717,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([buyEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([buyEmbed]), notices: [],
       components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : undefined
     });
   }
@@ -12823,7 +12769,7 @@ ${lines.join("\n")}`;
       description: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.`,
       user: interaction.member ?? interaction.user
     });
-    return commitState({ content: " ", ...composeV2FromLegacyEmbeds([sellEmbed]) });
+    return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([sellEmbed]), notices: [] });
   }
 
   /* ---------------- COOK ---------------- */
@@ -13057,7 +13003,7 @@ ${lines.join("\n")}`;
       const canClaim = Math.max(0, Math.floor(Number(takeout?.earned_unclaimed_coins || 0) || 0)) > 0;
       return commitState({
         content: " ",
-        ...composeV2FromLegacyEmbeds([cookEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]), notices: [],
         components: [
           noodleTakeoutActionRow(userId, {
             activeShift: true,
@@ -13071,7 +13017,7 @@ ${lines.join("\n")}`;
 
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([cookEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]), notices: [],
       components: showTutorialServeRowAfterCook
         ? [noodleTutorialServeRow(userId)]
         : [noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedOrders, disableServe: !hasAcceptedOrders })]
@@ -13125,7 +13071,7 @@ ${lines.join("\n")}`;
     
     // Check if there are any ready bowls for accepted orders (deduplicate by recipe)
     const uniqueRecipes = new Set();
-    acceptedEntries.forEach(([fullId, a]) => {
+    acceptedEntries.forEach(([_fullId, a]) => {
       const snap = a?.order ?? null;
       const order = snap;
       if (order?.recipe_id) {
@@ -13368,7 +13314,7 @@ ${lines.join("\n")}`;
     const tutorialRows = getTutorialProgressRows(p, userId, { highlightAccept, disableAccept });
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([menuEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([menuEmbed]), notices: [],
       components: tutorialRows
         ? tutorialRows
         : [
@@ -13431,7 +13377,7 @@ ${lines.join("\n")}`;
     if (!p.orders.accepted) p.orders.accepted = {};
 
     const results = [];
-    const unlockedRecipeNames = [];
+    const _unlockedRecipeNames = [];
     const readyBowlsByRecipe = new Map();
     const acceptedOrdersNow = [];
     let acceptedNow = 0;
@@ -13501,7 +13447,7 @@ ${lines.join("\n")}`;
 
       results.push(`Accepted \`${shortOrderId(order.order_id)}\` — **${rName}** (${timeNote})${extendedNote}`);
 
-      const bowl = p.inv_bowls?.[order.recipe_id];
+      const _bowl = p.inv_bowls?.[order.recipe_id];
       const total = getTotalBowlsForRecipe(p, order.recipe_id);
       if (total > 0) {
         readyBowlsByRecipe.set(order.recipe_id, total);
@@ -13529,7 +13475,7 @@ ${lines.join("\n")}`;
     const neededByItem = {};
     const neededByRecipe = {};
 
-    acceptedEntries.forEach(([fullId, a]) => {
+    acceptedEntries.forEach(([_fullId, a]) => {
       const snap = a?.order ?? null;
       const order = snap;
 
@@ -13603,7 +13549,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([acceptEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([acceptEmbed]), notices: [],
       components: showTutorialBuyRowAfterAccept
         ? [noodleTutorialBuyRow(userId)]
         : [
@@ -13684,7 +13630,7 @@ ${lines.join("\n")}`;
     });
     return commitState({
       content: " ",
-      ...composeV2FromLegacyEmbeds([cancelEmbed])
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cancelEmbed]), notices: []
     });
   }
 
@@ -13749,7 +13695,7 @@ ${lines.join("\n")}`;
     let discoveryRewardGrantedThisServe = false;
     let leveledUp = false;
     let recipeUnlocked = false;
-    const unlockedRecipeNames = [];
+    const _unlockedRecipeNames = [];
 
     for (const tok of tokens) {
       const matchEntry = Object.entries(acceptedMap).find(([fullId]) => {
@@ -13944,7 +13890,7 @@ ${lines.join("\n")}`;
           if (result.recipeUnlocked) {
             recipeUnlocked = true;
             const unlockedName = result.unlockedRecipeName || result.unlockedRecipeId || discovery.recipeName || discovery.recipeId;
-            if (unlockedName) unlockedRecipeNames.push(unlockedName);
+            if (unlockedName) _unlockedRecipeNames.push(unlockedName);
           }
         }
       }
@@ -13998,7 +13944,7 @@ ${lines.join("\n")}`;
         const auraExpiry = rewards.repAuraExpiresAt ?? p.buffs?.rep_aura_expires_at ?? 0;
         const now3_aura = nowTs();
         if (auraExpiry > now3_aura) {
-          const minsLeft = Math.ceil((auraExpiry - now3_aura) / 1000 / 60);
+          const _minsLeft = Math.ceil((auraExpiry - now3_aura) / 1000 / 60);
           const ts = Math.floor(auraExpiry / 1000);
           if (rewards.repAuraAlreadyActive) {
             serveMsg += ` ${getIcon("sparkle")} Aura buff already active (expires <t:${ts}:R>)`;
@@ -14059,7 +14005,7 @@ ${lines.join("\n")}`;
         description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
-      const failPayload = { content: " ", ...composeV2FromLegacyEmbeds([failEmbed]) };
+      const failPayload = { content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([failEmbed]), notices: [] };
       if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
         return commitState(convertLegacyEmbedPayloadToComponentsV2(failPayload));
       }
@@ -14112,10 +14058,10 @@ ${lines.join("\n")}`;
       const activeEventId = s.active_event_id ?? null;
       ensureDailyOrdersForPlayer(p, set, content, s.season, serverId, userId, activeEventId);
       applyHouse247OrderBoardOverride(p);
-      const friendlyNames = unlockedRecipeNames.length
-        ? unlockedRecipeNames.length === 1
-          ? unlockedRecipeNames[0]
-          : `${unlockedRecipeNames.slice(0, -1).join(", ")} & ${unlockedRecipeNames.at(-1)}`
+      const friendlyNames = _unlockedRecipeNames.length
+        ? _unlockedRecipeNames.length === 1
+          ? _unlockedRecipeNames[0]
+          : `${_unlockedRecipeNames.slice(0, -1).join(", ")} & ${_unlockedRecipeNames.at(-1)}`
         : "your new recipe";
       results.push(`${getIcon("regulars")} Regulars are already asking for **${friendlyNames}**.`);
     }
@@ -14148,11 +14094,16 @@ ${lines.join("\n")}`;
       user: interaction.member ?? interaction.user
     });
 
+    const composedServePayload = buildMainAndNoticesFromEmbeds([serveEmbed, ...embeds]);
+
     const servePayload = {
       content: " ",
       components,
-      ...composeV2FromLegacyEmbeds([serveEmbed, ...embeds]),
-      notices: hiddenSpecUnlockNotices
+      ...composedServePayload,
+      notices: [
+        ...(Array.isArray(composedServePayload.notices) ? composedServePayload.notices : []),
+        ...hiddenSpecUnlockNotices
+      ]
     };
     if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
       return commitState(convertLegacyEmbedPayloadToComponentsV2(servePayload));
@@ -14362,7 +14313,7 @@ if (!serverId && !isDmReminderToggle) {
 const v2Parsed = parseV2CustomId(customId);
 if (v2Parsed.isV2) {
   const rolloutPlayer = ensurePlayer(serverId, userId);
-  const rolloutEnabled = isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer });
+  const _rolloutEnabled = isComponentsV2Enabled({ guildId: serverId, userId, player: rolloutPlayer });
   if (!v2Parsed.valid) {
     emitTelemetry("v2_scene_error", {
       module: getV2SceneModule(v2Parsed.sceneKey),
@@ -14636,7 +14587,7 @@ if (v2Parsed.isV2) {
     }
 
     if (action === "cfm") {
-      const entries = Array.isArray(state.entries) ? state.entries : [];
+      const _entries = Array.isArray(state.entries) ? state.entries : [];
       const requestedShortId = String(v2Parsed.args?.[0] ?? "").trim();
       const selectedShortIds = Array.isArray(state.selectedShortIds)
         ? state.selectedShortIds.map((id) => String(id || "").trim()).filter(Boolean)
@@ -15547,15 +15498,15 @@ if (kind === "help" && action === "page") {
 }
 
 if (kind === "dm" && action === "reminders_toggle") {
-  const targetServerId = parts[4] ?? "";
-  if (!targetServerId) {
+  const _targetServerId = parts[4] ?? "";
+  if (!_targetServerId) {
     return componentCommit(interaction, { content: "Missing server info for reminders.", ephemeral: true });
   }
   if (ownerId && ownerId !== userId) {
     return componentCommit(interaction, { content: "That button isn’t for you.", ephemeral: true });
   }
 
-  const p = ensurePlayer(targetServerId, userId);
+  const p = ensurePlayer(_targetServerId, userId);
   if (!p.notifications) {
     p.notifications = {
       pending_pantry_messages: [],
@@ -15569,12 +15520,12 @@ if (kind === "dm" && action === "reminders_toggle") {
   p.notifications.dm_reminders_opt_out = nextOptOut;
 
   if (db) {
-    upsertPlayer(db, targetServerId, userId, p, null, p.schema_version);
+    upsertPlayer(db, _targetServerId, userId, p, null, p.schema_version);
   }
 
-  const guildName = interaction.client?.guilds?.cache?.get(targetServerId)?.name ?? "this server";
+  const guildName = interaction.client?.guilds?.cache?.get(_targetServerId)?.name ?? "this server";
   const channelId = p.notifications.last_noodle_channel_id ?? null;
-  const channelUrl = channelId ? `https://discord.com/channels/${targetServerId}/${channelId}` : null;
+  const channelUrl = channelId ? `https://discord.com/channels/${_targetServerId}/${channelId}` : null;
 
   const reminderText = nextOptOut
     ? `Reminders are now **off** for **${guildName}**.`
@@ -15582,7 +15533,7 @@ if (kind === "dm" && action === "reminders_toggle") {
 
   const reminderComponents = buildDmReminderComponents({
     userId,
-    serverId: targetServerId,
+    serverId: _targetServerId,
     channelUrl,
     optOut: nextOptOut
   });
@@ -15598,7 +15549,7 @@ if (kind === "dm" && action === "reminders_toggle") {
     includeGreenButtonTip: false
   });
 
-  if (isComponentsV2Enabled({ guildId: targetServerId, userId, player: p })) {
+  if (isComponentsV2Enabled({ guildId: _targetServerId, userId, player: p })) {
     return componentCommit(interaction, {
       content: " ",
       ...v2Payload,
@@ -15747,7 +15698,7 @@ if (kind === "profile" && action === "specialize_select") {
 
   return componentCommit(interaction, {
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components: [
       new ActionRowBuilder().addComponents(menu),
       noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -15804,7 +15755,7 @@ if (kind === "profile" && action === "specialize_cancel") {
   );
   return componentCommit(interaction, {
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components,
     targetMessageId: interaction.message?.id
   });
@@ -15859,7 +15810,7 @@ if (kind === "profile" && action === "specialize_confirm") {
 
   return componentCommit(interaction, {
     content: " ",
-    ...composeV2FromLegacyEmbeds([embed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components: [
       noodleSpecializeSelectRow(userId),
       noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -15934,12 +15885,12 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
   const p = ensurePlayer(serverId, userId);
   const garden = ensureGardenState(p);
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-  const gardenState = getGardenActionState(p, combinedEffects);
+  const _gardenState = getGardenActionState(p, combinedEffects);
   const compostCount = garden.compost_bags || 0;
   const compostDescription = [
     `Compost: **${compostCount}** bags`,
-    `Spoiled saved: **${gardenState.spoiledTotal}**`,
-    `Fresh forageables: **${gardenState.pantryTotal}**`,
+    `Spoiled saved: **${_gardenState.spoiledTotal}**`,
+    `Fresh forageables: **${_gardenState.pantryTotal}**`,
     `*Recipe: ${COMPOST_PER_BAG} spoiled or fresh forageables = 1 bag*`
   ].join("\n");
 
@@ -15991,14 +15942,14 @@ if (kind === "action" && action === "compost" && interaction.isButton?.()) {
     kitchenUnlocked: getKitchenUnlockState(p).unlocked,
     kitchenJustUnlocked: getKitchenUnlockState(p).justUnlocked,
     showGardenActions: true,
-    canCompost: gardenState.canCraft,
-    canHarvest: gardenState.hasHarvestable
+    canCompost: _gardenState.canCraft,
+    canHarvest: _gardenState.hasHarvestable
   });
 
   const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    ...composeV2FromLegacyEmbeds([compostEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([compostEmbed]), notices: [],
     components,
     targetMessageId: interaction.message?.id
   });
@@ -16040,7 +15991,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   }
   const p = ensurePlayer(serverId, userId);
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-  const gardenState = getGardenActionState(p, combinedEffects);
+  const _gardenState = getGardenActionState(p, combinedEffects);
 
   const now = Date.now();
   const messageId = interaction.message?.id ?? `compost:${interaction.id}`;
@@ -16089,7 +16040,7 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
   const header = selectionList
     ? `Selected sources:\n${selectionList}\n\nAdd 5/10 buttons pull that many units from each selected source.`
     : `No items selected. Add 5/10 buttons pull that many units from each selected source.`;
-  const compostCount = gardenState.compostCount;
+  const compostCount = _gardenState.compostCount;
   const compostDescription = [
     `Compost: **${compostCount}** bags`,
     header
@@ -16117,14 +16068,14 @@ if (interaction.isSelectMenu?.() && kind === "garden" && action === "compost_sel
     kitchenUnlocked: getKitchenUnlockState(p).unlocked,
     kitchenJustUnlocked: getKitchenUnlockState(p).justUnlocked,
     showGardenActions: true,
-    canCompost: gardenState.canCraft,
-    canHarvest: gardenState.hasHarvestable
+    canCompost: _gardenState.canCraft,
+    canHarvest: _gardenState.hasHarvestable
   });
 
   const components = [navRow, selectRow, actionRow, backRow];
   return componentCommit(interaction, {
     content: " ",
-    ...composeV2FromLegacyEmbeds([compostEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([compostEmbed]), notices: [],
     components,
     targetMessageId: interaction.message?.id
   });
@@ -16165,7 +16116,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
   const garden = ensureGardenState(p);
   if (!p.inv_ingredients) p.inv_ingredients = {};
   const combinedEffects = calculateCombinedEffects(p, upgradesContent, staffContent, calculateStaffEffects);
-  const gardenState = getGardenActionState(p, combinedEffects);
+  const _gardenState = getGardenActionState(p, combinedEffects);
 
   let spoiledUsed = {};
   let freshUsed = {};
@@ -16293,8 +16244,8 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
     kitchenUnlocked: getKitchenUnlockState(p).unlocked,
     kitchenJustUnlocked: getKitchenUnlockState(p).justUnlocked,
     showGardenActions: true,
-    canCompost: gardenState.canCraft,
-    canHarvest: gardenState.hasHarvestable
+    canCompost: _gardenState.canCraft,
+    canHarvest: _gardenState.hasHarvestable
   });
 
   const components = [navRow];
@@ -16303,7 +16254,7 @@ if (interaction.isButton?.() && kind === "garden" && action === "compost_add") {
 
   return componentCommit(interaction, {
     content: " ",
-    ...composeV2FromLegacyEmbeds([compostEmbed]),
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([compostEmbed]), notices: [],
     components,
     targetMessageId: interaction.message?.id
   });
@@ -16776,7 +16727,7 @@ if (cid.startsWith("noodle:pick:accept_select:")) {
 
   const availableOrderIds = [];
   const pageData = loadPage(page);
-  const pageOrderIds = (pageData?.orders ?? []).map((o) => String(o.order_id));
+  const _pageOrderIds = (pageData?.orders ?? []).map((o) => String(o.order_id));
   for (const pg of availablePages.length ? availablePages : [page]) {
     const data = Number(pg) === page ? pageData : loadPage(pg);
     availableOrderIds.push(...((data?.orders ?? []).map((o) => String(o.order_id))));
@@ -16786,7 +16737,7 @@ if (cid.startsWith("noodle:pick:accept_select:")) {
   const merged = mergeAcceptOrderPageSelection({
     availableOrderIds,
     currentSelectedOrderIds: currentSelected,
-    pageOrderIds,
+    _pageOrderIds,
     pageSelectedOrderIds: interaction.values ?? []
   });
   writeAcceptOrderDraftSelection({ serverId, userId, selectedOrderIds: merged });
@@ -16816,7 +16767,7 @@ if (cid.startsWith("noodle:pick:cancel_select:")) {
   const accepted = Object.entries(p.orders?.accepted ?? {});
   const pageSize = 25;
   const safePage = Math.max(0, Math.min(page, Math.max(0, Math.ceil(accepted.length / pageSize) - 1)));
-  const pageOrderIds = accepted
+  const _pageOrderIds = accepted
     .slice(safePage * pageSize, (safePage + 1) * pageSize)
     .map(([oid]) => String(oid));
   const availableOrderIds = accepted.map(([oid]) => String(oid));
@@ -16824,7 +16775,7 @@ if (cid.startsWith("noodle:pick:cancel_select:")) {
   const merged = mergeCancelOrderPageSelection({
     availableOrderIds,
     currentSelectedOrderIds: currentSelected,
-    pageOrderIds,
+    _pageOrderIds,
     pageSelectedOrderIds: interaction.values ?? []
   });
   writeCancelOrderDraftSelection({ serverId, userId, selectedOrderIds: merged });
@@ -17018,7 +16969,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (messageId) {
       try {
         await interaction.deferReply({ ephemeral: true });
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
     }
@@ -17070,7 +17021,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (messageId) {
       try {
         await interaction.deferReply({ ephemeral: true });
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
     }
@@ -17115,7 +17066,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (messageId) {
       try {
         await interaction.deferReply({ ephemeral: true });
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
     }
@@ -17153,7 +17104,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (messageId) {
       try {
         await interaction.deferReply({ ephemeral: true });
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
     }
@@ -17193,7 +17144,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (!interaction.deferred && !interaction.replied) {
       try {
         await interaction.deferReply({ ephemeral: true });
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
     }
@@ -17228,7 +17179,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
@@ -17258,7 +17209,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
     if (!interaction.deferred && !interaction.replied) {
       try {
         await interaction.deferReply({ ephemeral: true });
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
     }
@@ -17293,7 +17244,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: messageId ?? interaction.message?.id
     });
@@ -17355,7 +17306,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      ...composeV2FromLegacyEmbeds([selectionEmbed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([selectionEmbed]), notices: [],
       components: showSellButton ? [btnRow, sellButton] : [btnRow]
     });
   }
@@ -17403,7 +17354,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
       return componentCommit(interaction, {
         content: " ",
-        ...composeV2FromLegacyEmbeds([embed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
         components: [
           noodleSpecializeSelectRow(userId),
           noodleProfileEditRow(userId, { specializationsAvailable }),
@@ -17448,7 +17399,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
     return componentCommit(interaction, {
       content: " ",
-      ...composeV2FromLegacyEmbeds([embed]),
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
       components: [confirmRow, noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)],
       targetMessageId: interaction.message?.id
     });
@@ -17537,7 +17488,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
       });
       return componentCommit(interaction, {
         content: " ",
-        ...composeV2FromLegacyEmbeds([selectionEmbed]),
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([selectionEmbed]), notices: [],
         components: showSellButton ? [btnRow, sellButton] : [btnRow],
         targetMessageId: sourceId !== "none" ? sourceId : undefined
       });
@@ -17744,7 +17695,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const replyObj = {
           content: " ",
-          ...composeV2FromLegacyEmbeds([buyEmbed]),
+          mainComponents: legacyEmbedsToV2TextComponentsForLegacy([buyEmbed]), notices: [],
           components,
           targetMessageId: interaction.message?.id ?? sourceMessageId ?? null
         };
@@ -17954,7 +17905,7 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const replyObj = {
           content: pickerPayload.content ?? " ",
-          ...composeV2FromLegacyEmbeds([sellEmbed]),
+          mainComponents: legacyEmbedsToV2TextComponentsForLegacy([sellEmbed]), notices: [],
           components: pickerPayload.ephemeral
             ? (pickerPayload.components ?? [])
             : [buildSellQuantityRow(userId, selectedIds, page, selectionToken), ...(pickerPayload.components ?? [noodleMainMenuRow(userId)])],
@@ -18139,7 +18090,7 @@ export {
   noodleMainMenuRowNoProfile,
   displayItemName,
   renderProfileEmbed,
-  composeV2FromLegacyEmbeds as composeV2FromLegacyEmbedsForTest,
+  buildMainAndNoticesFromEmbeds as buildMainAndNoticesFromEmbedsForTest,
   resolveComponentNavSub,
   applyPersistentNoticeCards as applyPersistentNoticeCardsForTest,
   convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest

@@ -159,6 +159,41 @@ function hasConversionShortCircuitRegression(fileContent = "") {
   return !/isComponentsV2Payload\s*\(\s*payload\s*\)/.test(body);
 }
 
+function getBannedEmbedRuntimePatternMatches(addedSource = "") {
+  if (!addedSource) return [];
+
+  const checks = [
+    {
+      pattern: /\bpayload\s*\.\s*embeds\b/,
+      reason: "payload.embeds usage in runtime conversion paths"
+    },
+    {
+      pattern: /\bcomposeV2FromLegacyEmbeds\b/,
+      reason: "composeV2FromLegacyEmbeds"
+    },
+    {
+      pattern: /\bbuildLegacyEmbedsV2Payload\b/,
+      reason: "buildLegacyEmbedsV2Payload"
+    },
+    {
+      pattern: /\bMessageEmbed\b|\bEmbedBuilder\b/,
+      reason: "MessageEmbed/EmbedBuilder construction in command flows"
+    },
+    {
+      pattern: /\bcreateCard\s*\(/,
+      reason: "runtime createCard construction in command flows"
+    }
+  ];
+
+  const matches = [];
+  for (const check of checks) {
+    if (check.pattern.test(addedSource)) {
+      matches.push(check.reason);
+    }
+  }
+  return unique(matches);
+}
+
 if (!changed.length) {
   warnings.push("No changed files detected. Run with --all to scan entire repository.");
 }
@@ -265,6 +300,20 @@ for (const file of changedJs.filter((f) => f.startsWith("src/commands/") && f.en
   if (!hasConversionShortCircuitRegression(content)) continue;
   errors.push(
     `${file}: convertPayloadToComponentsV2 must short-circuit prebuilt Components V2 payloads via isComponentsV2Payload(payload).`
+  );
+}
+
+// 7) No-embed runtime invariant (ban reintroducing legacy embed/runtime patterns in src code).
+for (const file of changedJs.filter((f) => f.startsWith("src/") && f.endsWith(".js"))) {
+  const added = addedByFile.get(file) || [];
+  const joined = added.join("\n");
+  if (!joined) continue;
+
+  const bannedMatches = getBannedEmbedRuntimePatternMatches(joined);
+  if (bannedMatches.length === 0) continue;
+
+  errors.push(
+    `${file}: banned embed runtime pattern(s) added: ${bannedMatches.join(", ")}. Use Components V2 native mainComponents/notices payload contracts instead.`
   );
 }
 

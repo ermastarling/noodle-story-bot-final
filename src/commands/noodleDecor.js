@@ -10,8 +10,7 @@ import { theme } from "../ui/theme.js";
 import { getIcon } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
-  isComponentsV2Payload,
-  legacyEmbedsToV2TextComponents
+  isComponentsV2Payload
 } from "../ui/componentsV2.js";
 
 function ownerFooterText(userOrMember) {
@@ -56,36 +55,6 @@ function normalizeLegacyComponentRows(rows = []) {
   return normalized;
 }
 
-function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {
-  const list = Array.isArray(embeds) ? embeds : [];
-  const ownerId = String(options?.ownerId ?? "").trim() || undefined;
-  const ephemeral = Boolean(options?.ephemeral === true || options?.ephemeral === 1 || options?.ephemeral === "true");
-  const components = Array.isArray(options?.components) ? options.components : [];
-  const primaryEmbed = list[0] ?? null;
-  const notificationEmbeds = list.slice(1);
-  const mainComponents = [
-    ...legacyEmbedsToV2TextComponents(primaryEmbed ? [primaryEmbed] : []),
-    ...normalizeLegacyComponentRows(components)
-  ];
-  const notices = notificationEmbeds
-    .map((embed) => {
-      const raw = embed?.toJSON?.() ?? embed ?? {};
-      const title = String(raw?.title ?? "").trim() || "Notification";
-      const details = legacyEmbedsToV2TextComponents([embed])
-        .map((entry) => String(entry?.content ?? "").trim())
-        .filter(Boolean);
-      return details.length > 0 || title ? { title, details, tone: "info" } : null;
-    })
-    .filter(Boolean);
-
-  return buildComponentsV2PayloadWithNoticeCards({
-    mainComponents,
-    notices,
-    ownerId,
-    ephemeral
-  });
-}
-
 function buildDecorV2Message({ title, description, ownerId, components = [] } = {}) {
   return buildComponentsV2PayloadWithNoticeCards({
     mainComponents: [
@@ -117,13 +86,6 @@ export function normalizePayloadForReply(interaction, payload = {}, _player = nu
       });
     }
 
-    if (Array.isArray(source.embeds) && source.embeds.length > 0) {
-      return buildLegacyEmbedsV2Payload(source.embeds, {
-        components: source.components,
-        ownerId: interaction?.user?.id ?? source.ownerId,
-        ephemeral: source.ephemeral === true || ((Number(source.flags) & (1 << 6)) !== 0)
-      });
-    }
   }
 
   return buildComponentsV2PayloadWithNoticeCards({

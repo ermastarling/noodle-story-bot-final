@@ -6,7 +6,7 @@
  * when players return after being offline.
  */
 
-import { nowTs, dayKeyUTC } from "../util/time.js";
+import { nowTs as _nowTs, dayKeyUTC as _dayKeyUTC } from "../util/time.js";
 import { makeStreamRng } from "../util/rng.js";
 import { getIcon } from "../ui/icons.js";
 import { getForageMaxForItem } from "./forage.js";
@@ -56,7 +56,6 @@ export function applySpoilageCatchup(player, settings, content, lastActiveAt, no
   const tickHours = settings.SPOILAGE_TICK_HOURS ?? 1;
   const maxCatchupTicks = settings.SPOILAGE_MAX_CATCHUP_TICKS ?? 24;
   const baseChance = settings.SPOILAGE_BASE_CHANCE ?? 0.05;
-  const reduction = Math.max(0, Math.min(0.95, effects?.spoilage_reduction || 0));
   const fishingUnlocked = isFishingUnlocked(player);
 
   // Calculate elapsed time and number of ticks
@@ -234,7 +233,7 @@ export function checkCooldownCatchup(player, now) {
  * @param {Object} content - Content bundle
  * @returns {string|null} - Welcome back message or null
  */
-export function generateWelcomeBackMessage(inactivityStatus, serverState, content) {
+export function generateWelcomeBackMessage(inactivityStatus, serverState, _content) {
   if (!inactivityStatus.is_inactive_7d) {
     return null;
   }

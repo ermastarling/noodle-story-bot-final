@@ -94,7 +94,7 @@ export function getUnseenHiddenSpecializations(player, specializationsContent) {
   });
 }
 
-export function canSelectSpecialization(player, specializationsContent, specId, now = nowTs()) {
+export function canSelectSpecialization(player, specializationsContent, specId, _now = nowTs()) {
   const state = ensureSpecializationState(player);
   const spec = getSpecializationById(specializationsContent, specId);
   if (!spec) return { ok: false, reason: "Specialization not found." };
@@ -106,8 +106,8 @@ export function canSelectSpecialization(player, specializationsContent, specId, 
   return meetsRequirements(player, spec.requirements, specId);
 }
 
-export function selectSpecialization(player, specializationsContent, specId, now = nowTs()) {
-  const check = canSelectSpecialization(player, specializationsContent, specId, now);
+export function selectSpecialization(player, specializationsContent, specId, _now = nowTs()) {
+  const check = canSelectSpecialization(player, specializationsContent, specId, _now);
   if (!check.ok) return { ok: false, reason: check.reason };
 
   const state = ensureSpecializationState(player);

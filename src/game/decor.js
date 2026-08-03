@@ -1,4 +1,3 @@
-import { nowTs } from "../util/time.js";
 import { applySxpLevelUp } from "./serve.js";
 import { ensureBadgeState } from "./badges.js";
 
@@ -132,7 +131,6 @@ function applyRewards(player, rewards) {
 
 export function evaluateDecorSets(player, decorContent, decorSetsContent) {
   ensureDecorState(player);
-  const registry = getDecorRegistry(decorContent);
   const sets = decorSetsContent?.sets ?? [];
   const owned = new Set(getOwnedDecorItems(player));
   const equipped = player.profile.decor_slots || {};

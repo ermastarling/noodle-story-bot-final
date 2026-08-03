@@ -50,7 +50,7 @@ export function createSceneStateStore({ maxEntries } = {}) {
     return removed;
   }
 
-  function enforceCapacity(nowMs = Date.now()) {
+  function enforceCapacity(_nowMs = Date.now()) {
     if (states.size <= resolvedMaxEntries) return 0;
 
     const entries = [...states.entries()].sort((a, b) => {
