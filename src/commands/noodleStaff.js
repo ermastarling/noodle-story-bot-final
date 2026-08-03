@@ -106,19 +106,7 @@ function applyGreenButtonFooter(embeds, components) {
 }
 
 function normalizeLegacyComponentRows(rows = []) {
-  if (!Array.isArray(rows)) return [];
-  const normalized = [];
-  for (const row of rows) {
-    if (!row) continue;
-    const baseRow = row?.toJSON?.() ?? row;
-    const rawComponents = baseRow?.components ?? row?.components ?? [];
-    const mapped = (rawComponents || [])
-      .map((comp) => comp?.toJSON?.() ?? comp)
-      .filter(Boolean);
-    if (!mapped.length) continue;
-    normalized.push({ type: 1, components: mapped });
-  }
-  return normalized;
+  return normalizeComponents(rows);
 }
 
 function buildLegacyEmbedsV2Payload(embeds = [], options = {}) {

@@ -4634,7 +4634,7 @@ function convertLegacyEmbedPayloadToComponentsV2(payload = {}) {
   };
 }
 
-function composeV2FromLegacyEmbeds(embeds = [], ownerId = "") {
+function composeV2FromLegacyEmbeds(embeds = [], _ownerId = "") {
   const list = Array.isArray(embeds) ? embeds : [];
   const primaryEmbed = list[0] ?? null;
   const notificationEmbeds = list.slice(1);
