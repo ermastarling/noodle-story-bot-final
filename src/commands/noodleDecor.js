@@ -98,18 +98,40 @@ function buildDecorV2Message({ title, description, ownerId, components = [] } = 
 }
 
 export function normalizePayloadForReply(interaction, payload = {}, player = null) {
-  if (payload && typeof payload === "object" && Array.isArray(payload.embeds) && payload.embeds.length > 0) {
-    return buildLegacyEmbedsV2Payload(payload.embeds, {
-      components: payload.components,
-      ownerId: interaction?.user?.id ?? payload.ownerId,
-      ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
-    });
+  const source = payload ?? {};
+
+  if (source && typeof source === "object") {
+    const hasV2Containers = Array.isArray(source.components)
+      && source.components.some((node) => Number(node?.type) === 17);
+    if (hasV2Containers) return source;
+
+    const hasSourceNativeComponents = Array.isArray(source.mainComponents) || Array.isArray(source.notices);
+    if (hasSourceNativeComponents) {
+      const explicitMainComponents = Array.isArray(source.mainComponents) ? source.mainComponents : [];
+      const normalizedRows = normalizeLegacyComponentRows(source.components);
+      const isEphemeral = source.ephemeral === true || ((Number(source.flags) & (1 << 6)) !== 0);
+      return buildComponentsV2PayloadWithNoticeCards({
+        mainComponents: [...explicitMainComponents, ...normalizedRows],
+        notices: Array.isArray(source.notices) ? source.notices : [],
+        ownerId: interaction?.user?.id ?? source.ownerId,
+        ephemeral: isEphemeral
+      });
+    }
+
+    if (Array.isArray(source.embeds) && source.embeds.length > 0) {
+      return buildLegacyEmbedsV2Payload(source.embeds, {
+        components: source.components,
+        ownerId: interaction?.user?.id ?? source.ownerId,
+        ephemeral: source.ephemeral === true || ((Number(source.flags) & (1 << 6)) !== 0)
+      });
+    }
   }
+
   return buildComponentsV2PayloadWithNoticeCards({
-    mainComponents: Array.isArray(payload?.components) ? payload.components : [],
+    mainComponents: Array.isArray(source?.components) ? source.components : [],
     notices: [],
-    ownerId: interaction?.user?.id ?? payload.ownerId,
-    ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)
+    ownerId: interaction?.user?.id ?? source?.ownerId,
+    ephemeral: source?.ephemeral === true || ((Number(source?.flags) & (1 << 6)) !== 0)
   });
 }
 
