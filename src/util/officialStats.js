@@ -10,7 +10,7 @@ const GUILD_VOICE_CHANNEL_TYPE_NAME = String(
   ?? "GUILD_VOICE"
 ).trim().toUpperCase();
 
-function isGuildVoiceCounterChannelType(type) {
+export function isGuildVoiceCounterChannelType(type) {
   if (Number(type) === GUILD_VOICE_CHANNEL_TYPE) return true;
   const normalizedType = String(type ?? "").trim().toUpperCase();
   if (!normalizedType) return false;

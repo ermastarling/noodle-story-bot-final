@@ -17,24 +17,6 @@ import { theme } from "./ui/theme.js";
   
   const Client = Discord.Client;
   const Intents = Discord.Intents;
-  const GUILD_VOICE_CHANNEL_TYPE_SOURCE = Discord.ChannelTypes?.GUILD_VOICE
-    ?? Discord.Constants?.ChannelTypes?.GUILD_VOICE;
-  const GUILD_VOICE_CHANNEL_TYPE = typeof GUILD_VOICE_CHANNEL_TYPE_SOURCE === "number"
-    ? GUILD_VOICE_CHANNEL_TYPE_SOURCE
-    : 2;
-  const GUILD_VOICE_CHANNEL_TYPE_NAME = String(
-    GUILD_VOICE_CHANNEL_TYPE_SOURCE
-    ?? "GUILD_VOICE"
-  ).trim().toUpperCase();
-
-  function isGuildVoiceCounterChannelType(type) {
-    if (Number(type) === GUILD_VOICE_CHANNEL_TYPE) return true;
-    const normalizedType = String(type ?? "").trim().toUpperCase();
-    if (!normalizedType) return false;
-    return normalizedType === "GUILD_VOICE"
-      || normalizedType === String(GUILD_VOICE_CHANNEL_TYPE)
-      || normalizedType === GUILD_VOICE_CHANNEL_TYPE_NAME;
-  }
 
   if (!Client || !Intents) {
     console.error("❌ Failed to load discord.js properly");
@@ -114,7 +96,10 @@ import { theme } from "./ui/theme.js";
   const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
   const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
   const { sendRawDm } = await import("./util/rawDm.js");
-  const { resolveOfficialStatsChannelTarget } = await import("./util/officialStats.js");
+  const {
+    resolveOfficialStatsChannelTarget,
+    isGuildVoiceCounterChannelType
+  } = await import("./util/officialStats.js");
 
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;

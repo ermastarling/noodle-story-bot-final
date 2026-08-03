@@ -145,8 +145,8 @@ test("official stats member events coalesce refresh requests instead of awaiting
   assert.match(source, /client\.on\("guildMemberRemove",\s*\(member\)\s*=>\s*{[\s\S]*requestOfficialMemberStatsRefresh\("memberRemove"\);/m);
   assert.doesNotMatch(source, /client\.on\("guildMemberAdd",\s*async\s*\(member\)[\s\S]*await\s+updateOfficialStatsChannels\(/m);
   assert.doesNotMatch(source, /client\.on\("guildMemberRemove",\s*async\s*\(member\)[\s\S]*await\s+updateOfficialStatsChannels\(/m);
-  assert.match(source, /GUILD_VOICE_CHANNEL_TYPE_SOURCE/);
-  assert.match(source, /typeof\s+GUILD_VOICE_CHANNEL_TYPE_SOURCE\s*===\s*"number"/);
+  assert.match(source, /isGuildVoiceCounterChannelType/);
+  assert.match(source, /import\("\.\/util\/officialStats\.js"\)/);
   assert.match(officialStatsSource, /GUILD_VOICE_CHANNEL_TYPE_SOURCE/);
   assert.match(officialStatsSource, /typeof\s+GUILD_VOICE_CHANNEL_TYPE_SOURCE\s*===\s*"number"/);
 });

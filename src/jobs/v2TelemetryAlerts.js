@@ -37,17 +37,18 @@ function formatMs(value) {
   return Number.isFinite(value) ? `${String(value)}ms` : safe(value);
 }
 
-export function buildReportText({ summary, delta, recommendation, windowHours, issues = [] } = {}) {
+export function buildReportText({ summary = {}, delta, recommendation, windowHours, issues = [] } = {}) {
+  const metricSummary = summary && typeof summary === "object" ? summary : {};
   const lines = [
     `Window: last ${windowHours}h`,
-    `Metric: transitions - ${safe(summary.transitions, "0")} transitions recorded in this window.`,
-    `Metric: errors - ${safe(summary.errors, "0")} scene errors captured; meaning: runtime failures still need inspection if counts spike.`,
-    `Metric: gate bypasses - ${safe(summary.bypasses, "0")} bypasses; meaning: rollout gating was skipped for these routes.`,
-    `Metric: error rate - ${formatPct(summary.errorRatePct)}; meaning: the share of transitions that ended in error.`,
-    `Metric: loops - ${safe(summary.loops, "0")} loop summaries; meaning: enough samples exist to compare efficiency trends.`,
-    `Metric: avg clicks/loop - ${safe(summary.clickAvg)}; meaning: interaction effort per loop.`,
-    `Metric: loop p50 - ${formatMs(summary.loopTimeP50)}; meaning: typical runtime latency for the middle of the sample.`,
-    `Metric: loop p95 - ${formatMs(summary.loopTimeP95)}; meaning: worst-case latency tail for the current window.`
+    `Metric: transitions - ${safe(metricSummary.transitions, "0")} transitions recorded in this window.`,
+    `Metric: errors - ${safe(metricSummary.errors, "0")} scene errors captured; meaning: runtime failures still need inspection if counts spike.`,
+    `Metric: gate bypasses - ${safe(metricSummary.bypasses, "0")} bypasses; meaning: rollout gating was skipped for these routes.`,
+    `Metric: error rate - ${formatPct(metricSummary.errorRatePct)}; meaning: the share of transitions that ended in error.`,
+    `Metric: loops - ${safe(metricSummary.loops, "0")} loop summaries; meaning: enough samples exist to compare efficiency trends.`,
+    `Metric: avg clicks/loop - ${safe(metricSummary.clickAvg)}; meaning: interaction effort per loop.`,
+    `Metric: loop p50 - ${formatMs(metricSummary.loopTimeP50)}; meaning: typical runtime latency for the middle of the sample.`,
+    `Metric: loop p95 - ${formatMs(metricSummary.loopTimeP95)}; meaning: worst-case latency tail for the current window.`
   ];
 
   if (delta) {
@@ -65,19 +66,19 @@ export function buildReportText({ summary, delta, recommendation, windowHours, i
     lines.push("", "Baseline comparison:", "Meaning: no baseline window was available for comparison.", "Action: inspect the current window directly and compare against later runs.");
   }
 
-  if (summary?.errorsByReason?.length) {
-    const topReasons = summary.errorsByReason.slice(0, 3)
+  if (metricSummary?.errorsByReason?.length) {
+    const topReasons = metricSummary.errorsByReason.slice(0, 3)
       .map((row) => `${row.reason}(${row.count})`)
       .join(", ");
     lines.push("", `Top error reasons: ${topReasons}`);
   }
 
-  if (summary?.dataQuality?.warnings?.length) {
-    lines.push("", "Data quality warnings:", ...summary.dataQuality.warnings.map((warning) => `- ${warning}`));
+  if (metricSummary?.dataQuality?.warnings?.length) {
+    lines.push("", "Data quality warnings:", ...metricSummary.dataQuality.warnings.map((warning) => `- ${warning}`));
   }
 
-  if (summary?.bypassByReason?.length) {
-    const topBypassReasons = summary.bypassByReason.slice(0, 3)
+  if (metricSummary?.bypassByReason?.length) {
+    const topBypassReasons = metricSummary.bypassByReason.slice(0, 3)
       .map((row) => `${row.reason}(${row.count})`)
       .join(", ");
     lines.push("", `Top bypass reasons: ${topBypassReasons}`);

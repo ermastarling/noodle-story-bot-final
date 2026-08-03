@@ -10,6 +10,7 @@ import { theme } from "../ui/theme.js";
 import { getIcon } from "../ui/icons.js";
 import {
   buildComponentsV2PayloadWithNoticeCards,
+  isComponentsV2Payload,
   legacyEmbedsToV2TextComponents
 } from "../ui/componentsV2.js";
 
@@ -101,9 +102,7 @@ export function normalizePayloadForReply(interaction, payload = {}, player = nul
   const source = payload ?? {};
 
   if (source && typeof source === "object") {
-    const hasV2Containers = Array.isArray(source.components)
-      && source.components.some((node) => Number(node?.type) === 17);
-    if (hasV2Containers) return source;
+    if (isComponentsV2Payload(source)) return source;
 
     const hasSourceNativeComponents = Array.isArray(source.mainComponents) || Array.isArray(source.notices);
     if (hasSourceNativeComponents) {
