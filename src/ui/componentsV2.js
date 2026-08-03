@@ -533,7 +533,7 @@ export function buildComponentsV2MenuPayload({
   const sceneBannerComponents = disableSceneBanner
     ? normalizedComponents
     : replaceHeadingWithSceneBanner(normalizedComponents);
-  const ownerSanitizedComponents = stripLegacyOwnerFromFooterLines(sceneBannerComponents);
+  const ownerSanitizedComponents = sceneBannerComponents;
   const resolvedOwnerId = String(ownerId ?? "").trim() || detectOwnerIdInComponents(ownerSanitizedComponents);
   let footerComponents = withOwnerFooter(ownerSanitizedComponents, resolvedOwnerId);
   if (includeGreenButtonTip && hasGreenButtonInComponents(footerComponents)) {

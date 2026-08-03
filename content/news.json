@@ -44,7 +44,8 @@
             "One-tap **Cook All** button is here to help you prep accepted orders in a breeze when the board gets busy.",
             "Brand-new **Kitchen Line Minigame** is changing how you cook: keep the rhythm, manage the line, and serve better bowls to take control of your cooking quality.",
             "Every **Shop Specialization** got a visual glow-up to show a richer mood and personality, from warm inn comfort to moonlit elegance.",
-            "If you are ready for a new shop story, revisit your specializations or stop by the Store to explore **premium specializations.**"
+            "If you are ready for a new shop story, revisit your specializations or stop by the Store to explore **premium specializations.**",
+            "**Known bug**: when using social features like tip, bless & contributing to shared orders, a private error saying 'Noodle Shop is thinking...' may appear. These messages can be dismissed and do not affect your gameplay."
           ]
         },
         {
