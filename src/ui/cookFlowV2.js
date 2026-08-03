@@ -366,7 +366,7 @@ export function buildCookMinigameV2Message({
   const isTutorialMode = Boolean(tutorialMode);
   const safeCoachingLine = String(coachingLine || "").trim();
   const totalWindowSeconds = ((safeTurnMs + safeGraceMs) / 1000).toFixed(1);
-  const totalRunSeconds = ((safeTurns * (safeTurnMs + safeGraceMs)) / 1000).toFixed(1);
+  const _totalRunSeconds = ((safeTurns * (safeTurnMs + safeGraceMs)) / 1000).toFixed(1);
   const actionLabelByKey = {
     prep: "Prep",
     heat: "Heat",

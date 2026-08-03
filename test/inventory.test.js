@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
-  ING_STACK_CAP_BASE,
-  ING_STACK_CAP_PER_UPGRADE,
-  BOWL_STACK_CAP_BASE,
-  OVERFLOW_MODE,
+  ING_STACK_CAP_BASE as _ING_STACK_CAP_BASE,
+  ING_STACK_CAP_PER_UPGRADE as _ING_STACK_CAP_PER_UPGRADE,
+  BOWL_STACK_CAP_BASE as _BOWL_STACK_CAP_BASE,
+  OVERFLOW_MODE as _OVERFLOW_MODE,
   getIngredientStackCapacity,
   getBowlStackCapacity,
   checkIngredientCapacity,
-  checkBowlCapacity,
+  checkBowlCapacity as _checkBowlCapacity,
   addIngredientsToInventory,
   removeIngredientsFromInventory,
   hasIngredients,

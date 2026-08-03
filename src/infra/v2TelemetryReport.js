@@ -56,7 +56,8 @@ export async function readTelemetryEvents({ filePath, startMs = null, endMs = nu
     errors: [],
     bypasses: [],
     loops: [],
-    minigame: []
+    minigame: [],
+    dropSummaries: []
   };
 
   for await (const line of rl) {
@@ -87,6 +88,8 @@ export async function readTelemetryEvents({ filePath, startMs = null, endMs = nu
       events.loops.push(payload);
     } else if (event === "v2_minigame_outcome") {
       events.minigame.push(payload);
+    } else if (event === "telemetry_drop_summary") {
+      events.dropSummaries.push(payload);
     }
   }
 
@@ -99,6 +102,7 @@ export function summarizeTelemetryEvents(events = {}) {
   const bypasses = Array.isArray(events.bypasses) ? events.bypasses : [];
   const loops = Array.isArray(events.loops) ? events.loops : [];
   const minigame = Array.isArray(events.minigame) ? events.minigame : [];
+  const dropSummaries = Array.isArray(events.dropSummaries) ? events.dropSummaries : [];
 
   const loopTimes = loops.map((row) => Number(row.completionMs));
   const clickCounts = loops.map((row) => Number(row.clickCount));
@@ -142,6 +146,14 @@ export function summarizeTelemetryEvents(events = {}) {
 
   const transitionCount = transitions.length;
   const errorCount = errors.length;
+  const totalDrops = dropSummaries.reduce((sum, row) => sum + (Number(row?.totalDrops) || 0), 0);
+  const warnings = [];
+  if (totalDrops > 0) {
+    warnings.push(`Telemetry dropped ${totalDrops} events in the sampled window; report accuracy may be reduced.`);
+  }
+  if (bypasses.length > 0) {
+    warnings.push(`Rollout bypass events were observed (${bypasses.length}); inspect gate behavior before rollout changes.`);
+  }
 
   return {
     transitions: transitionCount,
@@ -162,7 +174,11 @@ export function summarizeTelemetryEvents(events = {}) {
       .sort((a, b) => b.count - a.count),
     bypassByReason: [...bypassByReason.entries()]
       .map(([reason, count]) => ({ reason, count }))
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => b.count - a.count),
+    dataQuality: {
+      totalDrops,
+      warnings
+    }
   };
 }
 
@@ -193,9 +209,9 @@ export function buildGoNoGoRecommendation(delta) {
   const clicksNotWorse = Number.isFinite(delta.clickAvgDelta) ? delta.clickAvgDelta <= 0 : true;
 
   if (p95Improved && errorsNotWorse && clicksNotWorse) {
-    return "GO: Candidate V2 sample improves or preserves loop efficiency and reliability.";
+    return "INVESTIGATE: Candidate V2 sample improves or preserves loop efficiency and reliability; keep monitoring for regressions.";
   }
-  return "NO-GO / INVESTIGATE: Candidate V2 sample shows potential regressions in latency, click count, or errors.";
+  return "INVESTIGATE: Candidate V2 sample shows potential regressions in latency, click count, or errors; inspect before rollout changes.";
 }
 
 export function detectHighTelemetryIssues(summary, thresholds = {}) {

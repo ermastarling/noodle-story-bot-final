@@ -249,7 +249,7 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
   return serverState;
 }
 
-export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, activeEventId = null) {
+export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, _activeEventId = null) {
   const dayKey = dayKeyUTC();
   const orderSeedVersion = 5; // Increment when seed logic changes
   const previousOrdersDay = playerState.orders_day;

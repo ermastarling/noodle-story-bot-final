@@ -93,9 +93,13 @@ import { theme } from "./ui/theme.js";
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
-  const { noodleStaffCommand, noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
-  const { noodleUpgradesCommand, noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
+  const { noodleStaffCommand: _noodleStaffCommand, noodleStaffHandler: _noodleStaffHandler, noodleStaffInteractionHandler } = await import("./commands/noodleStaff.js");
+  const { noodleUpgradesCommand: _noodleUpgradesCommand, noodleUpgradesHandler: _noodleUpgradesHandler, noodleUpgradesInteractionHandler } = await import("./commands/noodleUpgrades.js");
   const { sendRawDm } = await import("./util/rawDm.js");
+  const {
+    resolveOfficialStatsChannelTarget,
+    isGuildVoiceCounterChannelType
+  } = await import("./util/officialStats.js");
 
   const MAX_FIELD = 1024;
   const SAFE_SLICE = 900;
@@ -297,7 +301,7 @@ import { theme } from "./ui/theme.js";
         origError("Command error log stream disabled:", safeLogMessage(error?.message ?? error));
       }
     });
-  } catch (error) {
+  } catch (_error) {
     errorLogEnabled = false;
     errorLog = null;
     errorLogNeedsDrain = false;
@@ -635,9 +639,9 @@ import { theme } from "./ui/theme.js";
   let officialServerCountChannelId = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_CHANNEL_ID || "").trim();
   let officialShopCountChannelId = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_CHANNEL_ID || "").trim();
   let officialMemberCountChannelId = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_CHANNEL_ID || "").trim();
+  const officialMemberCountLabel = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_LABEL || "Server Members").trim() || "Server Members";
   const officialServerCountLabel = String(process.env.NOODLE_OFFICIAL_SERVER_COUNT_LABEL || "Total Servers").trim() || "Total Servers";
   const officialShopCountLabel = String(process.env.NOODLE_OFFICIAL_SHOP_COUNT_LABEL || "Total Users").trim() || "Total Users";
-  const officialMemberCountLabel = String(process.env.NOODLE_OFFICIAL_MEMBER_COUNT_LABEL || "Server Members").trim() || "Server Members";
   const officialStatsCategoryId = String(process.env.NOODLE_OFFICIAL_STATS_CATEGORY_ID || "").trim();
   const startupAvatarSyncEnabled = String(process.env.NOODLE_STARTUP_AVATAR_ENABLED || "0") === "1";
   const startupAvatarGifUrl = String(process.env.NOODLE_STARTUP_AVATAR_GIF_URL || "").trim();
@@ -896,6 +900,9 @@ import { theme } from "./ui/theme.js";
   let nextOfficialStatsSyncAllowedAt = 0;
   let officialStatsUpdateQueue = Promise.resolve(false);
   let officialStatsUpdateInFlight = false;
+  let memberStatsRefreshPending = false;
+  let memberStatsRefreshRunning = false;
+  let memberStatsRefreshReason = "memberChange";
   if (!token) {
     console.error("❌ Missing DISCORD_TOKEN in .env");
     process.exit(1);
@@ -947,7 +954,7 @@ import { theme } from "./ui/theme.js";
   const baseContent = loadContentBundle(1);
   const eventsContent = loadEventsContent();
   const content = withEventRecipes(baseContent, eventsContent);
-  const settingsCatalog = loadSettingsCatalog();
+  const _settingsCatalog = loadSettingsCatalog();
   const badgesContent = loadBadgesContent();
   const specializationsContent = loadSpecializationsContent();
   const decorSetsContent = loadDecorSetsContent();
@@ -1928,7 +1935,7 @@ import { theme } from "./ui/theme.js";
 
   async function ensureOfficialReadonlyStatsChannel(officialGuild, channelId, { marker, label, count }) {
     const isSupportedStatsCounterChannel = (candidate) => (
-      candidate?.type === "GUILD_VOICE"
+      isGuildVoiceCounterChannelType(candidate?.type)
       && typeof candidate?.setName === "function"
       && typeof candidate?.permissionOverwrites?.edit === "function"
     );
@@ -1968,6 +1975,22 @@ import { theme } from "./ui/theme.js";
           configuredStatsChannelLoggedMarkers.add(marker);
           console.log(`ℹ️ Using configured stats channel ${existingId} for ${marker}; applying expected counter settings.`);
         }
+      }
+    }
+
+    if (!channel && existingId) {
+      if (!unresolvedStatsChannelLoggedMarkers.has(marker)) {
+        unresolvedStatsChannelLoggedMarkers.add(marker);
+        console.warn(`⚠️ Unable to resolve configured stats channel ${existingId} for ${marker}; attempting label-based discovery.`);
+      }
+      const discoveredTarget = await resolveOfficialStatsChannelTarget(officialGuild, null, {
+        label,
+        preferredCategoryId: officialStatsCategoryId
+      });
+      channel = discoveredTarget?.channel || null;
+      if (channel) {
+        const discoverySource = discoveredTarget?.source || "label-guild";
+        console.log(`ℹ️ Resolved stats channel for ${marker} via ${discoverySource}: ${channel.name}`);
       }
     }
 
@@ -2190,6 +2213,31 @@ import { theme } from "./ui/theme.js";
       });
     officialStatsUpdateQueue = queuedRun.then(() => false, () => false);
     return queuedRun;
+  }
+
+  function requestOfficialMemberStatsRefresh(reason = "memberChange") {
+    if (!officialStatsChannelsEnabled || !officialGuildId) return;
+
+    memberStatsRefreshPending = true;
+    memberStatsRefreshReason = String(reason || memberStatsRefreshReason || "memberChange");
+    if (memberStatsRefreshRunning) return;
+    memberStatsRefreshRunning = true;
+
+    void (async () => {
+      try {
+        while (memberStatsRefreshPending) {
+          memberStatsRefreshPending = false;
+          await updateOfficialStatsChannels(null, { reason: memberStatsRefreshReason });
+        }
+      } catch (error) {
+        console.error("❌ Failed to refresh official stats channels after member churn:", error?.stack ?? error);
+      } finally {
+        memberStatsRefreshRunning = false;
+        if (memberStatsRefreshPending) {
+          requestOfficialMemberStatsRefresh(memberStatsRefreshReason);
+        }
+      }
+    })();
   }
 
   function getMessageSearchBlob(message) {
@@ -3571,7 +3619,8 @@ import { theme } from "./ui/theme.js";
 
       if (guild?.id === officialGuildId) return;
       if (shouldSkipUntracked || isLikelyAvailabilityTransition) {
-        const logFn = isLikelyAvailabilityTransition ? console.info : console.warn;
+        const expectedSkip = isLikelyAvailabilityTransition || shouldSkipUntracked;
+        const logFn = expectedSkip ? console.info : console.warn;
         logFn("Skipping guildDelete dev alert for untracked or unavailable/unknown guild state", {
           guildId: guild?.id ?? null,
           guildTrackingPrimed,
@@ -3597,6 +3646,16 @@ import { theme } from "./ui/theme.js";
     } catch (error) {
       console.error("❌ Failed to send guild leave alert:", error?.stack ?? error);
     }
+  });
+
+  client.on("guildMemberAdd", (member) => {
+    if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
+    requestOfficialMemberStatsRefresh("memberAdd");
+  });
+
+  client.on("guildMemberRemove", (member) => {
+    if (!officialStatsChannelsEnabled || !officialGuildId || String(member?.guild?.id || "") !== officialGuildId) return;
+    requestOfficialMemberStatsRefresh("memberRemove");
   });
 
   client.on("messageCreate", async (message) => {
@@ -3688,7 +3747,7 @@ import { theme } from "./ui/theme.js";
     // Note: Discord.js v13 uses isSelectMenu(), not isStringSelectMenu()
     const isBtn = interaction.isButton?.();
     const isSelect = interaction.isSelectMenu?.();
-    const isModal = interaction.isModalSubmit?.();
+    const _isModal = interaction.isModalSubmit?.();
     const cid = interaction.customId;
     telemetryCustomIdPrefix = getCustomIdPrefix(cid);
     const isNoodle = cid?.startsWith("noodle:");

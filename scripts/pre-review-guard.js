@@ -92,6 +92,108 @@ const errors = [];
 const warnings = [];
 const addedByFile = new Map(changed.map((f) => [f, getAddedLines(f)]));
 
+function hasV2BuilderOverwritePattern(addedSource = "") {
+  if (!addedSource) return false;
+  const spreadBuilderPattern = /\.\.\.\s*buildComponentsV2(?:PayloadWithNoticeCards|MenuPayload|NoticeCardPayload|TextPayload)\s*\(/g;
+  if (!spreadBuilderPattern.test(addedSource)) return false;
+
+  const lines = addedSource.split("\n");
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const line = lines[idx];
+    if (!/\.\.\.\s*buildComponentsV2(?:PayloadWithNoticeCards|MenuPayload|NoticeCardPayload|TextPayload)\s*\(/.test(line)) {
+      continue;
+    }
+
+    for (let lookahead = idx + 1; lookahead < Math.min(lines.length, idx + 45); lookahead += 1) {
+      const next = lines[lookahead];
+      if (/^\s*components\s*:/.test(next)) {
+        return true;
+      }
+      if (/^\s*}\s*;?\s*$/.test(next)) {
+        break;
+      }
+    }
+  }
+
+  return false;
+}
+
+function hasChannelTypeCoercionRisk(addedSource = "") {
+  if (!addedSource) return false;
+  const lines = addedSource.split("\n");
+  for (const line of lines) {
+    const numericVoiceCheck = /Number\([^)]*type[^)]*\)\s*===\s*[A-Z0-9_]*VOICE[A-Z0-9_]*/.test(line);
+    if (!numericVoiceCheck) continue;
+
+    const hasCompatibilitySignal = /GUILD_VOICE|isGuildVoiceCounterChannelType|toUpperCase\(\)/.test(addedSource);
+    if (!hasCompatibilitySignal) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function extractFunctionBody(source = "", functionName = "") {
+  const startPattern = new RegExp(`function\\s+${functionName}\\s*\\([^)]*\\)\\s*{`);
+  const match = startPattern.exec(source);
+  if (!match) return "";
+
+  const start = match.index + match[0].length;
+  let depth = 1;
+  for (let idx = start; idx < source.length; idx += 1) {
+    const ch = source[idx];
+    if (ch === "{") depth += 1;
+    if (ch === "}") depth -= 1;
+    if (depth === 0) {
+      return source.slice(start, idx);
+    }
+  }
+
+  return "";
+}
+
+function hasConversionShortCircuitRegression(fileContent = "") {
+  const body = extractFunctionBody(fileContent, "convertPayloadToComponentsV2");
+  if (!body) return false;
+  if (!/buildComponentsV2PayloadWithNoticeCards\s*\(/.test(body)) return false;
+  return !/isComponentsV2Payload\s*\(\s*payload\s*\)/.test(body);
+}
+
+function getBannedEmbedRuntimePatternMatches(addedSource = "") {
+  if (!addedSource) return [];
+
+  const checks = [
+    {
+      pattern: /\bpayload\s*\.\s*embeds\b/,
+      reason: "payload.embeds usage in runtime conversion paths"
+    },
+    {
+      pattern: /\bcomposeV2FromLegacyEmbeds\b/,
+      reason: "composeV2FromLegacyEmbeds"
+    },
+    {
+      pattern: /\bbuildLegacyEmbedsV2Payload\b/,
+      reason: "buildLegacyEmbedsV2Payload"
+    },
+    {
+      pattern: /\bMessageEmbed\b|\bEmbedBuilder\b/,
+      reason: "MessageEmbed/EmbedBuilder construction in command flows"
+    },
+    {
+      pattern: /\bcreateCard\s*\(/,
+      reason: "runtime createCard construction in command flows"
+    }
+  ];
+
+  const matches = [];
+  for (const check of checks) {
+    if (check.pattern.test(addedSource)) {
+      matches.push(check.reason);
+    }
+  }
+  return unique(matches);
+}
+
 if (!changed.length) {
   warnings.push("No changed files detected. Run with --all to scan entire repository.");
 }
@@ -164,6 +266,55 @@ for (const file of changedJs.filter((f) => f.startsWith("scripts/"))) {
       `${file}: avoid spread with Math.min/Math.max on dynamic arrays (${unique(spreadMinMax).join(" | ")}).`
     );
   }
+}
+
+// 4) Components V2 contract safety check (PR #169 regression class).
+for (const file of changedJs) {
+  const added = addedByFile.get(file) || [];
+  const joined = added.join("\n");
+  if (!joined) continue;
+  if (!hasV2BuilderOverwritePattern(joined)) continue;
+  errors.push(
+    `${file}: avoid overwriting components after spreading a buildComponentsV2* payload. Compose action rows into mainComponents/notices before building the V2 payload.`
+  );
+}
+
+// 5) Channel-type compatibility safety check (mixed string/numeric runtime support).
+for (const file of changedJs) {
+  const added = addedByFile.get(file) || [];
+  const joined = added.join("\n");
+  if (!joined) continue;
+  if (!hasChannelTypeCoercionRisk(joined)) continue;
+  errors.push(
+    `${file}: numeric-only voice channel type checks detected. Include string/numeric compatibility handling (for example via a shared helper).`
+  );
+}
+
+// 6) Conversion-helper short-circuit safety check (avoid re-wrapping prebuilt V2 payloads).
+for (const file of changedJs.filter((f) => f.startsWith("src/commands/") && f.endsWith(".js"))) {
+  const added = addedByFile.get(file) || [];
+  const joined = added.join("\n");
+  if (!joined.includes("convertPayloadToComponentsV2")) continue;
+
+  const content = read(file) || "";
+  if (!hasConversionShortCircuitRegression(content)) continue;
+  errors.push(
+    `${file}: convertPayloadToComponentsV2 must short-circuit prebuilt Components V2 payloads via isComponentsV2Payload(payload).`
+  );
+}
+
+// 7) No-embed runtime invariant (ban reintroducing legacy embed/runtime patterns in src code).
+for (const file of changedJs.filter((f) => f.startsWith("src/") && f.endsWith(".js"))) {
+  const added = addedByFile.get(file) || [];
+  const joined = added.join("\n");
+  if (!joined) continue;
+
+  const bannedMatches = getBannedEmbedRuntimePatternMatches(joined);
+  if (bannedMatches.length === 0) continue;
+
+  errors.push(
+    `${file}: banned embed runtime pattern(s) added: ${bannedMatches.join(", ")}. Use Components V2 native mainComponents/notices payload contracts instead.`
+  );
 }
 
 if (warnings.length) {

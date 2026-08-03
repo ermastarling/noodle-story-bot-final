@@ -84,6 +84,13 @@ function printSummary(label, summary) {
       process.stdout.write(`  - ${row.reason}: ${row.count}\n`);
     }
   }
+
+  if (summary.dataQuality?.warnings?.length) {
+    process.stdout.write("- data quality warnings:\n");
+    for (const warning of summary.dataQuality.warnings) {
+      process.stdout.write(`  - ${warning}\n`);
+    }
+  }
 }
 
 async function main() {

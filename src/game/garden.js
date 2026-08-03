@@ -329,7 +329,7 @@ export function harvestGardenPlots(
   player,
   content,
   effects = {},
-  { plotIndex = null, now = Date.now(), onlyReady = false, allowedIngredients = null, capacityLimiter = null } = {}
+  { plotIndex = null, now = Date.now(), onlyReady = false, allowedIngredients: _allowedIngredients = null, capacityLimiter = null } = {}
 ) {
   const plots = ensureGardenPlots(player, effects);
   const targets = plotIndex === null ? plots.map((_, idx) => idx) : [plotIndex];
@@ -416,8 +416,8 @@ export function harvestGardenPlots(
   };
 }
 
-export function autoHarvestReadyPlots(player, content, effects = {}, { now = Date.now(), allowedIngredients = null, capacityLimiter = null } = {}) {
-  const result = harvestGardenPlots(player, content, effects, { now, onlyReady: true, allowedIngredients, capacityLimiter });
+export function autoHarvestReadyPlots(player, content, effects = {}, { now = Date.now(), allowedIngredients: _allowedIngredients = null, capacityLimiter = null } = {}) {
+  const result = harvestGardenPlots(player, content, effects, { now, onlyReady: true, allowedIngredients: _allowedIngredients, capacityLimiter });
   const harvested = result.results.filter((r) => !r.notReady && r.added > 0);
   return {
     harvested,
@@ -432,11 +432,11 @@ export function formatSeedLines(seeds = {}, content) {
   return entries
     .map(([seedId, qty]) => [seedId, qty, getSeedDisplayName(seedId, content)])
     .sort(([, , nameA], [, , nameB]) => nameA.localeCompare(nameB))
-    .map(([seedId, qty, name]) => `• ${name}: **${qty} seeds**`)
+    .map(([_seedId, qty, name]) => `• ${name}: **${qty} seeds**`)
     .join("\n");
 }
 
-export function formatSpoiledLines(spoiled = {}, content) {
+export function formatSpoiledLines(spoiled = {}, _content) {
   const total = Object.values(spoiled || {}).reduce((sum, v) => sum + (v || 0), 0);
   if (!total) return "_No spoiled ingredients saved._";
   return `• Spoiled ingredients: **${total}**`;
@@ -468,7 +468,7 @@ function getItemName(itemId, content) {
   return content?.items?.[itemId]?.name ?? itemId;
 }
 
-function formatDuration(ms) {
+function _formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;

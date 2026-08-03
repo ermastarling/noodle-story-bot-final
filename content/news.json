@@ -27,17 +27,17 @@
   "pinned": {
     "label": "Latest Update",
     "version": "0.5.0",
-    "date": "2026-07-25",
+    "date": "2026-08-03",
     "classification": "player_update",
     "summary": "A fresh chapter for your noodle shop: cozy new banner menus, one-tap Cook All, and a brand-new Kitchen Line minigame with friendly pacing, plus beautifully refreshed specialization looks that invite you to restyle your space and visit the Store for premium specializations."
   },
   "sections": [
     {
-      "title": "July 2026",
+      "title": "August 2026",
       "entries": [
         {
           "version": "0.5.0",
-          "date": "2026-07-25",
+          "date": "2026-08-03",
           "classification": "player_update",
           "changes": [
             "Every major menu now feels more magical, with handmade banners that bring extra charm to your daily shop routine.",

@@ -49,7 +49,7 @@ export function getIngredientStackCapacity(player) {
  * @param {Object} player - Player profile
  * @returns {number} Max bowls per bowl type
  */
-export function getBowlStackCapacity(player) {
+export function getBowlStackCapacity(_player) {
   // Future: Could add secure_crates bonus here if needed
   return BOWL_STACK_CAP_BASE;
 }

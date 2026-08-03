@@ -18,9 +18,6 @@ function normalizeRawNode(node) {
 export function normalizeRawContainerPayload(payload = {}, { ephemeralFlag = 0 } = {}) {
   const out = { ...(payload || {}) };
 
-  if (Array.isArray(out.embeds)) {
-    out.embeds = out.embeds.map((embed) => embed?.toJSON?.() ?? embed).filter(Boolean);
-  }
   if (Array.isArray(out.components)) {
     out.components = out.components.map((entry) => normalizeRawNode(entry)).filter(Boolean);
   }
@@ -32,13 +29,11 @@ export function normalizeRawContainerPayload(payload = {}, { ephemeralFlag = 0 }
   delete out.ephemeral;
 
   if (typeof out.content === "string" && out.content.trim().length === 0) {
-    const hasEmbeds = Array.isArray(out.embeds) && out.embeds.length > 0;
     const hasComponents = Array.isArray(out.components) && out.components.length > 0;
-    if (hasEmbeds || hasComponents) delete out.content;
+    if (hasComponents) delete out.content;
   }
 
   const hasAnyContent = Boolean(out.content)
-    || (Array.isArray(out.embeds) && out.embeds.length > 0)
     || (Array.isArray(out.components) && out.components.length > 0);
   if (!hasAnyContent) {
     out.content = "\u200b";

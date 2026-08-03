@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
   buildQualityCountsForBias,
@@ -292,4 +294,23 @@ test("Cook flow V2: tutorial mode includes forgiving timer guidance and future 1
 
   assert.match(allText, /generous timing/i);
   assert.match(allText, /10s/i);
+});
+
+test("Cook flow V2: standard and counter-cook flows use quantity-aware turn scaling", () => {
+  const noodleSource = fs.readFileSync(path.resolve(process.cwd(), "src/commands/noodle.js"), "utf8");
+  assert.match(
+    noodleSource,
+    /interaction\.isModalSubmit(?:\?\.)?\(\)\s*&&\s*interaction\.customId\.startsWith\("noodle:pick:cook_qty:"\)/,
+    "normal cook modal should be wired for the V2 minigame flow"
+  );
+  assert.match(
+    noodleSource,
+    /buildCookMinigameScenePayload\(\{[\s\S]*quantity: qty[\s\S]*deriveCookMinigameTotalTurns\(qty\)/m,
+    "normal cook flow should derive turn count from quantity"
+  );
+  assert.match(
+    noodleSource,
+    /counterCook: true/,
+    "counter-cook should still preserve its own flow flag"
+  );
 });

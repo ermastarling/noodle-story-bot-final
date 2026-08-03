@@ -154,12 +154,6 @@ async function trySendReminderForUser(client, userId, {
       errorName: error?.name ?? null,
       errorMessage: String(error?.message ?? error ?? "unknown_error")
     });
-    console.error("Daily reminder DM send failed", {
-      userId,
-      guildId: lastGuildId || resolvedServerId,
-      errorCode: error?.code ?? null,
-      errorMessage: error?.message ?? String(error)
-    });
     return { ok: false, reason: "send_failed", serverId: resolvedServerId };
   }
 }

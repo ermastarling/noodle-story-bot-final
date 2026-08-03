@@ -56,7 +56,7 @@ export function detectDeadlock(player, serverState, content) {
 
   // Check if player can buy anything from market (need to be able to afford at least one item)
   let canBuyAny = false;
-  for (const [itemId, price] of Object.entries(marketPrices)) {
+  for (const [_itemId, price] of Object.entries(marketPrices)) {
     if (price <= player.coins) {
       canBuyAny = true;
       break;
@@ -190,7 +190,7 @@ export function ensureOrderBoardHasFulfillable(orderBoard, knownRecipes) {
  * B6: Market Safety Net
  * If prices exceed coins and no sellables exist, apply pity discount
  */
-export function applyMarketPityDiscount(player, serverState, content) {
+export function applyMarketPityDiscount(player, serverState, _content) {
   // Check if player has any sellable items (market or fishing with valid sell price)
   const inventory = player.inv_ingredients || {};
   let hasSellableItems = false;
@@ -298,7 +298,7 @@ export function applyRepFloorBonus(player) {
  * - Missed seasonal recipes re-enter discovery next yearly cycle
  * - Event items convert to coins at 0.75 * base_price
  */
-export function applySeasonalCatchUp(player, content) {
+export function applySeasonalCatchUp(_player, _content) {
   // TODO: Implement when seasonal system is more developed
   return { applied: false };
 }

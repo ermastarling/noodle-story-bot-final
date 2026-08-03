@@ -134,7 +134,6 @@ export function rollPlayerMarketStock({
   baseOrders = 100
 }) {
   const dayKey = dayKeyUTC();
-  const hasStock = playerState.market_stock && Object.values(playerState.market_stock).some((qty) => Number(qty) > 0);
 
   const rng = makeStreamRng({ mode:"seeded", seed:54321, streamName:"player_market", serverId, userId, dayKey });
   const stock = playerState.market_stock_day === dayKey ? { ...(playerState.market_stock ?? {}) } : {};

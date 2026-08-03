@@ -1,7 +1,7 @@
 import { COIN_BASE, SXP_BASE, REP_BASE, sxpToNext } from "../constants.js";
 import { makeStreamRng, rngBetween } from "../util/rng.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
-import { getFailStreakBonuses, applyRepFloorBonus } from "./resilience.js";
+import { getFailStreakBonuses as _getFailStreakBonuses, applyRepFloorBonus } from "./resilience.js";
 import { loadStaffContent, loadUpgradesContent } from "../content/index.js";
 import { calculateCombinedEffects, applyReputationBonus } from "./upgrades.js";
 import { calculateStaffEffects } from "./staff.js";

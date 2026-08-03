@@ -37,6 +37,11 @@ For variables that accept file paths, absolute paths are honored, and relative p
 - `NOODLE_STARTUP_AVATAR_ENABLED` - set `1` to enable startup avatar sync via Discord API (default disabled)
 - `NOODLE_STARTUP_AVATAR_GIF_URL` - HTTPS URL to the avatar asset to apply at startup (use a GIF for animated avatars)
 
+## Command Registration Env Vars
+
+- `DISCORD_GUILD_ID` - explicit guild target for workflow-driven guild registration; this takes precedence over `NOODLE_OFFICIAL_GUILD_ID` and `NOODLE_DEV_GUILD_ID` when registering commands in guild mode
+- `NOODLE_OFFICIAL_GUILD_ID` - official runtime guild for alerts, social bridge checks, and other official-guild-only flows; runtime code still prefers this value before `NOODLE_DEV_GUILD_ID` and `DISCORD_GUILD_ID`
+
 ## Gameplay Tuning Env Vars
 
 - `NOODLE_ORDER_ACCEPT_CAP_BASE` - base max accepted orders per player (default `5`)

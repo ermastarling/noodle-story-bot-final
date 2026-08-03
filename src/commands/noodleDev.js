@@ -308,7 +308,6 @@ export const noodleDevCommand = {
           // Complete deferred component interaction first so the original response does not hang.
           await interaction.editReply({
             content: interaction.message?.content ?? " ",
-            embeds: interaction.message?.embeds ?? [],
             components: interaction.message?.components ?? []
           });
         } catch {

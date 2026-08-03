@@ -8,7 +8,10 @@ import {
 } from "../game/decor.js";
 import { theme } from "../ui/theme.js";
 import { getIcon } from "../ui/icons.js";
-import { buildComponentsV2PayloadWithNoticeCards } from "../ui/componentsV2.js";
+import {
+  buildComponentsV2PayloadWithNoticeCards,
+  isComponentsV2Payload
+} from "../ui/componentsV2.js";
 
 function ownerFooterText(userOrMember) {
   const member = userOrMember?.user ? userOrMember : null;
@@ -36,6 +39,22 @@ function buildMenuEmbed({ title, description, user, color = theme.colors.primary
   return applyOwnerFooter(embed, user);
 }
 
+function normalizeLegacyComponentRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
+  const normalized = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const baseRow = row?.toJSON?.() ?? row;
+    const rawComponents = baseRow?.components ?? row?.components ?? [];
+    const mapped = (rawComponents || [])
+      .map((comp) => comp?.toJSON?.() ?? comp)
+      .filter(Boolean);
+    if (!mapped.length) continue;
+    normalized.push({ type: 1, components: mapped });
+  }
+  return normalized;
+}
+
 function buildDecorV2Message({ title, description, ownerId, components = [] } = {}) {
   return buildComponentsV2PayloadWithNoticeCards({
     mainComponents: [
@@ -45,6 +64,35 @@ function buildDecorV2Message({ title, description, ownerId, components = [] } = 
     ],
     ownerId: String(ownerId || "").trim() || undefined,
     ephemeral: false
+  });
+}
+
+export function normalizePayloadForReply(interaction, payload = {}, _player = null) {
+  const source = payload ?? {};
+
+  if (source && typeof source === "object") {
+    if (isComponentsV2Payload(source)) return source;
+
+    const hasSourceNativeComponents = Array.isArray(source.mainComponents) || Array.isArray(source.notices);
+    if (hasSourceNativeComponents) {
+      const explicitMainComponents = Array.isArray(source.mainComponents) ? source.mainComponents : [];
+      const normalizedRows = normalizeLegacyComponentRows(source.components);
+      const isEphemeral = source.ephemeral === true || ((Number(source.flags) & (1 << 6)) !== 0);
+      return buildComponentsV2PayloadWithNoticeCards({
+        mainComponents: [...explicitMainComponents, ...normalizedRows],
+        notices: Array.isArray(source.notices) ? source.notices : [],
+        ownerId: interaction?.user?.id ?? source.ownerId,
+        ephemeral: isEphemeral
+      });
+    }
+
+  }
+
+  return buildComponentsV2PayloadWithNoticeCards({
+    mainComponents: Array.isArray(source?.components) ? source.components : [],
+    notices: [],
+    ownerId: interaction?.user?.id ?? source?.ownerId,
+    ephemeral: source?.ephemeral === true || ((Number(source?.flags) & (1 << 6)) !== 0)
   });
 }
 
