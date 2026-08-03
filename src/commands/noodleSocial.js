@@ -222,8 +222,14 @@ function cardSpecToTextComponents(card = {}) {
   }
 
   const footerText = String(raw?.footer?.text ?? "").trim();
-  if (footerText) {
-    textBlocks.push(footerText);
+  const sanitizedFooterText = footerText
+    .split("•")
+    .map((segment) => String(segment ?? "").trim())
+    .filter((segment) => segment && !/^owner\s*:/i.test(segment))
+    .join(" • ")
+    .trim();
+  if (sanitizedFooterText) {
+    textBlocks.push(sanitizedFooterText);
   }
 
   if (textBlocks.length > 0) {
@@ -394,7 +400,7 @@ function getGlobalLeaderboardPage(typeIndex, page = 0) {
   };
 }
 
-function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
+function buildLeaderboardView({ leaderboardPage, userId, ownerUser: _ownerUser }) {
   const { type, safeIndex, safePage, totalPages, startRank, rows } = leaderboardPage;
 
   const leaderboardText = rows
@@ -407,7 +413,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
 
   const title = `${getIcon("leaderboard")} Server Leaderboard`;
   const description = `**${type.title()}**\n\n${leaderboardText || "No entries yet."}`;
-  const footerText = `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}`;
+  const footerText = `Page ${safePage + 1}/${totalPages}`;
 
   const typeCount = LEADERBOARD_TYPES.length;
   const canNavigate = typeCount > 1 || totalPages > 1;
@@ -479,7 +485,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser }) {
   };
 }
 
-function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
+function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser: _ownerUser }) {
   const { type, safeIndex, safePage, totalPages, startRank, rows } = leaderboardPage;
 
   const leaderboardText = rows
@@ -493,7 +499,7 @@ function buildGlobalLeaderboardView({ leaderboardPage, userId, ownerUser }) {
 
   const title = `${getIcon("leaderboard")} Global Leaderboard`;
   const description = `**${type.title()}**\n\n${leaderboardText || "No entries yet."}`;
-  const footerText = `Page ${safePage + 1}/${totalPages} • ${ownerFooterText(ownerUser)}`;
+  const footerText = `Page ${safePage + 1}/${totalPages}`;
 
   const typeCount = LEADERBOARD_TYPES.length;
   const canNavigate = typeCount > 1 || totalPages > 1;
@@ -1239,12 +1245,15 @@ function convertPayloadToComponentsV2(interaction, payload = {}) {
   const hasSourceNativeComponents = Array.isArray(payload?.mainComponents) || Array.isArray(payload?.notices);
   const safeContent = String(payload?.content ?? "").trim();
   const contentComponent = safeContent ? [{ type: 10, content: safeContent }] : [];
+  const embedComponents = Array.isArray(payload?.embeds)
+    ? payload.embeds.flatMap((embed) => cardSpecToTextComponents(embed))
+    : [];
   if (hasSourceNativeComponents) {
     const explicitMainComponents = Array.isArray(payload?.mainComponents) ? payload.mainComponents : [];
     const normalizedRows = normalizeLegacyComponentRows(payload?.components);
     const isEphemeral = payload?.ephemeral === true || ((Number(payload?.flags) & (1 << 6)) !== 0);
     const built = buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: [...contentComponent, ...explicitMainComponents, ...normalizedRows],
+      mainComponents: [...contentComponent, ...embedComponents, ...explicitMainComponents, ...normalizedRows],
       notices: Array.isArray(payload?.notices) ? payload.notices : [],
       ownerId: interaction?.user?.id ?? payload?.ownerId,
       ephemeral: isEphemeral
@@ -1258,7 +1267,7 @@ function convertPayloadToComponentsV2(interaction, payload = {}) {
   }
 
   const built = buildComponentsV2PayloadWithNoticeCards({
-    mainComponents: [...contentComponent, ...(Array.isArray(payload?.components) ? payload.components : [])],
+    mainComponents: [...contentComponent, ...embedComponents, ...normalizeLegacyComponentRows(payload?.components)],
     notices: [],
     ownerId: interaction?.user?.id ?? payload.ownerId,
     ephemeral: payload.ephemeral === true || ((Number(payload.flags) & (1 << 6)) !== 0)

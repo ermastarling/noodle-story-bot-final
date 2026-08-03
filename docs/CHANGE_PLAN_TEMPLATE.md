@@ -10,6 +10,7 @@ Operating rules:
 - Reuse existing helpers/constants before adding new logic.
 - Preserve scope, auth, and compatibility gates.
 - Update this file live as work progresses.
+- Use this template exactly, do not drift from this template execution style.
 
 Progress legend:
 - [ ] not started

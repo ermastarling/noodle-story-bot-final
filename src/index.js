@@ -17,6 +17,7 @@ import { theme } from "./ui/theme.js";
   
   const Client = Discord.Client;
   const Intents = Discord.Intents;
+  const MESSAGE_FLAG_EPHEMERAL = Discord.MessageFlags?.Ephemeral ?? Discord.Constants?.MessageFlags?.EPHEMERAL ?? (1 << 6);
 
   if (!Client || !Intents) {
     console.error("❌ Failed to load discord.js properly");
@@ -597,9 +598,9 @@ import { theme } from "./ui/theme.js";
         } catch (_) {
           // Ignore when there is no editable reply to clear.
         }
-        await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral, ephemeral: true });
+        await interaction.followUp({ content: message, flags: MESSAGE_FLAG_EPHEMERAL, ephemeral: true });
       } else {
-        await interaction.reply({ content: message, flags: MessageFlags.Ephemeral, ephemeral: true });
+        await interaction.reply({ content: message, flags: MESSAGE_FLAG_EPHEMERAL, ephemeral: true });
       }
       return true;
     } catch (replyErr) {
@@ -2674,31 +2675,58 @@ import { theme } from "./ui/theme.js";
     console.log(`INFO: Bot-list stats heartbeat enabled every ${Math.round(botListStatsSyncIntervalMs / 1000)}s.`);
   }
 
-  async function fetchRecommendedShardCount() {
-    try {
-      const response = await fetch("https://discord.com/api/v10/gateway/bot", {
-        method: "GET",
-        headers: {
-          Authorization: `Bot ${token}`
-        }
-      });
+  function wait(ms = 0) {
+    const delay = Math.max(0, Number(ms) || 0);
+    return new Promise((resolve) => setTimeout(resolve, delay));
+  }
 
-      if (!response.ok) {
+  async function fetchRecommendedShardCount() {
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const response = await fetch("https://discord.com/api/v10/gateway/bot", {
+          method: "GET",
+          headers: {
+            Authorization: `Bot ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json().catch(() => ({}));
+          const recommended = Number(data?.shards);
+          if (!Number.isFinite(recommended) || recommended <= 0) return null;
+          return Math.floor(recommended);
+        }
+
         const responseBody = await response.text().catch(() => "");
-        console.error(
-          `❌ Failed to fetch recommended shard count: ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
+        const isRateLimited = Number(response.status) === 429;
+        if (isRateLimited && attempt < maxAttempts) {
+          const retryHeaderSeconds = Number(response.headers?.get("retry-after"));
+          const retryBodyMatch = responseBody.match(/"retry_after"\s*:\s*([0-9.]+)/i);
+          const retryBodySeconds = retryBodyMatch ? Number(retryBodyMatch[1]) : NaN;
+          const retrySeconds = Number.isFinite(retryHeaderSeconds)
+            ? retryHeaderSeconds
+            : (Number.isFinite(retryBodySeconds) ? retryBodySeconds : 0.25 * (2 ** (attempt - 1)));
+          await wait(Math.max(200, Math.round(retrySeconds * 1000)));
+          continue;
+        }
+
+        console.warn(
+          `⚠️ Failed to fetch recommended shard count: ${response.status} ${response.statusText}${responseBody ? ` - ${responseBody.slice(0, 300)}` : ""}`
         );
         return null;
+      } catch (error) {
+        if (attempt < maxAttempts) {
+          await wait(200 * (2 ** (attempt - 1)));
+          continue;
+        }
+        console.warn("⚠️ Failed to fetch recommended shard count:", error?.stack ?? error);
+        return null;
       }
-
-      const data = await response.json().catch(() => ({}));
-      const recommended = Number(data?.shards);
-      if (!Number.isFinite(recommended) || recommended <= 0) return null;
-      return Math.floor(recommended);
-    } catch (error) {
-      console.error("❌ Failed to fetch recommended shard count:", error?.stack ?? error);
-      return null;
     }
+
+    return null;
   }
 
   async function refreshShardHealth({ reason = "event" } = {}) {
@@ -3619,6 +3647,9 @@ import { theme } from "./ui/theme.js";
 
       if (guild?.id === officialGuildId) return;
       if (shouldSkipUntracked || isLikelyAvailabilityTransition) {
+        if (!guildTrackingPrimed) {
+          return;
+        }
         const expectedSkip = isLikelyAvailabilityTransition || shouldSkipUntracked;
         const logFn = expectedSkip ? console.info : console.warn;
         logFn("Skipping guildDelete dev alert for untracked or unavailable/unknown guild state", {

@@ -426,8 +426,7 @@ function hasGreenButtonInComponents(components = []) {
 function withOwnerFooter(components = [], ownerId = "") {
   const safeOwnerId = String(ownerId ?? "").trim();
   if (!safeOwnerId || hasOwnerFooter(components)) return components;
-
-  return appendFooterSegment(components, `Menu owner: <@${safeOwnerId}>`);
+  return components;
 }
 
 function withGreenButtonFooterTip(components = []) {

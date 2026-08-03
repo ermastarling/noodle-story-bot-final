@@ -3424,15 +3424,11 @@ function buildKitchenViewPayload({ player, user, userId, server = null, pendingM
     .join("\n") || "_No forageables yet_.";
   const hiddenCount = Math.max(0, forageEntries.length - 10);
   const forageFooter = hiddenCount > 0 ? `\n…and ${hiddenCount} more.` : "";
-  const craftableLine = craftableMax > 0
-    ? null
-    : " ";
   const forageIcon = getIcon("forageables");
   const proteinIcon = getIcon("protein");
   const forageValue = [
     "· · · · · · ·",
     `${forageIcon} **${totalForage}** in pantry`,
-    craftableLine,
     `${forageList}${forageFooter}`
   ].filter(Boolean).join("\n");
 
@@ -4297,8 +4293,10 @@ function normalizeComponentsV2Payload(payload = {}) {
 
 function normalizeEmbedFieldName(name = "") {
   return String(name ?? "")
+    .replace(/<a?:[^:>]+:\d+>/g, " ")
     .toLowerCase()
     .replace(/:[a-z0-9_+-]+:/gi, " ")
+    .replace(/\b\d{5,}\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -4332,25 +4330,16 @@ function buildProfileEmbedV2Components(raw = {}) {
     { leftLabel: "Bowls Served", leftValue: bowlsServed, rightLabel: "Level", rightValue: level },
     { leftLabel: "REP", leftValue: rep, rightLabel: "Coins", rightValue: coins }
   ];
-  const leftColWidth = Math.max(14, ...statRows.map((row) => Math.max(
-    String(row.leftLabel).length,
-    String(row.leftValue).length
-  )));
-  const rightColWidth = Math.max(10, ...statRows.map((row) => Math.max(
-    String(row.rightLabel).length,
-    String(row.rightValue).length
-  )));
+  const leftColWidth = Math.max(20, ...statRows.map((row) => String(`${row.leftLabel}: ${row.leftValue}`).length));
+  const rightColWidth = Math.max(16, ...statRows.map((row) => String(`${row.rightLabel}: ${row.rightValue}`).length));
   const divider = "  |  ";
   const separator = `${"-".repeat(leftColWidth)}${divider}${"-".repeat(rightColWidth)}`;
   const statLines = [];
   for (let idx = 0; idx < statRows.length; idx += 1) {
     const row = statRows[idx];
-    const leftLabel = String(row.leftLabel).padEnd(leftColWidth, " ");
-    const rightLabel = String(row.rightLabel).padEnd(rightColWidth, " ");
-    const leftValue = String(row.leftValue).padEnd(leftColWidth, " ");
-    const rightValue = String(row.rightValue).padEnd(rightColWidth, " ");
-    statLines.push(`${leftLabel}${divider}${rightLabel}`);
-    statLines.push(`${leftValue}${divider}${rightValue}`);
+    const leftCell = String(`${row.leftLabel}: ${row.leftValue}`).padEnd(leftColWidth, " ");
+    const rightCell = `${row.rightLabel}: ${row.rightValue}`;
+    statLines.push(`${leftCell}${divider}${rightCell}`);
     if (idx < statRows.length - 1) statLines.push(separator);
   }
 
@@ -17877,40 +17866,23 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         const pretty = sellLines.map((x) => `• **${x.qty}× ** ${x.name} (${x.price}c ea)`).join("\n");
 
-        const pickerPayload = buildSellPickerPayload({
-          userId,
-          p: p2,
-          s,
-          ownerUser: interaction.member ?? interaction.user,
-          page
-        });
-
-        const baseEmbed = pickerPayload.embeds?.[0] ?? null;
         const saleSummary = `Sold:\n${pretty}\n\nTotal: **${totalGain}c**.`;
-
-        let sellEmbed;
-        if (baseEmbed) {
-          const baseDescription = baseEmbed?.data?.description ?? baseEmbed?.description ?? "";
-          const combinedDescription = [saleSummary, baseDescription].filter(Boolean).join("\n\n");
-          baseEmbed.setTitle(`${getIcon("coins")} Sell Items`);
-          baseEmbed.setDescription(combinedDescription);
-          sellEmbed = baseEmbed;
-        } else {
-          sellEmbed = buildMenuEmbed({
-            title: `${getIcon("coins")} Sold Items`,
-            description: saleSummary,
-            user: interaction.member ?? interaction.user
-          });
-        }
+        const selectedNames = formatSelectedItemNames(selectedIds);
+        const quantityRow = buildSellQuantityRow(userId, selectedIds, page, selectionToken);
+        const postSellDescription = [
+          saleSummary,
+          `**Selected:** ${selectedNames}`,
+          "Choose how you want to sell:"
+        ].join("\n\n");
 
         const replyObj = {
-          content: pickerPayload.content ?? " ",
-          mainComponents: legacyEmbedsToV2TextComponentsForLegacy([sellEmbed]), notices: [],
-          components: pickerPayload.ephemeral
-            ? (pickerPayload.components ?? [])
-            : [buildSellQuantityRow(userId, selectedIds, page, selectionToken), ...(pickerPayload.components ?? [noodleMainMenuRow(userId)])],
-          targetMessageId: pickerPayload.ephemeral ? undefined : (interaction.message?.id ?? null),
-          ephemeral: pickerPayload.ephemeral
+          ...buildSellMenuPayload({
+            title: `${getIcon("coins")} Sell Items`,
+            description: postSellDescription,
+            userId,
+            components: [quantityRow]
+          }),
+          targetMessageId: interaction.message?.id ?? null
         };
 
         if (db) {
