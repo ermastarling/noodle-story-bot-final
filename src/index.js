@@ -3570,12 +3570,7 @@ import { theme } from "./ui/theme.js";
     }
 
     const startupCounts = getCurrentBotListCounts();
-    if (hasAnyConfiguredBotListStatsSync()) {
-      await updateAllBotListServerCounts(startupCounts, { reason: "ready" });
-    } else {
-      console.log("INFO: Skipping bot-list stats sync on ready (no providers configured with both URL and token).");
-    }
-    await updateOfficialStatsChannels(startupCounts, { reason: "ready" });
+    console.log("INFO: Skipping ready-time bot-list and official stats push; using heartbeat and guild lifecycle events.");
     await syncDiscordBotListCommands({ reason: "ready" });
     await syncRadarCpdvCommands({ reason: "ready" });
     await runRankTopAuthPreflight({ reason: "ready" });
@@ -3640,19 +3635,13 @@ import { theme } from "./ui/theme.js";
       const isLikelyAvailabilityTransition = guild?.unavailable === true || (!guildName && memberCount <= 0);
       const shouldSkipUntracked = guildTrackingPrimed && trackedGuildCountBeforeDelete > 0 && !wasTracked;
 
-      const currentCounts = getCurrentBotListCounts();
-      await updateAllBotListServerCounts(currentCounts, { reason: "guildDelete" });
-      await updateOfficialStatsChannels(currentCounts, { reason: "guildDelete" });
-      await refreshShardHealth({ reason: "guildDelete" });
-
-      if (guild?.id === officialGuildId) return;
       if (shouldSkipUntracked || isLikelyAvailabilityTransition) {
         if (!guildTrackingPrimed) {
           return;
         }
         const expectedSkip = isLikelyAvailabilityTransition || shouldSkipUntracked;
         const logFn = expectedSkip ? console.info : console.warn;
-        logFn("Skipping guildDelete dev alert for untracked or unavailable/unknown guild state", {
+        logFn("Skipping guildDelete stats/dev alert for untracked or unavailable/unknown guild state", {
           guildId: guild?.id ?? null,
           guildTrackingPrimed,
           trackedGuildCountBeforeDelete,
@@ -3664,6 +3653,12 @@ import { theme } from "./ui/theme.js";
         return;
       }
 
+      const currentCounts = getCurrentBotListCounts();
+      await updateAllBotListServerCounts(currentCounts, { reason: "guildDelete" });
+      await updateOfficialStatsChannels(currentCounts, { reason: "guildDelete" });
+      await refreshShardHealth({ reason: "guildDelete" });
+
+      if (guild?.id === officialGuildId) return;
       await sendDevAlert({
         title: "Server Left Alert!",
         description:

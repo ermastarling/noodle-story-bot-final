@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
+import { REST } from "@discordjs/rest";
 import discordPkg from "discord.js";
 import {
   openDb,
@@ -1323,16 +1324,41 @@ function isUnknownInteractionError(error) {
   return Number(error?.code) === 10062 || message.includes("Unknown interaction");
 }
 
+function resolveRuntimeBotToken(interaction) {
+  const fromClient = String(interaction?.client?.token || "").trim();
+  if (fromClient) return fromClient;
+  return String(process.env.DISCORD_TOKEN || "").trim();
+}
+
+function ensureInteractionClientToken(interaction, reason = "runtime") {
+  if (interaction?.client?.token) return true;
+  const token = resolveRuntimeBotToken(interaction);
+  if (!token || !interaction?.client) return false;
+  interaction.client.token = token;
+  console.warn(`⚠️ Restored missing Discord client token (${reason}).`);
+  return true;
+}
+
 async function rawWebhookEditOriginal(interaction, payload) {
   const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
   const token = interaction?.token;
   if (!interaction?.client?.api || !applicationId || !token) {
     throw new Error("Raw webhook edit unavailable: missing client api/applicationId/token");
   }
-  return interaction.client.api
-    .webhooks(applicationId, token)
-    .messages("@original")
-    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+  ensureInteractionClientToken(interaction, "socialRawWebhookEditOriginal");
+  try {
+    return await interaction.client.api
+      .webhooks(applicationId, token)
+      .messages("@original")
+      .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+  } catch (error) {
+    if (!isWebhookTokenUnavailableError(error)) throw error;
+    if (!ensureInteractionClientToken(interaction, "socialRawWebhookEditOriginal:retry")) throw error;
+    return interaction.client.api
+      .webhooks(applicationId, token)
+      .messages("@original")
+      .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+  }
 }
 
 async function rawWebhookFollowUp(interaction, payload) {
@@ -1341,9 +1367,18 @@ async function rawWebhookFollowUp(interaction, payload) {
   if (!interaction?.client?.api || !applicationId || !token) {
     throw new Error("Raw webhook followUp unavailable: missing client api/applicationId/token");
   }
-  return interaction.client.api
-    .webhooks(applicationId, token)
-    .post({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+  ensureInteractionClientToken(interaction, "socialRawWebhookFollowUp");
+  try {
+    return await interaction.client.api
+      .webhooks(applicationId, token)
+      .post({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+  } catch (error) {
+    if (!isWebhookTokenUnavailableError(error)) throw error;
+    if (!ensureInteractionClientToken(interaction, "socialRawWebhookFollowUp:retry")) throw error;
+    return interaction.client.api
+      .webhooks(applicationId, token)
+      .post({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+  }
 }
 
 function canUseRawWebhookResponse(interaction) {
@@ -1390,10 +1425,22 @@ async function rawChannelEditMessage(interaction, channelId, messageId, payload)
   if (!interaction?.client?.api || !channelId || !messageId) {
     throw new Error("Raw channel message edit unavailable: missing client api/channelId/messageId");
   }
-  return interaction.client.api
-    .channels(channelId)
-    .messages(messageId)
-    .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+  const data = normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral });
+  ensureInteractionClientToken(interaction, "socialRawChannelEditMessage");
+
+  try {
+    return await interaction.client.api
+      .channels(channelId)
+      .messages(messageId)
+      .patch({ data });
+  } catch (error) {
+    if (!isWebhookTokenUnavailableError(error)) throw error;
+    const token = resolveRuntimeBotToken(interaction);
+    if (!token) throw error;
+    interaction.client.token = token;
+    const rest = new REST({ version: "10" }).setToken(token);
+    return rest.patch(`/channels/${channelId}/messages/${messageId}`, { body: data });
+  }
 }
 
 async function sendSocialPayload(interaction, payload = {}) {
