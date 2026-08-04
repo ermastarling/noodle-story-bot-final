@@ -1335,7 +1335,6 @@ function ensureInteractionClientToken(interaction, reason = "runtime") {
   const token = resolveRuntimeBotToken(interaction);
   if (!token || !interaction?.client) return false;
   interaction.client.token = token;
-  console.warn(`⚠️ Restored missing Discord client token (${reason}).`);
   return true;
 }
 

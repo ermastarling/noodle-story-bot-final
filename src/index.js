@@ -938,7 +938,6 @@ import { theme } from "./ui/theme.js";
     const fallbackToken = String(token || "").trim() || String(process.env.DISCORD_TOKEN || "").trim();
     if (!fallbackToken) return false;
     client.token = fallbackToken;
-    console.warn(`⚠️ Restored missing Discord client token (${reason}).`);
     return true;
   }
 
@@ -3768,6 +3767,8 @@ import { theme } from "./ui/theme.js";
         console.error(`Interaction is ${age}ms old, likely to expire. Skipping.`);
         return;
       }
+
+      ensureClientTokenHydrated("interactionCreate");
     
     // IMMEDIATELY defer buttons/selects/modals FIRST, before ANY other logic
     // Note: Discord.js v13 uses isSelectMenu(), not isStringSelectMenu()

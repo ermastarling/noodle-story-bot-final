@@ -4696,7 +4696,6 @@ function ensureInteractionClientToken(interaction, reason = "runtime") {
   const token = resolveRuntimeBotToken(interaction);
   if (!token || !interaction?.client) return false;
   interaction.client.token = token;
-  console.warn(`⚠️ Restored missing Discord client token (${reason}).`);
   return true;
 }
 
@@ -7400,6 +7399,7 @@ const shouldDeferEphemeral = group === "dev" && !isDevAdmin(userId);
 // Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
 if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !interaction.deferred && !interaction.replied) {
+  ensureInteractionClientToken(interaction, "runNoodle:defer");
   try {
     if (shouldDeferEphemeral) {
       await interaction.deferReply({ ephemeral: true });
@@ -7407,8 +7407,17 @@ if ((interaction.isChatInputCommand?.() || interaction.isCommand?.()) && !intera
       await interaction.deferReply();
     }
   } catch (_e) {
-    // If defer fails, mark as deferred to avoid double-reply attempts
-    interaction.deferred = true;
+    if (isWebhookTokenUnavailableError(_e) && ensureInteractionClientToken(interaction, "runNoodle:deferRetry")) {
+      try {
+        if (shouldDeferEphemeral) {
+          await interaction.deferReply({ ephemeral: true });
+        } else {
+          await interaction.deferReply();
+        }
+      } catch {
+        // Continue and let downstream reply fallback handle response paths.
+      }
+    }
   }
 }
 
