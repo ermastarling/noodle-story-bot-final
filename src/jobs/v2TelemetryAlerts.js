@@ -41,29 +41,29 @@ export function buildReportText({ summary = {}, delta, recommendation, windowHou
   const metricSummary = summary && typeof summary === "object" ? summary : {};
   const lines = [
     `Window: last ${windowHours}h`,
-    `Metric: transitions - ${safe(metricSummary.transitions, "0")} transitions recorded in this window.`,
-    `Metric: errors - ${safe(metricSummary.errors, "0")} scene errors captured; meaning: runtime failures still need inspection if counts spike.`,
-    `Metric: gate bypasses - ${safe(metricSummary.bypasses, "0")} bypasses; meaning: rollout gating was skipped for these routes.`,
-    `Metric: error rate - ${formatPct(metricSummary.errorRatePct)}; meaning: the share of transitions that ended in error.`,
-    `Metric: loops - ${safe(metricSummary.loops, "0")} loop summaries; meaning: enough samples exist to compare efficiency trends.`,
-    `Metric: avg clicks/loop - ${safe(metricSummary.clickAvg)}; meaning: interaction effort per loop.`,
-    `Metric: loop p50 - ${formatMs(metricSummary.loopTimeP50)}; meaning: typical runtime latency for the middle of the sample.`,
-    `Metric: loop p95 - ${formatMs(metricSummary.loopTimeP95)}; meaning: worst-case latency tail for the current window.`
+    "",
+    "Core metrics:",
+    `- Transitions: ${safe(metricSummary.transitions, "0")}`,
+    `- Errors: ${safe(metricSummary.errors, "0")} (${formatPct(metricSummary.errorRatePct)})`,
+    `- Gate bypasses: ${safe(metricSummary.bypasses, "0")}`,
+    `- Loop summaries: ${safe(metricSummary.loops, "0")}`,
+    `- Avg clicks per loop: ${safe(metricSummary.clickAvg)}`,
+    `- Loop latency p50: ${formatMs(metricSummary.loopTimeP50)}`,
+    `- Loop latency p95: ${formatMs(metricSummary.loopTimeP95)}`
   ];
 
   if (delta) {
     lines.push(
       "",
       "Baseline comparison:",
-      `Meaning: click cost changed by ${safe(delta.clickAvgDelta)} (${safe(delta.clickAvgDeltaPct)}%) versus the previous window.`,
-      `Meaning: median loop latency changed by ${formatMs(delta.loopTimeP50Delta)} (${safe(delta.loopTimeP50DeltaPct)}%).`,
-      `Meaning: tail latency changed by ${formatMs(delta.loopTimeP95Delta)} (${safe(delta.loopTimeP95DeltaPct)}%).`,
-      `Meaning: error volume changed by ${safe(delta.errorCountDelta)} events and ${safe(delta.errorRateDeltaPct)} percentage points.`,
-      `Action: inspect the affected flow when deltas move materially from baseline.`,
-      `Threshold: compare against the previous window and the configured alert thresholds.`
+      `- Avg clicks delta: ${safe(delta.clickAvgDelta)} (${safe(delta.clickAvgDeltaPct)}%)`,
+      `- Loop p50 delta: ${formatMs(delta.loopTimeP50Delta)} (${safe(delta.loopTimeP50DeltaPct)}%)`,
+      `- Loop p95 delta: ${formatMs(delta.loopTimeP95Delta)} (${safe(delta.loopTimeP95DeltaPct)}%)`,
+      `- Error count delta: ${safe(delta.errorCountDelta)}`,
+      `- Error rate delta: ${safe(delta.errorRateDeltaPct)} percentage points`
     );
   } else {
-    lines.push("", "Baseline comparison:", "Meaning: no baseline window was available for comparison.", "Action: inspect the current window directly and compare against later runs.");
+    lines.push("", "Baseline comparison:", "- No prior window data available.");
   }
 
   if (metricSummary?.errorsByReason?.length) {
@@ -85,10 +85,10 @@ export function buildReportText({ summary = {}, delta, recommendation, windowHou
   }
 
   lines.push("", `Recommendation: ${recommendation}`);
-  lines.push("Action: follow the recommendation as an investigate-first signal, not a hard release gate.");
 
   if (issues.length) {
     lines.push("", "Detected issues:", ...issues.map((issue) => `- ${issue}`));
+    lines.push("Next action: investigate detected issues first, then rerun the next report window.");
   }
 
   return lines.join("\n").slice(0, 4000);

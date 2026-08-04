@@ -130,7 +130,7 @@ test("V2 telemetry report: surfaces data-quality warnings for dropped telemetry"
   assert.match(summary.dataQuality.warnings[0], /drop/i);
 });
 
-test("V2 telemetry report: alert text includes transitions numeric metric", () => {
+test("V2 telemetry report: alert text includes concise transitions metric", () => {
   const text = buildReportText({
     summary: {
       transitions: 12,
@@ -148,5 +148,6 @@ test("V2 telemetry report: alert text includes transitions numeric metric", () =
     issues: []
   });
 
-  assert.match(text, /Metric: transitions - 12 transitions recorded in this window\./);
+  assert.match(text, /Transitions: 12/);
+  assert.match(text, /Errors: 1 \(8.3%\)/);
 });

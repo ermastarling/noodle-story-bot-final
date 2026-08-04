@@ -1335,6 +1335,57 @@ async function rawWebhookEditOriginal(interaction, payload) {
     .patch({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
 }
 
+async function rawWebhookFollowUp(interaction, payload) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  const token = interaction?.token;
+  if (!interaction?.client?.api || !applicationId || !token) {
+    throw new Error("Raw webhook followUp unavailable: missing client api/applicationId/token");
+  }
+  return interaction.client.api
+    .webhooks(applicationId, token)
+    .post({ data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral }) });
+}
+
+function canUseRawWebhookResponse(interaction) {
+  const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
+  return Boolean(interaction?.client?.api && applicationId && interaction?.token);
+}
+
+export async function sendEphemeralFollowUp(interaction, payload = {}) {
+  const followUpPayload = { ...payload, flags: MessageFlags.Ephemeral, ephemeral: true };
+  const isV2FollowUpPayload = isComponentsV2Payload(followUpPayload);
+
+  if (isV2FollowUpPayload && canUseRawWebhookResponse(interaction)) {
+    try {
+      return await rawWebhookFollowUp(interaction, followUpPayload);
+    } catch (error) {
+      if (isUnknownWebhookError(error) || isUnknownInteractionError(error)) {
+        return null;
+      }
+      // Preserve prior behavior for non-webhook failures by falling back once.
+    }
+  }
+
+  try {
+    return await interaction.followUp(followUpPayload);
+  } catch (error) {
+    if (isV2FollowUpPayload && isInvalidComponentTypeError(error) && canUseRawWebhookResponse(interaction)) {
+      try {
+        return await rawWebhookFollowUp(interaction, followUpPayload);
+      } catch (rawError) {
+        if (isUnknownWebhookError(rawError) || isUnknownInteractionError(rawError)) {
+          return null;
+        }
+        throw rawError;
+      }
+    }
+    if (isUnknownWebhookError(error) || isUnknownInteractionError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function rawChannelEditMessage(interaction, channelId, messageId, payload) {
   if (!interaction?.client?.api || !channelId || !messageId) {
     throw new Error("Raw channel message edit unavailable: missing client api/channelId/messageId");
@@ -1427,14 +1478,7 @@ async function componentCommit(interaction, opts) {
           // ignore if already deleted or not present
         }
       }
-      try {
-        return await interaction.followUp({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
-      } catch (_e) {
-        if (isUnknownWebhookError(_e) || isUnknownInteractionError(_e)) {
-          return null;
-        }
-        throw _e;
-      }
+      return sendEphemeralFollowUp(interaction, rest);
     }
     try {
       return await interaction.reply({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
@@ -1580,14 +1624,7 @@ async function errorReply(interaction, content) {
         // ignore if already deleted or not present
       }
     }
-    try {
-      return await interaction.followUp(payload);
-    } catch (_e) {
-      if (isUnknownWebhookError(_e) || isUnknownInteractionError(_e)) {
-        return null;
-      }
-      throw _e;
-    }
+    return sendEphemeralFollowUp(interaction, payload);
   }
   try {
     return await interaction.reply(payload);
@@ -2198,7 +2235,7 @@ async function handleParty(interaction) {
       ephemeral: true
     });
     if (interaction.deferred || interaction.replied) {
-      return interaction.followUp(payload);
+      return sendEphemeralFollowUp(interaction, payload);
     }
     return interaction.reply(payload);
   }

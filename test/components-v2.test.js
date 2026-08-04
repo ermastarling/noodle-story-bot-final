@@ -14,6 +14,7 @@ import {
 import { buildHelpPageV2Payload, buildMultiBuyPickerPayload } from "../src/commands/noodle.js";
 import { buildMainAndNoticesFromEmbedsForTest } from "../src/commands/noodle.js";
 import { normalizePayloadForReply as normalizeSocialPayloadForReply } from "../src/commands/noodleSocial.js";
+import { sendEphemeralFollowUp } from "../src/commands/noodleSocial.js";
 import { normalizePayloadForReply as normalizeDecorPayloadForReply } from "../src/commands/noodleDecor.js";
 import { normalizePayloadForReply as normalizeQuestsPayloadForReply } from "../src/commands/noodleQuests.js";
 import { normalizePayloadForReply as normalizeStaffPayloadForReply } from "../src/commands/noodleStaff.js";
@@ -659,6 +660,73 @@ test("Components V2: replyOrEditInteraction retries raw webhook edit on INVALID_
   const result = await replyOrEditInteraction(interaction, payload);
 
   assert.equal(patchCalls, 2);
+  assert.equal(result?.mode, "rawRetry");
+});
+
+test("Components V2: social ephemeral follow-up prefers raw webhook for V2 payloads", async () => {
+  let rawFollowUpCalls = 0;
+  let followUpCalls = 0;
+
+  const interaction = {
+    applicationId: "app-social-1",
+    token: "tok-social-1",
+    client: {
+      api: {
+        webhooks: () => ({
+          post: async () => {
+            rawFollowUpCalls += 1;
+            return { ok: true, mode: "rawWebhookFollowUp" };
+          }
+        })
+      }
+    },
+    followUp: async () => {
+      followUpCalls += 1;
+      return { ok: false, mode: "discordFollowUp" };
+    }
+  };
+
+  const payload = buildComponentsV2ContainerMessage({ title: "Status", lines: ["V2"] });
+  const result = await sendEphemeralFollowUp(interaction, payload);
+
+  assert.equal(rawFollowUpCalls, 1);
+  assert.equal(followUpCalls, 0);
+  assert.equal(result?.mode, "rawWebhookFollowUp");
+});
+
+test("Components V2: social ephemeral follow-up falls back to raw webhook after INVALID_TYPE", async () => {
+  let rawFollowUpCalls = 0;
+  let followUpCalls = 0;
+
+  const interaction = {
+    applicationId: "app-social-2",
+    token: "tok-social-2",
+    client: {
+      api: {
+        webhooks: () => ({
+          post: async () => {
+            rawFollowUpCalls += 1;
+            if (rawFollowUpCalls === 1) {
+              throw new Error("temporary raw failure");
+            }
+            return { ok: true, mode: "rawRetry" };
+          }
+        })
+      }
+    },
+    followUp: async () => {
+      followUpCalls += 1;
+      const error = new Error("Supplied data.type is not a valid MessageComponentType");
+      error.code = "INVALID_TYPE";
+      throw error;
+    }
+  };
+
+  const payload = buildComponentsV2ContainerMessage({ title: "Status", lines: ["Fallback"] });
+  const result = await sendEphemeralFollowUp(interaction, payload);
+
+  assert.equal(rawFollowUpCalls, 2);
+  assert.equal(followUpCalls, 1);
   assert.equal(result?.mode, "rawRetry");
 });
 
