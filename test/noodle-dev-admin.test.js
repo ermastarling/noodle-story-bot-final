@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { noodleDevCommand } from "../src/commands/noodleDev.js";
+import { runNoodle } from "../src/commands/noodle.js";
 import { setPlayerShopLevel } from "../src/game/serve.js";
 import { unlockSpecialization } from "../src/game/specialization.js";
 import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../src/game/kitchen.js";
@@ -65,6 +66,109 @@ test("noodle-dev admin season_event autocomplete includes all configured events"
 
   const values = (responses[0] ?? []).map((item) => String(item.value || ""));
   assert.equal(values.includes("summer_solstice"), true);
+});
+
+test("runNoodle dev slash retries defer after token-unavailable and hydrates client token", async () => {
+  const previousToken = process.env.DISCORD_TOKEN;
+  process.env.DISCORD_TOKEN = "token-from-env";
+
+  let deferCalls = 0;
+  let editReplyCalls = 0;
+  let replyCalls = 0;
+  const interaction = {
+    guildId: "guild-1",
+    user: { id: "user-not-admin", tag: "user-not-admin#0001" },
+    member: { id: "user-not-admin", user: { id: "user-not-admin", tag: "user-not-admin#0001" } },
+    client: {
+      token: "",
+      user: { id: "bot-1", tag: "bot#0001" },
+      guilds: { cache: new Map() }
+    },
+    deferred: false,
+    replied: false,
+    isChatInputCommand: () => true,
+    isCommand: () => false,
+    deferReply: async ({ ephemeral } = {}) => {
+      deferCalls += 1;
+      if (deferCalls === 1) {
+        const error = new Error("Request to use token, but token was unavailable to the client.");
+        error.code = 500;
+        throw error;
+      }
+      interaction.deferred = true;
+      interaction.ephemeral = Boolean(ephemeral);
+      return { ok: true };
+    },
+    editReply: async (payload) => {
+      editReplyCalls += 1;
+      return { ok: true, payload };
+    },
+    reply: async (payload) => {
+      replyCalls += 1;
+      return { ok: true, payload };
+    }
+  };
+
+  try {
+    await runNoodle(interaction, { sub: "status", group: "dev" });
+  } finally {
+    if (previousToken === undefined) delete process.env.DISCORD_TOKEN;
+    else process.env.DISCORD_TOKEN = previousToken;
+  }
+
+  assert.equal(deferCalls, 2);
+  assert.equal(interaction.client.token, "token-from-env");
+  assert.equal(editReplyCalls, 1);
+  assert.equal(replyCalls, 0);
+});
+
+test("runNoodle dev slash falls back to reply when defer cannot be recovered", async () => {
+  const previousToken = process.env.DISCORD_TOKEN;
+  process.env.DISCORD_TOKEN = "token-from-env";
+
+  let deferCalls = 0;
+  let editReplyCalls = 0;
+  let replyCalls = 0;
+  const interaction = {
+    guildId: "guild-1",
+    user: { id: "user-not-admin", tag: "user-not-admin#0001" },
+    member: { id: "user-not-admin", user: { id: "user-not-admin", tag: "user-not-admin#0001" } },
+    client: {
+      token: "",
+      user: { id: "bot-1", tag: "bot#0001" },
+      guilds: { cache: new Map() }
+    },
+    deferred: false,
+    replied: false,
+    isChatInputCommand: () => true,
+    isCommand: () => false,
+    deferReply: async () => {
+      deferCalls += 1;
+      const error = new Error("Request to use token, but token was unavailable to the client.");
+      error.code = 500;
+      throw error;
+    },
+    editReply: async (payload) => {
+      editReplyCalls += 1;
+      return { ok: true, payload };
+    },
+    reply: async (payload) => {
+      replyCalls += 1;
+      return { ok: true, payload };
+    }
+  };
+
+  try {
+    await runNoodle(interaction, { sub: "status", group: "dev" });
+  } finally {
+    if (previousToken === undefined) delete process.env.DISCORD_TOKEN;
+    else process.env.DISCORD_TOKEN = previousToken;
+  }
+
+  assert.equal(deferCalls, 2);
+  assert.equal(interaction.client.token, "token-from-env");
+  assert.equal(editReplyCalls, 0);
+  assert.equal(replyCalls, 1);
 });
 
 test("setPlayerShopLevel reconciles shop level and SXP state", () => {
