@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.3",
-    "better-sqlite3": "^11.3.0",
+    "better-sqlite3": "^12.11.1",
     "discord.js": "^13.17.1",
     "dotenv": "^17.4.2",
     "jose": "^6.2.5",

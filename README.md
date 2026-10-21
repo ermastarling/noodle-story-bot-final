@@ -28,7 +28,7 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 
 ## Requirements
 
-- Node.js 18 or newer (ESM-only build)
+- Node.js 20 or newer (ESM-only build)
 - A Discord application with bot token, guild, and message content intents
 - Writable `data/` directory for SQLite persistence (the bot creates WAL/SHM files at runtime)
 

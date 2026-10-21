@@ -19,8 +19,8 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x, 24.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        node-version: [20.x, 22.x, 24.x]
+        # better-sqlite3 12.x supports Node 20+; keep CI aligned with supported runtimes.
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -32,6 +32,5 @@ jobs:
     - run: npm ci
     - run: npm run check:syntax
     - run: npm run lint
-      if: matrix.node-version != '18.x'
     - run: npm run build --if-present
     - run: npm test
