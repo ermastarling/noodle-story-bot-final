@@ -3,8 +3,8 @@
 ## Plan Metadata
 
 - Title: Preventing tutorial orders from expiring or being cleared
-- Branch: `develop`
-- PR: N/A
+- Branch: `fix/tutorial-order-loss-node24`
+- PR: Pending creation against `main`
 - Owner: Copilot SDK assistant
 - Start date: 2026-10-21 (plan recorded after implementation began)
 - Target merge date: TBD
@@ -98,8 +98,8 @@ Exit criteria: all items [x]
 - [x] Lint passes at project baseline or better: no errors; three unused-parameter warnings were reported.
 - [x] Residual scan for banned patterns is clean: `npm run review:guard` passed.
 - [!] Manual canary checks pass for user-critical flows: not run; requires an interactive game environment.
-- [!] PR notes include behavior-parity and validation evidence: no PR exists yet.
-- [~] GitHub Actions validates the fix on Node 24.x: queued by the workflow matrix update; results pending push.
+- [~] PR notes include behavior-parity and validation evidence: prepared for the clean branch; PR pending creation.
+- [x] GitHub Actions validates the fix on Node 24.x: the full workflow passed on the prior branch at the same source commit; the clean-branch workflow will run after PR creation.
 
 ## File Scope Checklist
 
@@ -107,7 +107,7 @@ Exit criteria: all items [x]
 - [x] `src/commands/noodle.js` — keep tutorial orders valid through expiry cleanup, serve eligibility, picker display, serving, and rollover index bookkeeping.
 - [x] `src/db/index.js` — keep persistence pruning from deleting timed accepted orders during the tutorial and normalize legacy timer metadata.
 - [x] `test/orders-board.test.js` — cover untimed tutorial boards, regular-order control behavior, and tutorial order retention across rollover.
-- [x] `.github/workflows/node.js.yml` — include Node 24.x in the existing CI version matrix; CI result pending push.
+- [x] `.github/workflows/node.js.yml` — include Node 24.x in the existing CI version matrix; full CI passed on 18.x, 20.x, 22.x, and 24.x on the prior branch.
 - [x] `docs/plans/2026-10-21-tutorial-order-loss.md` — record the fix and its verification status.
 
 ## Change Log (update after every code change)
@@ -128,6 +128,14 @@ Exit criteria: all items [x]
   - Verification run: `npm run review:guard` passed before this workflow edit; GitHub Actions result pending push.
   - Result: Workflow matrix updated to test 18.x, 20.x, 22.x, and 24.x.
   - Next step: Push `develop` and open a draft PR to `main` so CI can run; review the Node 24.x job result before merging.
+- [x] Entry:
+  - Timestamp: 2026-10-21
+  - File(s): `docs/plans/2026-10-21-tutorial-order-loss.md`
+  - Checklist item(s) updated: Phase 5 CI and PR status; branch metadata.
+  - Behavior impact statement: No gameplay behavior change; documentation now reflects the clean PR branch and prior green CI.
+  - Verification run: Targeted tutorial/order/serve tests (28 passed); `npm run lint` (0 errors, 3 warnings); `npm run review:guard` (passed).
+  - Result: Plan now identifies `fix/tutorial-order-loss-node24`; Node 24.x passed on the same source snapshot in the prior CI run.
+  - Next step: Push this clean branch, open the replacement PR, then confirm its fresh CI run before marking ready.
 
 ## Risk Controls
 
@@ -157,5 +165,5 @@ Exit criteria: all items [x]
 - `npm test`: 474 passed; `test/social.test.js` failed at process teardown in native `better-sqlite3`.
 - `npm run review:guard`: passed.
 - `npm run review:all` (required for broad/release-facing updates): not run; includes the full suite that hit the native teardown failure.
-- GitHub Actions Node 24.x job: pending push; workflow matrix includes 24.x.
+- GitHub Actions full CI: passed on 18.x, 20.x, 22.x, and 24.x for the same source snapshot on the prior branch; fresh clean-branch PR run pending.
 - Any intentionally skipped checks + reason: Manual canary not run because an interactive game environment is unavailable. The complete SQLite-backed suite should be repeated in a stable native environment.
