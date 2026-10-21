@@ -478,10 +478,20 @@ function prunePlayerBeforePersist(player) {
   }
   if (orders && orders.accepted && typeof orders.accepted === "object") {
     const now = Date.now();
-    for (const [id, entry] of Object.entries(orders.accepted)) {
-      const expiresAt = entry?.expires_at;
-      if (expiresAt && Number.isFinite(expiresAt) && expiresAt < now) {
-        delete orders.accepted[id];
+    if (player?.tutorial?.active === true) {
+      for (const entry of Object.values(orders.accepted)) {
+        if (!entry || typeof entry !== "object") continue;
+        entry.expires_at = null;
+        if (entry.order && typeof entry.order === "object") {
+          entry.order.is_limited_time = false;
+        }
+      }
+    } else {
+      for (const [id, entry] of Object.entries(orders.accepted)) {
+        const expiresAt = entry?.expires_at;
+        if (expiresAt && Number.isFinite(expiresAt) && expiresAt < now) {
+          delete orders.accepted[id];
+        }
       }
     }
 
