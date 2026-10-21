@@ -28,9 +28,11 @@ The bot pairs a stateful game simulation with Discord interactions so players ca
 
 ## Requirements
 
-- Node.js 20 or newer (ESM-only build)
+- Node.js 20.13 or newer (ESM-only build); Node.js 24.7.0 is the production target
 - A Discord application with bot token, guild, and message content intents
 - Writable `data/` directory for SQLite persistence (the bot creates WAL/SHM files at runtime)
+
+The root `.nvmrc` selects Node.js 24.7.0 for tools that honor it. Hosted panels such as PebbleHost choose the runtime separately; set the server's Node version in the panel and confirm the startup log reports the expected version.
 
 ## Quick Start
 
