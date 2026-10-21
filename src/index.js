@@ -11,6 +11,8 @@ import { jwtVerify } from "jose";
 import { getIcon } from "./ui/icons.js";
 import { theme } from "./ui/theme.js";
 
+console.log(`[startup] Node.js ${process.version}`);
+
 (async () => {
   // Import discord.js
   const Discord = await import("discord.js").then(m => m.default || m);
