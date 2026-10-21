@@ -3096,7 +3096,9 @@ function canServeAllOrders(player) {
     const order = entry?.order;
     if (!order) return false; // Missing snapshot means we can't confidently serve
 
-    if (entry.expires_at && now > entry.expires_at) return false; // Expired order blocks serve-all
+    if (player?.tutorial?.active !== true && entry.expires_at && now > entry.expires_at) {
+      return false;
+    }
 
     const recipeId = order.recipe_id;
     if (!recipeId) return false;
@@ -4165,6 +4167,17 @@ if (!r) return "";
 function sweepExpiredAcceptedOrders(p, _s, contentBundle, nowMs) {
 const accepted = p?.orders?.accepted ?? {};
 const expiredIds = [];
+
+if (p?.tutorial?.active === true) {
+for (const entry of Object.values(accepted)) {
+if (!entry || typeof entry !== "object") continue;
+entry.expires_at = null;
+if (entry.order && typeof entry.order === "object") {
+entry.order.is_limited_time = false;
+}
+}
+return { expiredIds: [], warning: "" };
+}
 
 for (const [fullId, entry] of Object.entries(accepted)) {
 const exp = entry?.expires_at ?? null;
@@ -6280,7 +6293,8 @@ function buildServePickerSceneEntries({ p, readyOnly = false }) {
     const npcName = order?.npc_archetype
       ? (content.npcs?.[order.npc_archetype]?.name ?? order.npc_archetype)
       : "customer";
-    const expired = Boolean(accepted?.expires_at && now > Number(accepted.expires_at));
+    const expired = p?.tutorial?.active !== true
+      && Boolean(accepted?.expires_at && now > Number(accepted.expires_at));
     const ready = !expired && recipeId ? getTotalBowlsForRecipe(p, recipeId) > 0 : false;
     const status = expired ? "expired" : (ready ? "ready" : "missing bowl");
 
@@ -13168,7 +13182,7 @@ ${lines.join("\n")}`;
       const snap = a?.order ?? null;
 
       let timeLeft = "";
-      if (a?.expires_at) {
+      if (p?.tutorial?.active !== true && a?.expires_at) {
         const msLeft = a.expires_at - now2;
         if (msLeft <= 0) timeLeft = " *(expired)*";
         else timeLeft = ` *(expires <t:${Math.floor(a.expires_at / 1000)}:R>)*`;
@@ -13395,7 +13409,7 @@ ${lines.join("\n")}`;
       });
     }
 
-    const tutorialSingleAcceptMode = isTutorialStepFromRouting(p, "intro_order");
+    const tutorialActive = p?.tutorial?.active === true;
     const rawInput = String(opt.getString("order_id") ?? "").trim();
     if (!rawInput) {
       const payload = buildAcceptPickerPayload({
@@ -13464,9 +13478,7 @@ ${lines.join("\n")}`;
 
       const acceptedAt = nowTs();
       const baseSpeedWindowSeconds = order.speed_window_seconds ?? 180;
-      const isLimitedTimeOrder = tutorialSingleAcceptMode && acceptedNow === 0
-        ? false
-        : Boolean(order.is_limited_time);
+      const isLimitedTimeOrder = tutorialActive ? false : Boolean(order.is_limited_time);
       const speedWindowSeconds = isLimitedTimeOrder
         ? getLimitedTimeWindowSeconds(p, baseSpeedWindowSeconds)
         : baseSpeedWindowSeconds;
@@ -13764,7 +13776,7 @@ ${lines.join("\n")}`;
 
       const [fullOrderId, accepted] = matchEntry;
       const now3 = nowTs();
-      if (accepted.expires_at && now3 > accepted.expires_at) {
+      if (p?.tutorial?.active !== true && accepted.expires_at && now3 > accepted.expires_at) {
         delete acceptedMap[fullOrderId];
         // Track fail streak for manually expired order (B4)
         updateFailStreak(p, false); // failure
@@ -13857,7 +13869,10 @@ ${lines.join("\n")}`;
       if (bowl.qty <= 0) delete p.inv_bowls[selectedEntry?.key ?? order.recipe_id];
 
       delete acceptedMap[fullOrderId];
-      markOrderConsumed(p, order.order_index);
+      const currentOrderPrefix = `${p.orders_day}-o`;
+      if (p.orders_day && String(order.order_id ?? fullOrderId).startsWith(currentOrderPrefix)) {
+        markOrderConsumed(p, order.order_index);
+      }
 
       p.coins += rewards.coins;
       p.rep += rewards.rep;

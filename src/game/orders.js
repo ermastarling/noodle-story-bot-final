@@ -158,9 +158,10 @@ function generateOrdersStream({
       continue;
     }
 
-    const isLimited = npc === "rain_soaked_courier"
+    const generatedLimitedTime = npc === "rain_soaked_courier"
       ? true
       : rng() < Number(settings.LIMITED_TIME_CHANCE ?? 0.20);
+    const isLimited = player?.tutorial?.active === true ? false : generatedLimitedTime;
     const createdAt = nowTs();
     const expiresAt = isLimited ? createdAt + 30*60*1000 : null;
 
@@ -275,7 +276,13 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
     playerState.orders_pool_sig = poolSig;
     playerState.orders_consumed_indices = [];
     playerState.orders_total_count = totalCount;
-    if (previousOrdersDay && dayChanged && playerState.orders && typeof playerState.orders === "object") {
+    if (
+      previousOrdersDay
+      && dayChanged
+      && playerState.tutorial?.active !== true
+      && playerState.orders
+      && typeof playerState.orders === "object"
+    ) {
       playerState.orders.accepted = {};
     }
     delete playerState.order_board; // free memory from legacy storage
