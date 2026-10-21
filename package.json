@@ -34,7 +34,7 @@
     "@discordjs/rest": "^2.6.3",
     "better-sqlite3": "^12.11.1",
     "discord.js": "^13.17.1",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.8",
     "jose": "^6.2.5",
     "node-cron": "^4.6.0"
   },
