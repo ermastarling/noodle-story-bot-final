@@ -133,6 +133,91 @@ test("Orders: day rollover clears stale accepted pointers and resets consumed in
 	assert.equal(Object.keys(playerState.orders.accepted).length, 0);
 });
 
+test("Orders: tutorial boards never generate limited-time orders", () => {
+	const timedSettings = { ...settings, LIMITED_TIME_CHANCE: 1 };
+	const playerState = {
+		shop_level: 1,
+		rep: 0,
+		coins: 0,
+		known_recipes: ["classic_soy_ramen", "veggie_ramen"],
+		tutorial: {
+			active: true,
+			queue: ["intro_serve"],
+			completed: ["intro_order", "intro_market", "intro_forage", "intro_cook"]
+		},
+		orders_consumed_indices: []
+	};
+
+	ensureDailyOrdersForPlayer(playerState, timedSettings, content, "spring", "s1", "u1");
+	const page = generateOrderPageForPlayer({
+		playerState,
+		settings: timedSettings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "u1",
+		page: 0,
+		pageSize: 10
+	});
+
+	assert.ok(page.orders.length > 0);
+	assert.ok(page.orders.every((order) => order.is_limited_time === false));
+	assert.ok(page.orders.every((order) => order.expires_at === null));
+
+	const regularPlayer = {
+		...playerState,
+		tutorial: { active: false, queue: [], completed: [] },
+		orders: { accepted: {} },
+		orders_day: null,
+		orders_seed: null,
+		orders_consumed_indices: []
+	};
+	ensureDailyOrdersForPlayer(regularPlayer, timedSettings, content, "spring", "s1", "u2");
+	const regularPage = generateOrderPageForPlayer({
+		playerState: regularPlayer,
+		settings: timedSettings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "u2",
+		page: 0,
+		pageSize: 10
+	});
+	assert.ok(regularPage.orders.some((order) => order.is_limited_time === true));
+});
+
+test("Orders: day rollover preserves accepted tutorial orders", () => {
+	const day1 = Date.UTC(2026, 3, 21, 10, 0, 0, 0);
+	const day2 = day1 + (24 * 60 * 60 * 1000);
+	const playerState = {
+		shop_level: 1,
+		rep: 0,
+		coins: 0,
+		known_recipes: ["classic_soy_ramen", "veggie_ramen"],
+		tutorial: { active: true, queue: ["intro_serve"], completed: [] },
+		orders: {
+			accepted: {
+				"2026-04-21-o0-123": {
+					accepted_at: day1,
+					expires_at: null,
+					order: { order_id: "2026-04-21-o0-123", order_index: 0, recipe_id: "classic_soy_ramen" }
+				}
+			}
+		},
+		orders_day: "2026-04-21",
+		orders_seed: "s1-u1-day-2026-04-21",
+		order_seed_version: 5,
+		orders_consumed_indices: [0]
+	};
+
+	withMockedNow(day2, () => {
+		ensureDailyOrdersForPlayer(playerState, settings, content, "spring", "s1", "u1");
+	});
+
+	assert.equal(Object.keys(playerState.orders.accepted).length, 1);
+	assert.deepEqual(playerState.orders_consumed_indices, []);
+});
+
 test("Orders: consumed indices are trimmed to valid range when board count shrinks", () => {
 	const day = Date.UTC(2026, 3, 21, 12, 0, 0, 0);
 	const playerState = {
