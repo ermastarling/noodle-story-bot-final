@@ -3,8 +3,8 @@
 ## Plan Metadata
 
 - Title: Preventing tutorial orders from expiring or being cleared
-- Branch: `develop`
-- PR: N/A
+- Branch: `fix/tutorial-order-loss-node24`
+- PR: #220 (draft; targets `main`)
 - Owner: Copilot SDK assistant
 - Start date: 2026-10-21 (plan recorded after implementation began)
 - Target merge date: TBD
@@ -94,12 +94,12 @@ Verification for this phase:
 
 Exit criteria: all items [x]
 
-- [!] Full test suite passes: `npm test` ran 475 tests; 474 passed and `test/social.test.js` crashed during native `better-sqlite3` teardown.
+- [x] Full test suite passes in GitHub Actions: clean-branch CI passed on 18.x, 20.x, 22.x, and 24.x. One initial Node 24.x run hit the native `better-sqlite3` teardown crash; rerunning the failed job passed.
 - [x] Lint passes at project baseline or better: no errors; three unused-parameter warnings were reported.
 - [x] Residual scan for banned patterns is clean: `npm run review:guard` passed.
 - [!] Manual canary checks pass for user-critical flows: not run; requires an interactive game environment.
-- [!] PR notes include behavior-parity and validation evidence: no PR exists yet.
-- [~] GitHub Actions validates the fix on Node 24.x: queued by the workflow matrix update; results pending push.
+- [x] PR notes include behavior-parity and validation evidence: PR #220 has been created with the template and validation state documented.
+- [x] GitHub Actions validates the fix on Node 24.x: all clean-branch workflow jobs passed, including the retried Node 24.x job.
 
 ## File Scope Checklist
 
@@ -107,7 +107,7 @@ Exit criteria: all items [x]
 - [x] `src/commands/noodle.js` — keep tutorial orders valid through expiry cleanup, serve eligibility, picker display, serving, and rollover index bookkeeping.
 - [x] `src/db/index.js` — keep persistence pruning from deleting timed accepted orders during the tutorial and normalize legacy timer metadata.
 - [x] `test/orders-board.test.js` — cover untimed tutorial boards, regular-order control behavior, and tutorial order retention across rollover.
-- [x] `.github/workflows/node.js.yml` — include Node 24.x in the existing CI version matrix; CI result pending push.
+- [x] `.github/workflows/node.js.yml` — include Node 24.x in the existing CI version matrix; clean-branch CI passed on 18.x, 20.x, 22.x, and 24.x.
 - [x] `docs/plans/2026-10-21-tutorial-order-loss.md` — record the fix and its verification status.
 
 ## Change Log (update after every code change)
@@ -128,6 +128,22 @@ Exit criteria: all items [x]
   - Verification run: `npm run review:guard` passed before this workflow edit; GitHub Actions result pending push.
   - Result: Workflow matrix updated to test 18.x, 20.x, 22.x, and 24.x.
   - Next step: Push `develop` and open a draft PR to `main` so CI can run; review the Node 24.x job result before merging.
+- [x] Entry:
+  - Timestamp: 2026-10-21
+  - File(s): `docs/plans/2026-10-21-tutorial-order-loss.md`
+  - Checklist item(s) updated: Phase 5 CI and PR status; branch metadata.
+  - Behavior impact statement: No gameplay behavior change; documentation now reflects the clean PR branch and prior green CI.
+  - Verification run: Targeted tutorial/order/serve tests (28 passed); `npm run lint` (0 errors, 3 warnings); `npm run review:guard` (passed).
+  - Result: Plan now identifies `fix/tutorial-order-loss-node24`; Node 24.x passed on the same source snapshot in the prior CI run.
+  - Next step: Push this clean branch, open the replacement PR, then confirm its fresh CI run before marking ready.
+- [x] Entry:
+  - Timestamp: 2026-10-21
+  - File(s): `docs/plans/2026-10-21-tutorial-order-loss.md`
+  - Checklist item(s) updated: Phase 5 full-suite and Node 24.x CI results; PR metadata.
+  - Behavior impact statement: No gameplay behavior change; plan records the clean PR and final CI outcomes.
+  - Verification run: Clean-branch GitHub Actions passed on 18.x, 20.x, 22.x, and 24.x; initial 24.x attempt failed at native `better-sqlite3` teardown and rerun passed.
+  - Result: PR #220 now has successful CI evidence for every configured Node version; manual canary remains outstanding.
+  - Next step: Update the PR body, mark it ready for review, and close superseded PR #193.
 
 ## Risk Controls
 
@@ -147,15 +163,15 @@ Exit criteria: all items [x]
 - Security and auth: No auth, authorization, or security-sensitive boundaries changed.
 - Data integrity and idempotency: Accepted tutorial entries survive rollover and persistence pruning; serving older accepted entries does not consume a new day's order index. No idempotency keys changed.
 - Behavior regressions: Timed-order generation/expiry remains enabled for non-tutorial players; a regular-player control test verifies generation.
-- Reliability and runtime safety: Persistence and command cleanup paths both protect tutorial orders. Full SQLite-backed validation remains incomplete due the native teardown crash.
-- Test coverage gaps: No direct integration test exercises `prunePlayerBeforePersist` or the end-to-end Discord accept-to-serve flow; manual canary and repeat full-suite run remain recommended.
+- Reliability and runtime safety: Persistence and command cleanup paths both protect tutorial orders. Node 24.x full CI initially hit the native teardown crash once, then passed on rerun.
+- Test coverage gaps: No direct integration test exercises `prunePlayerBeforePersist` or the end-to-end Discord accept-to-serve flow; manual canary remains recommended.
 - Docs-runtime parity checks: This plan records the tutorial-only timer and rollover behavior change and all known verification outcomes.
 
 ## Validation Commands and Outcomes
 
 - `npm run lint`: passed with 0 errors and 3 existing unused-parameter warnings.
-- `npm test`: 474 passed; `test/social.test.js` failed at process teardown in native `better-sqlite3`.
+- `npm test` (local): 474 passed; `test/social.test.js` crashed at process teardown in native `better-sqlite3`.
 - `npm run review:guard`: passed.
-- `npm run review:all` (required for broad/release-facing updates): not run; includes the full suite that hit the native teardown failure.
-- GitHub Actions Node 24.x job: pending push; workflow matrix includes 24.x.
-- Any intentionally skipped checks + reason: Manual canary not run because an interactive game environment is unavailable. The complete SQLite-backed suite should be repeated in a stable native environment.
+- `npm run review:all` (required for broad/release-facing updates): not run; constituent lint, targeted tests, review guard, and full GitHub Actions CI were run separately.
+- GitHub Actions full CI for PR #220: passed on 18.x, 20.x, 22.x, and 24.x; one Node 24.x retry was needed after the native teardown crash.
+- Any intentionally skipped checks + reason: Manual canary not run because an interactive game environment is unavailable.
