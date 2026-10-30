@@ -39,6 +39,7 @@ import {
   createSharedOrder,
   contributeToSharedOrder,
   getSharedOrderContributions,
+  getSharedOrderMemberCaps,
   completeSharedOrder,
   cancelSharedOrder,
   getActiveSharedOrderByParty,
@@ -1044,9 +1045,39 @@ function buildSharedOrderContributionOptions(recipe, servings, maxIngredientSlot
 
 function formatSharedOrderContributionError(error) {
   if (error?.code === "SHARED_ORDER_MEMBER_CAP") {
-    return `${getIcon("warning")} You've reached the maximum allowed contribution for one party member in this shared order, your party members can help with the rest!`;
+    return `${getIcon("warning")} You've reached your share of this shared order. Each party member can only add part of the ingredients, so your party members need to cover the rest!`;
+  }
+  if (error?.code === "SHARED_ORDER_SLOT_LIMIT") {
+    return `${getIcon("warning")} You've already picked the most ingredient types you can contribute to this shared order. Add more of an ingredient you've already contributed, or let your party members cover the others.`;
   }
   return `${getIcon("error")} ${error?.message || "Unable to record contribution."}`;
+}
+
+// Mirrors the per-member unit cap enforced in contributeToSharedOrder so the UI can explain limits before a click fails.
+function getSharedOrderMemberAllowance({ sharedOrder, recipe, userId, contributions }) {
+  const servings = sharedOrder?.servings ?? SHARED_ORDER_MIN_SERVINGS;
+  const used = (contributions ?? [])
+    .filter((c) => c.user_id === userId)
+    .reduce((sum, c) => sum + (Number(c.quantity) || 0), 0);
+  const members = db.prepare(
+    "SELECT user_id FROM party_members WHERE party_id = ? AND left_at IS NULL ORDER BY joined_at, user_id"
+  ).all(sharedOrder.party_id);
+  const memberIndex = members.findIndex((m) => m.user_id === userId);
+  if (memberIndex < 0) return { cap: Infinity, used, remaining: Infinity };
+  const caps = getSharedOrderMemberCaps({
+    ingredientRequirements: getSharedOrderIngredientRequirements(recipe, servings),
+    memberCount: members.length,
+    ingredientLimit: getSharedOrderIngredientLimit(recipe)
+  });
+  const cap = caps[memberIndex];
+  return { cap, used, remaining: Math.max(0, cap - used) };
+}
+
+function formatSharedOrderShareLimitMessage({ cap, used, remaining, requested = null }) {
+  if (remaining <= 0) {
+    return `${getIcon("warning")} You've already contributed your full share of this shared order (**${used}/${cap}** items). Your party members need to cover the rest!`;
+  }
+  return `${getIcon("warning")} You can only add **${remaining}** more item${remaining === 1 ? "" : "s"} to this shared order (your share is **${cap}**, you've contributed **${used}**). Pick **${remaining}** or fewer${requested ? ` instead of ${requested}` : ""}.`;
 }
 
 function getSharedOrderVisibleIngredients(player, recipe) {
@@ -3900,7 +3931,14 @@ async function handleComponent(interaction) {
       }
 
       const availableQty = Math.max(0, Number(viewer.inv_ingredients?.[ingredientId] || 0));
-      const maxQty = Math.max(0, Math.min(selected.remaining, availableQty));
+      const allowance = getSharedOrderMemberAllowance({ sharedOrder, recipe, userId, contributions });
+      if (allowance.remaining <= 0) {
+        return componentCommit(interaction, {
+          content: formatSharedOrderShareLimitMessage(allowance),
+          ephemeral: true
+        });
+      }
+      const maxQty = Math.max(0, Math.min(selected.remaining, availableQty, allowance.remaining));
       if (maxQty <= 0) {
         return componentCommit(interaction, {
           content: `${getIcon("error")} You do not have any of that ingredient available to contribute right now.`,
@@ -3923,8 +3961,9 @@ async function handleComponent(interaction) {
         .setDescription(
           `Ingredient: **${ingredient.name}**\n` +
           `Remaining needed: **${selected.remaining}**\n` +
-          `You have: **${availableQty}**\n\n` +
-          "Choose quantity:"
+          `You have: **${availableQty}**\n` +
+          (Number.isFinite(allowance.cap) ? `Your share: **${allowance.used}/${allowance.cap}** contributed\n` : "") +
+          "\nChoose quantity:"
         )
         .setColor(theme.colors.info);
       applyOwnerFooter(qtyEmbed, interaction.member ?? interaction.user);
@@ -4592,6 +4631,14 @@ async function handleComponent(interaction) {
       const userIngredientSlots = getUserIngredientSlots(contributions, userId);
       const userSlotsUsed = userIngredientSlots.size;
 
+      const menuAllowance = getSharedOrderMemberAllowance({ sharedOrder, recipe, userId, contributions });
+      if (menuAllowance.remaining <= 0) {
+        return componentCommit(interaction, {
+          content: formatSharedOrderShareLimitMessage(menuAllowance),
+          ephemeral: true
+        });
+      }
+
       const ingredientOptions = progress.items
         .filter((i) => {
           if (i.remaining <= 0) return false;
@@ -4710,6 +4757,14 @@ async function handleComponent(interaction) {
 
           if (quantity > selected.remaining) {
             return { ok: false, payload: { content: `${getIcon("error")} Max remaining is ${selected.remaining}.`, ephemeral: true } };
+          }
+
+          const allowance = getSharedOrderMemberAllowance({ sharedOrder, recipe, userId, contributions });
+          if (quantity > allowance.remaining) {
+            return {
+              ok: false,
+              payload: { content: formatSharedOrderShareLimitMessage({ ...allowance, requested: quantity }), ephemeral: true }
+            };
           }
 
           const ingredient = content.items[ingredientId];

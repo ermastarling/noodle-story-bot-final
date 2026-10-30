@@ -540,7 +540,11 @@ export function buildComponentsV2MenuPayload({
   });
 
   const normalizedComponents = normalizeContainerHeading(components);
-  const sceneBannerComponents = disableSceneBanner
+  // A heading synthesized from plain message text is the message itself; swapping it for a banner would drop the text.
+  const headingWasSynthesized = Number(components?.[0]?.type) === 10
+    && Boolean(String(components[0].content ?? "").trim())
+    && !hasHeadingPrefix(components[0].content);
+  const sceneBannerComponents = disableSceneBanner || headingWasSynthesized
     ? normalizedComponents
     : replaceHeadingWithSceneBanner(normalizedComponents);
   const ownerSanitizedComponents = sceneBannerComponents;
