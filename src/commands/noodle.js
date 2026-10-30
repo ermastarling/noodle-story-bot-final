@@ -9341,7 +9341,7 @@ if (sub === "profile_edit") {
 
 if (sub === "badges") {
   const p = ensurePlayer(serverId, userId);
-  return commitState(buildProfileBadgesPayload(
+  return commit(buildProfileBadgesPayload(
     p,
     userId,
     opt.getString("category") ?? "badges",
@@ -12745,14 +12745,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       });
     }
 
+    // Untargeted casts already roll 2 + bonusItems picks; only targeted casts need the flat bonus.
     if (itemId && bonusItems > 0) {
       drops[itemId] = (drops[itemId] ?? 0) + bonusItems;
-    } else if (bonusItems > 0) {
-      const ids = Object.keys(drops);
-      if (ids.length) {
-        const first = ids[0];
-        drops[first] = (drops[first] ?? 0) + bonusItems;
-      }
     }
 
     const allowedRare = RARE_FISHING_ITEM_IDS ?? [];

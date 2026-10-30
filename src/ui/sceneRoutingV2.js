@@ -1,5 +1,5 @@
 export const V2_SCENE_REGISTRY = Object.freeze({
-  "orders.board": Object.freeze(["acc", "ck", "sv", "fg", "qs", "rf", "nm", "buy", "pn", "cnl", "tk"]),
+  "orders.board": Object.freeze(["acc", "ck", "sv", "fg", "qs", "rf", "nm", "dm", "buy", "pn", "cnl", "tk"]),
   "orders.accept_picker": Object.freeze(["sel", "cfm", "pg", "cnl", "bk"]),
   "orders.accept_result": Object.freeze(["cfm", "cnl", "bk", "ord", "ck"]),
   "orders.cancel_picker": Object.freeze(["sel", "cfm", "cnl", "bk"]),
