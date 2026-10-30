@@ -10,6 +10,7 @@ import {
   isComponentsV2Payload,
   rawChannelSendMessage
 } from "../ui/componentsV2.js";
+import { ensureClientToken } from "../util/clientToken.js";
 import { emitTelemetry, runWithTelemetry } from "../infra/telemetry.js";
 import { getSceneBannerUrl } from "../ui/icons.js";
 import { markStaleScheduledDeliveriesUnknown } from "./scheduledDelivery.js";
@@ -306,6 +307,7 @@ function getEventForServer(eventsContent, eventId) {
 }
 
 async function ensureOfficialChannel(client, channelId, guildId) {
+  ensureClientToken(client);
   const channel = await client.channels.fetch(channelId);
   if (!channel || String(channel.guildId ?? "") !== guildId) {
     throw new Error("Configured announcement channel is not in the official guild");
