@@ -161,6 +161,23 @@ test("Counting only invokes the milestone callback for configured milestones", a
   }
 });
 
+test("Counting does not invoke milestone callbacks when rewards are disabled", async () => {
+  const db = setupDb();
+  let callbackCount = 0;
+  try {
+    const result = await handleCountingMessage(db, message({ id: "510", userId: "u1", content: "1" }), {
+      botUserId: "bot",
+      successEmoji: "ok",
+      onMilestone: async () => { callbackCount += 1; }
+    });
+    assert.equal(result.kind, "valid");
+    assert.equal(result.milestone, undefined);
+    assert.equal(callbackCount, 0);
+  } finally {
+    db.close();
+  }
+});
+
 test("Counting reacts distinctly to valid, repeated-user, and broken numbers", async () => {
   const db = setupDb();
   const settings = {

@@ -119,23 +119,38 @@ export function reconcileScheduledDelivery(db, {
 
     if (type === "game_update") {
       const row = db.prepare(
-        "SELECT guild_id, rollout_summary FROM scheduled_game_updates WHERE schedule_id = ? AND status = 'delivery_unknown'"
+        "SELECT guild_id, rollout_summary, attempt_channel_id, attempt_canary FROM scheduled_game_updates WHERE schedule_id = ? AND status = 'delivery_unknown'"
       ).get(id);
       if (!row) return { ok: false, reason: "not_unknown" };
       if (resolution === "not_delivered") {
         const result = db.prepare(`
-          UPDATE scheduled_game_updates SET status = 'pending', updated_at = ?
+          UPDATE scheduled_game_updates
+          SET status = 'pending', attempt_channel_id = NULL, attempt_canary = NULL, updated_at = ?
           WHERE schedule_id = ? AND status = 'delivery_unknown'
         `).run(now, id);
         if (result.changes !== 1) return { ok: false, reason: "not_unknown" };
         return { ok: true, status: "pending" };
       }
-      const publicRelease = !canary;
+      if (
+        !DISCORD_SNOWFLAKE.test(String(row.attempt_channel_id ?? ""))
+        || ![0, 1].includes(row.attempt_canary)
+      ) {
+        return { ok: false, reason: "missing_attempt_provenance" };
+      }
+      const publicRelease = row.attempt_canary === 0;
       const nextStatus = publicRelease ? "sent" : (row.rollout_summary ? "canary_previewed" : "sent");
       const result = db.prepare(`
         UPDATE scheduled_game_updates SET status = ?, message_id = ?, updated_at = ?
         WHERE schedule_id = ? AND status = 'delivery_unknown'
-      `).run(nextStatus, resolvedMessageId, now, id);
+          AND attempt_channel_id = ? AND attempt_canary = ?
+      `).run(
+        nextStatus,
+        resolvedMessageId,
+        now,
+        id,
+        row.attempt_channel_id,
+        row.attempt_canary
+      );
       if (result.changes !== 1) return { ok: false, reason: "not_unknown" };
       if (publicRelease && row.rollout_summary) {
         db.prepare(`

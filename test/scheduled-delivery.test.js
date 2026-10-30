@@ -9,7 +9,10 @@ import {
   markStaleScheduledDeliveriesUnknown,
   reconcileScheduledDelivery
 } from "../src/jobs/scheduledDelivery.js";
-import { completeScheduledGameUpdateDelivery } from "../src/jobs/gameUpdates.js";
+import {
+  claimScheduledGameUpdateDelivery,
+  completeScheduledGameUpdateDelivery
+} from "../src/jobs/gameUpdates.js";
 
 const require = createRequire(import.meta.url);
 const Database = require("better-sqlite3");
@@ -187,23 +190,34 @@ test("canary rollout summary remains queued for production and production comple
   db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
   const scheduledUpdate = (scheduleId) => db.prepare(`INSERT INTO scheduled_game_updates
     (schedule_id, guild_id, update_id, scheduled_at, payload_json, rollout_summary, status, created_by, created_at, updated_at)
-    VALUES (?, '12345678901234567', 'rollout', 1, '{}', 1, 'sending', 'admin', 1, 1)`).run(scheduleId);
+    VALUES (?, '12345678901234567', 'rollout', 1, '{}', 1, 'pending', 'admin', 1, 1)`).run(scheduleId);
 
   scheduledUpdate("canary-preview");
+  assert.equal(claimScheduledGameUpdateDelivery(db, {
+    scheduleId: "canary-preview",
+    expectedStatus: "pending",
+    channelId: "22345678901234567",
+    canary: true,
+    now: 5
+  }), true);
   assert.equal(completeScheduledGameUpdateDelivery(db, {
     scheduleId: "canary-preview",
     messageId: "32345678901234567",
-    canary: true,
     now: 10
   }), true);
   assert.equal(db.prepare("SELECT status FROM scheduled_game_updates WHERE schedule_id = 'canary-preview'").get().status, "canary_previewed");
   assert.equal(db.prepare("SELECT 1 FROM game_update_release_state").get(), undefined);
 
-  db.prepare("UPDATE scheduled_game_updates SET status = 'sending' WHERE schedule_id = 'canary-preview'").run();
+  assert.equal(claimScheduledGameUpdateDelivery(db, {
+    scheduleId: "canary-preview",
+    expectedStatus: "canary_previewed",
+    channelId: "32345678901234567",
+    canary: false,
+    now: 15
+  }), true);
   assert.equal(completeScheduledGameUpdateDelivery(db, {
     scheduleId: "canary-preview",
     messageId: "42345678901234567",
-    canary: false,
     now: 20
   }), true);
   assert.deepEqual(db.prepare("SELECT first_update_sent_at, first_update_id FROM game_update_release_state WHERE guild_id = '12345678901234567'").get(), {
@@ -213,21 +227,71 @@ test("canary rollout summary remains queued for production and production comple
   db.close();
 });
 
-test("reconciling a delivered uncertain rollout summary opens release gate in the same transaction", () => {
+test("scheduled game update claims require an explicit route and delivery mode", () => {
   const db = new Database(":memory:");
   db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
   db.prepare(`INSERT INTO scheduled_game_updates
     (schedule_id, guild_id, update_id, scheduled_at, payload_json, rollout_summary, status, created_by, created_at, updated_at)
-    VALUES ('uncertain-rollout', '12345678901234567', 'rollout', 1, '{}', 1, 'delivery_unknown', 'admin', 1, 1)`).run();
+    VALUES ('explicit-route', '12345678901234567', 'rollout', 1, '{}', 1, 'pending', 'admin', 1, 1)`).run();
+
+  assert.throws(() => claimScheduledGameUpdateDelivery(db, {
+    scheduleId: "explicit-route",
+    expectedStatus: "pending",
+    channelId: "22345678901234567"
+  }), /mode must be explicit/);
+  assert.equal(db.prepare("SELECT status FROM scheduled_game_updates WHERE schedule_id = 'explicit-route'").get().status, "pending");
+  db.close();
+});
+
+test("reconciliation uses persisted attempt mode instead of the current rollout mode", () => {
+  const db = new Database(":memory:");
+  db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
+  db.prepare(`INSERT INTO scheduled_game_updates
+    (schedule_id, guild_id, update_id, scheduled_at, payload_json, rollout_summary, status, attempt_channel_id, attempt_canary, created_by, created_at, updated_at)
+    VALUES ('uncertain-canary', '12345678901234567', 'rollout', 1, '{}', 1, 'delivery_unknown', '22345678901234567', 1, 'admin', 1, 1)`).run();
 
   assert.deepEqual(reconcileScheduledDelivery(db, {
     type: "game_update",
-    recordId: "uncertain-rollout",
+    recordId: "uncertain-canary",
     resolution: "delivered",
     messageId: "52345678901234567",
     canary: false,
     now: 25
+  }), { ok: true, status: "canary_previewed" });
+  assert.equal(db.prepare("SELECT status FROM scheduled_game_updates WHERE schedule_id = 'uncertain-canary'").get().status, "canary_previewed");
+  assert.equal(db.prepare("SELECT 1 FROM game_update_release_state WHERE guild_id = '12345678901234567'").get(), undefined);
+
+  db.prepare(`INSERT INTO scheduled_game_updates
+    (schedule_id, guild_id, update_id, scheduled_at, payload_json, rollout_summary, status, attempt_channel_id, attempt_canary, created_by, created_at, updated_at)
+    VALUES ('uncertain-production', '12345678901234567', 'rollout', 1, '{}', 1, 'delivery_unknown', '32345678901234567', 0, 'admin', 1, 1)`).run();
+  assert.deepEqual(reconcileScheduledDelivery(db, {
+    type: "game_update",
+    recordId: "uncertain-production",
+    resolution: "delivered",
+    messageId: "62345678901234567",
+    canary: true,
+    now: 30
   }), { ok: true, status: "sent" });
-  assert.equal(db.prepare("SELECT first_update_id FROM game_update_release_state WHERE guild_id = '12345678901234567'").get().first_update_id, "uncertain-rollout");
+  assert.equal(db.prepare("SELECT first_update_id FROM game_update_release_state WHERE guild_id = '12345678901234567'").get().first_update_id, "uncertain-production");
+  db.close();
+});
+
+test("legacy uncertain game updates without attempt provenance cannot open the rollout gate", () => {
+  const db = new Database(":memory:");
+  db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
+  db.prepare(`INSERT INTO scheduled_game_updates
+    (schedule_id, guild_id, update_id, scheduled_at, payload_json, rollout_summary, status, created_by, created_at, updated_at)
+    VALUES ('legacy-uncertain', '12345678901234567', 'rollout', 1, '{}', 1, 'delivery_unknown', 'admin', 1, 1)`).run();
+
+  assert.deepEqual(reconcileScheduledDelivery(db, {
+    type: "game_update",
+    recordId: "legacy-uncertain",
+    resolution: "delivered",
+    messageId: "52345678901234567",
+    canary: false,
+    now: 25
+  }), { ok: false, reason: "missing_attempt_provenance" });
+  assert.equal(db.prepare("SELECT status FROM scheduled_game_updates WHERE schedule_id = 'legacy-uncertain'").get().status, "delivery_unknown");
+  assert.equal(db.prepare("SELECT 1 FROM game_update_release_state").get(), undefined);
   db.close();
 });

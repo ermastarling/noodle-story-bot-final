@@ -21,6 +21,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const content = JSON.parse(fs.readFileSync(path.join(__dirname, "../content/achievements.json"), "utf8"));
 const specializationsContent = JSON.parse(fs.readFileSync(path.join(__dirname, "../content/specializations.json"), "utf8"));
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  return 1
+    + (component.components ?? []).reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + (component.accessory ? countComponentsDeep(component.accessory) : 0);
+}
+
 test("Achievement pages keep the menu compact and expose every visible achievement exactly once", () => {
   const visible = getVisibleAchievements(newPlayerProfile("achievement-pages"), content);
   const totalPages = Math.ceil(visible.length / ACHIEVEMENTS_PER_PAGE);
@@ -36,6 +43,23 @@ test("Achievement pages keep the menu compact and expose every visible achieveme
   ).join("\n\n").length < 4096));
   assert.deepEqual(getAchievementPage(visible, 999).entries, pages.at(-1).entries);
   assert.equal(getAchievementPage([], 0).totalPages, 1);
+});
+
+test("A full claimable-achievement page stays within Discord's component limit", () => {
+  const entries = Array.from({ length: ACHIEVEMENTS_PER_PAGE }, (_, index) => ({
+    achievement_id: `claimable_${index}`,
+    name: `Claimable ${index}`,
+    description: "Ready to claim."
+  }));
+  const payload = buildAchievementsV2Message({
+    userId: "12345678901234567",
+    entries,
+    unlocked: Object.fromEntries(entries.map((entry) => [entry.achievement_id, { unlocked_at: 1 }])),
+    visibleCount: entries.length
+  });
+  const count = payload.components.reduce((sum, component) => sum + countComponentsDeep(component), 0);
+  assert.equal(entries.length, 9);
+  assert.ok(count <= 40, `expected at most 40 components, received ${count}`);
 });
 
 test("Achievement notice cards use the achievement banner and point to the achievements command", () => {

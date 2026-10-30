@@ -677,14 +677,17 @@ export function contributeToSharedOrder(
     }
 
     if (Number.isFinite(totalRequiredUnits)) {
-      const activeMemberCount = db.prepare(
-        "SELECT COUNT(*) AS count FROM party_members WHERE party_id = ? AND left_at IS NULL"
-      ).get(sharedOrder.party_id).count;
-      if (activeMemberCount < 1) {
+      const activeMembers = db.prepare(
+        "SELECT user_id FROM party_members WHERE party_id = ? AND left_at IS NULL ORDER BY joined_at, user_id"
+      ).all(sharedOrder.party_id);
+      if (activeMembers.length < 1) {
         throw new Error("Shared order has no active party members");
       }
-      // Round up so the remainder can be covered and the order stays completable.
-      const maxMemberUnits = Math.ceil(totalRequiredUnits / activeMemberCount);
+      const requiredUnits = Math.max(0, Math.floor(totalRequiredUnits));
+      const baseMemberUnits = Math.floor(requiredUnits / activeMembers.length);
+      const remainder = requiredUnits % activeMembers.length;
+      const memberIndex = activeMembers.findIndex((member) => member.user_id === userId);
+      const maxMemberUnits = baseMemberUnits + (memberIndex < remainder ? 1 : 0);
       const currentMemberUnits = db.prepare(
         "SELECT COALESCE(SUM(quantity), 0) AS total FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
       ).get(sharedOrderId, userId).total;

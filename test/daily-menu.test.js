@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setDailyOrderMenu, shouldCommitDailyOrderMenu } from "../src/game/dailyMenu.js";
-import { ensureDailyOrdersForPlayer, generateOrderPageForPlayer } from "../src/game/orders.js";
+import { ensureDailyOrdersForPlayer, generateOrderPageForPlayer, getOrdersMeta } from "../src/game/orders.js";
 import { newPlayerProfile } from "../src/game/player.js";
 import { buildDailyMenuV2Message } from "../src/ui/dailyMenuV2.js";
 
@@ -73,8 +73,16 @@ test("Daily order menu can change once per day and preserves accepted orders and
   player.known_recipes = ["classic_soy_ramen", "ginger_broth", "miso_bowl"];
   player.orders_day = "2026-10-21";
   player.orders_seed = "before-menu";
+  player.orders_total_count = 5;
   player.orders_consumed_indices = [0, 2];
-  player.orders.accepted.order_1 = { accepted_at: 1, order: { recipe_id: "classic_soy_ramen" } };
+  player.orders.accepted.order_1 = {
+    accepted_at: 1,
+    order: {
+      order_id: "2026-10-21-o1-old-menu",
+      order_index: 1,
+      recipe_id: "classic_soy_ramen"
+    }
+  };
 
   const result = setDailyOrderMenu(player, ["ginger_broth", "miso_bowl"], {
     availableRecipeIds: player.known_recipes,
@@ -85,7 +93,12 @@ test("Daily order menu can change once per day and preserves accepted orders and
   assert.equal(result.ok, true);
   assert.notEqual(player.orders_seed, "before-menu");
   assert.deepEqual(player.orders_consumed_indices, [0, 2]);
-  assert.deepEqual(player.orders.accepted.order_1.order, { recipe_id: "classic_soy_ramen" });
+  assert.deepEqual(player.orders.accepted.order_1.order, {
+    order_id: "2026-10-21-o1-old-menu",
+    order_index: 1,
+    recipe_id: "classic_soy_ramen"
+  });
+  assert.equal(getOrdersMeta(player).availableCount, 2);
 
   assert.deepEqual(setDailyOrderMenu(player, ["classic_soy_ramen"], {
     availableRecipeIds: player.known_recipes,
@@ -113,7 +126,7 @@ test("Daily order generation uses selected menu without rewriting accepted-order
   const player = newPlayerProfile("daily-menu-orders-user");
   player.known_recipes = ["classic_soy_ramen", "ginger_broth"];
   player.daily_order_menu_recipe_ids = ["ginger_broth"];
-  player.orders = { accepted: { locked: { order: { recipe_id: "classic_soy_ramen" } } } };
+  player.orders = { accepted: {} };
   const settings = {
     ORDERS_BASE_COUNT: 5,
     ORDER_TIER_WEIGHTS_BASE: { common: 1 },
@@ -130,6 +143,13 @@ test("Daily order generation uses selected menu without rewriting accepted-order
     }
   };
   ensureDailyOrdersForPlayer(player, settings, content, "spring", "guild", player.user_id);
+  player.orders.accepted.locked = {
+    order: {
+      order_id: `${player.orders_day}-o1-previous-menu`,
+      order_index: 1,
+      recipe_id: "classic_soy_ramen"
+    }
+  };
   const orders = generateOrderPageForPlayer({
     playerState: player,
     settings,
@@ -141,5 +161,10 @@ test("Daily order generation uses selected menu without rewriting accepted-order
   }).orders;
   assert.ok(orders.length > 0);
   assert.ok(orders.every((order) => order.recipe_id === "ginger_broth"));
-  assert.deepEqual(player.orders.accepted.locked.order, { recipe_id: "classic_soy_ramen" });
+  assert.ok(orders.every((order) => order.order_index !== 1));
+  assert.deepEqual(player.orders.accepted.locked.order, {
+    order_id: `${player.orders_day}-o1-previous-menu`,
+    order_index: 1,
+    recipe_id: "classic_soy_ramen"
+  });
 });

@@ -8710,6 +8710,7 @@ if (inDevPath && sub === "admin_delivery_reconcile") {
       absence_not_verified: "Confirm that you checked Discord and verified no message exists before allowing a retry.",
       invalid_message_id: "Provide the Discord message ID when marking a delivery as delivered.",
       invalid_channel_id: "The current route is missing a valid channel ID, so the delivery cannot be marked as delivered.",
+      missing_attempt_provenance: "This delivery has no recorded destination and mode. Do not mark it delivered; verify absence and retry it through the current route.",
       not_unknown: "That record is not in an uncertain delivery state; no change was made.",
       not_awaiting_fulfillment: "That giveaway is not awaiting manual VALOR fulfillment.",
       giveaway_expired: "That giveaway can no longer be safely reposted.",

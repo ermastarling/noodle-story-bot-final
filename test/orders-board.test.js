@@ -273,6 +273,110 @@ test("Orders: temporary recipe pool changes keep consumed progress mid-day", () 
 	assert.deepEqual(playerState.orders_consumed_indices, [0, 2]);
 });
 
+test("Orders: unavailable menu recipes fall back to learned recipes and rescue recipes take priority", () => {
+	const seasonalContent = {
+		recipes: {
+			classic_soy_ramen: { recipe_id: "classic_soy_ramen", tier: "common" },
+			summer_special: { recipe_id: "summer_special", tier: "seasonal", season: "summer" },
+			simple_broth: { recipe_id: "simple_broth", tier: "common" }
+		},
+		npcs: { traveler: { npc_id: "traveler", rarity: "common" } }
+	};
+	const playerState = {
+		known_recipes: ["classic_soy_ramen"],
+		daily_order_menu_recipe_ids: ["summer_special"],
+		orders_consumed_indices: []
+	};
+	ensureDailyOrdersForPlayer(playerState, settings, seasonalContent, "winter", "s1", "menu-user");
+	const fallbackOrders = generateOrderPageForPlayer({
+		playerState,
+		settings,
+		content: seasonalContent,
+		activeSeason: "winter",
+		serverId: "s1",
+		userId: "menu-user",
+		pageSize: 10
+	}).orders;
+	assert.ok(fallbackOrders.length > 0);
+	assert.ok(fallbackOrders.every((order) => order.recipe_id === "classic_soy_ramen"));
+
+	playerState.resilience = { temp_recipes: ["simple_broth"] };
+	ensureDailyOrdersForPlayer(playerState, settings, seasonalContent, "winter", "s1", "menu-user");
+	const rescueOrders = generateOrderPageForPlayer({
+		playerState,
+		settings,
+		content: seasonalContent,
+		activeSeason: "winter",
+		serverId: "s1",
+		userId: "menu-user",
+		pageSize: 10
+	}).orders;
+	assert.ok(rescueOrders.length > 0);
+	assert.ok(rescueOrders.every((order) => order.recipe_id === "simple_broth"));
+});
+
+test("Orders: a depleted board provides a tutorial-only replay order without restoring regular availability", () => {
+	const dayKey = "2026-10-30";
+	const playerState = {
+		known_recipes: ["classic_soy_ramen"],
+		tutorial: { active: true, queue: ["intro_order"], completed: [] },
+		orders_day: dayKey,
+		orders_seed: "s1-user-day",
+		order_seed_version: 5,
+		orders_total_count: 5,
+		orders_consumed_indices: [0, 1, 2, 3, 4],
+		orders_depleted_day: dayKey,
+		orders: { accepted: {} }
+	};
+	const meta = getOrdersMeta(playerState);
+	assert.equal(meta.availableCount, 1);
+	assert.equal(meta.tutorialReplayAvailable, true);
+
+	const replay = generateOrderPageForPlayer({
+		playerState,
+		settings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "user",
+		pageSize: 10
+	}).orders[0];
+	assert.ok(replay);
+	assert.equal(replay.recipe_id, "classic_soy_ramen");
+	assert.equal(findOrderByToken({
+		playerState,
+		settings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "user",
+		token: replay.order_id
+	})?.order_id, replay.order_id);
+	assert.equal(findOrderByToken({
+		playerState,
+		settings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "user",
+		token: "TR0001"
+	})?.order_id, replay.order_id);
+	assert.deepEqual(playerState.orders_consumed_indices, [0, 1, 2, 3, 4]);
+	assert.equal(playerState.orders_depleted_day, dayKey);
+
+	playerState.tutorial.active = false;
+	assert.equal(getOrdersMeta(playerState).availableCount, 0);
+	assert.deepEqual(generateOrderPageForPlayer({
+		playerState,
+		settings,
+		content,
+		activeSeason: "spring",
+		serverId: "s1",
+		userId: "user",
+		pageSize: 10
+	}).orders, []);
+});
+
 test("Orders: depleted day marker keeps board complete for the rest of the day", () => {
 	const playerState = {
 		shop_level: 1,

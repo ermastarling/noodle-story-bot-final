@@ -237,24 +237,57 @@ export function scheduleGameUpdate(db, {
   return { scheduleId, scheduledAt: dueAt };
 }
 
+export function claimScheduledGameUpdateDelivery(db, {
+  scheduleId,
+  expectedStatus,
+  channelId,
+  canary,
+  now = Date.now()
+} = {}) {
+  if (!db) throw new Error("Database is required");
+  if (!DISCORD_SNOWFLAKE.test(String(channelId ?? ""))) {
+    throw new Error("A valid delivery channel ID is required");
+  }
+  if (typeof canary !== "boolean") throw new Error("Delivery mode must be explicit");
+  if (!["pending", "canary_previewed"].includes(expectedStatus)) {
+    throw new Error("Invalid scheduled update status for delivery");
+  }
+  return db.prepare(`
+    UPDATE scheduled_game_updates
+    SET status = 'sending', attempt_channel_id = ?, attempt_canary = ?, updated_at = ?
+    WHERE schedule_id = ? AND status = ?
+  `).run(String(channelId), canary ? 1 : 0, now, String(scheduleId ?? ""), expectedStatus).changes === 1;
+}
+
 export function completeScheduledGameUpdateDelivery(db, {
   scheduleId,
   messageId,
-  canary = false,
   now = Date.now()
 } = {}) {
   const row = db.prepare(`
-    SELECT guild_id, rollout_summary
+    SELECT guild_id, rollout_summary, attempt_channel_id, attempt_canary
     FROM scheduled_game_updates
     WHERE schedule_id = ? AND status = 'sending'
   `).get(String(scheduleId ?? ""));
-  if (!row) return false;
+  if (
+    !row
+    || !DISCORD_SNOWFLAKE.test(String(row.attempt_channel_id ?? ""))
+    || ![0, 1].includes(row.attempt_canary)
+  ) return false;
+  const canary = row.attempt_canary === 1;
   const nextStatus = row.rollout_summary && canary ? "canary_previewed" : "sent";
   return db.transaction(() => {
     const result = db.prepare(`
       UPDATE scheduled_game_updates SET status = ?, message_id = ?, updated_at = ?
-      WHERE schedule_id = ? AND status = 'sending'
-    `).run(nextStatus, String(messageId), now, String(scheduleId));
+      WHERE schedule_id = ? AND status = 'sending' AND attempt_channel_id = ? AND attempt_canary = ?
+    `).run(
+      nextStatus,
+      String(messageId),
+      now,
+      String(scheduleId),
+      row.attempt_channel_id,
+      row.attempt_canary
+    );
     if (result.changes !== 1) return false;
     if (row.rollout_summary && !canary) {
       db.prepare(`
@@ -336,17 +369,18 @@ async function postScheduledUpdates({ db, client, settings, env, logger, now }) 
       });
       continue;
     }
-    const claimed = db.prepare(`
-      UPDATE scheduled_game_updates SET status = 'sending', updated_at = ?
-      WHERE schedule_id = ? AND status = ?
-    `).run(now, row.schedule_id, row.status);
-    if (claimed.changes !== 1) continue;
+    if (!claimScheduledGameUpdateDelivery(db, {
+      scheduleId: row.schedule_id,
+      expectedStatus: row.status,
+      channelId: settings.channelId,
+      canary: settings.canary,
+      now
+    })) continue;
     try {
       const messageId = await sendPayload(client, settings, payload, env);
       if (!completeScheduledGameUpdateDelivery(db, {
         scheduleId: row.schedule_id,
         messageId,
-        canary: settings.canary,
         now
       })) throw new Error("Scheduled update delivery state changed before completion");
       logger.info(`Game update ${row.update_id} sent to channel ${settings.channelId}.`);

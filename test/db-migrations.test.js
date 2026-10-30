@@ -15,6 +15,7 @@ test("runtime schema migration adds giveaway delivery fields idempotently", () =
       created_at INTEGER NOT NULL
     )
   `);
+  db.exec("CREATE TABLE scheduled_game_updates (schedule_id TEXT PRIMARY KEY)");
   ensureRuntimeSchemaColumns(db);
   ensureRuntimeSchemaColumns(db);
   const columns = db.prepare("PRAGMA table_info(weekly_giveaways)").all();
@@ -24,6 +25,9 @@ test("runtime schema migration adds giveaway delivery fields idempotently", () =
   assert.equal(columns.some((column) => column.name === "valor_confirmation_started_at"), true);
   assert.equal(columns.some((column) => column.name === "valor_confirmation_message_id"), true);
   assert.equal(columns.some((column) => column.name === "posting_started_at"), true);
+  const updateColumns = db.prepare("PRAGMA table_info(scheduled_game_updates)").all();
+  assert.equal(updateColumns.some((column) => column.name === "attempt_channel_id"), true);
+  assert.equal(updateColumns.some((column) => column.name === "attempt_canary"), true);
   db.prepare("INSERT INTO weekly_giveaways (giveaway_id, status, created_at) VALUES ('legacy', 'open', 1)").run();
   assert.equal(db.prepare("SELECT confirmation_status FROM weekly_giveaways WHERE giveaway_id='legacy'").get().confirmation_status, "pending");
   db.close();

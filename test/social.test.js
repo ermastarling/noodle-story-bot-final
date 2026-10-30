@@ -25,6 +25,7 @@ import {
   clearExpiredBlessings,
   createParty,
   createSharedOrder,
+  completeSharedOrder,
   contributeToSharedOrder,
   getSharedOrderContributions,
   joinParty,
@@ -197,9 +198,14 @@ test("Shared order: contribution is capped per active member across ingredient t
   assert.equal(contributions.filter((row) => row.user_id === "leader1").reduce((sum, row) => sum + row.quantity, 0), 6);
   assert.equal(contributions.some((row) => row.ingredient_id === "toppings"), false);
 
+  assert.throws(
+    () => contributeToSharedOrder(db, sharedOrderId, "user2", "toppings", 6, { totalRequiredUnits: 11 }),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
   contributeToSharedOrder(db, sharedOrderId, "user2", "toppings", 5, { totalRequiredUnits: 11 });
-  assert.equal(getSharedOrderContributions(db, sharedOrderId).length, 3);
-  // 6 + 5 covers all 11 required units: the remainder is not stranded.
+  const completedContributions = getSharedOrderContributions(db, sharedOrderId);
+  assert.equal(completedContributions.length, 3);
+  assert.equal(completedContributions.reduce((sum, row) => sum + row.quantity, 0), 11);
 
   const player = newPlayerProfile("leader1");
   player.inv_ingredients.noodles = 10;
@@ -217,6 +223,8 @@ test("Shared order: contribution is capped per active member across ingredient t
   assert.equal(getSharedOrderContributions(db, sharedOrderId)
     .filter((row) => row.user_id === "leader1")
     .reduce((sum, row) => sum + row.quantity, 0), 6);
+  completeSharedOrder(db, sharedOrderId);
+  assert.equal(db.prepare("SELECT status FROM shared_orders WHERE shared_order_id = ?").get(sharedOrderId).status, "completed");
   db.close();
 });
 

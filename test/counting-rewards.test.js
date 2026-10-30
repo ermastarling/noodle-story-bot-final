@@ -83,6 +83,50 @@ test("Counting milestone grants recover pending rewards after restart", () => {
   }
 });
 
+test("Counting milestone grants reject a caller who does not own the pending reward", () => {
+  const db = setupDb();
+  try {
+    const winnerId = "pending-reward-winner";
+    upsertPlayer(db, "guild", winnerId, newPlayerProfile(winnerId), null, 1);
+    queueReward(db, { userId: winnerId, milestone: 10, reward: { type: "coins", amount: 250 } });
+
+    assert.deepEqual(grantCountingMilestoneReward(db, {
+      guildId: "guild",
+      channelId: "counting",
+      userId: "different-user",
+      milestone: 10,
+      content: { recipes: {} }
+    }), { status: "winner_mismatch", userId: winnerId, milestone: 10 });
+    assert.equal(db.prepare("SELECT status FROM counting_milestone_rewards").get().status, "pending");
+    assert.equal(getPlayer(db, "guild", winnerId).coins, newPlayerProfile(winnerId).coins);
+  } finally {
+    db.close();
+  }
+});
+
+test("Missing counting reward profiles remain pending without stopping startup recovery", () => {
+  const db = setupDb();
+  try {
+    queueReward(db, { userId: "missing-profile", milestone: 10, reward: { type: "coins", amount: 250 } });
+    const availableUserId = "available-profile";
+    upsertPlayer(db, "guild", availableUserId, newPlayerProfile(availableUserId), null, 1);
+    queueReward(db, { userId: availableUserId, milestone: 20, reward: { type: "rep", amount: 5 } });
+
+    assert.deepEqual(grantPendingCountingMilestoneRewards(db, { recipes: {} }), [
+      { status: "profile_missing", userId: "missing-profile", milestone: 10 },
+      {
+        status: "granted",
+        userId: availableUserId,
+        milestone: 20,
+        reward: { type: "rep", amount: 5 }
+      }
+    ]);
+    assert.equal(db.prepare("SELECT status FROM counting_milestone_rewards WHERE user_id = 'missing-profile'").get().status, "pending");
+  } finally {
+    db.close();
+  }
+});
+
 test("Counting recipe clue milestones only select recipes the player does not know", () => {
   const db = setupDb();
   try {

@@ -7,7 +7,7 @@ const CATEGORY_LABELS = {
   achievements: "Achievements",
   collections: "Collections"
 };
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 7;
 
 export function buildProfileBadgesV2Message({
   userId,

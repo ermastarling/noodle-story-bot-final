@@ -2,6 +2,7 @@ import { strict as assert } from "assert";
 import { test } from "node:test";
 
 import { newPlayerProfile } from "../src/game/player.js";
+import { getOrdersMeta } from "../src/game/orders.js";
 import { advanceTutorial, getCurrentTutorialStep, resetTutorialProgress } from "../src/game/tutorial.js";
 
 test("Tutorial reset: resets only tutorial state and preserves all other profile data", () => {
@@ -48,6 +49,8 @@ test("Tutorial reset: resets only tutorial state and preserves all other profile
   const step = getCurrentTutorialStep(player);
   assert.equal(player.tutorial?.active, true);
   assert.equal(step?.id, "intro_order");
+  assert.equal(getOrdersMeta(player).availableCount, 1);
+  assert.equal(getOrdersMeta(player).tutorialReplayAvailable, true);
 
   const after = structuredClone(player);
   delete after.tutorial;

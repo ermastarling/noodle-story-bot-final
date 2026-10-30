@@ -18,6 +18,13 @@ const eligible = {
   collections: ["collection_1", "collection_2"]
 };
 
+function countComponentsDeep(component) {
+  if (!component || typeof component !== "object") return 0;
+  return 1
+    + (component.components ?? []).reduce((sum, child) => sum + countComponentsDeep(child), 0)
+    + (component.accessory ? countComponentsDeep(component.accessory) : 0);
+}
+
 test("Profile badge rows initialize with eligible badges and enforce seven per category", () => {
   const player = newPlayerProfile("profile-badge-user");
   player.profile.featured_badge_id = "badge_8";
@@ -92,6 +99,23 @@ test("Badges menu provides category tabs, equipped state, pagination, and Custom
 
   const customize = buildProfileEditV2Message({ userId });
   assert.match(JSON.stringify(customize), /noodle:nav:badges:12345678901234567/);
+});
+
+test("A full profile badge page stays within Discord's component limit", () => {
+  const entries = Array.from({ length: 10 }, (_, index) => ({
+    id: `badge_${index}`,
+    name: `Badge ${index}`,
+    description: "An earned profile badge."
+  }));
+  const page = getProfileBadgePage(entries);
+  const payload = buildProfileBadgesV2Message({
+    userId: "12345678901234567",
+    entries: page.entries,
+    totalPages: page.totalPages
+  });
+  const count = payload.components.reduce((sum, component) => sum + countComponentsDeep(component), 0);
+  assert.equal(page.entries.length, 7);
+  assert.ok(count <= 40, `expected at most 40 components, received ${count}`);
 });
 
 test("Profile renders separate badge, achievement, and collection rows capped at seven", () => {

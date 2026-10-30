@@ -88,8 +88,13 @@ export function grantCountingMilestoneReward(db, { guildId, channelId, userId, m
     if (!pending) {
       return { status: "already_granted" };
     }
+    if (pending.user_id !== userId) {
+      return { status: "winner_mismatch", userId: pending.user_id, milestone };
+    }
     const player = getPlayer(db, guildId, pending.user_id);
-    if (!player) throw new Error(`Counting milestone winner profile is missing: ${pending.user_id}`);
+    if (!player) {
+      return { status: "profile_missing", userId: pending.user_id, milestone };
+    }
     const updatedPlayer = structuredClone(player);
     const reward = applyCountingReward(updatedPlayer, JSON.parse(pending.reward_json), content, milestone);
     if (!reward) {

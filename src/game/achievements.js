@@ -2,7 +2,7 @@ import { applySxpLevelUp } from "./serve.js";
 import { nowTs } from "../util/time.js";
 
 const ACHIEVEMENT_NOTICE_LIMIT = 50;
-export const ACHIEVEMENTS_PER_PAGE = 10;
+export const ACHIEVEMENTS_PER_PAGE = 9;
 
 function getByPath(source, path) {
   return String(path ?? "").split(".").reduce((value, key) => value?.[key], source);

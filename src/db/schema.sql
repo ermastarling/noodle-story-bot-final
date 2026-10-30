@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS scheduled_game_updates (
   rollout_summary INTEGER NOT NULL DEFAULT 0 CHECK (rollout_summary IN (0, 1)),
   status TEXT NOT NULL DEFAULT 'pending',
   message_id TEXT,
+  attempt_channel_id TEXT,
+  attempt_canary INTEGER CHECK (attempt_canary IN (0, 1) OR attempt_canary IS NULL),
   created_by TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
