@@ -29,7 +29,7 @@
     "version": "0.6.0",
     "date": "2026-10-30",
     "classification": "player_update",
-    "summary": "Your noodle shop has more to chase and more to show off: Achievements with claimable rewards, profile Badges, a customizable Daily Menu, plus weekly giveaways, work pings, counting milestones, and seasonal announcements in the Official Server."
+    "summary": "Your noodle shop has more to chase and more to show off: Achievements with claimable rewards, profile Badges, a customizable Daily Menu, plus weekly giveaways, work pings, and seasonal announcements in the Official Server."
   },
   "sections": [
     {
@@ -45,7 +45,6 @@
             "**Daily Menu Customization** is here! Pick up to 10 learned recipes for your shop's order board menu from the new **Menu** button on the Orders Board. Select across multiple pages if you have a lot of recipes, then **Save Menu** (or cancel the draft). You can change your menu once per day after the daily reset.",
             "**Weekly Giveaways** now run automatically in the Official Server every Wednesday: one to three contests, each open for a week, with prizes that include coins, coin packs, perks, and VALOR (official server xp). Tap **Enter Giveaway** for a chance to win, each player can win once per week.",
             "A **Work Ping** now appears every two hours in the Official Server to remind you to use `/work` and earn VALOR (server xp).",
-            "The Official Server's **Counting Channel** is open: count with the community and reach special milestones to earn coins, REP, SXP, and recipe clues for your shop. A wrong number sends everyone back to 1, so count carefully!",
             "Adjustments were made to shared orders: Shared orders limit how much one party member can contribute, so everyone gets a fair chance to help your party finish together.",
             "Recipe wording updated, it now says **Discovered** to better match how you find new recipes."
           ]
@@ -119,6 +118,7 @@
     {
       "title": "Upcoming Updates",
       "items": [
+        "**Counting Channel** - count together with the community in the Official Server and reach milestones to earn coins, REP, SXP, and recipe clues for your shop.",
         "**Recipe Creation** - design your own recipes and share them with your party.",
         "**More Events & Minigames** - participate in limited-time events with unique recipes, bonuses, and challenges.",
         "**Player Settings** - set your preferences for notifications, button display, and other gameplay options.",
