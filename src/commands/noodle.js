@@ -109,7 +109,7 @@ import {
   PROFILE_COLLECTIONS_SHOWN as _PROFILE_COLLECTIONS_SHOWN
 } from "../constants.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
-import { normalizeRawContainerPayload } from "../util/rawPayload.js";
+import { normalizeRawContainerPayload, dedupeComponentCustomIds } from "../util/rawPayload.js";
 import { containsProfanity } from "../util/profanity.js";
 import {
   formatNewsVersion,
@@ -4320,6 +4320,10 @@ warning: `${lines.join("\n")}${more}`
 /* ------------------------------------------------------------------ */
 
 function normalizeComponents(rows, flags = 0) {
+  return dedupeComponentCustomIds(normalizeComponentsRows(rows, flags));
+}
+
+function normalizeComponentsRows(rows, flags = 0) {
   if (!Array.isArray(rows)) return rows;
   const isComponentsV2Payload = (Number(flags) & MESSAGE_FLAG_IS_COMPONENTS_V2) !== 0;
 
