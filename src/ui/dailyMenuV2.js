@@ -50,7 +50,16 @@ export function buildDailyMenuV2Message({
             }
           ]
         }]
-      : [])
+      : []),
+    {
+      type: 1,
+      components: [{
+        type: 2,
+        style: 2,
+        label: "Back",
+        custom_id: `noodle:nav:orders:${safeUserId}`
+      }]
+    }
   ];
 
   return buildComponentsV2MenuPayload({

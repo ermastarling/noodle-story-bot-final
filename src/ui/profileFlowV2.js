@@ -191,16 +191,16 @@ function buildProfileEditActionRows({ userId, specializationsAvailable = false, 
           emoji: buttonEmoji.sparkle
         }),
         button({
-          label: "Store",
-          customId: `noodle:action:store:${safeUserId}`,
-          style: BUTTON_STYLE_SUCCESS,
-          emoji: buttonEmoji.cart
-        }),
-        button({
           label: "Badges",
           customId: `noodle:nav:badges:${safeUserId}`,
           style: BUTTON_STYLE_SECONDARY,
           emoji: buttonEmoji.badges
+        }),
+        button({
+          label: "Store",
+          customId: `noodle:action:store:${safeUserId}`,
+          style: BUTTON_STYLE_SUCCESS,
+          emoji: buttonEmoji.cart
         })
       ]
     },
