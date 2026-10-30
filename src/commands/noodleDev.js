@@ -117,6 +117,49 @@ const noodleDevData = new SlashCommandBuilder()
           )
           .addStringOption((o) => o.setName("server_id").setDescription("Override server ID").setRequired(false))
       )
+      .addSubcommand((sc) =>
+        sc
+          .setName("game_update_preview")
+          .setDescription("Preview a configured game update privately.")
+          .addStringOption((o) => o.setName("update_id").setDescription("ID from content/game-updates.md").setRequired(true))
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("game_update_schedule")
+          .setDescription("Schedule a configured game update.")
+          .addStringOption((o) => o.setName("update_id").setDescription("ID from content/game-updates.md").setRequired(true))
+          .addStringOption((o) => o.setName("run_at").setDescription("Future ISO-8601 date/time, including timezone").setRequired(true))
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("delivery_reconcile")
+          .setDescription("Resolve an uncertain scheduled delivery after checking Discord.")
+          .addStringOption((o) =>
+            o.setName("type").setDescription("Delivery record type").setRequired(true).addChoices(
+              { name: "Scheduled message", value: "scheduled_message" },
+              { name: "Game update", value: "game_update" },
+              { name: "Season update", value: "season_update" },
+              { name: "Giveaway post", value: "giveaway_post" },
+              { name: "Giveaway winner notice", value: "giveaway_winner" },
+              { name: "VALOR confirmation", value: "valor_confirmation" }
+            )
+          )
+          .addStringOption((o) => o.setName("record_id").setDescription("Job, schedule, guild, or giveaway ID").setRequired(true))
+          .addStringOption((o) =>
+            o.setName("resolution").setDescription("What you verified in Discord").setRequired(true).addChoices(
+              { name: "Delivered", value: "delivered" },
+              { name: "Not delivered", value: "not_delivered" }
+            )
+          )
+          .addStringOption((o) => o.setName("message_id").setDescription("Required if delivered").setRequired(false))
+          .addBooleanOption((o) => o.setName("verified_absent").setDescription("Confirm you verified no post exists before retrying").setRequired(false))
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("giveaway_valor_fulfilled")
+          .setDescription("Confirm that Erma has manually sent a VALOR giveaway reward.")
+          .addStringOption((o) => o.setName("giveaway_id").setDescription("Giveaway ID to confirm").setRequired(true))
+      )
   )
   .addSubcommand((sc) =>
     sc
@@ -138,7 +181,7 @@ const noodleDevData = new SlashCommandBuilder()
       .addStringOption((o) =>
         o
           .setName("server_id")
-          .setDescription("Override server ID (defaults to current guild)")
+          .setDescription("Only wipe this server's row (default: global profile and all legacy rows)")
           .setRequired(false)
       )
   )

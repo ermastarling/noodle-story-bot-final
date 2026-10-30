@@ -195,6 +195,14 @@ export function isKitchenUnlocked(player) {
   return (player?.shop_level ?? 1) >= KITCHEN_UNLOCK_LEVEL;
 }
 
+export function recordKitchenBrothServings(player, amount) {
+  const servings = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!servings) return Number(player?.lifetime?.broth_servings_simmered) || 0;
+  player.lifetime ??= {};
+  player.lifetime.broth_servings_simmered = (Number(player.lifetime.broth_servings_simmered) || 0) + servings;
+  return player.lifetime.broth_servings_simmered;
+}
+
 export function ensureKitchenState(player) {
   if (!player.kitchen) {
     player.kitchen = { active_batches: [], unlock_seen_level: player?.shop_level ?? 1 };

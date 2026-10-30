@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import { REST } from "@discordjs/rest";
 import { jwtVerify } from "jose";
 import { getIcon } from "./ui/icons.js";
+import { COUNTING_RESET_NOTICE, handleCountingMessage, resolveCountingSettings } from "./game/counting.js";
 import { theme } from "./ui/theme.js";
 
 (async () => {
@@ -30,16 +31,20 @@ import { theme } from "./ui/theme.js";
   const { startDailyResetScheduler } = await import("./jobs/dailyReset.js");
   const { startDailyRewardReminderScheduler } = await import("./jobs/dailyRewardReminders.js");
   const { startEventSyncScheduler } = await import("./jobs/eventSync.js");
+  const { startGameUpdateScheduler } = await import("./jobs/gameUpdates.js");
+  const { startWorkPingScheduler } = await import("./jobs/workPings.js");
+  const { startWeeklyGiveawayScheduler } = await import("./jobs/weeklyGiveaways.js");
   const { startDbBackupScheduler, runDbBackup } = await import("./jobs/backupDb.js");
   const { startDbMaintenanceScheduler } = await import("./jobs/dbMaintenance.js");
-  const { startV2TelemetryAlertScheduler } = await import("./jobs/v2TelemetryAlerts.js");
+  const { resolveTelemetryAlertChannel, startV2TelemetryAlertScheduler } = await import("./jobs/v2TelemetryAlerts.js");
   const {
     loadContentBundle,
     loadSettingsCatalog,
     loadBadgesContent,
     loadSpecializationsContent,
     loadDecorSetsContent,
-    loadEventsContent
+    loadEventsContent,
+    loadCountingRewardsContent
   } = await import("./content/index.js");
   const {
     openDb,
@@ -53,9 +58,19 @@ import { theme } from "./ui/theme.js";
     getAllTimeStorePurchaseCount
   } = await import("./db/index.js");
   const { checkRateLimit } = await import("./infra/rateLimit.js");
-  const { emitTelemetry } = await import("./infra/telemetry.js");
+  const { emitTelemetry, runWithTelemetry } = await import("./infra/telemetry.js");
+  emitTelemetry("process_start", { nodeVersion: process.version });
   const { withInteractionPerf, getInteractionPerfSnapshot } = await import("./infra/perfMetrics.js");
   const { getIdempotentResult, putIdempotentResult } = await import("./infra/idempotency.js");
+  const { withLock } = await import("./infra/locks.js");
+  const {
+    grantCountingMilestoneReward,
+    grantPendingCountingMilestoneRewards,
+    getPendingCountingMilestoneNotices,
+    markCountingMilestoneNoticeSent,
+    buildCountingRewardNotice,
+    validateCountingMilestoneConfig
+  } = await import("./game/countingRewards.js");
   const { newPlayerProfile } = await import("./game/player.js");
   const { STARTER_PROFILE } = await import("./constants.js");
   const { FORAGE_ITEM_IDS } = await import("./game/forage.js");
@@ -91,6 +106,7 @@ import { theme } from "./ui/theme.js";
     rawChannelSendMessage,
     isClientTokenUnavailableError
   } = await import("./ui/componentsV2.js");
+  const { buildCountingNoticePayload } = await import("./ui/countingNotices.js");
   const { noodleCommand } = await import("./commands/noodle.js");
   const { noodleDevCommand } = await import("./commands/noodleDev.js");
   const { noodleSocialCommand } = await import("./commands/noodleSocial.js");
@@ -634,6 +650,12 @@ import { theme } from "./ui/theme.js";
   const officialAutoReactBotsOnly = String(process.env.NOODLE_OFFICIAL_AUTOREACT_BOTS_ONLY || "1") !== "0";
   const officialAutoReactKeywordMatchEnabled = String(process.env.NOODLE_OFFICIAL_AUTOREACT_MATCH_KEYWORDS || "0") === "1";
   const officialMessageContentIntentEnabled = String(process.env.NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT || "0") === "1";
+  const officialCountingSettings = resolveCountingSettings(process.env);
+  const officialCountingEnabled = officialCountingSettings.enabled;
+  const officialCountingConfigured = officialCountingSettings.configured;
+  const officialCountingChannelId = officialCountingSettings.channelId;
+  const officialFeatureCanaryEnabled = officialCountingSettings.canaryEnabled;
+  const officialFeatureCanaryPrivateVerified = officialCountingSettings.canaryPrivateVerified;
   const officialWelcomeAutoReactEmojis = parseCsvValues(process.env.NOODLE_OFFICIAL_WELCOME_REACT_EMOJI || "👋");
   const officialLevelAutoReactEmojis = parseCsvValues(process.env.NOODLE_OFFICIAL_LEVEL_REACT_EMOJI || "🎉");
   const officialStatsChannelsEnabled = String(process.env.NOODLE_OFFICIAL_STATS_CHANNELS_ENABLED || "1") !== "0";
@@ -656,6 +678,7 @@ import { theme } from "./ui/theme.js";
     : officialStatsChannelRefreshIntervalMs;
   let officialStatsChannelRefreshHandle = null;
   const devAlertChannelId = process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "";
+  const telemetryAlertChannelId = String(process.env.NOODLE_TELEMETRY_ALERT_CHANNEL_ID || "").trim();
   const devAlertUserId = process.env.NOODLE_DEV_ALERT_USER_ID || "";
   const sharedBotId = process.env.NOODLE_BOT_ID || process.env.TOPGG_BOT_ID || "1460058511802105976";
   const BOT_ID_FALLBACK = "1460058511802105976";
@@ -916,9 +939,11 @@ import { theme } from "./ui/theme.js";
   ];
   const messageContentIntentBit = Intents.FLAGS.MESSAGE_CONTENT ?? (1 << 15);
   const messageContentIntentRequested = Boolean(
-    officialAutoReactEnabled
-    && officialAutoReactKeywordMatchEnabled
-    && officialMessageContentIntentEnabled
+    officialMessageContentIntentEnabled
+    && (
+      (officialAutoReactEnabled && officialAutoReactKeywordMatchEnabled)
+      || officialCountingEnabled
+    )
   );
   const messageContentIntentApplied = Boolean(
     messageContentIntentRequested
@@ -928,12 +953,100 @@ import { theme } from "./ui/theme.js";
   if (messageContentIntentApplied) {
     clientIntents.push(messageContentIntentBit);
   }
+  if (officialCountingConfigured && !officialCountingSettings.ready) {
+    const missing = [];
+    if (!officialCountingSettings.officialGuildId) missing.push("NOODLE_OFFICIAL_GUILD_ID");
+    if (!officialMessageContentIntentEnabled) missing.push("NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT=1");
+    if (officialFeatureCanaryEnabled && !officialFeatureCanaryPrivateVerified) {
+      missing.push("private canary verification via NOODLE_OFFICIAL_FEATURE_CANARY_PRIVATE_VERIFIED=1");
+    } else if (officialFeatureCanaryEnabled && !devAlertChannelId) {
+      missing.push("NOODLE_DEV_ALERT_CHANNEL_ID");
+    } else if (!officialFeatureCanaryEnabled && !officialCountingChannelId) {
+      missing.push("NOODLE_OFFICIAL_COUNTING_CHANNEL_ID");
+    }
+    console.error(`Counting is disabled because required configuration is missing: ${missing.join(", ")}.`);
+  }
+  // Serialize with player commands that hold the same per-user lock so a stale profile snapshot cannot overwrite the reward.
+  const grantCountingMilestoneRewardLocked = async ({ guildId, channelId, userId, milestone }) => {
+    const owner = `counting-milestone:${process.pid}:${guildId}:${channelId}:${milestone}`;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await withLock(db, `lock:user:${userId}`, owner, 8000, async () => grantCountingMilestoneReward(db, {
+          guildId,
+          channelId,
+          userId,
+          milestone,
+          content
+        }));
+      } catch (error) {
+        if (error?.code !== "ERR_LOCK_BUSY" || attempt >= 5) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      }
+    }
+  };
+  let countingMessageQueue = Promise.resolve();
+  const queueCountingMessage = (message) => {
+    countingMessageQueue = countingMessageQueue.then(() => handleCountingMessage(db, message, {
+      botUserId: client.user?.id,
+      successEmoji: getIcon("status_complete"),
+      repeatEmoji: getIcon("refresh"),
+      brokenEmoji: getIcon("cancel"),
+      resetMessage: COUNTING_RESET_NOTICE,
+      sendResetNotice: async (channel) => rawChannelSendMessage(
+        client,
+        channel.id,
+        buildCountingNoticePayload(COUNTING_RESET_NOTICE),
+        { botToken: token || "" }
+      ),
+      milestoneRewards: countingMilestoneRewards,
+      onMilestone: async ({ guildId, channelId, userId, milestone }) => {
+        const granted = await grantCountingMilestoneRewardLocked({ guildId, channelId, userId, milestone });
+        if (granted.status !== "granted") return granted;
+        const payload = buildCountingNoticePayload(buildCountingRewardNotice(granted), [userId]);
+        await rawChannelSendMessage(client, channelId, payload, { botToken: token || "" });
+        if (!markCountingMilestoneNoticeSent(db, { guildId, channelId, milestone })) {
+          throw new Error(`Counting milestone notice state changed before acknowledgment: ${milestone}`);
+        }
+        return granted;
+      }
+    })).catch((error) => {
+      console.error("Counting message handler failed:", error?.stack ?? error);
+    });
+    return countingMessageQueue;
+  };
 
   const client = new Client({ intents: clientIntents });
+  client.on("shardDisconnect", (event, shardId) => {
+    emitTelemetry("discord_gateway_event", {
+      kind: "disconnect",
+      shardId: Number.isFinite(Number(shardId)) ? Number(shardId) : null,
+      closeCode: Number.isFinite(Number(event?.code)) ? Number(event.code) : null
+    });
+  });
+  client.on("shardReconnecting", (shardId) => {
+    emitTelemetry("discord_gateway_event", {
+      kind: "reconnecting",
+      shardId: Number.isFinite(Number(shardId)) ? Number(shardId) : null
+    });
+  });
+  client.on("shardResume", (shardId) => {
+    emitTelemetry("discord_gateway_event", {
+      kind: "resume",
+      shardId: Number.isFinite(Number(shardId)) ? Number(shardId) : null
+    });
+  });
+  client.on("shardError", (error, shardId) => {
+    emitTelemetry("discord_gateway_event", {
+      kind: "shard_error",
+      shardId: Number.isFinite(Number(shardId)) ? Number(shardId) : null,
+      errorCode: error?.code ?? null,
+      errorName: error?.name ?? null
+    });
+  });
   const trackedGuildIds = new Set();
   let guildTrackingPrimed = false;
 
-  function ensureClientTokenHydrated(reason = "runtime") {
+  function ensureClientTokenHydrated(_reason = "runtime") {
     if (client?.token) return true;
     const fallbackToken = String(token || "").trim() || String(process.env.DISCORD_TOKEN || "").trim();
     if (!fallbackToken) return false;
@@ -954,10 +1067,45 @@ import { theme } from "./ui/theme.js";
   const baseContent = loadContentBundle(1);
   const eventsContent = loadEventsContent();
   const content = withEventRecipes(baseContent, eventsContent);
+  const countingRewardContent = loadCountingRewardsContent();
+  const configuredCountingMilestones = validateCountingMilestoneConfig(countingRewardContent);
+  const countingRewardsEnabled = officialCountingSettings.ready
+    && String(process.env.NOODLE_OFFICIAL_COUNTING_REWARDS_ENABLED || "0") === "1";
+  const countingMilestoneRewards = countingRewardsEnabled
+    ? configuredCountingMilestones
+    : [];
+  const recoveredCountingRewards = db ? grantPendingCountingMilestoneRewards(db, content) : [];
+  if (recoveredCountingRewards.length) {
+    console.log(`Recovered ${recoveredCountingRewards.filter((result) => result.status === "granted").length} pending counting milestone reward(s).`);
+  }
   const _settingsCatalog = loadSettingsCatalog();
   const badgesContent = loadBadgesContent();
   const specializationsContent = loadSpecializationsContent();
   const decorSetsContent = loadDecorSetsContent();
+
+  async function deliverPendingCountingMilestoneNotices() {
+    if (!db || !officialCountingSettings.copyApproved) return;
+    const pendingNotices = getPendingCountingMilestoneNotices(db);
+    for (const notice of pendingNotices) {
+      try {
+        const guild = client.guilds.cache.get(notice.guildId)
+          || await client.guilds.fetch(notice.guildId);
+        const channel = guild.channels.cache.get(notice.channelId)
+          || await guild.channels.fetch(notice.channelId);
+        if (!channel || typeof channel.send !== "function") {
+          console.error(`Counting milestone notice is pending: channel ${notice.channelId} is not sendable.`);
+          continue;
+        }
+        const payload = buildCountingNoticePayload(buildCountingRewardNotice(notice), [notice.userId]);
+        await rawChannelSendMessage(client, notice.channelId, payload, { botToken: token || "" });
+        if (!markCountingMilestoneNoticeSent(db, notice)) {
+          throw new Error(`Counting milestone notice state changed before acknowledgment: ${notice.milestone}`);
+        }
+      } catch (error) {
+        console.error(`Counting milestone notice delivery failed for ${notice.guildId}/${notice.channelId}/${notice.milestone}:`, error?.stack ?? error);
+      }
+    }
+  }
 
   function seedInitialStorePurchaseHistory() {
     if (!db) return;
@@ -1349,9 +1497,10 @@ import { theme } from "./ui/theme.js";
     footerText = "",
     requireMention = true,
     mentionUser = requireMention,
-    color
+    color,
+    targetChannelId = devAlertChannelId
   }) {
-    if (!officialGuildId || !devAlertChannelId) return false;
+    if (!officialGuildId || !targetChannelId) return false;
     if (requireMention && !devAlertUserId) {
       console.error("⚠️ Dev alert skipped: NOODLE_DEV_ALERT_USER_ID is required for mention.");
       return false;
@@ -1365,8 +1514,8 @@ import { theme } from "./ui/theme.js";
         return false;
       }
 
-      alertChannel = officialGuild.channels.cache.get(devAlertChannelId)
-        || await officialGuild.channels.fetch(devAlertChannelId).catch(() => null);
+      alertChannel = officialGuild.channels.cache.get(targetChannelId)
+        || await officialGuild.channels.fetch(targetChannelId).catch(() => null);
       if (!alertChannel || typeof alertChannel.send !== "function") {
         console.error("⚠️ Dev alert skipped: alert channel not sendable.");
         return false;
@@ -1376,7 +1525,7 @@ import { theme } from "./ui/theme.js";
       const mentionLine = shouldMention ? `<@${devAlertUserId}>` : "";
       const bodyLines = [
         mentionLine,
-        String(description || "").slice(0, 4096),
+        String(description || "").slice(0, 3700),
         footerText ? `-# ${String(footerText).slice(0, 2048)}` : ""
       ].filter(Boolean);
       const payload = buildComponentsV2PayloadWithNoticeCards({
@@ -1391,7 +1540,7 @@ import { theme } from "./ui/theme.js";
       });
 
       ensureClientTokenHydrated("sendDevAlert");
-      await rawChannelSendMessage(client, alertChannel.id ?? devAlertChannelId, {
+      await rawChannelSendMessage(client, alertChannel.id ?? targetChannelId, {
         ...payload,
         allowed_mentions: shouldMention ? { users: [devAlertUserId], parse: [] } : undefined
       });
@@ -1401,7 +1550,7 @@ import { theme } from "./ui/theme.js";
         emitTelemetry("hard_failure_alert_send", {
           route: "index:dev_alert",
           guildId: officialGuildId || null,
-          channelId: devAlertChannelId || null,
+          channelId: targetChannelId || null,
           mentionUserId: devAlertUserId || null,
           errorCode: error?.code ?? null,
           errorName: error?.name ?? null,
@@ -1413,7 +1562,7 @@ import { theme } from "./ui/theme.js";
       emitTelemetry("hard_failure_alert_send", {
         route: "index:dev_alert",
         guildId: officialGuildId || null,
-        channelId: devAlertChannelId || null,
+        channelId: targetChannelId || null,
         mentionUserId: devAlertUserId || null,
         errorCode: error?.code ?? null,
         errorName: error?.name ?? null,
@@ -2662,9 +2811,13 @@ import { theme } from "./ui/theme.js";
       return;
     }
 
-    botListStatsHeartbeatHandle = setInterval(async () => {
-      const counts = getCurrentBotListCounts();
-      await updateAllBotListServerCounts(counts, { reason: "heartbeat" });
+    botListStatsHeartbeatHandle = setInterval(() => {
+      void runWithTelemetry("botlist_stats_heartbeat", "interval", async () => {
+        const counts = getCurrentBotListCounts();
+        return updateAllBotListServerCounts(counts, { reason: "heartbeat" });
+      }).catch((error) => {
+        console.error("Bot-list stats heartbeat failed:", error?.stack ?? error);
+      });
     }, botListStatsSyncIntervalMs);
 
     if (typeof botListStatsHeartbeatHandle.unref === "function") {
@@ -3509,6 +3662,7 @@ import { theme } from "./ui/theme.js";
 
 
   client.once("ready", async (c) => {
+    emitTelemetry("discord_gateway_event", { kind: "ready" });
     trackedGuildIds.clear();
     for (const guildId of c.guilds.cache.keys()) {
       trackedGuildIds.add(String(guildId));
@@ -3517,6 +3671,7 @@ import { theme } from "./ui/theme.js";
     ensureClientTokenHydrated("ready");
     console.log(`✅ Logged in as ${c.user.tag}`);
     logRankTopEnvDiagnostics({ clientUserId: c.user?.id || "" });
+    await deliverPendingCountingMilestoneNotices();
 
     await applyStartupAvatarIfConfigured(c.user);
 
@@ -3586,14 +3741,25 @@ import { theme } from "./ui/theme.js";
     startDailyResetScheduler(getKnownServerIds);
     startDailyRewardReminderScheduler(client, getKnownServerIds);
     startEventSyncScheduler(getKnownServerIds);
+    startGameUpdateScheduler({ client: c });
+    startWorkPingScheduler({ client: c });
+    startWeeklyGiveawayScheduler({ client: c });
     startDbBackupScheduler(db);
     startDbMaintenanceScheduler(db);
-    startV2TelemetryAlertScheduler({ sendAlert: sendDevAlert });
+    const telemetryReportsEnabled = String(process.env.NOODLE_V2_TELEMETRY_REPORTS_ENABLED || "").trim() === "1";
+    const telemetryRoute = resolveTelemetryAlertChannel(telemetryAlertChannelId, devAlertChannelId);
+    if (telemetryReportsEnabled && !telemetryRoute.ok) {
+      console.error(`Bot health reports are enabled but the alert channel is invalid (${telemetryRoute.reason}); reports will not start.`);
+    } else if (telemetryReportsEnabled) {
+      startV2TelemetryAlertScheduler({
+        sendAlert: (alert) => sendDevAlert({ ...alert, targetChannelId: telemetryRoute.channelId })
+      });
+    }
 
     const backupOnStart = process.env.NOODLE_BACKUP_ON_START !== "0";
     if (backupOnStart) {
       setTimeout(() => {
-        runDbBackup(db, "startup");
+        void runWithTelemetry("database_backup", "startup", () => runDbBackup(db, "startup"));
       }, 60_000);
     }
   });
@@ -3685,6 +3851,17 @@ import { theme } from "./ui/theme.js";
 
   client.on("messageCreate", async (message) => {
     try {
+      if (
+        db
+        &&
+        officialCountingSettings.ready
+        && String(message?.guildId || "") === officialCountingSettings.officialGuildId
+        && String(message?.channelId || "") === officialCountingSettings.channelId
+      ) {
+        await queueCountingMessage(message);
+        return;
+      }
+
       if (!officialAutoReactEnabled || !officialGuildId) return;
       if (!message?.guildId || message.guildId !== officialGuildId) return;
       if (message.author?.id === client.user?.id) return;
@@ -3923,7 +4100,7 @@ import { theme } from "./ui/theme.js";
           return interaction.respond(results);
         }
 
-        // ✅ Market autocomplete (buy/sell) — only ingredients used by unlocked recipes
+        // ✅ Market autocomplete (buy/sell) — only ingredients used by discovered recipes
         if ((sub === "buy" || sub === "sell") && focused.name === "item") {
           telemetryRoute = `autocomplete:${sub}`;
           const serverId = interaction.guildId;

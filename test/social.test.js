@@ -24,6 +24,9 @@ import {
   getActiveBlessing as _getActiveBlessing,
   clearExpiredBlessings,
   createParty,
+  createSharedOrder,
+  contributeToSharedOrder,
+  getSharedOrderContributions,
   joinParty,
   inviteUserToParty,
   leaveParty,
@@ -41,6 +44,8 @@ import {
   MIN_TIP_AMOUNT as _MIN_TIP_AMOUNT,
   MAX_TIP_AMOUNT as _MAX_TIP_AMOUNT
 } from "../src/game/social.js";
+import { getPlayer, upsertPlayer } from "../src/db/index.js";
+import { newPlayerProfile } from "../src/game/player.js";
 import { nowTs } from "../src/util/time.js";
 
 function setupTestDb() {
@@ -171,6 +176,46 @@ test("Party: cannot join full party", dbTestOpts, () => {
     joinParty(db, "server1", partyId, "user5");
   }, /Party is full/);
   
+  db.close();
+});
+
+test("Shared order: contribution is capped per active member across ingredient types", dbTestOpts, () => {
+  const db = setupTestDb();
+  const { partyId } = createParty(db, "server1", "leader1", "Test Party");
+  joinParty(db, "server1", partyId, "user2");
+  const { sharedOrderId } = createSharedOrder(db, partyId, "recipe1", "server1", 5);
+
+  contributeToSharedOrder(db, sharedOrderId, "leader1", "noodles", 3, { totalRequiredUnits: 11 });
+  contributeToSharedOrder(db, sharedOrderId, "leader1", "broth", 2, { totalRequiredUnits: 11 });
+
+  assert.throws(
+    () => contributeToSharedOrder(db, sharedOrderId, "leader1", "toppings", 1, { totalRequiredUnits: 11 }),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
+
+  const contributions = getSharedOrderContributions(db, sharedOrderId);
+  assert.equal(contributions.filter((row) => row.user_id === "leader1").reduce((sum, row) => sum + row.quantity, 0), 5);
+  assert.equal(contributions.some((row) => row.ingredient_id === "toppings"), false);
+
+  contributeToSharedOrder(db, sharedOrderId, "user2", "toppings", 5, { totalRequiredUnits: 11 });
+  assert.equal(getSharedOrderContributions(db, sharedOrderId).length, 3);
+
+  const player = newPlayerProfile("leader1");
+  player.inv_ingredients.noodles = 10;
+  upsertPlayer(db, "server1", "leader1", player, null, player.schema_version);
+  assert.throws(
+    () => db.transaction(() => {
+      player.inv_ingredients.noodles -= 1;
+      upsertPlayer(db, "server1", "leader1", player, null, player.schema_version);
+      contributeToSharedOrder(db, sharedOrderId, "leader1", "noodles", 1, { totalRequiredUnits: 11 });
+    })(),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
+  const storedPlayer = getPlayer(db, "server1", "leader1");
+  assert.equal(storedPlayer.inv_ingredients.noodles, 10);
+  assert.equal(getSharedOrderContributions(db, sharedOrderId)
+    .filter((row) => row.user_id === "leader1")
+    .reduce((sum, row) => sum + row.quantity, 0), 5);
   db.close();
 });
 

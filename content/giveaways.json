@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "prize_pools_by_contest_count": {
+    "1": [
+      { "type": "coins", "amount": 50000 },
+      { "type": "coin_pack", "pack_id": "coin_pack_499" },
+      { "type": "perks", "perks": ["house_247", "takeout_counter"] },
+      { "type": "valor", "amount": 500 }
+    ],
+    "2": [
+      { "type": "coins", "amount": 25000 },
+      { "type": "coins", "amount": 40000 },
+      { "type": "coin_pack", "pack_id": "coin_pack_199" },
+      { "type": "coin_pack", "pack_id": "coin_pack_499" },
+      { "type": "perks", "perks": ["house_247"] },
+      { "type": "perks", "perks": ["takeout_counter"] },
+      { "type": "perks", "perks": ["house_247", "takeout_counter"] },
+      { "type": "valor", "amount": 300 },
+      { "type": "valor", "amount": 400 }
+    ],
+    "3": [
+      { "type": "coins", "amount": 5000 },
+      { "type": "coins", "amount": 10000 },
+      { "type": "coins", "amount": 15000 },
+      { "type": "coins", "amount": 20000 },
+      { "type": "coins", "amount": 25000 },
+      { "type": "coins", "amount": 30000 },
+      { "type": "coin_pack", "pack_id": "coin_pack_099" },
+      { "type": "coin_pack", "pack_id": "coin_pack_199" },
+      { "type": "perks", "perks": ["house_247"] },
+      { "type": "perks", "perks": ["takeout_counter"] },
+      { "type": "valor", "amount": 100 },
+      { "type": "valor", "amount": 150 },
+      { "type": "valor", "amount": 200 },
+      { "type": "valor", "amount": 250 }
+    ]
+  }
+}

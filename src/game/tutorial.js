@@ -114,18 +114,10 @@ export function formatTutorialCompletionMessage() {
 }
 
 export function resetTutorialProgress(player) {
-  player.tutorial = null;
+  player.tutorial = {
+    active: true,
+    queue: [...TUTORIAL_QUESTS],
+    completed: []
+  };
   ensureTutorial(player);
-
-  // Reset order flow so tutorial can always restart from the first customer.
-  if (!player.orders || typeof player.orders !== "object" || Array.isArray(player.orders)) {
-    player.orders = { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 };
-  }
-  player.orders.accepted = {};
-  player.orders_day = null;
-  player.orders_seed = null;
-  player.orders_pool_sig = null;
-  player.orders_consumed_indices = [];
-  player.orders_total_count = 0;
-  player.orders_depleted_day = null;
 }

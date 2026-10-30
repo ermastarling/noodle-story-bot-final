@@ -115,6 +115,7 @@ function resolveSceneBannerFromHeading(heading = "") {
   if (!normalized) return "";
 
   const aliases = {
+    daily_order_board_menu: ["daily_menu", "menu"],
     noodle_story_store: ["store"],
     customize_profile: ["customize"],
     server_leaderboard: ["leaderboard"],
@@ -141,6 +142,7 @@ function resolveSceneBannerFromHeading(heading = "") {
     cook: ["cook"],
     customize: ["customize"],
     event: ["event"],
+    achievement: ["achievements"],
     fishing: ["fishing"],
     forage: ["forage"],
     giveaway: ["giveaway"],
@@ -164,6 +166,7 @@ function resolveSceneBannerFromHeading(heading = "") {
     serve: ["serve"],
     specializations: ["specializations"],
     staff: ["staff"],
+    stats: ["stats"],
     status: ["status"],
     store: ["store"],
     take_out: ["takeout_counter"],
@@ -318,6 +321,9 @@ function detectOwnerIdInComponents(components = []) {
     if (Array.isArray(node.components) && node.components.length > 0) {
       stack.push(...node.components);
     }
+    if (node.accessory && typeof node.accessory === "object") {
+      stack.push(node.accessory);
+    }
   }
 
   let bestId = null;
@@ -418,6 +424,9 @@ function hasGreenButtonInComponents(components = []) {
 
     if (Array.isArray(node.components) && node.components.length > 0) {
       stack.push(...node.components);
+    }
+    if (node.accessory && typeof node.accessory === "object") {
+      stack.push(node.accessory);
     }
   }
   return false;
@@ -708,28 +717,6 @@ function isTutorialActive(player) {
   return Boolean(player?.tutorial?.active === true);
 }
 
-export function resolveComponentsV2TargetGuild(env = process.env) {
-  return normalizeSnowflake(env?.NOODLE_OFFICIAL_GUILD_ID || env?.NOODLE_DEV_GUILD_ID || env?.DISCORD_GUILD_ID || "");
-}
-
-function isGuildAllowed(guildId, env = process.env) {
-  const normalizedGuild = normalizeSnowflake(guildId);
-  if (!normalizedGuild) return false;
-
-  const configured = parseAllowlist(env?.NOODLE_COMPONENTS_V2_GUILD_ALLOWLIST);
-  if (configured.size > 0) return configured.has(normalizedGuild);
-
-  const fallbackGuild = resolveComponentsV2TargetGuild(env);
-  if (!fallbackGuild) return false;
-  return fallbackGuild === normalizedGuild;
-}
-
-function isUserAllowed(userId, env = process.env) {
-  const configured = parseAllowlist(env?.NOODLE_COMPONENTS_V2_USER_ALLOWLIST);
-  if (configured.size === 0) return true;
-  return configured.has(normalizeSnowflake(userId));
-}
-
 function isTutorialUserAllowed(userId, env = process.env) {
   const explicitToggle = String(env?.NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED ?? "").trim();
   if (explicitToggle === "1") return true;
@@ -740,10 +727,9 @@ function isTutorialUserAllowed(userId, env = process.env) {
   return true;
 }
 
-export function isComponentsV2Enabled({ guildId, userId, player, env = process.env } = {}) {
+// Gameplay UI is global: only the kill switch and tutorial rule apply, never the guild or user.
+export function isComponentsV2Enabled({ userId, player, env = process.env } = {}) {
   if (!isEnabled(env?.NOODLE_COMPONENTS_V2_ENABLED)) return false;
-  if (!isGuildAllowed(guildId, env)) return false;
-  if (!isUserAllowed(userId, env)) return false;
 
   if (isTutorialActive(player) && !isTutorialUserAllowed(userId, env)) {
     return false;

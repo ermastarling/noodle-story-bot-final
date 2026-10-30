@@ -16,11 +16,24 @@ test("noodle-dev command schema includes admin control group", () => {
   assert.equal(adminGroup.type, 2);
 
   const adminSubNames = (adminGroup.options ?? []).map((option) => option.name).sort();
-  assert.deepEqual(adminSubNames, ["recipe", "season_event", "spec", "stat"]);
+  assert.deepEqual(adminSubNames, [
+    "delivery_reconcile",
+    "game_update_preview",
+    "game_update_schedule",
+    "giveaway_valor_fulfilled",
+    "recipe",
+    "season_event",
+    "spec",
+    "stat"
+  ]);
 
   const specSub = (adminGroup.options ?? []).find((option) => option.name === "spec");
   const recipeSub = (adminGroup.options ?? []).find((option) => option.name === "recipe");
   const seasonEventSub = (adminGroup.options ?? []).find((option) => option.name === "season_event");
+  const gameUpdatePreviewSub = (adminGroup.options ?? []).find((option) => option.name === "game_update_preview");
+  const gameUpdateScheduleSub = (adminGroup.options ?? []).find((option) => option.name === "game_update_schedule");
+  const valorFulfilledSub = (adminGroup.options ?? []).find((option) => option.name === "giveaway_valor_fulfilled");
+  const deliveryReconcileSub = (adminGroup.options ?? []).find((option) => option.name === "delivery_reconcile");
   const specIdOption = (specSub?.options ?? []).find((option) => option.name === "spec_id");
   const recipeIdOption = (recipeSub?.options ?? []).find((option) => option.name === "recipe_id");
   const eventIdOption = (seasonEventSub?.options ?? []).find((option) => option.name === "event_id");
@@ -28,6 +41,16 @@ test("noodle-dev command schema includes admin control group", () => {
   assert.equal(specIdOption?.autocomplete, true);
   assert.equal(recipeIdOption?.autocomplete, true);
   assert.equal(eventIdOption?.autocomplete, true);
+  assert.equal((gameUpdatePreviewSub?.options ?? []).some((option) => option.name === "update_id"), true);
+  assert.deepEqual((gameUpdateScheduleSub?.options ?? []).map((option) => option.name), ["update_id", "run_at"]);
+  assert.deepEqual((valorFulfilledSub?.options ?? []).map((option) => option.name), ["giveaway_id"]);
+  assert.deepEqual((deliveryReconcileSub?.options ?? []).map((option) => option.name), [
+    "type",
+    "record_id",
+    "resolution",
+    "message_id",
+    "verified_absent"
+  ]);
 });
 
 test("noodle-dev admin recipe autocomplete includes event recipes", async () => {

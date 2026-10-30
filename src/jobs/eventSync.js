@@ -4,8 +4,9 @@ import { newServerState } from "../game/server.js";
 import { loadEventsContent, loadSettingsCatalog } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import { computeActiveSeason } from "../game/seasons.js";
-import { getEventWindow } from "../game/events.js";
+import { resolveActiveEventId } from "../game/events.js";
 import { nowTs } from "../util/time.js";
+import { runWithTelemetry } from "../infra/telemetry.js";
 
 const db = openDb();
 const eventsContent = loadEventsContent();
@@ -21,32 +22,15 @@ function ensureServer(serverId) {
   return s;
 }
 
-function resolveActiveEventId(nowMs = Date.now(), activeSeason = null) {
-  const events = eventsContent?.events ?? [];
-  const active = [];
-
-  for (const event of events) {
-    if (!event?.event_id) continue;
-    if (activeSeason && event?.season && event.season !== activeSeason) continue;
-    const window = getEventWindow(event, nowMs);
-    if (!window.start || !window.end) continue;
-    if (nowMs < window.start || nowMs > window.end) continue;
-    active.push({ event, window });
-  }
-
-  if (!active.length) return null;
-  active.sort((a, b) => a.window.start - b.window.start);
-  return active[0].event.event_id;
-}
-
 async function syncEventsOnce(getKnownServerIds) {
   const serverIds = await getKnownServerIds();
+  let failed = false;
   for (const serverId of serverIds) {
     try {
       const s = ensureServer(serverId);
       const settings = buildSettingsMap(settingsCatalog, s.settings);
       const activeSeason = computeActiveSeason(settings);
-      const activeEventId = resolveActiveEventId(Date.now(), activeSeason);
+      const activeEventId = resolveActiveEventId(eventsContent, Date.now(), activeSeason);
       if (s.active_event_id === activeEventId) continue;
 
       const previous = s.active_event_id ?? null;
@@ -59,17 +43,21 @@ async function syncEventsOnce(getKnownServerIds) {
       });
       upsertServer(db, serverId, s, null);
     } catch (e) {
+      failed = true;
       console.error("event_sync failed", serverId, e);
     }
   }
+  return !failed;
 }
 
 export function startEventSyncScheduler(getKnownServerIds) {
   if (!db) return;
-  syncEventsOnce(getKnownServerIds).catch((e) => {
+  runWithTelemetry("event_sync", "startup", () => syncEventsOnce(getKnownServerIds)).catch((e) => {
     console.error("event_sync failed", e);
   });
-  cron.schedule("5 0 * * *", async () => {
-    await syncEventsOnce(getKnownServerIds);
+  cron.schedule("5 0 * * *", () => {
+    return runWithTelemetry("event_sync", "scheduled", () => syncEventsOnce(getKnownServerIds)).catch((e) => {
+      console.error("event_sync failed", e);
+    });
   }, { timezone: "UTC" });
 }

@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { nowTs } from "../util/time.js";
 import { ORDER_ACCEPT_CAP_HOUSE_247 } from "../game/subscriptions.js";
 import { recordDbRead, recordDbWrite } from "../infra/perfMetrics.js";
+import { ensureRuntimeSchemaColumns } from "./migrations.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -139,8 +140,16 @@ function invalidateSharedPlayerByUser(userId) {
   }
 }
 
-function parsePlayerRow(row, userId) {
-  if (!row?.data_json) return null;
+function parsePlayerRow(row, userId, { strict = false } = {}) {
+  if (!row) return null;
+  if (typeof row.data_json !== "string" || row.data_json.length === 0) {
+    if (strict) {
+      const error = new Error("Stored player profile JSON is missing; refusing to replace the existing profile.");
+      error.code = "ERR_PLAYER_PROFILE_CORRUPT";
+      throw error;
+    }
+    return null;
+  }
   try {
     return {
       ...JSON.parse(row.data_json),
@@ -148,7 +157,12 @@ function parsePlayerRow(row, userId) {
       state_rev: row.state_rev,
       schema_version: row.schema_version
     };
-  } catch {
+  } catch (cause) {
+    if (strict) {
+      const error = new Error("Stored player profile JSON is invalid; refusing to replace the existing profile.", { cause });
+      error.code = "ERR_PLAYER_PROFILE_CORRUPT";
+      throw error;
+    }
     return null;
   }
 }
@@ -237,7 +251,7 @@ export function repairGlobalPlayerProfileFromLegacy(db, userId, { force = false 
     "SELECT data_json, state_rev, schema_version, last_active_at FROM players WHERE server_id=? AND user_id=?"
   );
   const globalRowData = measureDbRead(() => globalRow.get(GLOBAL_PLAYER_SERVER_ID, userId));
-  const globalPlayer = parsePlayerRow(globalRowData, userId);
+  const globalPlayer = parsePlayerRow(globalRowData, userId, { strict: true });
   const globalScore = globalPlayer ? getPlayerProgressScore(globalPlayer, globalRowData?.last_active_at) : -1;
 
   const bestLegacy = loadBestLegacyPlayerRow(db, userId);
@@ -305,6 +319,7 @@ export function openDb() {
   const db = new Database(dbPath);
   const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf-8");
   db.exec(schema);
+  ensureRuntimeSchemaColumns(db);
   dbSingleton = db;
   return db;
 }
@@ -375,7 +390,7 @@ export function getPlayer(db, serverId, userId) {
 
   if (!row) return null;
 
-  let player = parsePlayerRow(row, userId);
+  let player = parsePlayerRow(row, userId, { strict: true });
   if (!player) return null;
 
   if (USE_GLOBAL_PLAYER_DATA && storageServerId === GLOBAL_PLAYER_SERVER_ID && isWeakGlobalPlayer(player)) {
@@ -549,12 +564,19 @@ function prunePlayerBeforePersist(player) {
 
 export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null, schemaVersion=1) {
   const storageServerId = getPlayerStorageServerId(serverId);
+  const requestedSchemaVersion = Math.max(
+    Number.isInteger(Number(schemaVersion)) && Number(schemaVersion) > 0 ? Number(schemaVersion) : 1,
+    Number.isInteger(Number(playerData?.schema_version)) && Number(playerData.schema_version) > 0
+      ? Number(playerData.schema_version)
+      : 1
+  );
   prunePlayerBeforePersist(playerData);
   const tx = db.transaction(() => {
-    const existing = prepareCached(db, "SELECT state_rev FROM players WHERE server_id=? AND user_id=?").get(storageServerId, userId);
+    const existing = prepareCached(db, "SELECT state_rev, schema_version FROM players WHERE server_id=? AND user_id=?").get(storageServerId, userId);
     if (!existing) {
+      playerData.schema_version = requestedSchemaVersion;
       prepareCached(db, "INSERT INTO players(server_id,user_id,schema_version,state_rev,created_at,last_active_at,data_json) VALUES (?,?,?,?,?,?,?)")
-        .run(storageServerId, userId, schemaVersion, 1, nowTs(), nowTs(), JSON.stringify(playerData));
+        .run(storageServerId, userId, requestedSchemaVersion, 1, nowTs(), nowTs(), JSON.stringify(playerData));
       return 1;
     }
     if (expectedRev !== null && existing.state_rev !== expectedRev) {
@@ -562,9 +584,11 @@ export function upsertPlayer(db, serverId, userId, playerData, expectedRev=null,
       err.code = "ERR_CONFLICT";
       throw err;
     }
+    const nextSchemaVersion = Math.max(Number(existing.schema_version) || 1, requestedSchemaVersion);
+    playerData.schema_version = nextSchemaVersion;
     const newRev = existing.state_rev + 1;
-    prepareCached(db, "UPDATE players SET state_rev=?, last_active_at=?, data_json=? WHERE server_id=? AND user_id=?")
-      .run(newRev, nowTs(), JSON.stringify(playerData), storageServerId, userId);
+    prepareCached(db, "UPDATE players SET schema_version=?, state_rev=?, last_active_at=?, data_json=? WHERE server_id=? AND user_id=?")
+      .run(nextSchemaVersion, newRev, nowTs(), JSON.stringify(playerData), storageServerId, userId);
     return newRev;
   });
   const rev = measureDbWrite(() => tx());

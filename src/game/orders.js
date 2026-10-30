@@ -193,6 +193,10 @@ function buildRecipePoolSignature(playerRecipePool) {
 }
 
 function getPlayerRecipePool(playerState) {
+  const dailyMenu = Array.isArray(playerState.daily_order_menu_recipe_ids)
+    ? playerState.daily_order_menu_recipe_ids.filter(Boolean)
+    : [];
+  if (dailyMenu.length > 0) return new Set(dailyMenu);
   const permanentRecipes = playerState.known_recipes || [];
   const tempRecipes = playerState.resilience?.temp_recipes || [];
   return new Set(tempRecipes.length > 0 ? tempRecipes : [...permanentRecipes, ...tempRecipes]);

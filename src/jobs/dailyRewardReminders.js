@@ -5,7 +5,7 @@ import { dayKeyUTC, nowTs } from "../util/time.js";
 import { hasDailyRewardAvailable } from "../game/daily.js";
 import { hasUnlimitedMarketStock } from "../game/subscriptions.js";
 import { getIcon } from "../ui/icons.js";
-import { emitTelemetry } from "../infra/telemetry.js";
+import { emitTelemetry, runWithTelemetry } from "../infra/telemetry.js";
 import { buildComponentsV2PayloadWithNoticeCards } from "../ui/componentsV2.js";
 import { sendRawDm } from "../util/rawDm.js";
 
@@ -130,8 +130,8 @@ async function trySendReminderForUser(client, userId, {
     : null;
   const channelLine = channelId ? `<#${channelId}>` : null;
   const claimLine = force
-    ? "*Use `/noodle quests_daily` to claim it.*"
-    : "*Use `/noodle quests_daily` to claim it.*";
+    ? "*Use `/noodle-quests daily` to claim it.*"
+    : "*Use `/noodle-quests daily` to claim it.*";
   const components = buildDmReminderComponents({
     userId,
     serverId: lastGuildId || resolvedServerId,
@@ -192,9 +192,10 @@ function normalizeNotifications(player) {
 }
 
 async function sendDailyRewardReminders(client, getKnownServerIds) {
-  if (!db) return;
-  if (isRunning) return;
+  if (!db) return false;
+  if (isRunning) return "skipped";
   isRunning = true;
+  let sendFailures = 0;
 
   const now = nowTs();
   const todayKey = dayKeyUTC(now);
@@ -223,13 +224,15 @@ async function sendDailyRewardReminders(client, getKnownServerIds) {
       if (row.last_active_at && row.last_active_at < inactiveCutoff) continue;
 
       const preferredServerId = getLatestServerIdForUser(db, userId) ?? "global";
-      await trySendReminderForUser(client, userId, {
+      const result = await trySendReminderForUser(client, userId, {
         preferredServerId,
         now,
         todayKey,
         force: false
       });
+      if (result.reason === "send_failed") sendFailures += 1;
     }
+    return sendFailures === 0;
   } finally {
     isRunning = false;
   }
@@ -266,7 +269,11 @@ export function startDailyRewardReminderScheduler(client, getKnownServerIds) {
   if (!db) return;
   const cronExpr = getDailyRewardReminderCronExpr();
 
-  cron.schedule(cronExpr, async () => {
-    await sendDailyRewardReminders(client, getKnownServerIds);
-  }, { timezone: "UTC" });
+  cron.schedule(cronExpr, () => runWithTelemetry(
+    "daily_reward_reminders",
+    "scheduled",
+    () => sendDailyRewardReminders(client, getKnownServerIds)
+  ).catch((error) => {
+    console.error("Daily reward reminder scheduler failed:", error?.stack ?? error);
+  }), { timezone: "UTC" });
 }

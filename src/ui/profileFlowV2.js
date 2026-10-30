@@ -195,6 +195,12 @@ function buildProfileEditActionRows({ userId, specializationsAvailable = false, 
           customId: `noodle:action:store:${safeUserId}`,
           style: BUTTON_STYLE_SUCCESS,
           emoji: buttonEmoji.cart
+        }),
+        button({
+          label: "Badges",
+          customId: `noodle:nav:badges:${safeUserId}`,
+          style: BUTTON_STYLE_SECONDARY,
+          emoji: buttonEmoji.badges
         })
       ]
     },
@@ -242,6 +248,7 @@ export function buildProfileEditV2Message({
     asText([
       "- Change your shop name and tagline.",
       "- Change your shop specialization.",
+      "- Choose the badges shown on your profile.",
       "- Check out the Store for premium specializations, coin packs, and subscription perks."
     ].join("\n"))
   ];

@@ -86,6 +86,8 @@ export function grantBlessing(visitorPlayer, hostUserId, blessingType) {
     expires_at: expiresAt
   };
   visitorPlayer.social.last_blessing_at = now;
+  visitorPlayer.lifetime ??= {};
+  visitorPlayer.lifetime.blessings_received = (Number(visitorPlayer.lifetime.blessings_received) || 0) + 1;
   
   return visitorPlayer;
 }
@@ -632,54 +634,86 @@ export function createSharedOrder(db, partyId, recipeId, serverId, servings = 5)
 /**
  * Contribute to a shared order
  */
-export function contributeToSharedOrder(db, sharedOrderId, userId, ingredientId, quantity, { maxIngredientSlots = null } = {}) {
+export function contributeToSharedOrder(
+  db,
+  sharedOrderId,
+  userId,
+  ingredientId,
+  quantity,
+  { maxIngredientSlots = null, totalRequiredUnits = null } = {}
+) {
   const now = nowTs();
-  
-  // Check if shared order exists and is active
-  const sharedOrder = db.prepare("SELECT * FROM shared_orders WHERE shared_order_id = ? AND status = 'active'").get(sharedOrderId);
-  if (!sharedOrder) {
-    throw new Error("Shared order not found or already completed");
-  }
-  
-  // Check if user is party member
-  const membership = db.prepare("SELECT * FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL").get(sharedOrder.party_id, userId);
-  if (!membership) {
-    throw new Error("Not a member of this party");
-  }
-  
-  const existing = db.prepare("SELECT * FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ? AND ingredient_id = ?")
-    .get(sharedOrderId, userId, ingredientId);
 
-  if (!existing && Number.isFinite(maxIngredientSlots)) {
-    const slotCount = db.prepare(
-      "SELECT COUNT(DISTINCT ingredient_id) as cnt FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
-    ).get(sharedOrderId, userId).cnt || 0;
-    if (slotCount >= maxIngredientSlots) {
-      const error = new Error("You have already contributed the maximum ingredient types for this shared order.");
-      error.code = "SHARED_ORDER_SLOT_LIMIT";
-      throw error;
+  const contribute = db.transaction(() => {
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw new Error("Invalid shared order contribution quantity");
     }
-  }
-  
-  if (existing) {
-    db.prepare(`
+
+    const sharedOrder = db.prepare("SELECT * FROM shared_orders WHERE shared_order_id = ? AND status = 'active'").get(sharedOrderId);
+    if (!sharedOrder) {
+      throw new Error("Shared order not found or already completed");
+    }
+
+    const membership = db.prepare(
+      "SELECT 1 FROM party_members WHERE party_id = ? AND user_id = ? AND left_at IS NULL"
+    ).get(sharedOrder.party_id, userId);
+    if (!membership) {
+      throw new Error("Not a member of this party");
+    }
+
+    const existing = db.prepare(
+      "SELECT * FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ? AND ingredient_id = ?"
+    ).get(sharedOrderId, userId, ingredientId);
+
+    if (!existing && Number.isFinite(maxIngredientSlots)) {
+      const slotCount = db.prepare(
+        "SELECT COUNT(DISTINCT ingredient_id) as cnt FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
+      ).get(sharedOrderId, userId).cnt || 0;
+      if (slotCount >= maxIngredientSlots) {
+        const error = new Error("You have already contributed the maximum ingredient types for this shared order.");
+        error.code = "SHARED_ORDER_SLOT_LIMIT";
+        throw error;
+      }
+    }
+
+    if (Number.isFinite(totalRequiredUnits)) {
+      const activeMemberCount = db.prepare(
+        "SELECT COUNT(*) AS count FROM party_members WHERE party_id = ? AND left_at IS NULL"
+      ).get(sharedOrder.party_id).count;
+      if (activeMemberCount < 1) {
+        throw new Error("Shared order has no active party members");
+      }
+      const maxMemberUnits = Math.floor(totalRequiredUnits / activeMemberCount);
+      const currentMemberUnits = db.prepare(
+        "SELECT COALESCE(SUM(quantity), 0) AS total FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
+      ).get(sharedOrderId, userId).total;
+      if (currentMemberUnits + quantity > maxMemberUnits) {
+        const error = new Error("Shared order member contribution limit reached");
+        error.code = "SHARED_ORDER_MEMBER_CAP";
+        throw error;
+      }
+    }
+
+    if (existing) {
+      db.prepare(`
       UPDATE shared_order_contributions 
       SET quantity = quantity + ?, contributed_at = ?
       WHERE shared_order_id = ? AND user_id = ? AND ingredient_id = ?
-    `).run(quantity, now, sharedOrderId, userId, ingredientId);
-  } else {
-    db.prepare(`
+      `).run(quantity, now, sharedOrderId, userId, ingredientId);
+    } else {
+      db.prepare(`
       INSERT INTO shared_order_contributions (shared_order_id, user_id, ingredient_id, quantity, contributed_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(sharedOrderId, userId, ingredientId, quantity, now);
-  }
-  
-  // Update party member contribution points
-  db.prepare(`
+      `).run(sharedOrderId, userId, ingredientId, quantity, now);
+    }
+
+    db.prepare(`
     UPDATE party_members 
     SET contribution_points = contribution_points + ?
     WHERE party_id = ? AND user_id = ?
-  `).run(quantity, sharedOrder.party_id, userId);
+    `).run(quantity, sharedOrder.party_id, userId);
+  });
+  contribute();
 }
 
 /**
