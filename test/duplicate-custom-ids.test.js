@@ -25,11 +25,34 @@ test("dedupeComponentCustomIds: suffixes repeated ids, keeps first and leaves un
   assert.equal(ids[3], "noodle:nav:y:u");
 });
 
-test("dedupeComponentCustomIds: never exceeds Discord's 100 char custom_id limit", () => {
-  const long = `noodle:${"a".repeat(93)}`;
-  const out = dedupeComponentCustomIds([{ type: 2, custom_id: long }, { type: 2, custom_id: long }]);
-  assert.ok(out[1].custom_id.length <= 100);
-  assert.notEqual(out[0].custom_id, out[1].custom_id);
+test("dedupeComponentCustomIds: boundary lengths stay unique, <=100 chars and never truncate the route", () => {
+  for (let length = 90; length <= 100; length += 1) {
+    const original = `noodle:${"a".repeat(length - 7)}`;
+    const out = dedupeComponentCustomIds([{ type: 1, components: [
+      { type: 2, custom_id: original },
+      { type: 2, custom_id: original },
+      { type: 2, custom_id: original }
+    ] }])[0].components;
+    const ids = out.map((c) => c.custom_id);
+    assert.equal(ids[0], original);
+    assert.equal(new Set(ids).size, ids.length, `unique at length ${length}`);
+    for (const id of ids) {
+      assert.ok(id.length <= 100, `limit at length ${length}`);
+      assert.ok(id.startsWith(original), `route preserved at length ${length}`);
+      assert.match(id.slice(original.length), /^(:(dup)?\d+)?$/);
+    }
+  }
+});
+
+test("dedupeComponentCustomIds: an unfixable duplicate is dropped; a Section keeps its text", () => {
+  const original = `noodle:${"a".repeat(93)}`;
+  const out = dedupeComponentCustomIds([
+    { type: 1, components: [{ type: 2, custom_id: original }, { type: 2, custom_id: original }] },
+    { type: 9, components: [{ type: 10, content: "hi" }], accessory: { type: 2, custom_id: original } }
+  ]);
+  assert.equal(out[0].components.length, 1);
+  assert.equal(out[0].components[0].custom_id, original);
+  assert.deepEqual(out[1], { type: 10, content: "hi" });
 });
 
 test("Badges V2: a two-page menu produces unique custom ids once normalized for Discord", () => {

@@ -2409,8 +2409,8 @@ function noodleProfileEditRow(userId, { specializationsAvailable = false } = {})
     new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:action:store:${userId}`).setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`noodle:nav:badges:${userId}`).setLabel("Badges").setEmoji(getButtonEmoji("badges")).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:badges:${userId}`).setLabel("Badges").setEmoji(getButtonEmoji("badges")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:action:store:${userId}`).setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Success)
   );
 }
 
@@ -2563,6 +2563,20 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
+}
+
+// Keeps the board's action rows on an all-failed serve so the player is never left without buttons.
+function buildServeFailurePayload({ userId, embed, hasAcceptedOrders = false, useV2 = true } = {}) {
+  const payload = {
+    content: " ",
+    components: [
+      noodleOrdersActionRow(userId, { highlightAccept: false, disableServe: !hasAcceptedOrders }),
+      noodleMainMenuRow(userId)
+    ],
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]),
+    notices: []
+  };
+  return useV2 ? convertLegacyEmbedPayloadToComponentsV2(payload) : payload;
 }
 
 function noodleOrdersActionRow(userId, { highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
@@ -13309,7 +13323,7 @@ ${lines.join("\n")}`;
     return commitState({
       content: " ",
       mainComponents: legacyEmbedsToV2TextComponentsForLegacy([buyEmbed]), notices: [],
-      components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : undefined
+      components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : [noodleMainMenuRow(userId)]
     });
   }
 
@@ -13361,7 +13375,12 @@ ${lines.join("\n")}`;
       description: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.`,
       user: interaction.member ?? interaction.user
     });
-    return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([sellEmbed]), notices: [] });
+    return commitState({
+      content: " ",
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([sellEmbed]),
+      notices: [],
+      components: [noodleMainMenuRow(userId)]
+    });
   }
 
   /* ---------------- COOK ---------------- */
@@ -14220,9 +14239,15 @@ ${lines.join("\n")}`;
       description: cancelMsg,
       user: interaction.member ?? interaction.user
     });
+    const hasAcceptedAfterCancel = Object.keys(accepted).length > 0;
     return commitState({
       content: " ",
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cancelEmbed]), notices: []
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cancelEmbed]),
+      notices: [],
+      components: [
+        noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedAfterCancel, disableServe: !hasAcceptedAfterCancel }),
+        noodleMainMenuRow(userId)
+      ]
     });
   }
 
@@ -14599,11 +14624,12 @@ ${lines.join("\n")}`;
         description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
-      const failPayload = { content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([failEmbed]), notices: [] };
-      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
-        return commitState(convertLegacyEmbedPayloadToComponentsV2(failPayload));
-      }
-      return commitState(failPayload);
+      return commitState(buildServeFailurePayload({
+        userId,
+        embed: failEmbed,
+        hasAcceptedOrders: Object.keys(acceptedMap).length > 0,
+        useV2: isComponentsV2Enabled({ guildId: serverId, userId, player: p })
+      }));
     }
 
     if (servedCount > 0) {
@@ -16987,9 +17013,10 @@ if (kind === "action") {
       });
     }
     const category = parts[5] === "claimed" ? "claimed" : "in_progress";
+    const claimPage = Math.max(0, Math.floor(Number(parts[6])) || 0);
     return runNoodle(interaction, {
       sub: "achievements",
-      overrides: { strings: { category }, integers: { page: 0 } }
+      overrides: { strings: { category }, integers: { page: claimPage } }
     });
   }
   if (action === "achievement_category") {
@@ -17035,9 +17062,10 @@ if (kind === "action") {
         : "That badge is not available to equip.";
       return componentCommit(interaction, { content: message, ephemeral: true });
     }
+    const togglePage = Math.max(0, Math.floor(Number(parts[6])) || 0);
     return runNoodle(interaction, {
       sub: "badges",
-      overrides: { strings: { category }, integers: { page: 0 } }
+      overrides: { strings: { category }, integers: { page: togglePage } }
     });
   }
   const sub = action;
@@ -18862,5 +18890,7 @@ export {
   buildMainAndNoticesFromEmbeds as buildMainAndNoticesFromEmbedsForTest,
   resolveComponentNavSub,
   applyPersistentNoticeCards as applyPersistentNoticeCardsForTest,
-  convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest
+  convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest,
+  buildServeFailurePayload as buildServeFailurePayloadForTest,
+  noodleProfileEditRow as noodleProfileEditRowForTest
 };

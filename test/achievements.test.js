@@ -109,7 +109,7 @@ test("Achievements container places claim actions inline and keeps pagination wi
 
   assert.equal((payload.flags & (1 << 15)) !== 0, true);
   assert.ok(nodes.some((node) => node.type === 9 && node.accessory?.label === "Claim"
-    && node.accessory.custom_id === `noodle:action:achievement_claim:${userId}:ready:in_progress`
+    && node.accessory.custom_id === `noodle:action:achievement_claim:${userId}:ready:in_progress:1`
     && node.accessory.emoji?.name === "daily_reward"));
   assert.equal(nodes.some((node) => node.type === 3), false);
   assert.ok(nodes.some((node) => node.type === 10
