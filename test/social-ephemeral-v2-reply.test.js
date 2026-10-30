@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 process.env.NOODLE_SKIP_DB = "1";
 
-const { componentCommitForTest } = await import("../src/commands/noodleSocial.js");
+const { componentCommitForTest, replyInitialForTest } = await import("../src/commands/noodleSocial.js");
 
 function buildInteraction() {
   const callbacks = [];
@@ -69,4 +69,21 @@ test("Social: plain error text containing a scene keyword is not replaced by the
     const rendered = collectText(callbacks[0].data.data.components).join("\n");
     assert.ok(rendered.includes(text), `message text must survive: ${text}`);
   }
+});
+
+test("Social: initial slash-command replies with V2 payloads use the raw callback, classic ones use reply()", async () => {
+  const { interaction, callbacks } = buildInteraction();
+  await replyInitialForTest(interaction, {
+    components: [{ type: 17, components: [{ type: 10, content: "Removed member." }] }],
+    flags: (1 << 15) | 64
+  });
+  assert.equal(callbacks.length, 1);
+  assert.equal(callbacks[0].data.type, 4);
+
+  const classic = buildInteraction();
+  let called = 0;
+  classic.interaction.reply = async () => { called += 1; };
+  await replyInitialForTest(classic.interaction, { content: "hi", ephemeral: true });
+  assert.equal(called, 1);
+  assert.equal(classic.callbacks.length, 0);
 });

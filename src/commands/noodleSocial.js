@@ -1472,6 +1472,14 @@ async function rawInteractionReply(interaction, payload) {
   return result;
 }
 
+// Initial reply that is safe for both classic and Components V2 payloads.
+async function replyInitial(interaction, payload) {
+  if (isComponentsV2Payload(payload) && canUseRawWebhookResponse(interaction)) {
+    return rawInteractionReply(interaction, payload);
+  }
+  return interaction.reply(payload);
+}
+
 function canUseRawWebhookResponse(interaction) {
   const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
   return Boolean(interaction?.client?.api && applicationId && interaction?.token);
@@ -1577,7 +1585,7 @@ async function sendSocialPayload(interaction, payload = {}) {
     return await rawWebhookEditOriginal(interaction, finalPayload);
   } catch {
     try {
-      return await interaction.reply(finalPayload);
+      return await replyInitial(interaction, finalPayload);
     } catch (e) {
       if (isInvalidComponentTypeError(e)) {
         if (!interaction.deferred && !interaction.replied) {
@@ -1624,7 +1632,7 @@ async function componentCommit(interaction, opts) {
       if (isV2Reply && canUseRawWebhookResponse(interaction)) {
         return await rawInteractionReply(interaction, ephemeralPayload);
       }
-      return await interaction.reply(ephemeralPayload);
+      return await replyInitial(interaction, ephemeralPayload);
     } catch (_e) {
       if (isUnknownWebhookError(_e) || isUnknownInteractionError(_e)) {
         return null;
@@ -2380,7 +2388,7 @@ async function handleParty(interaction) {
     if (interaction.deferred || interaction.replied) {
       return sendEphemeralFollowUp(interaction, payload);
     }
-    return interaction.reply(payload);
+    return replyInitial(interaction, payload);
   }
 
   if (lockedResult.targetMessageId && interaction.channel?.messages) {
@@ -5544,4 +5552,4 @@ export const noodleSocialCommand = {
   }
 };
 
-export { socialMainMenuRow, socialMainMenuRowNoProfile, statsViewButtons, componentCommit as componentCommitForTest };
+export { replyInitial as replyInitialForTest, socialMainMenuRow, socialMainMenuRowNoProfile, statsViewButtons, componentCommit as componentCommitForTest };
