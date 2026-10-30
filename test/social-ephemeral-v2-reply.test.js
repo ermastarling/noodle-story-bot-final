@@ -48,3 +48,25 @@ test("Social: ephemeral Components V2 reply goes through the raw interaction cal
   assert.ok((flags & (1 << 15)) !== 0, "Components V2 flag kept");
   assert.equal(interaction.replied, true);
 });
+
+function collectText(node, out = []) {
+  if (Array.isArray(node)) node.forEach((child) => collectText(child, out));
+  else if (node && typeof node === "object") {
+    if (node.type === 10 && typeof node.content === "string") out.push(node.content);
+    Object.values(node).forEach((child) => collectText(child, out));
+  }
+  return out;
+}
+
+test("Social: plain error text containing a scene keyword is not replaced by the scene banner", async () => {
+  for (const text of [
+    "You've reached your max ingredient slots for this shared order. Ask teammates to cover another ingredient.",
+    "You're not in a party.",
+    "You've already contributed your full share of this shared order (**8/8** items)."
+  ]) {
+    const { interaction, callbacks } = buildInteraction();
+    await componentCommitForTest(interaction, { content: text, ephemeral: true });
+    const rendered = collectText(callbacks[0].data.data.components).join("\n");
+    assert.ok(rendered.includes(text), `message text must survive: ${text}`);
+  }
+});
