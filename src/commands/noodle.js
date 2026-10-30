@@ -15100,6 +15100,7 @@ if (v2Parsed.isV2) {
     if (action === "pn") return runNoodle(interaction, { sub: "pantry" });
     if (action === "qs") return runNoodle(interaction, { sub: "quests" });
     if (action === "tk") return runNoodle(interaction, { sub: "takeout" });
+    if (action === "dm") return runNoodle(interaction, { sub: "daily_menu" });
     if (action === "rf") return runNoodle(interaction, { sub: "orders" });
     if (action === "nm") return runNoodle(interaction, { sub: "profile" });
     if (action === "cnl") {

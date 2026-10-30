@@ -120,20 +120,20 @@ const noodleDevData = new SlashCommandBuilder()
       .addSubcommand((sc) =>
         sc
           .setName("game_update_preview")
-          .setDescription("Preview a configured game update privately.")
+          .setDescription("Dev only.")
           .addStringOption((o) => o.setName("update_id").setDescription("ID from content/game-updates.md").setRequired(true))
       )
       .addSubcommand((sc) =>
         sc
           .setName("game_update_schedule")
-          .setDescription("Schedule a configured game update.")
+          .setDescription("Dev only.")
           .addStringOption((o) => o.setName("update_id").setDescription("ID from content/game-updates.md").setRequired(true))
           .addStringOption((o) => o.setName("run_at").setDescription("Future ISO-8601 date/time, including timezone").setRequired(true))
       )
       .addSubcommand((sc) =>
         sc
           .setName("delivery_reconcile")
-          .setDescription("Resolve an uncertain scheduled delivery after checking Discord.")
+          .setDescription("Dev only.")
           .addStringOption((o) =>
             o.setName("type").setDescription("Delivery record type").setRequired(true).addChoices(
               { name: "Scheduled message", value: "scheduled_message" },
@@ -157,7 +157,7 @@ const noodleDevData = new SlashCommandBuilder()
       .addSubcommand((sc) =>
         sc
           .setName("giveaway_valor_fulfilled")
-          .setDescription("Confirm that Erma has manually sent a VALOR giveaway reward.")
+          .setDescription("Dev only.")
           .addStringOption((o) => o.setName("giveaway_id").setDescription("Giveaway ID to confirm").setRequired(true))
       )
   )
