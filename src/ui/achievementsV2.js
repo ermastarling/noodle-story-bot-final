@@ -46,7 +46,7 @@ export function buildAchievementsV2Message({
             type: 2,
             style: 3,
             label: "Claim",
-            custom_id: `noodle:action:achievement_claim:${safeUserId}:${achievementId}:${safeCategory}`,
+            custom_id: `noodle:action:achievement_claim:${safeUserId}:${achievementId}:${safeCategory}:${safePage}`,
             ...(emoji ? { emoji } : {})
           }
         });

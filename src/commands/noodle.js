@@ -16987,9 +16987,10 @@ if (kind === "action") {
       });
     }
     const category = parts[5] === "claimed" ? "claimed" : "in_progress";
+    const claimPage = Math.max(0, Math.floor(Number(parts[6])) || 0);
     return runNoodle(interaction, {
       sub: "achievements",
-      overrides: { strings: { category }, integers: { page: 0 } }
+      overrides: { strings: { category }, integers: { page: claimPage } }
     });
   }
   if (action === "achievement_category") {
@@ -17035,9 +17036,10 @@ if (kind === "action") {
         : "That badge is not available to equip.";
       return componentCommit(interaction, { content: message, ephemeral: true });
     }
+    const togglePage = Math.max(0, Math.floor(Number(parts[6])) || 0);
     return runNoodle(interaction, {
       sub: "badges",
-      overrides: { strings: { category }, integers: { page: 0 } }
+      overrides: { strings: { category }, integers: { page: togglePage } }
     });
   }
   const sub = action;
