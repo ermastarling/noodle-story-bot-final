@@ -1426,6 +1426,21 @@ async function rawWebhookFollowUp(interaction, payload) {
   }
 }
 
+// discord.js v13 rejects Components V2 types in reply(), so send the initial response as a raw interaction callback.
+async function rawInteractionReply(interaction, payload) {
+  ensureInteractionClientToken(interaction, "socialRawInteractionReply");
+  const result = await interaction.client.api
+    .interactions(interaction.id, interaction.token)
+    .callback.post({
+      data: {
+        type: 4,
+        data: normalizeRawContainerPayload(payload, { ephemeralFlag: MessageFlags.Ephemeral })
+      }
+    });
+  interaction.replied = true;
+  return result;
+}
+
 function canUseRawWebhookResponse(interaction) {
   const applicationId = interaction?.applicationId || interaction?.client?.user?.id;
   return Boolean(interaction?.client?.api && applicationId && interaction?.token);
@@ -1572,8 +1587,13 @@ async function componentCommit(interaction, opts) {
       }
       return sendEphemeralFollowUp(interaction, rest);
     }
+    const ephemeralPayload = { ...rest, flags: Number(rest.flags || 0) | MessageFlags.Ephemeral, ephemeral: true };
+    const isV2Reply = isComponentsV2Payload(ephemeralPayload);
     try {
-      return await interaction.reply({ ...rest, flags: MessageFlags.Ephemeral, ephemeral: true });
+      if (isV2Reply && canUseRawWebhookResponse(interaction)) {
+        return await rawInteractionReply(interaction, ephemeralPayload);
+      }
+      return await interaction.reply(ephemeralPayload);
     } catch (_e) {
       if (isUnknownWebhookError(_e) || isUnknownInteractionError(_e)) {
         return null;
@@ -5469,4 +5489,4 @@ export const noodleSocialCommand = {
   }
 };
 
-export { socialMainMenuRow, socialMainMenuRowNoProfile, statsViewButtons };
+export { socialMainMenuRow, socialMainMenuRowNoProfile, statsViewButtons, componentCommit as componentCommitForTest };
