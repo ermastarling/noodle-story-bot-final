@@ -125,7 +125,7 @@ export async function handleCountingMessage(
   if (result.kind === "duplicate") return result;
   if (result.kind === "valid") {
     await message.react(successEmoji);
-    if (result.milestone !== null && typeof onMilestone === "function") {
+    if (result.milestone != null && typeof onMilestone === "function") {
       const reward = await onMilestone({
         guildId: message.guildId,
         channelId: message.channelId,

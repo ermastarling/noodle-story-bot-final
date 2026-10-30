@@ -142,6 +142,25 @@ test("Counting deletes malformed human and other bot/webhook posts but preserves
   }
 });
 
+test("Counting only invokes the milestone callback for configured milestones", async () => {
+  const db = setupDb();
+  const milestones = [];
+  const settings = {
+    botUserId: "bot",
+    successEmoji: "ok",
+    milestoneRewards: [{ count: 2, reward: { coins: 1 } }],
+    onMilestone: async ({ milestone }) => { milestones.push(milestone); return { granted: true }; }
+  };
+  try {
+    await handleCountingMessage(db, message({ id: "500", userId: "u1", content: "1" }), settings);
+    assert.deepEqual(milestones, []);
+    await handleCountingMessage(db, message({ id: "501", userId: "u2", content: "2" }), settings);
+    assert.deepEqual(milestones, [2]);
+  } finally {
+    db.close();
+  }
+});
+
 test("Counting reacts distinctly to valid, repeated-user, and broken numbers", async () => {
   const db = setupDb();
   const settings = {

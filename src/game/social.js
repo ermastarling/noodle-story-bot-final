@@ -683,7 +683,8 @@ export function contributeToSharedOrder(
       if (activeMemberCount < 1) {
         throw new Error("Shared order has no active party members");
       }
-      const maxMemberUnits = Math.floor(totalRequiredUnits / activeMemberCount);
+      // Round up so the remainder can be covered and the order stays completable.
+      const maxMemberUnits = Math.ceil(totalRequiredUnits / activeMemberCount);
       const currentMemberUnits = db.prepare(
         "SELECT COALESCE(SUM(quantity), 0) AS total FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
       ).get(sharedOrderId, userId).total;
