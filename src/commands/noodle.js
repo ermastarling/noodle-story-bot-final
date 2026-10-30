@@ -13309,7 +13309,7 @@ ${lines.join("\n")}`;
     return commitState({
       content: " ",
       mainComponents: legacyEmbedsToV2TextComponentsForLegacy([buyEmbed]), notices: [],
-      components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : undefined
+      components: showTutorialForageRowAfterBuy ? [noodleTutorialForageRow(userId)] : [noodleMainMenuRow(userId)]
     });
   }
 
@@ -13361,7 +13361,12 @@ ${lines.join("\n")}`;
       description: `${getIcon("coins")} Sold **${qty}× ${item.name}** for **${gain}c**.`,
       user: interaction.member ?? interaction.user
     });
-    return commitState({ content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([sellEmbed]), notices: [] });
+    return commitState({
+      content: " ",
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([sellEmbed]),
+      notices: [],
+      components: [noodleMainMenuRow(userId)]
+    });
   }
 
   /* ---------------- COOK ---------------- */
@@ -14220,9 +14225,15 @@ ${lines.join("\n")}`;
       description: cancelMsg,
       user: interaction.member ?? interaction.user
     });
+    const hasAcceptedAfterCancel = Object.keys(accepted).length > 0;
     return commitState({
       content: " ",
-      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cancelEmbed]), notices: []
+      mainComponents: legacyEmbedsToV2TextComponentsForLegacy([cancelEmbed]),
+      notices: [],
+      components: [
+        noodleOrdersActionRow(userId, { highlightAccept: !hasAcceptedAfterCancel, disableServe: !hasAcceptedAfterCancel }),
+        noodleMainMenuRow(userId)
+      ]
     });
   }
 
