@@ -20,14 +20,12 @@ This checklist is used to execute NSB-V2-33 safely and to preserve rollback read
 
 - Stage A: tester guild only, non-tutorial users.
 - Stage B: tester guild, tutorial allowlist users.
-- Stage C: production canary guild allowlist.
-- Stage D: production rollout by guild allowlist expansion.
+- Stage C: production canary with tutorial allowlist users.
+- Stage D: global rollout (`NOODLE_COMPONENTS_V2_ENABLED=1` applies to every server).
 
 Suggested environment switches:
 
 - `NOODLE_COMPONENTS_V2_ENABLED=1`
-- `NOODLE_COMPONENTS_V2_GUILD_ALLOWLIST=<guild_ids>`
-- `NOODLE_COMPONENTS_V2_USER_ALLOWLIST=<optional_user_ids>`
 - `NOODLE_COMPONENTS_V2_TUTORIAL_USER_ALLOWLIST=<tutorial_canary_users>`
 
 ## 3) Runtime Monitoring

@@ -23,7 +23,7 @@
     "register": "node src/register-commands.js",
     "register:dev": "NODE_ENV=development node src/register-commands.js",
     "register:prod": "NODE_ENV=production node src/register-commands.js",
-    "test": "node --test",
+    "test": "node --test --test-concurrency=1",
     "test:no-sqlite": "node --test $(ls test/*.test.js | grep -v social.test.js)",
     "telemetry:v2-report": "node scripts/v2-efficiency-report.js",
     "sim": "node src/sim/runSimulation.js",
@@ -34,7 +34,7 @@
     "@discordjs/rest": "^2.6.3",
     "better-sqlite3": "^12.11.1",
     "discord.js": "^13.17.1",
-    "dotenv": "^18.0.8",
+    "dotenv": "^18.0.9",
     "jose": "^6.2.13",
     "node-cron": "^4.6.0"
   },

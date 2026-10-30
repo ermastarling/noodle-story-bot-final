@@ -48,6 +48,19 @@ export function getEventWindow(event, nowMs = Date.now()) {
   return { start: startCurrent, end: endCurrent };
 }
 
+export function resolveActiveEventId(eventsContent, nowMs = Date.now(), activeSeason = null) {
+  const active = [];
+  for (const event of eventsContent?.events ?? []) {
+    if (!event?.event_id) continue;
+    if (activeSeason && event.season && event.season !== activeSeason) continue;
+    const window = getEventWindow(event, nowMs);
+    if (!window.start || !window.end || nowMs < window.start || nowMs > window.end) continue;
+    active.push({ event, window });
+  }
+  active.sort((left, right) => left.window.start - right.window.start);
+  return active[0]?.event?.event_id ?? null;
+}
+
 export function getActiveEvent(eventsContent, serverState) {
   const eventId = serverState?.active_event_id;
   return getEventById(eventsContent, eventId);

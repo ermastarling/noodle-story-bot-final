@@ -63,7 +63,7 @@ test("Orders board V2: quick actions are deduplicated by action key", () => {
   assert.equal(cookButtons.length, 1);
 });
 
-test("Orders board V2: second row keeps Main Menu, Buy, Pantry, then Quests", () => {
+test("Orders board V2: second row keeps Back, Buy, Pantry, then Quests", () => {
   const payload = buildOrdersBoardV2Message({
     userId: "u1",
     token: "tok-3",
@@ -73,7 +73,7 @@ test("Orders board V2: second row keeps Main Menu, Buy, Pantry, then Quests", ()
       { label: "Cook", actionKey: "ck", style: 2, disabled: false },
       { label: "Serve", actionKey: "sv", style: 1, disabled: false },
       { label: "Cancel", actionKey: "cnl", style: 2, disabled: false },
-      { label: "Main Menu", actionKey: "nm", style: 2, disabled: false },
+      { label: "Back", actionKey: "nm", style: 2, disabled: false },
       { label: "Buy", actionKey: "buy", style: 2, disabled: false },
       { label: "Pantry", actionKey: "pn", style: 2, disabled: false },
       { label: "Quests", actionKey: "qs", style: 2, disabled: false }
@@ -85,6 +85,7 @@ test("Orders board V2: second row keeps Main Menu, Buy, Pantry, then Quests", ()
   assert.equal(rows.length >= 2, true);
   const secondRowIds = rows[1].components.map((btn) => btn.custom_id);
   assert.equal(secondRowIds.length, 4);
+  assert.equal(rows[1].components[0].label, "Back");
   assert.equal(secondRowIds[0].includes(":nm:"), true);
   assert.equal(secondRowIds[1].includes(":buy:"), true);
   assert.equal(secondRowIds[2].includes(":pn:"), true);

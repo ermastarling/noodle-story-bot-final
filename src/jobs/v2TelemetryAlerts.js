@@ -1,8 +1,10 @@
 import path from "path";
+import { runWithTelemetry } from "../infra/telemetry.js";
 import {
   buildGoNoGoRecommendation,
   compareTelemetrySummary,
   detectHighTelemetryIssues,
+  buildTelemetrySuggestions,
   getTelemetryWindowRange,
   readTelemetryEvents,
   summarizeTelemetryEvents
@@ -24,6 +26,14 @@ function asBool(value) {
   return String(value || "").trim() === "1";
 }
 
+export function resolveTelemetryAlertChannel(telemetryChannelId, devAlertChannelId) {
+  const telemetryId = String(telemetryChannelId || "").trim();
+  const devId = String(devAlertChannelId || "").trim();
+  if (!telemetryId) return { ok: false, reason: "missing_telemetry_channel" };
+  if (telemetryId === devId) return { ok: false, reason: "channel_not_separate" };
+  return { ok: true, channelId: telemetryId };
+}
+
 function safe(v, fallback = "n/a") {
   return v == null ? fallback : String(v);
 }
@@ -37,40 +47,96 @@ function formatMs(value) {
   return Number.isFinite(value) ? `${String(value)}ms` : safe(value);
 }
 
-export function buildReportText({ summary = {}, delta, recommendation, windowHours, issues = [] } = {}) {
+function formatCountPer100(value) {
+  return Number.isFinite(value) ? `${String(value)} per 100` : safe(value);
+}
+
+const REPORT_TEXT_BUDGET = 3600;
+
+export function buildReportText({
+  summary = {},
+  baselineSummary = null,
+  delta,
+  recommendation,
+  windowHours,
+  issues = [],
+  issueCheck = null,
+  thresholds = {},
+  telemetryMode = "all",
+  sampleRate = 1
+} = {}) {
   const metricSummary = summary && typeof summary === "object" ? summary : {};
   const lines = [
     `Window: last ${windowHours}h`,
+    "Scope: sampled bot interactions, instrumented scheduled-job runs, and V2 diagnostics. This is measured activity, not continuous uptime or Discord availability.",
     "",
-    "Core metrics:",
-    `- Transitions: ${safe(metricSummary.transitions, "0")}`,
-    `- Errors: ${safe(metricSummary.errors, "0")} (${formatPct(metricSummary.errorRatePct)})`,
+    "What was observed:",
+    `- Log records in this window: ${safe(metricSummary.recordsInWindow, "0")}`,
+    `- Bot interaction latency records: ${safe(metricSummary.interactionEventRecords, safe(metricSummary.interactions, "0"))} seen; ${safe(metricSummary.interactions, "0")} had valid durations`,
+    `- Failed interactions: ${safe(metricSummary.interactionErrors, "0")} (${formatPct(metricSummary.interactionErrorRatePct)})`,
+    `- Server response time p50 / p95: ${formatMs(metricSummary.interactionTimeP50)} / ${formatMs(metricSummary.interactionTimeP95)}`,
+    `- Interactions over the slow-event threshold: ${safe(metricSummary.slowInteractions, "0")}`,
+    `- Scheduled-job runs: ${safe(metricSummary.scheduledJobRuns, "0")} (${safe(metricSummary.successfulJobRuns, "0")} succeeded, ${safe(metricSummary.failedJobRuns, "0")} failed, ${safe(metricSummary.skippedJobRuns, "0")} skipped)`,
+    `- Hard operation/delivery failures recorded: ${safe(metricSummary.hardFailures, "0")}`,
+    `- Process start events observed: ${safe(metricSummary.processStarts, "0")}; continuous uptime: not measured`,
+    `- Discord gateway events: ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "ready")?.count, "0")} ready, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "disconnect")?.count, "0")} disconnect, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "shard_error")?.count, "0")} shard errors, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "reconnecting")?.count, "0")} reconnecting, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "resume")?.count, "0")} resumed`,
+    `- V2 scene transitions / completed flows: ${safe(metricSummary.transitions, "0")} / ${safe(metricSummary.loops, "0")}`,
+    `- V2 route-error signals per 100 scene transitions: ${formatCountPer100(metricSummary.errorRatePct)} (diagnostic ratio, not a command failure rate)`,
     `- Gate bypasses: ${safe(metricSummary.bypasses, "0")}`,
-    `- Loop summaries: ${safe(metricSummary.loops, "0")}`,
-    `- Avg clicks per loop: ${safe(metricSummary.clickAvg)}`,
-    `- Loop latency p50: ${formatMs(metricSummary.loopTimeP50)}`,
-    `- Loop latency p95: ${formatMs(metricSummary.loopTimeP95)}`
+    `- V2 average clicks per completed flow: ${safe(metricSummary.clickAvg)}`,
+    `- V2 flow elapsed p50 / p95: ${formatMs(metricSummary.loopTimeP50)} / ${formatMs(metricSummary.loopTimeP95)} (includes time between player clicks; not server latency)`,
+    `- Data collection: mode=${safe(telemetryMode)}, sample rate=${formatPct(Number(sampleRate) * 100)}`
   ];
 
   if (delta) {
     lines.push(
       "",
-      "Baseline comparison:",
-      `- Avg clicks delta: ${safe(delta.clickAvgDelta)} (${safe(delta.clickAvgDeltaPct)}%)`,
-      `- Loop p50 delta: ${formatMs(delta.loopTimeP50Delta)} (${safe(delta.loopTimeP50DeltaPct)}%)`,
-      `- Loop p95 delta: ${formatMs(delta.loopTimeP95Delta)} (${safe(delta.loopTimeP95DeltaPct)}%)`,
-      `- Error count delta: ${safe(delta.errorCountDelta)}`,
-      `- Error rate delta: ${safe(delta.errorRateDeltaPct)} percentage points`
+      `Compared with previous ${windowHours}h window:`,
+      `- Interactions measured: ${safe(baselineSummary?.interactions, "0")} before → ${safe(metricSummary.interactions, "0")} now`,
+      `- Failed interactions: ${safe(baselineSummary?.interactionErrors, "0")} before → ${safe(metricSummary.interactionErrors, "0")} now`,
+      `- Server response p95 change: ${formatMs(delta.interactionTimeP95Delta)} (${safe(delta.interactionTimeP95DeltaPct)}%)`,
+      `- Interaction error-rate change: ${safe(delta.interactionErrorRateDeltaPct)} percentage points`,
+      `- Failed scheduled-job runs: ${safe(baselineSummary?.failedJobRuns, "0")} before → ${safe(metricSummary.failedJobRuns, "0")} now`,
+      `- Hard send failures: ${safe(baselineSummary?.hardFailures, "0")} before → ${safe(metricSummary.hardFailures, "0")} now`,
+      `- V2 flow elapsed p95 change: ${formatMs(delta.loopTimeP95Delta)} (${safe(delta.loopTimeP95DeltaPct)}%)`,
+      `- V2 route-error signal change: ${formatCountPer100(delta.errorRateDeltaPct)}`
     );
   } else {
-    lines.push("", "Baseline comparison:", "- No prior window data available.");
+    lines.push("", "Comparison:", "- No prior window data available; changes cannot be assessed.");
   }
 
   if (metricSummary?.errorsByReason?.length) {
     const topReasons = metricSummary.errorsByReason.slice(0, 3)
       .map((row) => `${row.reason}(${row.count})`)
       .join(", ");
-    lines.push("", `Top error reasons: ${topReasons}`);
+    lines.push("", `Top V2 route-error signals (may include expected stale/ownership rejections): ${topReasons}`);
+  }
+
+  if (metricSummary?.interactionErrorsByRoute?.length) {
+    const topRoutes = metricSummary.interactionErrorsByRoute.slice(0, 3)
+      .map((row) => `${row.route}(${row.count})`)
+      .join(", ");
+    lines.push("", `Most failed interaction routes: ${topRoutes}`);
+  }
+
+  if (metricSummary?.jobRunRows?.length) {
+    const jobRows = metricSummary.jobRunRows.slice(0, 5)
+      .map((row) => `${row.job}(${row.runs} runs, ${row.failures} failed)`)
+      .join(", ");
+    lines.push("", `Scheduled-job outcomes: ${jobRows}`);
+  }
+
+  if (metricSummary?.hardFailuresByType?.length) {
+    const failureTypes = metricSummary.hardFailuresByType.slice(0, 4)
+      .map((row) => `${row.event}(${row.count})`)
+      .join(", ");
+    lines.push("", `Hard failure signals: ${failureTypes}`);
+  }
+  if (metricSummary?.hardFailureRows?.length) {
+    const failureSources = metricSummary.hardFailureRows.slice(0, 5)
+      .map((row) => `${row.source}(${row.count})`)
+      .join(", ");
+    lines.push(`Affected operation sources: ${failureSources}`);
   }
 
   if (metricSummary?.dataQuality?.warnings?.length) {
@@ -84,14 +150,25 @@ export function buildReportText({ summary = {}, delta, recommendation, windowHou
     lines.push("", `Top bypass reasons: ${topBypassReasons}`);
   }
 
+  const headLines = lines.splice(0, lines.length);
   lines.push("", `Recommendation: ${recommendation}`);
+
+  const suggestions = buildTelemetrySuggestions(metricSummary, issueCheck, delta, thresholds);
+  lines.push("", "Suggested next step:", ...suggestions.map((suggestion) => `- ${suggestion}`));
 
   if (issues.length) {
     lines.push("", "Detected issues:", ...issues.map((issue) => `- ${issue}`));
-    lines.push("Next action: investigate detected issues first, then rerun the next report window.");
   }
 
-  return lines.join("\n").slice(0, 4000);
+  // Discord caps one Components V2 message at 4000 text characters shared with header, footer and ping,
+  // so trim the diagnostic detail first and always keep the recommendation, next steps and issues.
+  const tail = lines.join("\n");
+  const headBudget = Math.max(0, REPORT_TEXT_BUDGET - tail.length);
+  let head = headLines.join("\n");
+  if (head.length > headBudget) {
+    head = `${head.slice(0, Math.max(0, headBudget - 40)).trimEnd()}\n… (details trimmed to fit Discord limit)`;
+  }
+  return `${head}${tail}`.slice(0, REPORT_TEXT_BUDGET);
 }
 
 export function startV2TelemetryAlertScheduler({ sendAlert, env = process.env, logger = console } = {}) {
@@ -112,17 +189,32 @@ export function startV2TelemetryAlertScheduler({ sendAlert, env = process.env, l
   const windowHours = Math.max(1, parseIntEnv(env.NOODLE_V2_TELEMETRY_REPORT_WINDOW_HOURS, 24));
 
   const thresholds = {
-    minLoops: Math.max(1, parseIntEnv(env.NOODLE_V2_TELEMETRY_ALERT_MIN_LOOPS, 20)),
-    loopP95ThresholdMs: parseNumEnv(env.NOODLE_V2_TELEMETRY_ALERT_LOOP_P95_MS, 20000),
+    minInteractions: Math.max(1, parseIntEnv(
+      env.NOODLE_V2_TELEMETRY_ALERT_MIN_INTERACTIONS,
+      parseIntEnv(env.NOODLE_V2_TELEMETRY_ALERT_MIN_LOOPS, 20)
+    )),
+    interactionP95ThresholdMs: parseNumEnv(
+      env.NOODLE_V2_TELEMETRY_ALERT_INTERACTION_P95_MS,
+      20000
+    ),
     clickAvgThreshold: parseNumEnv(env.NOODLE_V2_TELEMETRY_ALERT_CLICK_AVG, 6),
-    errorRateThresholdPct: parseNumEnv(env.NOODLE_V2_TELEMETRY_ALERT_ERROR_RATE_PCT, 8)
+    interactionErrorRateThresholdPct: parseNumEnv(
+      env.NOODLE_V2_TELEMETRY_ALERT_INTERACTION_ERROR_RATE_PCT,
+      8
+    ),
+    routeErrorRateThresholdPct: parseNumEnv(
+      env.NOODLE_V2_TELEMETRY_ALERT_ROUTE_ERROR_RATE_PCT,
+      parseNumEnv(env.NOODLE_V2_TELEMETRY_ALERT_ERROR_RATE_PCT, 8)
+    )
   };
 
   const p95RegressionPctThreshold = parseNumEnv(env.NOODLE_V2_TELEMETRY_ALERT_P95_REGRESSION_PCT, 20);
+  const telemetryMode = String(env.NOODLE_TELEMETRY_MODE || "all").trim().toLowerCase();
+  const sampleRate = Math.max(0, Math.min(1, parseNumEnv(env.NOODLE_TELEMETRY_SAMPLE_RATE, 1)));
   let running = false;
 
   async function runOnce(reason = "interval") {
-    if (running) return;
+    if (running) return "skipped";
     running = true;
     try {
       const nowMs = Date.now();
@@ -137,30 +229,48 @@ export function startV2TelemetryAlertScheduler({ sendAlert, env = process.env, l
       const candidateSummary = summarizeTelemetryEvents(candidateEvents);
       const baselineSummary = summarizeTelemetryEvents(baselineEvents);
       const delta = compareTelemetrySummary(baselineSummary, candidateSummary);
-      const recommendation = buildGoNoGoRecommendation(delta);
-
       const issueCheck = detectHighTelemetryIssues(candidateSummary, thresholds);
       const issues = [...issueCheck.issues];
       if (
         issueCheck.hasEnoughData
         && delta
-        && Number.isFinite(delta.loopTimeP95DeltaPct)
-        && delta.loopTimeP95DeltaPct > p95RegressionPctThreshold
+        && Number.isFinite(delta.interactionTimeP95DeltaPct)
+        && delta.interactionTimeP95DeltaPct > p95RegressionPctThreshold
       ) {
-        issues.push(`Loop p95 regression ${delta.loopTimeP95DeltaPct}% exceeds ${p95RegressionPctThreshold}% threshold.`);
+        const regressionIssue = `Interaction p95 regression ${delta.interactionTimeP95DeltaPct}% exceeds ${p95RegressionPctThreshold}% threshold.`;
+        issues.push(regressionIssue);
+        issueCheck.issues.push(regressionIssue);
       }
       if (!issueCheck.hasEnoughData && issueCheck.note) {
         issues.push(issueCheck.note);
       }
+      if (telemetryMode === "slow") {
+        candidateSummary.dataQuality.warnings.push("Telemetry mode is 'slow'; ordinary interaction latency, scheduled-job outcomes, gateway lifecycle events, V2 transitions, and loop summaries are omitted, so health coverage is incomplete.");
+      }
+      if (sampleRate < 1) {
+        candidateSummary.dataQuality.warnings.push(`Telemetry sampling is ${Math.round(sampleRate * 100)}%; some measured activity may be missing.`);
+      }
+      const recommendation = buildGoNoGoRecommendation(delta, {
+        summary: candidateSummary,
+        issueCheck,
+        thresholds
+      });
 
-      const highIssue = issueCheck.hasEnoughData && issues.length > 0;
-      const title = highIssue ? "V2 Telemetry Alert" : "V2 Telemetry Report";
+      const highIssue = (issueCheck.hasEnoughData && issues.length > 0)
+        || candidateSummary.failedJobRuns > 0
+        || candidateSummary.hardFailures > 0;
+      const title = highIssue ? "Bot Health Alert" : "Bot Health Report";
       const description = buildReportText({
         summary: candidateSummary,
+        baselineSummary,
         delta,
         recommendation,
         windowHours,
-        issues
+        issues,
+        issueCheck,
+        thresholds,
+        telemetryMode,
+        sampleRate
       });
 
       // Avoid replay-style startup chatter when there is no actionable telemetry issue.
@@ -168,23 +278,25 @@ export function startV2TelemetryAlertScheduler({ sendAlert, env = process.env, l
         await sendAlert({
           title,
           description,
-          footerText: `Reason: ${reason} | minLoops=${thresholds.minLoops}`,
+          footerText: `Window: ${windowHours}h | Minimum interactions: ${thresholds.minInteractions} | Mode: ${telemetryMode}`,
           requireMention: highIssue,
           mentionUser: highIssue
         });
       }
+      return true;
     } catch (error) {
-      logger.error("V2 telemetry report scheduler failed:", error?.stack ?? error);
+      logger.error("Bot health report scheduler failed:", error?.stack ?? error);
+      return false;
     } finally {
       running = false;
     }
   }
 
   const handle = setInterval(() => {
-    runOnce("interval");
+    void runWithTelemetry("telemetry_report", "interval", () => runOnce("interval"));
   }, intervalMs);
   handle.unref?.();
 
-  logger.log(`INFO: V2 telemetry report scheduler enabled every ${Math.round(intervalMs / 1000)}s (window ${windowHours}h).`);
+  logger.log(`INFO: Bot health report scheduler enabled every ${Math.round(intervalMs / 1000)}s (window ${windowHours}h).`);
   return handle;
 }

@@ -17,7 +17,7 @@ import { newPlayerProfile, trackLastKitchen } from "../game/player.js";
 import { newServerState } from "../game/server.js";
 import { applySxpLevelUp } from "../game/serve.js";
 import { applyQuestProgress } from "../game/quests.js";
-import { loadBadgesContent, loadContentBundle, loadEventsContent, loadNewsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
+import { loadAchievementsContent, loadBadgesContent, loadContentBundle, loadEventsContent, loadNewsContent, loadQuestsContent, loadSpecializationsContent } from "../content/index.js";
 import { noodleMainMenuRowNoProfile, displayItemName as _displayItemName, renderProfileEmbed, runNoodle } from "./noodle.js";
 import { shouldForceTutorialCommand } from "../game/tutorialRouting.js";
 import {
@@ -49,6 +49,7 @@ import {
 } from "../game/social.js";
 import { withEventRecipes } from "../game/events.js";
 import { grantEventBadgesForKnownRecipes } from "../game/badges.js";
+import { evaluatePlayerAchievements, hasClaimableAchievementRewards } from "../game/achievements.js";
 import { hasNewShopLevelSpecialization } from "../game/specialization.js";
 import { isFishingIngredientLocked } from "../game/fishing.js";
 import { nowTs, dayKeyUTC, parseYYYYMMDD } from "../util/time.js";
@@ -94,6 +95,7 @@ const newsContent = loadNewsContent();
 const content = withEventRecipes(baseContent, eventsContent);
 const specializationsContent = loadSpecializationsContent();
 const badgesContent = loadBadgesContent();
+const achievementsContent = loadAchievementsContent();
 const questsContent = loadQuestsContent();
 
 const SHARED_ORDER_MIN_SERVINGS = 5;
@@ -401,7 +403,7 @@ function getGlobalLeaderboardPage(typeIndex, page = 0) {
   };
 }
 
-function buildLeaderboardView({ leaderboardPage, userId, ownerUser: _ownerUser }) {
+function buildLeaderboardView({ leaderboardPage, userId, ownerUser: _ownerUser, serverId }) {
   const { type, safeIndex, safePage, totalPages, startRank, rows } = leaderboardPage;
 
   const leaderboardText = rows
@@ -477,7 +479,7 @@ function buildLeaderboardView({ leaderboardPage, userId, ownerUser: _ownerUser }
         { type: 10, content: `## ${title}` },
         { type: 10, content: description },
         { type: 10, content: `-# ${footerText}` },
-        ...normalizeComponents([navRow, typeRow, socialMainMenuRow(userId)])
+        ...normalizeComponents([navRow, typeRow, socialMainMenuRow(userId, { serverId })])
       ],
       notices: [],
       ownerId: userId,
@@ -658,10 +660,25 @@ function buildMarketRefreshFooterText(existingFooterText, marketRestockMs, nowMs
   return existingFooterText ? `${existingFooterText} • ${marketText}` : marketText;
 }
 
+function hasProjectedAchievementRewards(player) {
+  if (!player || typeof player !== "object") return false;
+  const projectedPlayer = structuredClone(player);
+  evaluatePlayerAchievements(projectedPlayer, achievementsContent);
+  return hasClaimableAchievementRewards(projectedPlayer, achievementsContent);
+}
+
 /**
  * Main social menu navigation buttons
  */
-function socialMainMenuRow(userId, { partyHasActiveOrder = null } = {}) {
+function socialMainMenuRow(userId, {
+  serverId = null,
+  partyHasActiveOrder = null,
+  achievementRewardsAvailable: providedAchievementRewardStatus = null
+} = {}) {
+  const player = serverId && db ? getPlayer(db, serverId, userId) : null;
+  const achievementRewardsAvailable = typeof providedAchievementRewardStatus === "boolean"
+    ? providedAchievementRewardStatus
+    : hasClaimableAchievementRewards(player, achievementsContent);
   const resolvedPartyHasActiveOrder = typeof partyHasActiveOrder === "boolean"
     ? partyHasActiveOrder
     : (() => {
@@ -683,7 +700,7 @@ function socialMainMenuRow(userId, { partyHasActiveOrder = null } = {}) {
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:stats:${userId}`)
       .setLabel("Stats").setEmoji(getButtonEmoji("stats"))
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(achievementRewardsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:profile:${userId}`)
       .setLabel("Profile").setEmoji(getButtonEmoji("profile"))
@@ -875,7 +892,7 @@ function buildRecentPickerPayload(interaction, {
   if (totalPages > 1) {
     components.push(recentPickerNavRow(userId, mode, sourceMessageId, safePage, totalPages));
   }
-  components.push(socialMainMenuRow(userId));
+  components.push(socialMainMenuRow(userId, { serverId }));
 
   return {
     mainComponents: cardSpecToTextComponents(embed),
@@ -1005,6 +1022,31 @@ function buildSharedOrderProgress({ recipe, servings, contributions }) {
 
   const isComplete = items.every((i) => i.remaining <= 0);
   return { items, isComplete };
+}
+
+function getSharedOrderIngredientRequirements(recipe, servings) {
+  const normalizedServings = Math.max(0, Math.floor(Number(servings) || 0));
+  return (recipe?.ingredients ?? [])
+    .map((ingredient) => {
+      const quantity = Number(ingredient?.qty);
+      return Number.isFinite(quantity) && quantity > 0 ? quantity * normalizedServings : 0;
+    })
+    .filter((units) => units > 0);
+}
+
+function buildSharedOrderContributionOptions(recipe, servings, maxIngredientSlots) {
+  return {
+    maxIngredientSlots,
+    ingredientRequirements: getSharedOrderIngredientRequirements(recipe, servings),
+    memberIngredientLimit: getSharedOrderIngredientLimit(recipe)
+  };
+}
+
+function formatSharedOrderContributionError(error) {
+  if (error?.code === "SHARED_ORDER_MEMBER_CAP") {
+    return `${getIcon("warning")} You've reached the maximum allowed contribution for one party member in this shared order, your party members can help with the rest!`;
+  }
+  return `${getIcon("error")} ${error?.message || "Unable to record contribution."}`;
 }
 
 function getSharedOrderVisibleIngredients(player, recipe) {
@@ -1157,7 +1199,7 @@ function partyCreationRow(userId) {
 /**
  * Social stats view buttons (two rows)
  */
-function statsViewButtons(userId, { newsAvailable = false } = {}) {
+function statsViewButtons(userId, { newsAvailable = false, achievementRewardsAvailable = false } = {}) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle-social:nav:party:${userId}`)
@@ -1170,7 +1212,11 @@ function statsViewButtons(userId, { newsAvailable = false } = {}) {
     new ButtonBuilder()
       .setCustomId(`noodle:nav:collections:${userId}`)
       .setLabel("Collections").setEmoji(getButtonEmoji("collections"))
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:achievements:${userId}`)
+      .setLabel("Achievements").setEmoji(getButtonEmoji("sparkle"))
+      .setStyle(achievementRewardsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
@@ -1330,7 +1376,7 @@ function resolveRuntimeBotToken(interaction) {
   return String(process.env.DISCORD_TOKEN || "").trim();
 }
 
-function ensureInteractionClientToken(interaction, reason = "runtime") {
+function ensureInteractionClientToken(interaction, _reason = "runtime") {
   if (interaction?.client?.token) return true;
   const token = resolveRuntimeBotToken(interaction);
   if (!token || !interaction?.client) return false;
@@ -2006,7 +2052,7 @@ async function handleParty(interaction) {
         response: {
           mainComponents: cardSpecToTextComponents(embed),
           notices: [],
-          components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
+          components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId, { serverId })]
         }
       };
     }
@@ -2032,7 +2078,7 @@ async function handleParty(interaction) {
           response: {
             mainComponents: cardSpecToTextComponents(embed),
             notices: [],
-            components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
+            components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId, { serverId })]
           }
         };
       } catch (err) {
@@ -2058,7 +2104,7 @@ async function handleParty(interaction) {
         const replyObj = {
           mainComponents: cardSpecToTextComponents(embed),
           notices: [],
-          components: [partyCreationRow(userId), socialMainMenuRow(userId)]
+          components: [partyCreationRow(userId), socialMainMenuRow(userId, { serverId })]
         };
 
         return {
@@ -2100,7 +2146,7 @@ async function handleParty(interaction) {
         response: {
           mainComponents: cardSpecToTextComponents(embed),
           notices: [],
-          components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
+          components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId, { serverId })]
         }
       };
     }
@@ -2172,7 +2218,7 @@ async function handleParty(interaction) {
           response: {
             mainComponents: cardSpecToTextComponents(embed),
             notices: [],
-            components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
+            components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId, { serverId })]
           }
         };
       }
@@ -2239,7 +2285,7 @@ async function handleParty(interaction) {
           response: {
             mainComponents: cardSpecToTextComponents(embed),
             notices: [],
-            components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId)]
+            components: [new ActionRowBuilder().addComponents(menu), socialMainMenuRow(userId, { serverId })]
           }
         };
       }
@@ -2379,7 +2425,7 @@ async function handleTip(interaction) {
         const replyObj = { 
           mainComponents: cardSpecToTextComponents(embed),
           notices: [], 
-          components: [socialMainMenuRow(userId)] 
+          components: [socialMainMenuRow(userId, { serverId })]
         };
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
@@ -2436,6 +2482,8 @@ async function handleVisit(interaction) {
         // Grant a random blessing
         const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
         targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+        visitor.lifetime ??= {};
+        visitor.lifetime.blessings_given = (Number(visitor.lifetime.blessings_given) || 0) + 1;
 
         const blessingLabels = {
           discovery_chance_add: "Enhanced Discovery",
@@ -2493,7 +2541,7 @@ async function handleVisit(interaction) {
       const replyObj = { 
         mainComponents: cardSpecToTextComponents(embed),
         notices: [], 
-        components: [socialMainMenuRow(userId)] 
+        components: [socialMainMenuRow(userId, { serverId })]
       };
         if (db) {
           putIdempotentResult(db, { key: idemKey, userId, action, ttlSeconds: 900, result: replyObj });
@@ -2539,7 +2587,8 @@ async function handleLeaderboard(interaction) {
     const view = buildLeaderboardView({
       leaderboardPage,
       userId: interaction.user.id,
-      ownerUser: interaction.member ?? interaction.user
+      ownerUser: interaction.member ?? interaction.user,
+      serverId
     });
 
     return sendSocialPayload(interaction, normalizePayloadForReply(interaction, view));
@@ -2591,6 +2640,7 @@ async function handleStats(interaction) {
 
   try {
     const player = ensurePlayer(serverId, userId);
+    const achievementRewardsAvailable = hasProjectedAchievementRewards(player);
     touchLastKitchen(player, serverId, channelId, userId);
     const tipStats = getUserTipStats(db, serverId, userId);
     const party = getUserActivePartyBridge(serverId, userId);
@@ -2654,7 +2704,7 @@ async function handleStats(interaction) {
     return sendSocialPayload(interaction, normalizePayloadForReply(interaction, { 
       mainComponents: cardSpecToTextComponents(embed),
       notices: [], 
-      components: [socialMainMenuRow(userId)] 
+      components: [socialMainMenuRow(userId, { serverId, achievementRewardsAvailable })]
     }));
   } catch (err) {
     console.error("Stats error:", err);
@@ -2727,7 +2777,7 @@ async function handleComponent(interaction) {
           const replyObj = {
             mainComponents: cardSpecToTextComponents(embed),
             notices: [],
-            components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId)]
+            components: [partyActionRow(userId, true, true, false), socialMainMenuRow(userId, { serverId })]
           };
           return { ok: true, response: replyObj, targetMessageId: sourceMessageId };
         } catch (err) {
@@ -2786,7 +2836,7 @@ async function handleComponent(interaction) {
             response: {
               mainComponents: cardSpecToTextComponents(embed),
               notices: [],
-              components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId)]
+              components: [partyActionRow(userId, true, false, false), socialMainMenuRow(userId, { serverId })]
             },
             targetMessageId: sourceMessageId
           };
@@ -2847,7 +2897,7 @@ async function handleComponent(interaction) {
               response: {
                 mainComponents: cardSpecToTextComponents(embed),
                 notices: [],
-                components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)]
+                components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId, { serverId })]
               }
             };
           } catch (err) {
@@ -2946,7 +2996,7 @@ async function handleComponent(interaction) {
               payload: {
                 mainComponents: cardSpecToTextComponents(embed),
                 notices: [],
-                components: [partyRow, socialMainMenuRow(userId)],
+                components: [partyRow, socialMainMenuRow(userId, { serverId })],
                 targetMessageId: sourceMessageId
               }
             };
@@ -3036,7 +3086,7 @@ async function handleComponent(interaction) {
               payload: {
                 mainComponents: cardSpecToTextComponents(embed),
                 notices: [],
-                components: [partyRow, socialMainMenuRow(userId)],
+                components: [partyRow, socialMainMenuRow(userId, { serverId })],
                 targetMessageId: sourceMessageId
               }
             };
@@ -3082,6 +3132,8 @@ async function handleComponent(interaction) {
           try {
             const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
             targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+            visitor.lifetime ??= {};
+            visitor.lifetime.blessings_given = (Number(visitor.lifetime.blessings_given) || 0) + 1;
 
             const blessingLabels = {
               discovery_chance_add: "Enhanced Discovery",
@@ -3146,7 +3198,7 @@ async function handleComponent(interaction) {
               payload: {
                 mainComponents: cardSpecToTextComponents(embed),
                 notices: [],
-                components: [partyRow, socialMainMenuRow(userId)],
+                components: [partyRow, socialMainMenuRow(userId, { serverId })],
                 targetMessageId: sourceMessageId
               }
             };
@@ -3271,13 +3323,22 @@ async function handleComponent(interaction) {
             return { ok: false, payload: { content: `${getIcon("error")} You only have ${owned}.`, ephemeral: true } };
           }
 
-          player.inv_ingredients[ingredientId] = owned - quantity;
-          if (db) {
+          const servings = sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS;
+          db.transaction(() => {
+            player.inv_ingredients[ingredientId] = owned - quantity;
+            player.lifetime ??= {};
+            player.lifetime.shared_order_ids ??= {};
+            player.lifetime.shared_order_ids[sharedOrder.shared_order_id] = true;
             upsertPlayer(db, serverId, userId, player, null, player.schema_version);
-          }
-
-          // Contribute to shared order
-          contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, { maxIngredientSlots: maxSlots });
+            contributeToSharedOrder(
+              db,
+              sharedOrder.shared_order_id,
+              userId,
+              ingredientId,
+              quantity,
+              buildSharedOrderContributionOptions(recipe, servings, maxSlots)
+            );
+          })();
 
           const embed = buildCardSpec()
             .setTitle(`${getIcon("status_complete")} Shared Order • Contribution Recorded`)
@@ -3305,13 +3366,13 @@ async function handleComponent(interaction) {
             payload: {
               mainComponents: cardSpecToTextComponents(embed),
               notices: [],
-              components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)],
+              components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId, { serverId })],
               targetMessageId: sourceMessageId,
               targetChannelId: sourceChannelId
             }
           };
         } catch (err) {
-          return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
+          return { ok: false, payload: { content: formatSharedOrderContributionError(err), ephemeral: true } };
         }
       });
 
@@ -3427,7 +3488,7 @@ async function handleComponent(interaction) {
               payload: {
                 mainComponents: cardSpecToTextComponents(embed),
                 notices: [],
-                components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId)],
+                components: [partyActionRow(userId, true, true, !!existingOrder), socialMainMenuRow(userId, { serverId })],
                 targetMessageId: sourceMessageId
               }
             };
@@ -3450,6 +3511,8 @@ async function handleComponent(interaction) {
             try {
               const blessingType = BLESSING_TYPES[Math.floor(Math.random() * BLESSING_TYPES.length)];
               targetPlayer = grantBlessing(targetPlayer, userId, blessingType);
+              visitor.lifetime ??= {};
+              visitor.lifetime.blessings_given = (Number(visitor.lifetime.blessings_given) || 0) + 1;
 
               const blessingLabels = {
                 discovery_chance_add: "Enhanced Discovery",
@@ -3512,7 +3575,7 @@ async function handleComponent(interaction) {
                 payload: {
                   mainComponents: cardSpecToTextComponents(embed),
                   notices: [],
-                  components: [partyRow, socialMainMenuRow(userId)],
+                  components: [partyRow, socialMainMenuRow(userId, { serverId })],
                   targetMessageId: sourceMessageId
                 }
               };
@@ -3559,7 +3622,7 @@ async function handleComponent(interaction) {
                 ok: true,
                 payload: {
                   content: `${getIcon("status_complete")} Leadership transferred to <@${targetId}>.`,
-                  components: [socialMainMenuRow(userId)]
+                  components: [socialMainMenuRow(userId, { serverId })]
                 }
               };
             }
@@ -3570,7 +3633,7 @@ async function handleComponent(interaction) {
               ok: true,
               payload: {
                 content: `${getIcon("status_complete")} Removed <@${targetId}> from the party.`,
-                components: [socialMainMenuRow(userId)]
+                components: [socialMainMenuRow(userId, { serverId })]
               }
             };
           } catch (err) {
@@ -3753,7 +3816,7 @@ async function handleComponent(interaction) {
             payload: {
               mainComponents: cardSpecToTextComponents(embed),
               notices: [],
-              components: [partyActionRow(userId, true, isLeader, true), socialMainMenuRow(userId)]
+              components: [partyActionRow(userId, true, isLeader, true), socialMainMenuRow(userId, { serverId })]
             }
           };
         } catch (err) {
@@ -3849,7 +3912,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(qtyEmbed),
         notices: [],
-        components: [qtyRow, sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
+        components: [qtyRow, sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId, { serverId })]
       });
     }
   }
@@ -3872,7 +3935,7 @@ async function handleComponent(interaction) {
           content: " ",
           mainComponents: cardSpecToTextComponents(embed),
           notices: [],
-          components: [partyCreationRow(userId), socialMainMenuRow(userId)],
+          components: [partyCreationRow(userId), socialMainMenuRow(userId, { serverId })],
           ephemeral: false
         });
       }
@@ -3916,12 +3979,13 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(embed),
         notices: [],
-        components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
+        components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId, { serverId })]
       });
     }
 
     if (action === "stats") {
       const player = ensurePlayer(serverId, userId);
+      const achievementRewardsAvailable = hasProjectedAchievementRewards(player);
       const newsAvailable = hasUnreadNewsUpdate(player, newsContent);
       const tipStats = getUserTipStats(db, serverId, userId);
       const party = getUserActivePartyBridge(serverId, userId);
@@ -3982,7 +4046,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(embed),
         notices: [],
-        components: statsViewButtons(userId, { newsAvailable })
+        components: statsViewButtons(userId, { newsAvailable, achievementRewardsAvailable })
       });
     }
 
@@ -4007,7 +4071,8 @@ async function handleComponent(interaction) {
       const view = buildLeaderboardView({
         leaderboardPage,
         userId,
-        ownerUser: interaction.member ?? interaction.user
+        ownerUser: interaction.member ?? interaction.user,
+        serverId
       });
 
       return componentCommit(interaction, view);
@@ -4203,7 +4268,7 @@ async function handleComponent(interaction) {
       }
 
       const replyObj = {
-        components: [sharedOrderActionRow(userId, hasActiveOrder, isLeader, canComplete), socialMainMenuRow(userId)]
+        components: [sharedOrderActionRow(userId, hasActiveOrder, isLeader, canComplete), socialMainMenuRow(userId, { serverId })]
       };
 
       if (embed) {
@@ -4301,7 +4366,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(embed),
         notices: [],
-        components: [sharedOrderActionRow(userId, true, true, canComplete), socialMainMenuRow(userId)],
+        components: [sharedOrderActionRow(userId, true, true, canComplete), socialMainMenuRow(userId, { serverId })],
         targetMessageId
       });
     }
@@ -4403,7 +4468,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(embed),
         notices: [],
-        components: [socialMainMenuRow(userId)]
+        components: [socialMainMenuRow(userId, { serverId })]
       });
     }
 
@@ -4429,7 +4494,7 @@ async function handleComponent(interaction) {
         return componentCommit(interaction, {
           mainComponents: cardSpecToTextComponents(embed),
           notices: [],
-          components: [socialMainMenuRow(userId)]
+          components: [socialMainMenuRow(userId, { serverId })]
         });
       } catch (err) {
         return componentCommit(interaction, {
@@ -4558,7 +4623,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(contributeEmbed),
         notices: [],
-        components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
+        components: [new ActionRowBuilder().addComponents(menu), sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId, { serverId })]
       });
     }
 
@@ -4637,12 +4702,22 @@ async function handleComponent(interaction) {
             return { ok: false, payload: { content: `${getIcon("error")} You only have ${owned}.`, ephemeral: true } };
           }
 
-          player.inv_ingredients[ingredientId] = owned - quantity;
-          if (db) {
+          const servings = sharedOrder.servings ?? SHARED_ORDER_MIN_SERVINGS;
+          db.transaction(() => {
+            player.inv_ingredients[ingredientId] = owned - quantity;
+            player.lifetime ??= {};
+            player.lifetime.shared_order_ids ??= {};
+            player.lifetime.shared_order_ids[sharedOrder.shared_order_id] = true;
             upsertPlayer(db, serverId, userId, player, null, player.schema_version);
-          }
-
-          contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, { maxIngredientSlots: maxSlots });
+            contributeToSharedOrder(
+              db,
+              sharedOrder.shared_order_id,
+              userId,
+              ingredientId,
+              quantity,
+              buildSharedOrderContributionOptions(recipe, servings, maxSlots)
+            );
+          })();
 
           const embed = buildCardSpec()
             .setTitle(`${getIcon("status_complete")} Shared Order • Contribution Recorded`)
@@ -4685,7 +4760,7 @@ async function handleComponent(interaction) {
               payload: {
                 mainComponents: cardSpecToTextComponents(continueEmbed),
                 notices: [],
-                components: [qtyRow, sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
+                components: [qtyRow, sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId, { serverId })]
               }
             };
           }
@@ -4695,11 +4770,11 @@ async function handleComponent(interaction) {
             payload: {
               mainComponents: cardSpecToTextComponents(embed),
               notices: [],
-              components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId)]
+              components: [sharedOrderActionRow(userId, true, isLeader, canComplete), socialMainMenuRow(userId, { serverId })]
             }
           };
         } catch (err) {
-          return { ok: false, payload: { content: `${getIcon("error")} ${err.message}`, ephemeral: true } };
+          return { ok: false, payload: { content: formatSharedOrderContributionError(err), ephemeral: true } };
         }
       });
 
@@ -5000,7 +5075,7 @@ async function handleComponent(interaction) {
         const commitPayload = {
           mainComponents: cardSpecToTextComponents(embed),
           notices: [],
-          components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
+          components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId, { serverId })]
         };
 
         if (targetMessageId) {
@@ -5041,7 +5116,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(cancelEmbed),
         notices: [],
-        components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId)]
+        components: [partyActionRow(userId, true, isLeader, !!existingOrder), socialMainMenuRow(userId, { serverId })]
       });
     }
 
@@ -5117,7 +5192,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(cancelEmbed),
         notices: [],
-        components: [sharedOrderActionRow(userId, false, true), socialMainMenuRow(userId)]
+        components: [sharedOrderActionRow(userId, false, true), socialMainMenuRow(userId, { serverId })]
       });
     }
 
@@ -5156,7 +5231,7 @@ async function handleComponent(interaction) {
       return componentCommit(interaction, {
         mainComponents: cardSpecToTextComponents(keepEmbed),
         notices: [],
-        components: [sharedOrderActionRow(userId, !!existingOrder, isLeader, canComplete), socialMainMenuRow(userId)]
+        components: [sharedOrderActionRow(userId, !!existingOrder, isLeader, canComplete), socialMainMenuRow(userId, { serverId })]
       });
     }
 
@@ -5394,4 +5469,4 @@ export const noodleSocialCommand = {
   }
 };
 
-export { socialMainMenuRow, socialMainMenuRowNoProfile };
+export { socialMainMenuRow, socialMainMenuRowNoProfile, statsViewButtons };

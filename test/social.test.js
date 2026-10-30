@@ -24,6 +24,11 @@ import {
   getActiveBlessing as _getActiveBlessing,
   clearExpiredBlessings,
   createParty,
+  createSharedOrder,
+  completeSharedOrder,
+  contributeToSharedOrder,
+  getSharedOrderContributions,
+  getSharedOrderMemberCaps,
   joinParty,
   inviteUserToParty,
   leaveParty,
@@ -41,6 +46,8 @@ import {
   MIN_TIP_AMOUNT as _MIN_TIP_AMOUNT,
   MAX_TIP_AMOUNT as _MAX_TIP_AMOUNT
 } from "../src/game/social.js";
+import { getPlayer, upsertPlayer } from "../src/db/index.js";
+import { newPlayerProfile } from "../src/game/player.js";
 import { nowTs } from "../src/util/time.js";
 
 function setupTestDb() {
@@ -171,6 +178,90 @@ test("Party: cannot join full party", dbTestOpts, () => {
     joinParty(db, "server1", partyId, "user5");
   }, /Party is full/);
   
+  db.close();
+});
+
+test("Shared order: contribution is capped per active member across ingredient types", dbTestOpts, () => {
+  const db = setupTestDb();
+  const { partyId } = createParty(db, "server1", "leader1", "Test Party");
+  joinParty(db, "server1", partyId, "user2");
+  const { sharedOrderId } = createSharedOrder(db, partyId, "recipe1", "server1", 5);
+
+  contributeToSharedOrder(db, sharedOrderId, "leader1", "noodles", 3, { totalRequiredUnits: 11 });
+  contributeToSharedOrder(db, sharedOrderId, "leader1", "broth", 3, { totalRequiredUnits: 11 });
+
+  assert.throws(
+    () => contributeToSharedOrder(db, sharedOrderId, "leader1", "toppings", 1, { totalRequiredUnits: 11 }),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
+
+  const contributions = getSharedOrderContributions(db, sharedOrderId);
+  assert.equal(contributions.filter((row) => row.user_id === "leader1").reduce((sum, row) => sum + row.quantity, 0), 6);
+  assert.equal(contributions.some((row) => row.ingredient_id === "toppings"), false);
+
+  assert.throws(
+    () => contributeToSharedOrder(db, sharedOrderId, "user2", "toppings", 6, { totalRequiredUnits: 11 }),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
+  contributeToSharedOrder(db, sharedOrderId, "user2", "toppings", 5, { totalRequiredUnits: 11 });
+  const completedContributions = getSharedOrderContributions(db, sharedOrderId);
+  assert.equal(completedContributions.length, 3);
+  assert.equal(completedContributions.reduce((sum, row) => sum + row.quantity, 0), 11);
+
+  const player = newPlayerProfile("leader1");
+  player.inv_ingredients.noodles = 10;
+  upsertPlayer(db, "server1", "leader1", player, null, player.schema_version);
+  assert.throws(
+    () => db.transaction(() => {
+      player.inv_ingredients.noodles -= 1;
+      upsertPlayer(db, "server1", "leader1", player, null, player.schema_version);
+      contributeToSharedOrder(db, sharedOrderId, "leader1", "noodles", 1, { totalRequiredUnits: 11 });
+    })(),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
+  const storedPlayer = getPlayer(db, "server1", "leader1");
+  assert.equal(storedPlayer.inv_ingredients.noodles, 10);
+  assert.equal(getSharedOrderContributions(db, sharedOrderId)
+    .filter((row) => row.user_id === "leader1")
+    .reduce((sum, row) => sum + row.quantity, 0), 6);
+  completeSharedOrder(db, sharedOrderId);
+  assert.equal(db.prepare("SELECT status FROM shared_orders WHERE shared_order_id = ?").get(sharedOrderId).status, "completed");
+  db.close();
+});
+
+test("Shared order: member caps stay even unless the ingredient-type limit would make the order unfinishable", () => {
+  assert.deepEqual(getSharedOrderMemberCaps({ totalRequiredUnits: 11, memberCount: 3 }), [4, 4, 3]);
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [4, 4, 4], memberCount: 3, ingredientLimit: 2 }), [4, 4, 4]);
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [5, 5], memberCount: 2, ingredientLimit: 1 }), [5, 5]);
+
+  // 5 broth + 5 noodles, three members who can each supply one ingredient type: an even 4/3/3 split cannot finish.
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [5, 5], memberCount: 3, ingredientLimit: 1 }), [5, 4, 4]);
+
+  // A single member can never cover two ingredient types, so the unit cap is not what blocks completion.
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [5, 5], memberCount: 1, ingredientLimit: 1 }), [10]);
+});
+
+test("Shared order: unit caps and ingredient-type limits can both be satisfied to finish the order", dbTestOpts, () => {
+  const db = setupTestDb();
+  const { partyId } = createParty(db, "server1", "leader1", "Test Party");
+  joinParty(db, "server1", partyId, "user2");
+  joinParty(db, "server1", partyId, "user3");
+  const { sharedOrderId } = createSharedOrder(db, partyId, "butter_noodles", "server1", 5);
+  const limits = { maxIngredientSlots: 1, ingredientRequirements: [5, 5], memberIngredientLimit: 1 };
+
+  assert.throws(
+    () => contributeToSharedOrder(db, sharedOrderId, "leader1", "broth", 6, limits),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
+  contributeToSharedOrder(db, sharedOrderId, "leader1", "broth", 5, limits);
+  contributeToSharedOrder(db, sharedOrderId, "user2", "noodles", 4, limits);
+  contributeToSharedOrder(db, sharedOrderId, "user3", "noodles", 1, limits);
+
+  const totals = getSharedOrderContributions(db, sharedOrderId).reduce((acc, row) => {
+    acc[row.ingredient_id] = (acc[row.ingredient_id] ?? 0) + row.quantity;
+    return acc;
+  }, {});
+  assert.deepEqual(totals, { broth: 5, noodles: 5 });
   db.close();
 });
 

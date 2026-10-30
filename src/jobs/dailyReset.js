@@ -8,6 +8,7 @@ import { rollMarket } from "../game/market.js";
 import { getActiveEventEffects, withEventRecipes } from "../game/events.js";
 import { ensureDailyOrders } from "../game/orders.js";
 import { dayKeyUTC, nowTs } from "../util/time.js";
+import { runWithTelemetry } from "../infra/telemetry.js";
 
 const db = openDb();
 const baseContent = loadContentBundle(1);
@@ -27,8 +28,9 @@ function ensureServer(serverId) {
 
 export function startDailyResetScheduler(getKnownServerIds) {
   // Default: midnight UTC
-  cron.schedule("0 0 * * *", async () => {
+  cron.schedule("0 0 * * *", () => runWithTelemetry("daily_reset", "scheduled", async () => {
     const serverIds = await getKnownServerIds();
+    let failed = false;
     for (const serverId of serverIds) {
       try {
         const s = ensureServer(serverId);
@@ -44,8 +46,12 @@ export function startDailyResetScheduler(getKnownServerIds) {
         s.audit_log.push({ ts: nowTs(), actor_id: "system", action: "daily_reset", details: { day: today }});
         upsertServer(db, serverId, s, null);
       } catch (e) {
+        failed = true;
         console.error("daily_reset failed", serverId, e);
       }
     }
-  }, { timezone: "UTC" });
+    return !failed;
+  }).catch((error) => {
+    console.error("daily_reset scheduler failed", error);
+  }), { timezone: "UTC" });
 }
