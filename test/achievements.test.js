@@ -38,6 +38,23 @@ test("Achievement pages keep the menu compact and expose every visible achieveme
   assert.equal(getAchievementPage([], 0).totalPages, 1);
 });
 
+test("Achievement notice cards use the achievement banner and point to the achievements command", () => {
+  const player = newPlayerProfile("achievement-notice-user");
+  player.lifetime.coins_earned = 25_000;
+  const result = evaluatePlayerAchievements(player, content, Date.now());
+  const notice = player.notifications.pending_v2_notice_cards
+    .find((entry) => entry.title.startsWith("Achievement unlocked:"));
+  assert.ok(result.unlocked.length > 0);
+  assert.ok(notice?.details.some((line) => line.includes("/noodle achievements")));
+
+  const payload = buildComponentsV2NoticeCardPayload({
+    title: notice.title,
+    details: notice.details,
+    tone: notice.tone
+  });
+  assert.match(JSON.stringify(payload), /Achievements\.png/);
+});
+
 test("Achievements container places claim actions inline and keeps pagination with the owner footer", () => {
   const userId = "12345678901234567";
   const payload = buildAchievementsV2Message({
@@ -56,22 +73,6 @@ test("Achievements container places claim actions inline and keeps pagination wi
     claimedIds: ["claimed"]
   });
 
-  test("Achievement notice cards use the achievement banner and point to the achievements command", () => {
-    const player = newPlayerProfile("achievement-notice-user");
-    player.lifetime.coins_earned = 25_000;
-    const result = evaluatePlayerAchievements(player, content, Date.now());
-    const notice = player.notifications.pending_v2_notice_cards
-      .find((entry) => entry.title.startsWith("Achievement unlocked:"));
-    assert.ok(result.unlocked.length > 0);
-    assert.ok(notice?.details.some((line) => line.includes("/noodle achievements")));
-
-    const payload = buildComponentsV2NoticeCardPayload({
-      title: notice.title,
-      details: notice.details,
-      tone: notice.tone
-    });
-    assert.match(JSON.stringify(payload), /Achievements\.png/);
-  });
   const nodes = [];
   const visit = (items) => {
     for (const item of items ?? []) {

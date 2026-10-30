@@ -125,41 +125,42 @@ test("Counting milestone configuration is recorded atomically with valid count",
       milestoneRewards: [{ count: 1, reward: { type: "coins", amount: 10 } }]
     });
 
-    test("Counting milestone config rejects duplicate and invalid reward entries", () => {
-      assert.throws(() => validateCountingMilestoneConfig({ milestones: [
-        { count: 10, reward: { type: "coins", amount: 10 } },
-        { count: 10, reward: { type: "rep", amount: 1 } }
-      ] }), /unique positive safe integers/);
-      assert.throws(() => validateCountingMilestoneConfig({ milestones: [
-        { count: 10, reward: { type: "valor", amount: 10 } }
-      ] }), /Invalid counting milestone reward configuration/);
-    });
-
-    test("Counting recipe clue milestone falls back when there are no undiscovered recipes", () => {
-      const db = setupDb();
-      try {
-        const userId = "reward-clue-fallback-user";
-        upsertPlayer(db, "guild", userId, newPlayerProfile(userId), null, 1);
-        queueReward(db, {
-          userId,
-          milestone: 100,
-          reward: { type: "recipe_clue", amount: 1, fallback: { type: "coins", amount: 500 } }
-        });
-        const granted = grantCountingMilestoneReward(db, {
-          guildId: "guild",
-          channelId: "counting",
-          userId,
-          milestone: 100,
-          content: { recipes: {} }
-        });
-        assert.equal(granted.status, "granted");
-        assert.deepEqual(granted.reward, { type: "coins", amount: 500 });
-      } finally {
-        db.close();
-      }
-    });
     assert.equal(result.milestone, 1);
     assert.equal(db.prepare("SELECT status FROM counting_milestone_rewards").get().status, "pending");
+  } finally {
+    db.close();
+  }
+});
+
+test("Counting milestone config rejects duplicate and invalid reward entries", () => {
+  assert.throws(() => validateCountingMilestoneConfig({ milestones: [
+    { count: 10, reward: { type: "coins", amount: 10 } },
+    { count: 10, reward: { type: "rep", amount: 1 } }
+  ] }), /unique positive safe integers/);
+  assert.throws(() => validateCountingMilestoneConfig({ milestones: [
+    { count: 10, reward: { type: "valor", amount: 10 } }
+  ] }), /Invalid counting milestone reward configuration/);
+});
+
+test("Counting recipe clue milestone falls back when there are no undiscovered recipes", () => {
+  const db = setupDb();
+  try {
+    const userId = "reward-clue-fallback-user";
+    upsertPlayer(db, "guild", userId, newPlayerProfile(userId), null, 1);
+    queueReward(db, {
+      userId,
+      milestone: 100,
+      reward: { type: "recipe_clue", amount: 1, fallback: { type: "coins", amount: 500 } }
+    });
+    const granted = grantCountingMilestoneReward(db, {
+      guildId: "guild",
+      channelId: "counting",
+      userId,
+      milestone: 100,
+      content: { recipes: {} }
+    });
+    assert.equal(granted.status, "granted");
+    assert.deepEqual(granted.reward, { type: "coins", amount: 500 });
   } finally {
     db.close();
   }
