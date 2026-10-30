@@ -14599,7 +14599,15 @@ ${lines.join("\n")}`;
         description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
-      const failPayload = { content: " ", mainComponents: legacyEmbedsToV2TextComponentsForLegacy([failEmbed]), notices: [] };
+      const failPayload = {
+        content: " ",
+        components: [
+          noodleOrdersActionRow(userId, { highlightAccept: false, disableServe: !Object.keys(acceptedMap).length }),
+          noodleMainMenuRow(userId)
+        ],
+        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([failEmbed]),
+        notices: []
+      };
       if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
         return commitState(convertLegacyEmbedPayloadToComponentsV2(failPayload));
       }
