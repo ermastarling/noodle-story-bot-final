@@ -192,10 +192,79 @@ function buildRecipePoolSignature(playerRecipePool) {
   return Array.from(playerRecipePool).sort().join("|");
 }
 
-function getPlayerRecipePool(playerState) {
-  const permanentRecipes = playerState.known_recipes || [];
-  const tempRecipes = playerState.resilience?.temp_recipes || [];
-  return new Set(tempRecipes.length > 0 ? tempRecipes : [...permanentRecipes, ...tempRecipes]);
+function isRecipeEligibleForOrders(recipe, activeSeason, activeEventId) {
+  if (!recipe) return false;
+  if (recipe.event_id && (!activeEventId || recipe.event_id !== activeEventId)) return false;
+  return recipe.tier !== "seasonal" || recipe.season === activeSeason;
+}
+
+function getPlayerRecipePool(playerState, content, activeSeason, activeEventId) {
+  const recipesById = content?.recipes ?? {};
+  const eligibleIds = (recipeIds) => [...new Set((recipeIds ?? [])
+    .map((recipeId) => String(recipeId ?? "").trim())
+    .filter((recipeId) => isRecipeEligibleForOrders(recipesById[recipeId], activeSeason, activeEventId)))];
+  const temporaryRecipes = eligibleIds(playerState.resilience?.temp_recipes);
+  if (temporaryRecipes.length > 0) return new Set(temporaryRecipes);
+
+  const dailyMenu = eligibleIds(playerState.daily_order_menu_recipe_ids);
+  if (dailyMenu.length > 0) return new Set(dailyMenu);
+
+  return new Set(eligibleIds([
+    ...(playerState.known_recipes ?? []),
+    ...(playerState.resilience?.temp_recipes ?? [])
+  ]));
+}
+
+function getOccupiedOrderIndices(playerState, totalCount = Infinity) {
+  const occupied = new Set(
+    Array.isArray(playerState.orders_consumed_indices) ? playerState.orders_consumed_indices : []
+  );
+  const currentDay = String(playerState.orders_day ?? "");
+  if (!currentDay) return occupied;
+
+  for (const [acceptedId, entry] of Object.entries(playerState.orders?.accepted ?? {})) {
+    const order = entry?.order;
+    const orderIndex = Number(order?.order_index);
+    const orderId = String(order?.order_id ?? acceptedId);
+    if (
+      Number.isInteger(orderIndex)
+      && orderIndex >= 0
+      && orderIndex < totalCount
+      && orderId.startsWith(`${currentDay}-o`)
+    ) {
+      occupied.add(orderIndex);
+    }
+  }
+  return occupied;
+}
+
+function buildTutorialReplayOrder(playerState, content, activeSeason, activeEventId) {
+  if (playerState.tutorial?.active !== true || playerState.tutorial?.queue?.[0] !== "intro_order") return null;
+  const recipePool = getPlayerRecipePool(playerState, content, activeSeason, activeEventId);
+  const eligibleRecipes = [...recipePool]
+    .map((recipeId) => content?.recipes?.[recipeId])
+    .filter((recipe) => isRecipeEligibleForOrders(recipe, activeSeason, activeEventId));
+  const recipe = eligibleRecipes.find((entry) => entry.recipe_id === "classic_soy_ramen")
+    ?? eligibleRecipes.find((entry) => entry.recipe_id === "simple_broth")
+    ?? eligibleRecipes.find((entry) => entry.tier === "common")
+    ?? eligibleRecipes.sort((left, right) => left.recipe_id.localeCompare(right.recipe_id))[0];
+  if (!recipe) return null;
+
+  const dayKey = String(playerState.orders_day || dayKeyUTC());
+  return {
+    order_index: null,
+    order_id: `${dayKey}-tutorial-replay-TR0001`,
+    tier: recipe.tier ?? "common",
+    npc_archetype: "sleepy_traveler",
+    recipe_id: recipe.recipe_id,
+    is_limited_time: false,
+    created_at: nowTs(),
+    expires_at: null,
+    speed_window_seconds: null,
+    base_reward_override: null,
+    modifiers: {},
+    season: recipe.tier === "seasonal" ? recipe.season : null
+  };
 }
 
 export function generateOrderBoard({
@@ -250,7 +319,7 @@ export function ensureDailyOrders(serverState, settings, content, playerRecipePo
   return serverState;
 }
 
-export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, _activeEventId = null) {
+export function ensureDailyOrdersForPlayer(playerState, settings, content, activeSeason, serverId, userId, activeEventId = null) {
   const dayKey = dayKeyUTC();
   const orderSeedVersion = 5; // Increment when seed logic changes
   const previousOrdersDay = playerState.orders_day;
@@ -259,7 +328,7 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
     playerState.orders_depleted_day = null;
   }
 
-  const playerRecipePool = getPlayerRecipePool(playerState);
+  const playerRecipePool = getPlayerRecipePool(playerState, content, activeSeason, activeEventId);
   const poolSig = buildRecipePoolSignature(playerRecipePool);
   const combinedEffects = calculateCombinedEffects(playerState, upgradesContent, staffContent, calculateStaffEffects);
   const totalCount = computeOrderCount(settings, combinedEffects);
@@ -300,19 +369,23 @@ export function ensureDailyOrdersForPlayer(playerState, settings, content, activ
 }
 
 export function getOrdersMeta(playerState) {
-  const consumed = Array.isArray(playerState.orders_consumed_indices) ? playerState.orders_consumed_indices : [];
-  const consumedSet = new Set(consumed);
   const totalCount = Math.max(0, Number(playerState.orders_total_count ?? 0));
+  const consumedSet = getOccupiedOrderIndices(playerState, totalCount);
   const currentDay = String(playerState.orders_day ?? "");
   const depletedDay = String(playerState.orders_depleted_day ?? "");
   const depletedForCurrentDay = currentDay.length > 0 && depletedDay === currentDay;
 
   if (depletedForCurrentDay) {
+    const tutorialReplayAvailable = playerState.tutorial?.active === true
+      && playerState.tutorial?.queue?.[0] === "intro_order";
+    if (tutorialReplayAvailable) {
+      return { totalCount, consumedSet, availableCount: 1, depletedForCurrentDay: false, tutorialReplayAvailable: true };
+    }
     return { totalCount, consumedSet, availableCount: 0, depletedForCurrentDay: true };
   }
 
   const availableCount = Math.max(0, totalCount - consumedSet.size);
-  return { totalCount, consumedSet, availableCount, depletedForCurrentDay: false };
+  return { totalCount, consumedSet, availableCount, depletedForCurrentDay: false, tutorialReplayAvailable: false };
 }
 
 export function generateOrderPageForPlayer({
@@ -326,8 +399,7 @@ export function generateOrderPageForPlayer({
   page = 0,
   pageSize = 25
 }) {
-  const playerRecipePool = getPlayerRecipePool(playerState);
-  const { totalCount, consumedSet, availableCount, depletedForCurrentDay } = getOrdersMeta(playerState);
+  const { totalCount, consumedSet, availableCount, depletedForCurrentDay, tutorialReplayAvailable } = getOrdersMeta(playerState);
   if (depletedForCurrentDay) {
     return {
       orders: [],
@@ -335,6 +407,17 @@ export function generateOrderPageForPlayer({
       availableCount: 0
     };
   }
+  if (tutorialReplayAvailable) {
+    const order = page === 0
+      ? buildTutorialReplayOrder(playerState, content, activeSeason, activeEventId)
+      : null;
+    return {
+      orders: order ? [order] : [],
+      totalCount,
+      availableCount: order ? 1 : 0
+    };
+  }
+  const playerRecipePool = getPlayerRecipePool(playerState, content, activeSeason, activeEventId);
 
   const offset = Math.max(0, page) * pageSize;
   const { orders } = generateOrdersStream({
@@ -370,9 +453,17 @@ export function findOrderByToken({
   token
 }) {
   if (!token) return null;
-  const playerRecipePool = getPlayerRecipePool(playerState);
-  const { totalCount, consumedSet, depletedForCurrentDay } = getOrdersMeta(playerState);
+  const { totalCount, consumedSet, depletedForCurrentDay, tutorialReplayAvailable } = getOrdersMeta(playerState);
   if (depletedForCurrentDay) return null;
+  if (tutorialReplayAvailable) {
+    const replayOrder = buildTutorialReplayOrder(playerState, content, activeSeason, activeEventId);
+    if (!replayOrder) return null;
+    const full = replayOrder.order_id.toUpperCase();
+    const short = replayOrder.order_id.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
+    const target = String(token).toUpperCase();
+    return full === target || short === target ? replayOrder : null;
+  }
+  const playerRecipePool = getPlayerRecipePool(playerState, content, activeSeason, activeEventId);
   const target = token.toUpperCase();
 
   const { orders } = generateOrdersStream({
@@ -419,11 +510,7 @@ export function ensureUnlimitedOrdersBuffer(playerState, { minVisibleOrders = 25
 
   const safeMinVisibleOrders = Math.max(1, Math.floor(Number(minVisibleOrders) || 1));
   const totalCount = Math.max(0, Math.floor(Number(playerState.orders_total_count || 0) || 0));
-  const consumedSet = new Set(
-    Array.isArray(playerState.orders_consumed_indices)
-      ? playerState.orders_consumed_indices.map((idx) => Math.floor(Number(idx))).filter((idx) => Number.isFinite(idx) && idx >= 0)
-      : []
-  );
+  const consumedSet = getOccupiedOrderIndices(playerState, totalCount);
   const consumedCount = consumedSet.size;
   const availableCount = Math.max(0, totalCount - consumedCount);
 

@@ -45,6 +45,45 @@ export function loadCollectionsContent() {
   return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
 
+export function loadCountingRewardsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "counting.rewards.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadAchievementsContent() {
+  const p = path.join(__dirname, "..", "..", "content", "achievements.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadWorkPingContent() {
+  const p = path.join(__dirname, "..", "..", "content", "work-ping.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function loadGiveawaysContent() {
+  const p = path.join(__dirname, "..", "..", "content", "giveaways.json");
+  return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+export function parseGameUpdatesMarkdown(text) {
+  const updates = [];
+  const block = /^---\r?\nid:[ \t]*(.*)\r?\ntitle:[ \t]*(.*)\r?\nrollout_summary:[ \t]*(true|false)[ \t]*\r?\n---\r?\n([\s\S]*?)(?=\r?\n---\r?\nid:|(?![\s\S]))/gm;
+  for (const match of String(text).matchAll(block)) {
+    updates.push({
+      id: match[1].trim(),
+      title: match[2].trim(),
+      rollout_summary: match[3] === "true",
+      body: match[4].replace(/\r\n/g, "\n").trim()
+    });
+  }
+  return { version: 1, updates };
+}
+
+export function loadGameUpdatesContent() {
+  const p = path.join(__dirname, "..", "..", "content", "game-updates.md");
+  return parseGameUpdatesMarkdown(fs.readFileSync(p, "utf-8"));
+}
+
 export function loadSpecializationsContent() {
   const p = path.join(__dirname, "..", "..", "content", "specializations.json");
   return JSON.parse(fs.readFileSync(p, "utf-8"));

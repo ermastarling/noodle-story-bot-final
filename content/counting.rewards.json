@@ -1,0 +1,27 @@
+{
+  "milestones": [
+    { "count": 10, "reward": { "type": "coins", "amount": 100 } },
+    { "count": 25, "reward": { "type": "rep", "amount": 250 } },
+    { "count": 50, "reward": { "type": "sxp", "amount": 500 } },
+    { "count": 100, "reward": { "type": "recipe_clue", "amount": 1, "fallback": { "type": "coins", "amount": 500 } } },
+    { "count": 140, "reward": { "type": "coins", "amount": 140 } },
+    { "count": 210, "reward": { "type": "rep", "amount": 2100 } },
+    { "count": 270, "reward": { "type": "recipe_clue", "amount": 1, "fallback": { "type": "coins", "amount": 1000 } } },
+    { "count": 320, "reward": { "type": "coins", "amount": 320 } },
+    { "count": 380, "reward": { "type": "rep", "amount": 3800 } },
+    { "count": 444, "reward": { "type": "recipe_clue", "amount": 1, "fallback": { "type": "coins", "amount": 2000 } } },
+    { "count": 530, "reward": { "type": "coins", "amount": 530 } },
+    { "count": 560, "reward": { "type": "rep", "amount": 5600 } },
+    { "count": 600, "reward": { "type": "recipe_clue", "amount": 1, "fallback": { "type": "coins", "amount": 4000 } } },
+    { "count": 680, "reward": { "type": "coins", "amount": 680 } },
+    { "count": 777, "reward": { "type": "rep", "amount": 7770 } },
+    { "count": 810, "reward": { "type": "recipe_clue", "amount": 1, "fallback": { "type": "coins", "amount": 8000 } } },
+    { "count": 870, "reward": { "type": "coins", "amount": 870 } },
+    { "count": 945, "reward": { "type": "rep", "amount": 9450 } },
+    { "count": 999, "reward": { "type": "recipe_clue", "amount": 1, "fallback": { "type": "coins", "amount": 16000 } } },
+    { "count": 1212, "reward": { "type": "coins", "amount": 1212 } },
+    { "count": 1444, "reward": { "type": "rep", "amount": 14440 } },
+    { "count": 1789, "reward": { "type": "recipe_clue", "amount": 1, "fallback": { "type": "coins", "amount": 32000 } } },
+    { "count": 2222, "reward": { "type": "coins", "amount": 2222 } }
+  ]
+}

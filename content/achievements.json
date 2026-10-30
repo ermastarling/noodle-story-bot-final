@@ -1,0 +1,1268 @@
+{
+  "version": 1,
+  "achievements": [
+    {
+      "achievement_id": "a_familiar_face",
+      "category": "npcs",
+      "name": "A Familiar Face",
+      "description": "Serve 5 different kinds of visitors.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.npc_seen",
+        "threshold": 5
+      },
+      "reward": {
+        "coins": 750
+      }
+    },
+    {
+      "achievement_id": "a_bustling_shop",
+      "category": "npcs",
+      "name": "A Bustling Shop",
+      "description": "Serve 15 different kinds of visitors.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.npc_seen",
+        "threshold": 15
+      },
+      "reward": {
+        "rep": 75
+      }
+    },
+    {
+      "achievement_id": "beloved_by_all",
+      "category": "npcs",
+      "name": "Beloved by All",
+      "description": "Serve 30 different kinds of visitors.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.npc_seen",
+        "threshold": 30
+      },
+      "reward": {
+        "coins": 4000
+      }
+    },
+    {
+      "achievement_id": "a_legendary_welcome",
+      "category": "npcs",
+      "name": "A Legendary Welcome",
+      "description": "Serve 44 different kinds of visitors.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.npc_seen",
+        "threshold": 44
+      },
+      "reward": {
+        "sxp": 750
+      }
+    },
+    {
+      "achievement_id": "first_savings",
+      "category": "money",
+      "name": "First Savings",
+      "description": "Earn 25,000 coins over time.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_earned",
+        "threshold": 25000
+      },
+      "reward": {
+        "rep": 250
+      }
+    },
+    {
+      "achievement_id": "a_comfortable_living",
+      "category": "money",
+      "name": "A Comfortable Living",
+      "description": "Earn 100,000 coins over time.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_earned",
+        "threshold": 100000
+      },
+      "reward": {
+        "rep": 500
+      }
+    },
+    {
+      "achievement_id": "prosperous_proprietor",
+      "category": "money",
+      "name": "Prosperous Proprietor",
+      "description": "Earn 500,000 coins over time.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_earned",
+        "threshold": 500000
+      },
+      "reward": {
+        "rep": 1000
+      }
+    },
+    {
+      "achievement_id": "a_fortune_in_broth",
+      "category": "money",
+      "name": "A Fortune in Broth",
+      "description": "Earn 1,000,000 coins over time.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_earned",
+        "threshold": 1000000
+      },
+      "reward": {
+        "rep": 2000
+      }
+    },
+    {
+      "achievement_id": "the_first_pages",
+      "category": "recipes",
+      "name": "The First Pages",
+      "description": "Learn 10 recipes.",
+      "criteria": {
+        "type": "array_length",
+        "path": "known_recipes",
+        "threshold": 10
+      },
+      "reward": {
+        "coins": 1250
+      }
+    },
+    {
+      "achievement_id": "a_well_worn_cookbook",
+      "category": "recipes",
+      "name": "A Well-Worn Cookbook",
+      "description": "Learn 25 recipes.",
+      "criteria": {
+        "type": "array_length",
+        "path": "known_recipes",
+        "threshold": 25
+      },
+      "reward": {
+        "coins": 2500
+      }
+    },
+    {
+      "achievement_id": "keeper_of_flavors",
+      "category": "recipes",
+      "name": "Keeper of Flavors",
+      "description": "Learn 50 recipes.",
+      "criteria": {
+        "type": "array_length",
+        "path": "known_recipes",
+        "threshold": 50
+      },
+      "reward": {
+        "coins": 5000
+      }
+    },
+    {
+      "achievement_id": "the_grand_recipe_archive",
+      "category": "recipes",
+      "name": "The Grand Recipe Archive",
+      "description": "Learn 100 recipes.",
+      "criteria": {
+        "type": "array_length",
+        "path": "known_recipes",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 10000
+      }
+    },
+    {
+      "achievement_id": "the_first_hundred",
+      "category": "bowls",
+      "name": "The First Hundred",
+      "description": "Serve 100 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 500
+      }
+    },
+    {
+      "achievement_id": "a_steady_simmer",
+      "category": "bowls",
+      "name": "A Steady Simmer",
+      "description": "Serve 500 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 500
+      },
+      "reward": {
+        "sxp": 250
+      }
+    },
+    {
+      "achievement_id": "the_thousand_bowl_kitchen",
+      "category": "bowls",
+      "name": "The Thousand-Bowl Kitchen",
+      "description": "Serve 1,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 1000
+      },
+      "reward": {
+        "rep": 1000
+      }
+    },
+    {
+      "achievement_id": "two_thousand_warm_meals",
+      "category": "bowls",
+      "name": "Two Thousand Warm Meals",
+      "description": "Serve 2,500 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 2500
+      },
+      "reward": {
+        "sxp": 1250
+      }
+    },
+    {
+      "achievement_id": "the_neighborhood_favorite",
+      "category": "bowls",
+      "name": "The Neighborhood Favorite",
+      "description": "Serve 5,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 5000
+      },
+      "reward": {
+        "coins": 3500
+      }
+    },
+    {
+      "achievement_id": "a_flourishing_noodle_house",
+      "category": "bowls",
+      "name": "A Flourishing Noodle House",
+      "description": "Serve 10,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 10000
+      },
+      "reward": {
+        "sxp": 2000
+      }
+    },
+    {
+      "achievement_id": "master_of_the_ladle",
+      "category": "bowls",
+      "name": "Master of the Ladle",
+      "description": "Serve 15,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 15000
+      },
+      "reward": {
+        "rep": 2500
+      }
+    },
+    {
+      "achievement_id": "the_endless_soup_pot",
+      "category": "bowls",
+      "name": "The Endless Soup Pot",
+      "description": "Serve 20,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 20000
+      },
+      "reward": {
+        "sxp": 4000
+      }
+    },
+    {
+      "achievement_id": "a_city_fed_on_noodles",
+      "category": "bowls",
+      "name": "A City Fed on Noodles",
+      "description": "Serve 30,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 30000
+      },
+      "reward": {
+        "coins": 8000
+      }
+    },
+    {
+      "achievement_id": "the_golden_ladle",
+      "category": "bowls",
+      "name": "The Golden Ladle",
+      "description": "Serve 40,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 40000
+      },
+      "reward": {
+        "sxp": 5000
+      }
+    },
+    {
+      "achievement_id": "a_thousand_tables",
+      "category": "bowls",
+      "name": "A Thousand Tables",
+      "description": "Serve 50,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 50000
+      },
+      "reward": {
+        "rep": 5000
+      }
+    },
+    {
+      "achievement_id": "the_immortal_kitchen",
+      "category": "bowls",
+      "name": "The Immortal Kitchen",
+      "description": "Serve 75,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 75000
+      },
+      "reward": {
+        "sxp": 8000
+      }
+    },
+    {
+      "achievement_id": "a_legend_in_every_bowl",
+      "category": "bowls",
+      "name": "A Legend in Every Bowl",
+      "description": "Serve 100,000 bowls.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.bowls_served_total",
+        "threshold": 100000
+      },
+      "reward": {
+        "sxp": 15000
+      }
+    },
+    {
+      "achievement_id": "a_patient_cast",
+      "category": "fishing_foraging",
+      "name": "A Patient Cast",
+      "description": "Catch 100 fish.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.fish_caught",
+        "threshold": 100
+      },
+      "reward": {
+        "rep": 150
+      }
+    },
+    {
+      "achievement_id": "riverbank_regular",
+      "category": "fishing_foraging",
+      "name": "Riverbank Regular",
+      "description": "Catch 500 fish.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.fish_caught",
+        "threshold": 500
+      },
+      "reward": {
+        "coins": 1500
+      }
+    },
+    {
+      "achievement_id": "friend_of_the_waters",
+      "category": "fishing_foraging",
+      "name": "Friend of the Waters",
+      "description": "Catch 1,500 fish.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.fish_caught",
+        "threshold": 1500
+      },
+      "reward": {
+        "sxp": 750
+      }
+    },
+    {
+      "achievement_id": "master_angler",
+      "category": "fishing_foraging",
+      "name": "Master Angler",
+      "description": "Catch 5,000 fish.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.fish_caught",
+        "threshold": 5000
+      },
+      "reward": {
+        "rep": 2500
+      }
+    },
+    {
+      "achievement_id": "a_few_wild_greens",
+      "category": "fishing_foraging",
+      "name": "A Few Wild Greens",
+      "description": "Gather 100 forageables.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.forage_items_collected",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 750
+      }
+    },
+    {
+      "achievement_id": "the_forager_s_satchel",
+      "category": "fishing_foraging",
+      "name": "The Forager's Satchel",
+      "description": "Gather 500 forageables.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.forage_items_collected",
+        "threshold": 500
+      },
+      "reward": {
+        "rep": 100
+      }
+    },
+    {
+      "achievement_id": "woodland_gatherer",
+      "category": "fishing_foraging",
+      "name": "Woodland Gatherer",
+      "description": "Gather 1,000 forageables.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.forage_items_collected",
+        "threshold": 1000
+      },
+      "reward": {
+        "coins": 3500
+      }
+    },
+    {
+      "achievement_id": "bounty_of_the_wilds",
+      "category": "fishing_foraging",
+      "name": "Bounty of the Wilds",
+      "description": "Gather 2,500 forageables.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.forage_items_collected",
+        "threshold": 2500
+      },
+      "reward": {
+        "sxp": 750
+      }
+    },
+    {
+      "achievement_id": "a_familiar_stall",
+      "category": "market",
+      "name": "A Familiar Stall",
+      "description": "Complete 25 market trades.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.market_transactions",
+        "threshold": 25
+      },
+      "reward": {
+        "coins": 500
+      }
+    },
+    {
+      "achievement_id": "a_regular_at_the_market",
+      "category": "market",
+      "name": "A Regular at the Market",
+      "description": "Complete 100 market trades.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.market_transactions",
+        "threshold": 100
+      },
+      "reward": {
+        "rep": 500
+      }
+    },
+    {
+      "achievement_id": "a_savvy_shopkeeper",
+      "category": "market",
+      "name": "A Savvy Shopkeeper",
+      "description": "Complete 250 market trades.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.market_transactions",
+        "threshold": 250
+      },
+      "reward": {
+        "coins": 2500
+      }
+    },
+    {
+      "achievement_id": "merchant_of_the_noodle_district",
+      "category": "market",
+      "name": "Merchant of the Noodle District",
+      "description": "Complete 1,000 market trades.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.market_transactions",
+        "threshold": 1000
+      },
+      "reward": {
+        "rep": 1500
+      }
+    },
+    {
+      "achievement_id": "a_helping_hand",
+      "category": "shared_orders",
+      "name": "A Helping Hand",
+      "description": "Contribute to 10 shared orders.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.shared_order_ids",
+        "threshold": 10
+      },
+      "reward": {
+        "rep": 100
+      }
+    },
+    {
+      "achievement_id": "a_reliable_neighbor",
+      "category": "shared_orders",
+      "name": "A Reliable Neighbor",
+      "description": "Contribute to 50 shared orders.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.shared_order_ids",
+        "threshold": 50
+      },
+      "reward": {
+        "coins": 1000
+      }
+    },
+    {
+      "achievement_id": "the_community_s_backbone",
+      "category": "shared_orders",
+      "name": "The Community's Backbone",
+      "description": "Contribute to 150 shared orders.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.shared_order_ids",
+        "threshold": 150
+      },
+      "reward": {
+        "rep": 350
+      }
+    },
+    {
+      "achievement_id": "a_feast_for_everyone",
+      "category": "shared_orders",
+      "name": "A Feast for Everyone",
+      "description": "Contribute to 500 shared orders.",
+      "criteria": {
+        "type": "distinct",
+        "path": "lifetime.shared_order_ids",
+        "threshold": 500
+      },
+      "reward": {
+        "rep": 2000
+      }
+    },
+    {
+      "achievement_id": "a_little_blessing",
+      "category": "blessings",
+      "name": "A Little Blessing",
+      "description": "Give another chef their first blessing.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_given",
+        "threshold": 1
+      },
+      "reward": {
+        "coins": 250
+      }
+    },
+    {
+      "achievement_id": "a_warmhearted_host",
+      "category": "blessings",
+      "name": "A Warmhearted Host",
+      "description": "Give other chefs 25 blessings.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_given",
+        "threshold": 25
+      },
+      "reward": {
+        "rep": 75
+      }
+    },
+    {
+      "achievement_id": "a_blessing_for_every_table",
+      "category": "blessings",
+      "name": "A Blessing for Every Table",
+      "description": "Give other chefs 100 blessings.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_given",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 1500
+      }
+    },
+    {
+      "achievement_id": "a_heart_full_of_kindness",
+      "category": "blessings",
+      "name": "A Heart Full of Kindness",
+      "description": "Give other chefs 500 blessings.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_given",
+        "threshold": 500
+      },
+      "reward": {
+        "rep": 500
+      }
+    },
+    {
+      "achievement_id": "a_kind_first_visit",
+      "category": "blessings",
+      "name": "A Kind First Visit",
+      "description": "Receive your first blessing from another chef.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_received",
+        "threshold": 1
+      },
+      "reward": {
+        "coins": 200
+      }
+    },
+    {
+      "achievement_id": "a_welcome_worth_remembering",
+      "category": "blessings",
+      "name": "A Welcome Worth Remembering",
+      "description": "Receive 25 blessings from other chefs.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_received",
+        "threshold": 25
+      },
+      "reward": {
+        "rep": 100
+      }
+    },
+    {
+      "achievement_id": "a_beloved_shopkeeper",
+      "category": "blessings",
+      "name": "A Beloved Shopkeeper",
+      "description": "Receive 100 blessings from other chefs.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_received",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 2000
+      }
+    },
+    {
+      "achievement_id": "the_heart_of_the_community",
+      "category": "blessings",
+      "name": "The Heart of the Community",
+      "description": "Receive 500 blessings from other chefs.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.blessings_received",
+        "threshold": 500
+      },
+      "reward": {
+        "rep": 750
+      }
+    },
+    {
+      "achievement_id": "the_first_offering",
+      "category": "tipping",
+      "name": "The First Offering",
+      "description": "Give your first tip.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_tipped_out",
+        "threshold": 1
+      },
+      "reward": {
+        "coins": 100
+      }
+    },
+    {
+      "achievement_id": "a_welcome_surprise",
+      "category": "tipping",
+      "name": "A Welcome Surprise",
+      "description": "Receive your first tip.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_tipped_in",
+        "threshold": 1
+      },
+      "reward": {
+        "rep": 10
+      }
+    },
+    {
+      "achievement_id": "a_generous_gesture",
+      "category": "tipping",
+      "name": "A Generous Gesture",
+      "description": "Tip 5,000 coins in total.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_tipped_out",
+        "threshold": 5000
+      },
+      "reward": {
+        "coins": 1500
+      }
+    },
+    {
+      "achievement_id": "a_heart_of_gold",
+      "category": "tipping",
+      "name": "A Heart of Gold",
+      "description": "Tip 25,000 coins in total.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_tipped_out",
+        "threshold": 25000
+      },
+      "reward": {
+        "rep": 150
+      }
+    },
+    {
+      "achievement_id": "the_generous_patron",
+      "category": "tipping",
+      "name": "The Generous Patron",
+      "description": "Tip 100,000 coins in total.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_tipped_out",
+        "threshold": 100000
+      },
+      "reward": {
+        "coins": 7500
+      }
+    },
+    {
+      "achievement_id": "the_village_benefactor",
+      "category": "tipping",
+      "name": "The Village Benefactor",
+      "description": "Tip 500,000 coins in total.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.coins_tipped_out",
+        "threshold": 500000
+      },
+      "reward": {
+        "rep": 1500
+      }
+    },
+    {
+      "achievement_id": "a_daily_ritual",
+      "category": "quests",
+      "name": "A Daily Ritual",
+      "description": "Complete 10 daily quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.daily",
+        "threshold": 10
+      },
+      "reward": {
+        "sxp": 250
+      }
+    },
+    {
+      "achievement_id": "a_devoted_routine",
+      "category": "quests",
+      "name": "A Devoted Routine",
+      "description": "Complete 50 daily quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.daily",
+        "threshold": 50
+      },
+      "reward": {
+        "coins": 750
+      }
+    },
+    {
+      "achievement_id": "the_daily_regular",
+      "category": "quests",
+      "name": "The Daily Regular",
+      "description": "Complete 150 daily quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.daily",
+        "threshold": 150
+      },
+      "reward": {
+        "sxp": 750
+      }
+    },
+    {
+      "achievement_id": "a_life_of_dedication",
+      "category": "quests",
+      "name": "A Life of Dedication",
+      "description": "Complete 500 daily quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.daily",
+        "threshold": 500
+      },
+      "reward": {
+        "sxp": 2500
+      }
+    },
+    {
+      "achievement_id": "finding_your_rhythm",
+      "category": "quests",
+      "name": "Finding Your Rhythm",
+      "description": "Complete 5 weekly quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.weekly",
+        "threshold": 5
+      },
+      "reward": {
+        "rep": 150
+      }
+    },
+    {
+      "achievement_id": "a_steady_tradition",
+      "category": "quests",
+      "name": "A Steady Tradition",
+      "description": "Complete 20 weekly quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.weekly",
+        "threshold": 20
+      },
+      "reward": {
+        "coins": 1000
+      }
+    },
+    {
+      "achievement_id": "a_season_of_service",
+      "category": "quests",
+      "name": "A Season of Service",
+      "description": "Complete 50 weekly quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.weekly",
+        "threshold": 50
+      },
+      "reward": {
+        "rep": 500
+      }
+    },
+    {
+      "achievement_id": "a_year_of_dedication",
+      "category": "quests",
+      "name": "A Year of Dedication",
+      "description": "Complete 100 weekly quests.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.quests_completed_by_type.weekly",
+        "threshold": 100
+      },
+      "reward": {
+        "rep": 1500
+      }
+    },
+    {
+      "achievement_id": "a_week_together",
+      "category": "daily_streaks",
+      "name": "A Week Together",
+      "description": "Keep a 7-day daily reward streak.",
+      "criteria": {
+        "type": "metric",
+        "path": "daily.streak_days",
+        "threshold": 7
+      },
+      "reward": {
+        "coins": 2000
+      }
+    },
+    {
+      "achievement_id": "two_weeks_of_warmth",
+      "category": "daily_streaks",
+      "name": "Two Weeks of Warmth",
+      "description": "Keep a 14-day daily reward streak.",
+      "criteria": {
+        "type": "metric",
+        "path": "daily.streak_days",
+        "threshold": 14
+      },
+      "reward": {
+        "rep": 250
+      }
+    },
+    {
+      "achievement_id": "a_month_at_the_hearth",
+      "category": "daily_streaks",
+      "name": "A Month at the Hearth",
+      "description": "Keep a 30-day daily reward streak.",
+      "criteria": {
+        "type": "metric",
+        "path": "daily.streak_days",
+        "threshold": 30
+      },
+      "reward": {
+        "coins": 5000
+      }
+    },
+    {
+      "achievement_id": "the_unbroken_tradition",
+      "category": "daily_streaks",
+      "name": "The Unbroken Tradition",
+      "description": "Keep a 100-day daily reward streak.",
+      "criteria": {
+        "type": "metric",
+        "path": "daily.streak_days",
+        "threshold": 100
+      },
+      "reward": {
+        "rep": 2000
+      }
+    },
+    {
+      "achievement_id": "golden_hearth_revealed",
+      "category": "hidden_specializations",
+      "name": "The Golden Hearth Revealed",
+      "description": "Unlock the hidden Golden Hearth specialization.",
+      "criteria": {
+        "type": "array_includes",
+        "path": "profile.specialization.unlocked_spec_ids",
+        "value": "golden_hearth"
+      },
+      "reward": {
+        "coins": 500
+      },
+      "secret": true
+    },
+    {
+      "achievement_id": "lucky_ladle_revealed",
+      "category": "hidden_specializations",
+      "name": "Fortune Favors the Ladle",
+      "description": "Unlock the hidden Lucky Ladle Pavilion specialization.",
+      "criteria": {
+        "type": "array_includes",
+        "path": "profile.specialization.unlocked_spec_ids",
+        "value": "lucky_ladle_pavilion"
+      },
+      "reward": {
+        "coins": 1000
+      },
+      "secret": true
+    },
+    {
+      "achievement_id": "legendary_hall_revealed",
+      "category": "hidden_specializations",
+      "name": "A Hall of Legends",
+      "description": "Unlock the hidden Legendary Noodle Hall specialization.",
+      "criteria": {
+        "type": "array_includes",
+        "path": "profile.specialization.unlocked_spec_ids",
+        "value": "legendary_noodle_hall"
+      },
+      "reward": {
+        "coins": 2000
+      },
+      "secret": true
+    },
+    {
+      "achievement_id": "sprout_of_promise",
+      "category": "gardening",
+      "name": "Sprout of Promise",
+      "description": "Harvest 100 vegetables and herbs.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_items_harvested",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 750
+      }
+    },
+    {
+      "achievement_id": "the_green_thumb",
+      "category": "gardening",
+      "name": "The Green Thumb",
+      "description": "Harvest 500 vegetables and herbs.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_items_harvested",
+        "threshold": 500
+      },
+      "reward": {
+        "rep": 150
+      }
+    },
+    {
+      "achievement_id": "a_herbalist_s_bounty",
+      "category": "gardening",
+      "name": "A Herbalist's Bounty",
+      "description": "Harvest 1,500 vegetables and herbs.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_items_harvested",
+        "threshold": 1500
+      },
+      "reward": {
+        "coins": 4000
+      }
+    },
+    {
+      "achievement_id": "the_verdant_sanctuary",
+      "category": "gardening",
+      "name": "The Verdant Sanctuary",
+      "description": "Harvest 5,000 vegetables and herbs.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_items_harvested",
+        "threshold": 5000
+      },
+      "reward": {
+        "sxp": 750
+      }
+    },
+    {
+      "achievement_id": "seeds_of_tomorrow",
+      "category": "gardening",
+      "name": "Seeds of Tomorrow",
+      "description": "Collect 100 seeds.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_seeds_collected",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 500
+      }
+    },
+    {
+      "achievement_id": "the_seed_collector",
+      "category": "gardening",
+      "name": "The Seed Collector",
+      "description": "Collect 500 seeds.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_seeds_collected",
+        "threshold": 500
+      },
+      "reward": {
+        "rep": 75
+      }
+    },
+    {
+      "achievement_id": "a_thousand_possibilities",
+      "category": "gardening",
+      "name": "A Thousand Possibilities",
+      "description": "Collect 1,500 seeds.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_seeds_collected",
+        "threshold": 1500
+      },
+      "reward": {
+        "coins": 3500
+      }
+    },
+    {
+      "achievement_id": "the_keeper_of_seeds",
+      "category": "gardening",
+      "name": "The Keeper of Seeds",
+      "description": "Collect 5,000 seeds.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_seeds_collected",
+        "threshold": 5000
+      },
+      "reward": {
+        "sxp": 400
+      }
+    },
+    {
+      "achievement_id": "first_furrow",
+      "category": "gardening",
+      "name": "First Furrow",
+      "description": "Plant 25 garden plots.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_plots_planted",
+        "threshold": 25
+      },
+      "reward": {
+        "coins": 350
+      }
+    },
+    {
+      "achievement_id": "rows_of_abundance",
+      "category": "gardening",
+      "name": "Rows of Abundance",
+      "description": "Plant 100 garden plots.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_plots_planted",
+        "threshold": 100
+      },
+      "reward": {
+        "rep": 50
+      }
+    },
+    {
+      "achievement_id": "the_patient_cultivator",
+      "category": "gardening",
+      "name": "The Patient Cultivator",
+      "description": "Plant 500 garden plots.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_plots_planted",
+        "threshold": 500
+      },
+      "reward": {
+        "coins": 4500
+      }
+    },
+    {
+      "achievement_id": "the_master_gardener",
+      "category": "gardening",
+      "name": "The Master Gardener",
+      "description": "Plant 1,500 garden plots.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.garden_plots_planted",
+        "threshold": 1500
+      },
+      "reward": {
+        "sxp": 650
+      }
+    },
+    {
+      "achievement_id": "the_first_simmer",
+      "category": "broth_simmering",
+      "name": "The First Simmer",
+      "description": "Simmer 100 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 100
+      },
+      "reward": {
+        "coins": 800
+      }
+    },
+    {
+      "achievement_id": "a_comforting_stockpot",
+      "category": "broth_simmering",
+      "name": "A Comforting Stockpot",
+      "description": "Simmer 500 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 500
+      },
+      "reward": {
+        "rep": 100
+      }
+    },
+    {
+      "achievement_id": "master_of_the_stockpot",
+      "category": "broth_simmering",
+      "name": "Master of the Stockpot",
+      "description": "Simmer 1,500 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 1500
+      },
+      "reward": {
+        "coins": 4500
+      }
+    },
+    {
+      "achievement_id": "the_endless_broth_pot",
+      "category": "broth_simmering",
+      "name": "The Endless Broth Pot",
+      "description": "Simmer 5,000 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 5000
+      },
+      "reward": {
+        "sxp": 500
+      }
+    },
+    {
+      "achievement_id": "a_broth_for_every_bowl",
+      "category": "broth_simmering",
+      "name": "A Broth for Every Bowl",
+      "description": "Simmer 10,000 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 10000
+      },
+      "reward": {
+        "coins": 12500
+      }
+    },
+    {
+      "achievement_id": "the_broth_artisan",
+      "category": "broth_simmering",
+      "name": "The Broth Artisan",
+      "description": "Simmer 25,000 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 25000
+      },
+      "reward": {
+        "rep": 1000
+      }
+    },
+    {
+      "achievement_id": "guardian_of_the_hearth",
+      "category": "broth_simmering",
+      "name": "Guardian of the Hearth",
+      "description": "Simmer 50,000 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 50000
+      },
+      "reward": {
+        "coins": 40000
+      }
+    },
+    {
+      "achievement_id": "the_legendary_brothmaster",
+      "category": "broth_simmering",
+      "name": "The Legendary Brothmaster",
+      "description": "Simmer 100,000 servings of broth in your kitchen.",
+      "criteria": {
+        "type": "metric",
+        "path": "lifetime.broth_servings_simmered",
+        "threshold": 100000
+      },
+      "reward": {
+        "rep": 2500
+      }
+    }
+  ]
+}

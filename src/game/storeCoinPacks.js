@@ -1,18 +1,21 @@
 export const STORE_COIN_PACKS = Object.freeze({
   coin_pack_099: Object.freeze({
     id: "coin_pack_099",
+    name: "Chef's Coin Crate",
     priceUsd: 0.99,
     priceLabel: "$0.99",
     coins: 10_000
   }),
   coin_pack_199: Object.freeze({
     id: "coin_pack_199",
+    name: "Brothkeeper's Savings",
     priceUsd: 1.99,
     priceLabel: "$1.99",
     coins: 25_000
   }),
   coin_pack_499: Object.freeze({
     id: "coin_pack_499",
+    name: "Greedy Noodle Goblin Hoard",
     priceUsd: 4.99,
     priceLabel: "$4.99",
     coins: 100_000

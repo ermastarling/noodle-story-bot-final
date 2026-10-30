@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import cron from "node-cron";
+import { runWithTelemetry } from "../infra/telemetry.js";
 
 const DEFAULT_CRON = "0 3 * * *"; // 03:00 UTC daily
 const DEFAULT_RETAIN = 14;
@@ -45,18 +46,18 @@ function cleanupOldBackups(dir, retainCount) {
 let isRunning = false;
 
 export async function runDbBackup(db, reason = "scheduled") {
-  if (!db) return;
+  if (!db) return false;
   if (isRunning) {
     console.log("⏭️  Backup already running, skipping");
-    return;
+    return "skipped";
   }
   isRunning = true;
-  const dir = resolveBackupDir();
-  const stamp = formatStamp();
-  const dest = path.join(dir, `noodlestory-${stamp}.sqlite`);
-  const latest = path.join(dir, "latest.sqlite");
 
   try {
+    const dir = resolveBackupDir();
+    const stamp = formatStamp();
+    const dest = path.join(dir, `noodlestory-${stamp}.sqlite`);
+    const latest = path.join(dir, "latest.sqlite");
     try {
       db.pragma("wal_checkpoint(TRUNCATE)");
     } catch (e) {
@@ -74,8 +75,10 @@ export async function runDbBackup(db, reason = "scheduled") {
     const retain = Number.parseInt(process.env.NOODLE_BACKUP_RETAIN || "", 10);
     const retainCount = Number.isFinite(retain) && retain > 0 ? retain : DEFAULT_RETAIN;
     cleanupOldBackups(dir, retainCount);
+    return true;
   } catch (e) {
     console.error("❌ DB backup failed:", e?.stack ?? e);
+    return false;
   } finally {
     isRunning = false;
   }
@@ -84,7 +87,7 @@ export async function runDbBackup(db, reason = "scheduled") {
 export function startDbBackupScheduler(db) {
   if (!db) return;
   const cronExpr = process.env.NOODLE_BACKUP_CRON || DEFAULT_CRON;
-  cron.schedule(cronExpr, async () => {
-    await runDbBackup(db, "scheduled");
+  cron.schedule(cronExpr, () => {
+    return runWithTelemetry("database_backup", "scheduled", () => runDbBackup(db, "scheduled"));
   }, { timezone: "UTC" });
 }

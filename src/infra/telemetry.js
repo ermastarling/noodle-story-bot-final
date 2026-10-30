@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { performance } from "node:perf_hooks";
 
 const logDir = path.join(process.cwd(), "noodle-logs");
 const telemetryLogPath = (() => {
@@ -77,13 +78,18 @@ function maybeLogDropSummary() {
   const totalDrops = droppedByBuffer + droppedBySampling + droppedByMode;
   if (totalDrops <= 0 && backpressureSignals <= 0) return;
   lastDropLogAt = now;
-  writeTelemetryMeta("telemetry_drop_summary", {
+  const summary = {
     totalDrops,
     droppedByBuffer,
     droppedBySampling,
     droppedByMode,
     backpressureSignals
-  });
+  };
+  writeTelemetryMeta("telemetry_drop_summary", summary);
+  droppedByBuffer = 0;
+  droppedBySampling = 0;
+  droppedByMode = 0;
+  backpressureSignals = 0;
 }
 
 function roundTelemetryNumber(value) {
@@ -179,5 +185,33 @@ export function emitTelemetry(event, payload = {}) {
     telemetryBackpressureActive = true;
     backpressureSignals += 1;
     maybeLogDropSummary();
+  }
+}
+
+export async function runWithTelemetry(job, reason, task) {
+  if (typeof task !== "function") {
+    throw new Error("runWithTelemetry requires a task callback");
+  }
+
+  const startedAt = performance.now();
+  try {
+    const result = await task();
+    emitTelemetry("scheduled_job_run", {
+      job: String(job || "unknown"),
+      reason: String(reason || "scheduled"),
+      outcome: result === false ? "failure" : result === "skipped" ? "skipped" : "success",
+      durationMs: performance.now() - startedAt
+    });
+    return result;
+  } catch (error) {
+    emitTelemetry("scheduled_job_run", {
+      job: String(job || "unknown"),
+      reason: String(reason || "scheduled"),
+      outcome: "failure",
+      durationMs: performance.now() - startedAt,
+      errorCode: error?.code ?? null,
+      errorName: error?.name ?? null
+    });
+    throw error;
   }
 }

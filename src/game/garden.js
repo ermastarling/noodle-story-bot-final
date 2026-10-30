@@ -7,6 +7,17 @@ export const BASE_GARDEN_PLOTS = 5;
 export const COMPOST_PER_BAG = 5;
 export const PLOT_YIELD = 5;
 export const SPOILED_STASH_KEY = "spoiled_generic";
+const GARDEN_VEGETABLE_HERB_IDS = new Set([
+  "scallions",
+  "carrots",
+  "root_vegetables",
+  "wild_greens",
+  "night_herbs",
+  "ember_peppers",
+  "dew_greens",
+  "roasted_roots",
+  "black_garlic"
+]);
 
 const COOLDOWN_BY_TIER_MS = {
   common: 60 * 60 * 1000,
@@ -192,10 +203,16 @@ export function getPlotTotalYield(plot) {
 
 export function addSeeds(player, seedDrops) {
   const garden = ensureGardenState(player);
+  let collected = 0;
   for (const [itemId, qty] of Object.entries(seedDrops || {})) {
     if (!qty || qty <= 0) continue;
     const canonical = canonicalSeedId(itemId);
     garden.seeds[canonical] = (garden.seeds[canonical] || 0) + qty;
+    collected += Math.floor(Number(qty) || 0);
+  }
+  if (collected > 0) {
+    player.lifetime ??= {};
+    player.lifetime.garden_seeds_collected = (Number(player.lifetime.garden_seeds_collected) || 0) + collected;
   }
   return garden.seeds;
 }
@@ -314,6 +331,8 @@ export function plantSeedInPlot(player, seedId, content, effects = {}, { now = D
     total_yield: yieldMap,
     harvest_ready_at: now + readyIn
   };
+  player.lifetime ??= {};
+  player.lifetime.garden_plots_planted = (Number(player.lifetime.garden_plots_planted) || 0) + 1;
 
   return {
     ok: true,
@@ -405,6 +424,13 @@ export function harvestGardenPlots(
 
   if (Object.keys(seedBonus).length) {
     addSeeds(player, seedBonus);
+  }
+  const vegetableHerbHarvested = Object.entries(totalAdded)
+    .filter(([itemId]) => GARDEN_VEGETABLE_HERB_IDS.has(itemId))
+    .reduce((sum, [, qty]) => sum + qty, 0);
+  if (vegetableHerbHarvested > 0) {
+    player.lifetime ??= {};
+    player.lifetime.garden_items_harvested = (Number(player.lifetime.garden_items_harvested) || 0) + vegetableHerbHarvested;
   }
 
   return {

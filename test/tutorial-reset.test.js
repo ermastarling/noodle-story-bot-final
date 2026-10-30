@@ -2,9 +2,10 @@ import { strict as assert } from "assert";
 import { test } from "node:test";
 
 import { newPlayerProfile } from "../src/game/player.js";
+import { getOrdersMeta } from "../src/game/orders.js";
 import { advanceTutorial, getCurrentTutorialStep, resetTutorialProgress } from "../src/game/tutorial.js";
 
-test("Tutorial reset: keeps inventory and core progress data", () => {
+test("Tutorial reset: resets only tutorial state and preserves all other profile data", () => {
   const player = newPlayerProfile("user1");
 
   // Simulate a progressed profile with custom state.
@@ -39,12 +40,8 @@ test("Tutorial reset: keeps inventory and core progress data", () => {
   player.orders_total_count = 8;
   player.orders_depleted_day = "2026-04-08";
 
-  const before = {
-    coins: player.coins,
-    knownRecipes: [...player.known_recipes],
-    invIngredients: JSON.parse(JSON.stringify(player.inv_ingredients)),
-    invBowls: JSON.parse(JSON.stringify(player.inv_bowls))
-  };
+  const before = structuredClone(player);
+  delete before.tutorial;
 
   resetTutorialProgress(player);
 
@@ -52,21 +49,12 @@ test("Tutorial reset: keeps inventory and core progress data", () => {
   const step = getCurrentTutorialStep(player);
   assert.equal(player.tutorial?.active, true);
   assert.equal(step?.id, "intro_order");
+  assert.equal(getOrdersMeta(player).availableCount, 1);
+  assert.equal(getOrdersMeta(player).tutorialReplayAvailable, true);
 
-  // Order flow is reset so tutorial can start cleanly.
-  assert.deepEqual(player.orders?.accepted ?? {}, {});
-  assert.equal(player.orders_day, null);
-  assert.equal(player.orders_seed, null);
-  assert.equal(player.orders_pool_sig, null);
-  assert.deepEqual(player.orders_consumed_indices, []);
-  assert.equal(player.orders_total_count, 0);
-  assert.equal(player.orders_depleted_day, null);
-
-  // Unrelated player data remains untouched.
-  assert.equal(player.coins, before.coins);
-  assert.deepEqual(player.known_recipes, before.knownRecipes);
-  assert.deepEqual(player.inv_ingredients, before.invIngredients);
-  assert.deepEqual(player.inv_bowls, before.invBowls);
+  const after = structuredClone(player);
+  delete after.tutorial;
+  assert.deepEqual(after, before);
 });
 
 test("Tutorial reset: can replay full tutorial chain to completion", () => {

@@ -76,6 +76,7 @@ The root `.nvmrc` selects Node.js 24.7.0 for tools that honor it. Hosted panels 
 - `npm run review:audit-gate` — fail unless `NOODLE_AUDIT_VERDICT=COMPLETE` and unresolved, non-outdated PR review threads are `0`
 - `npm run review:one-command` — run lint + tests + review guard + audit gate in one command
 - `npm run review:all` — run lint + tests + pre-review guard
+- Counting, work-ping, giveaway, and game-update automations are disabled by default; setup, private-canary verification, and user approval of player-facing copy are required before enabling them. See [Environment configuration](./docs/ENVIRONMENT.md).
 - `npm run check:pr-checklist` — validate the active PR body against required checklist rules
 
 ### Audit Gate Usage
@@ -119,7 +120,9 @@ Only `DISCORD_TOKEN` is required for booting the bot.
 
 Set `NOODLE_DEV_GUILD_ID` to lock `/noodle-dev` registration and access to a test guild, and set `NOODLE_OFFICIAL_GUILD_ID` for official-server-only flows (alerts, social bridge checks, and related guards).
 
-All environment variables, webhook templates, and alert behavior have moved to [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
+All environment variables, webhook templates, and alert behavior are described in [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md), with rollout-specific settings in [docs/FEATURE_ROLLOUT_ENVIRONMENT.md](docs/FEATURE_ROLLOUT_ENVIRONMENT.md). Changed interactive screens are shown in [docs/FEATURE_ROLLOUT_MENU_LAYOUTS.md](docs/FEATURE_ROLLOUT_MENU_LAYOUTS.md). Configure `NOODLE_TELEMETRY_ALERT_CHANNEL_ID` separately from `NOODLE_DEV_ALERT_CHANNEL_ID` when enabling reports. Reports summarize observed interaction outcomes, instrumented scheduled-job results, hard operation/delivery failures, and gateway lifecycle events; they disclose sampling and coverage limits and do not infer continuous uptime, downtime, or Discord availability without an independent heartbeat. Work pings and game updates also require reviewed copy and separate private-canary and production settings. Production giveaways and game updates share the required `NOODLE_ROLLOUT_ANNOUNCEMENTS_ROLE_ID`; production game updates additionally tag `NOODLE_GAME_UPDATES_EVENTS_ROLE_ID`.
+
+Rollout feature flags (all disabled by default; see [docs/FEATURE_ROLLOUT_ENVIRONMENT.md](docs/FEATURE_ROLLOUT_ENVIRONMENT.md) and the [rollout checklist](docs/FEATURE_ROLLOUT_CHECKLIST.md)): `NOODLE_OFFICIAL_FEATURE_CANARY`, `NOODLE_OFFICIAL_FEATURE_CANARY_PRIVATE_VERIFIED`, `NOODLE_OFFICIAL_ENABLE_MESSAGE_CONTENT_INTENT`, `NOODLE_OFFICIAL_COUNTING_ENABLED`, `NOODLE_OFFICIAL_COUNTING_COPY_APPROVED`, `NOODLE_OFFICIAL_COUNTING_CHANNEL_ID`, `NOODLE_OFFICIAL_COUNTING_REWARDS_ENABLED`, `NOODLE_WORK_PING_ENABLED`, `NOODLE_WORK_PING_COPY_APPROVED`, `NOODLE_WORK_PING_PRODUCTION_ENABLED`, `NOODLE_WORK_PING_CHANNEL_ID`, `NOODLE_WORK_PING_ROLE_ID`, `NOODLE_WORK_CHANNEL_ID`, `NOODLE_GIVEAWAYS_ENABLED`, `NOODLE_GIVEAWAYS_COPY_APPROVED`, `NOODLE_GIVEAWAYS_PRODUCTION_ENABLED`, `NOODLE_GIVEAWAYS_CANARY_PREVIEW`, `NOODLE_GIVEAWAY_CHANNEL_ID`, `NOODLE_GIVEAWAY_VALOR_FULFILLER_ID`, `NOODLE_GAME_UPDATES_ENABLED`, `NOODLE_GAME_UPDATES_COPY_APPROVED`, `NOODLE_GAME_UPDATES_PRODUCTION_ENABLED`, and `NOODLE_GAME_UPDATES_CHANNEL_ID`. Telemetry tuning: `NOODLE_TELEMETRY_MODE`, `NOODLE_TELEMETRY_SAMPLE_RATE`, `NOODLE_V2_TELEMETRY_REPORTS_ENABLED`, and the `NOODLE_V2_TELEMETRY_ALERT_*` thresholds. Database backups: `NOODLE_BACKUP_DIR`, `NOODLE_BACKUP_CRON`, `NOODLE_BACKUP_RETAIN`, and `NOODLE_BACKUP_ON_START`.
 
 Runtime logs default to `noodle-logs/` (`command-errors.log`, `boot-ok.log`, `webhooks.log`, `telemetry.log`, and `user-error-logs/`).
 

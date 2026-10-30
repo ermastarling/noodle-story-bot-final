@@ -35,6 +35,8 @@ export function newPlayerProfile(userId) {
     quests: { active: {}, completed: [], claimed: [], daily_day: null, weekly_week: null, monthly_month: null },
 
     orders: { accepted: {}, seasonal_served_today: 0, epic_served_today: 0 },
+    daily_order_menu_recipe_ids: [],
+    daily_order_menu_changed_day: null,
 
     buffs: { rep_aura_expires_at: null, apprentice_bonus_pending: false, last_recipe_served: null, fail_streak: 0 },
 
@@ -77,7 +79,14 @@ export function newPlayerProfile(userId) {
       npcs_served_unique: 0,
       npc_seen: {},
       coins_tipped_out: 0,
-      coins_tipped_in: 0
+      coins_tipped_in: 0,
+      fish_caught: 0,
+      forage_items_collected: 0,
+      market_transactions: 0,
+      shared_order_ids: {},
+      blessings_given: 0,
+      blessings_received: 0,
+      quests_completed_by_type: {}
     },
 
     social: {

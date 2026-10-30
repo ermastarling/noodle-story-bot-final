@@ -346,6 +346,11 @@ export function applyQuestProgress(player, questsContent, userId, event, now = n
     if (quest.progress >= quest.target) {
       quest.completed_at = now;
       quests.completed.push(quest.instance_id);
+      player.lifetime ??= {};
+      player.lifetime.quests_completed_by_type ??= {};
+      const cadence = String(quest.cadence ?? "other");
+      player.lifetime.quests_completed_by_type[cadence] =
+        (Number(player.lifetime.quests_completed_by_type[cadence]) || 0) + 1;
       updated.push(quest);
     }
   }

@@ -40,11 +40,13 @@ import {
   loadDailyRewards,
   loadBadgesContent,
   loadCollectionsContent,
+  loadAchievementsContent,
   loadSpecializationsContent,
   loadDecorContent,
   loadDecorSetsContent,
   loadEventsContent,
-  loadNewsContent
+  loadNewsContent,
+  loadGameUpdatesContent
 } from "../content/index.js";
 import { buildSettingsMap } from "../settings/resolve.js";
 import {
@@ -75,6 +77,26 @@ import {
   markOrderConsumed,
   ensureUnlimitedOrdersBuffer
 } from "../game/orders.js";
+import {
+  DAILY_ORDER_MENU_MAX_RECIPES,
+  setDailyOrderMenu,
+  shouldCommitDailyOrderMenu
+} from "../game/dailyMenu.js";
+import { recordGiveawayEntry } from "../game/giveaways.js";
+import {
+  buildValorFulfillmentConfirmation,
+  claimValorFulfillmentConfirmation,
+  completeValorFulfillmentConfirmation,
+  markValorFulfillmentConfirmationUnknown
+} from "../jobs/weeklyGiveaways.js";
+import {
+  buildGameUpdatePayload,
+  findGameUpdate,
+  parseScheduledAt,
+  resolveGameUpdateSettings,
+  scheduleGameUpdate
+} from "../jobs/gameUpdates.js";
+import { reconcileScheduledDelivery } from "../jobs/scheduledDelivery.js";
 import { computeServeRewards, applySxpLevelUp } from "../game/serve.js";
 import {
   STARTER_PROFILE,
@@ -162,6 +184,19 @@ import {
   revalidateCollections
 } from "../game/collections.js";
 import {
+  claimAchievementReward,
+  evaluatePlayerAchievements,
+  getAchievementPage,
+  getVisibleAchievements
+} from "../game/achievements.js";
+import {
+  ensureDisplayedProfileBadges,
+  getDefaultDisplayedProfileBadges,
+  PROFILE_BADGE_CATEGORIES,
+  PROFILE_BADGE_ROW_LIMIT,
+  toggleDisplayedProfileBadge
+} from "../game/profileBadges.js";
+import {
   canSelectSpecialization,
   ensureSpecializationState,
   getActiveSpecialization,
@@ -243,6 +278,7 @@ import {
   ensureKitchenState,
   getKitchenStatus,
   getKitchenBatches,
+  recordKitchenBrothServings,
   getKitchenCapacity,
   getKitchenUnlockState,
   acknowledgeKitchenUnlock,
@@ -272,6 +308,9 @@ import { resolvePreferredGuildId } from "../util/guildConfig.js";
 import { isV2OwnerMismatch, parseV2CustomId } from "../ui/sceneRoutingV2.js";
 import { getSceneState, putSceneState } from "../ui/sceneStateV2.js";
 import { buildOrdersBoardV2Message } from "../ui/ordersBoardV2.js";
+import { buildDailyMenuV2Message } from "../ui/dailyMenuV2.js";
+import { buildAchievementsV2Message } from "../ui/achievementsV2.js";
+import { buildProfileBadgesV2Message, getProfileBadgePage } from "../ui/profileBadgesV2.js";
 import {
   buildAcceptConfirmV2Message as _buildAcceptConfirmV2Message,
   buildAcceptPickerV2Message,
@@ -348,8 +387,8 @@ function purgeExpiredSelectionCache(cache) {
   }
 }
 
-function getTakeoutMenuSelectionCacheKey(serverId, userId) {
-  return `${String(serverId || "")}:${String(userId || "")}`;
+function getTakeoutMenuSelectionCacheKey(serverId, userId, kind = "takeout") {
+  return `${String(kind || "takeout")}:${String(serverId || "")}:${String(userId || "")}`;
 }
 
 function normalizeTakeoutDraftSelection(ids = [], availableRecipeIds = []) {
@@ -365,25 +404,25 @@ function normalizeTakeoutDraftSelection(ids = [], availableRecipeIds = []) {
   return out;
 }
 
-function readTakeoutMenuDraftSelection({ serverId, userId, availableRecipeIds = [], fallbackRecipeIds = [] } = {}) {
+function readTakeoutMenuDraftSelection({ serverId, userId, availableRecipeIds = [], fallbackRecipeIds = [], kind = "takeout" } = {}) {
   purgeExpiredSelectionCache(takeoutMenuSelectionCache);
-  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId, kind);
   const cached = takeoutMenuSelectionCache.get(key);
   const cachedIds = Array.isArray(cached?.selectedRecipeIds) ? cached.selectedRecipeIds : [];
-  const source = cachedIds.length ? cachedIds : (Array.isArray(fallbackRecipeIds) ? fallbackRecipeIds : []);
+  const source = cached ? cachedIds : (Array.isArray(fallbackRecipeIds) ? fallbackRecipeIds : []);
   return normalizeTakeoutDraftSelection(source, availableRecipeIds);
 }
 
-function writeTakeoutMenuDraftSelection({ serverId, userId, selectedRecipeIds = [] } = {}) {
-  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+function writeTakeoutMenuDraftSelection({ serverId, userId, selectedRecipeIds = [], kind = "takeout" } = {}) {
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId, kind);
   takeoutMenuSelectionCache.set(key, {
     selectedRecipeIds: [...selectedRecipeIds],
     expiresAt: Date.now() + TAKEOUT_MENU_SELECTION_CACHE_TTL_MS
   });
 }
 
-function clearTakeoutMenuDraftSelection({ serverId, userId } = {}) {
-  const key = getTakeoutMenuSelectionCacheKey(serverId, userId);
+function clearTakeoutMenuDraftSelection({ serverId, userId, kind = "takeout" } = {}) {
+  const key = getTakeoutMenuSelectionCacheKey(serverId, userId, kind);
   takeoutMenuSelectionCache.delete(key);
 }
 
@@ -976,6 +1015,7 @@ const questsContent = loadQuestsContent();
 const dailyRewards = loadDailyRewards();
 const badgesContent = loadBadgesContent();
 const collectionsContent = loadCollectionsContent();
+const achievementsContent = loadAchievementsContent();
 const specializationsContent = loadSpecializationsContent();
 const decorContent = loadDecorContent();
 const decorSetsContent = loadDecorSetsContent();
@@ -1517,8 +1557,8 @@ function buildHelpPage({ page, userId, user }) {
           name: "Quests & Events",
           value: [
             "• `/noodle quests` — View quests.",
-            "• `/noodle quests_daily` — Claim your daily reward.",
-            "• `/noodle quests_claim` — Claim your quest rewards.",
+            "• `/noodle-quests daily` — Claim your daily reward.",
+            "• `/noodle-quests claim` — Claim your quest rewards.",
             "• `/noodle quests_vote` — View and claim bot-list vote rewards.",
             "• `/noodle season` — View the current season.",
             "• `/noodle event` — View the current event."
@@ -2368,7 +2408,8 @@ function noodleProfileEditRow(userId, { specializationsAvailable = false } = {})
     new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:action:store:${userId}`).setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId(`noodle:action:store:${userId}`).setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`noodle:nav:badges:${userId}`).setLabel("Badges").setEmoji(getButtonEmoji("badges")).setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -2592,6 +2633,16 @@ if (showTakeout) {
 return row;
 }
 
+function noodleOrdersDailyMenuRow(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`noodle:nav:daily_menu:${userId}`)
+      .setLabel("Menu")
+      .setEmoji(getButtonEmoji("recipes"))
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
 function noodleTakeoutActionRow(userId, { activeShift = false, disableOpen = false, disableClaim = false, disableServe = false } = {}) {
   if (activeShift) {
     return new ActionRowBuilder().addComponents(
@@ -2656,7 +2707,8 @@ function buildTakeoutMenuPickerRows(userId, {
   selectedRecipeIds = [],
   minRequired: _minRequired = 1,
   maxAllowed = 1,
-  page = 0
+  page = 0,
+  menuKind = "takeout"
 } = {}) {
   const pageSize = 25;
   const sortedRecipeIds = [...availableRecipeIds]
@@ -2680,8 +2732,8 @@ function buildTakeoutMenuPickerRows(userId, {
   const safeMax = Math.max(1, Math.min(maxAllowed, options.length));
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:takeout:menu_select:${userId}:${safePage}`)
-    .setPlaceholder("Pick recipes for your takeout menu")
+    .setCustomId(`noodle:${menuKind}:menu_select:${userId}:${safePage}`)
+    .setPlaceholder(menuKind === "daily_menu" ? "Pick recipes for your shop's order board menu." : "Pick recipes for your takeout menu")
     .setMinValues(0)
     .setMaxValues(safeMax)
     .addOptions(options);
@@ -2693,12 +2745,12 @@ function buildTakeoutMenuPickerRows(userId, {
     rows.push(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:takeout_menu:${userId}:${prevPage}`)
+          .setCustomId(`noodle:nav:${menuKind === "daily_menu" ? "daily_menu" : "takeout_menu"}:${userId}:${prevPage}`)
           .setLabel("Prev")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
-          .setCustomId(`noodle:nav:takeout_menu:${userId}:${nextPage}`)
+          .setCustomId(`noodle:nav:${menuKind === "daily_menu" ? "daily_menu" : "takeout_menu"}:${userId}:${nextPage}`)
           .setLabel("Next")
           .setEmoji(getButtonEmoji("next"))
           .setStyle(ButtonStyle.Secondary)
@@ -3836,6 +3888,59 @@ function formatIngredientLabel(ing) {
   return ing?.optional ? `${name} (optional)` : name;
 }
 
+function resolveProfileBadgeCatalog(player) {
+  ensureBadgeState(player);
+  ensureCollectionsState(player);
+  const unlockedAchievements = player.achievements?.unlocked ?? {};
+  const ownedBadges = getOwnedBadges(player);
+  const completedCollections = new Set(player.collections?.completed ?? []);
+  const entriesByCategory = {
+    badges: ownedBadges
+      .map((id) => getBadgeById(badgesContent, id))
+      .filter(Boolean)
+      .map((badge) => ({ id: badge.badge_id, name: badge.name, icon: badge.icon, description: badge.rarity ?? "" })),
+    achievements: (achievementsContent?.achievements ?? [])
+      .filter((achievement) => Boolean(unlockedAchievements[achievement.achievement_id]))
+      .map((achievement) => ({
+        id: achievement.achievement_id,
+        name: achievement.name,
+        icon: badgesContent?.achievement_artwork?.[achievement.achievement_id] ?? achievement.achievement_id,
+        description: achievement.description
+      })),
+    collections: (collectionsContent?.collections ?? [])
+      .filter((collection) => completedCollections.has(collection.collection_id))
+      .map((collection) => ({
+        id: collection.collection_id,
+        name: collection.name,
+        icon: badgesContent?.collection_artwork?.[collection.collection_id] ?? collection.collection_id,
+        description: collection.description
+      }))
+  };
+  const eligibleByCategory = Object.fromEntries(PROFILE_BADGE_CATEGORIES.map((category) => [
+    category,
+    entriesByCategory[category].map((entry) => entry.id)
+  ]));
+
+  return { entriesByCategory, eligibleByCategory };
+}
+
+function buildProfileBadgesPayload(player, userId, category = "badges", requestedPage = 0) {
+  evaluatePlayerAchievements(player, achievementsContent);
+  const { entriesByCategory, eligibleByCategory } = resolveProfileBadgeCatalog(player);
+  const safeCategory = PROFILE_BADGE_CATEGORIES.includes(category) ? category : "badges";
+  const displayed = ensureDisplayedProfileBadges(player, eligibleByCategory);
+  const page = getProfileBadgePage(entriesByCategory[safeCategory], requestedPage);
+  return buildProfileBadgesV2Message({
+    userId,
+    category: safeCategory,
+    entries: page.entries,
+    selectedIds: displayed[safeCategory],
+    page: page.page,
+    totalPages: page.totalPages,
+    ownerId: userId
+  });
+}
+
 function renderProfileEmbed(player, displayName, partyName, ownerUser) {
   if (!player.profile) {
     player.profile = {
@@ -3863,31 +3968,23 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
     player.lifetime = { bowls_served_total: 0 };
   }
 
-  const ownedBadges = getOwnedBadges(player);
-  const featured = player.profile.featured_badge_id;
-  const orderedBadges = featured && ownedBadges.includes(featured)
-    ? [featured, ...ownedBadges.filter((id) => id !== featured)]
-    : [...ownedBadges];
-
-  const badgeLines = orderedBadges.map((id) => {
-    const badge = getBadgeById(badgesContent, id);
-    const icon = resolveIcon(badge?.icon, getIcon("tag"));
-    return `${icon}`;
-  });
-
-  const badgeRows = [];
-  for (let i = 0; i < badgeLines.length; i += 6) {
-    badgeRows.push(badgeLines.slice(i, i + 6).join(" "));
-  }
-  const badgesText = badgeRows.length ? badgeRows.join("\n") : "_No badges yet._";
-
-  const completedIds = player.collections?.completed ?? [];
-  const completedNames = completedIds
-    .map((id) => (collectionsContent?.collections ?? []).find((c) => c.collection_id === id)?.name ?? null)
-    .filter(Boolean);
-  const collectionsText = completedNames.length
-    ? completedNames.map((name) => `• ${name}`).join("\n")
-    : "_No collections completed yet._";
+  const { entriesByCategory, eligibleByCategory } = resolveProfileBadgeCatalog(player);
+  const displayed = getDefaultDisplayedProfileBadges(player, eligibleByCategory);
+  const displayedEntries = Object.fromEntries(PROFILE_BADGE_CATEGORIES.map((category) => [
+    category,
+    displayed[category]
+      .map((id) => entriesByCategory[category].find((entry) => entry.id === id))
+      .filter(Boolean)
+  ]));
+  const badgesText = displayedEntries.badges.length
+    ? displayedEntries.badges.map((badge) => resolveIcon(badge.icon, getIcon("badges"))).join(" ")
+    : `_No badges equipped (0/${PROFILE_BADGE_ROW_LIMIT})._`;
+  const achievementsText = displayedEntries.achievements.length
+    ? displayedEntries.achievements.map((achievement) => getIcon(achievement.icon, getIcon("badges"))).join(" ")
+    : `_No achievements equipped (0/${PROFILE_BADGE_ROW_LIMIT})._`;
+  const collectionsText = displayedEntries.collections.length
+    ? displayedEntries.collections.map((collection) => getIcon(collection.icon, getIcon("badges"))).join(" ")
+    : `_No collections equipped (0/${PROFILE_BADGE_ROW_LIMIT})._`;
 
   const activeSpecId = activeSpec?.spec_id ?? specState?.active_spec_id ?? null;
   const decorSetId = activeSpecId ? getDecorSetIdForSpec(activeSpecId) : null;
@@ -3940,6 +4037,7 @@ function renderProfileEmbed(player, displayName, partyName, ownerUser) {
         inline: true
       },
       { name: `${getIcon("badges")} Badges`, value: badgesText, inline: false },
+      { name: `${getIcon("sparkle")} Achievements`, value: achievementsText, inline: false },
       { name: `${getIcon("collections")} Collections`, value: collectionsText, inline: false },
       { name: `${getIcon("decor")} Decor Set`, value: decorSetValue, inline: false }
     ]
@@ -4070,6 +4168,7 @@ function getProfileV2ButtonEmoji() {
     stats: getButtonEmoji("stats"),
     quests: getButtonEmoji("quests"),
     customize: getButtonEmoji("customize"),
+    badges: getButtonEmoji("badges"),
     note: getButtonEmoji("note"),
     tag: getButtonEmoji("tag"),
     sparkle: getButtonEmoji("sparkle"),
@@ -4595,12 +4694,15 @@ const LEGACY_TO_V2_SUBS = new Set([
   "giveaway_winner",
   "profile",
   "profile_edit",
+  "badges",
   "specialize",
   "decor",
   "decor_sets_spec",
   "store",
   "about",
   "news",
+  "daily_menu",
+  "achievements",
   "takeout",
   "takeout_menu",
   "takeout_open",
@@ -4636,7 +4738,7 @@ function shouldAutoConvertCommerceComponentPayload(interaction, payload = {}) {
   const customId = String(interaction?.customId ?? "").trim();
   const isConvertibleComponent =
     /^noodle:(multibuy|sell):/.test(customId)
-    || /^noodle:nav:(orders|buy|sell|pantry|cook|serve|cancel|help|recipes|regulars|season|event|profile|profile_edit|specialize|decor|about|news|takeout|takeout_menu|takeout_open|takeout_claim|takeout_needs|forage|fishing|garden|compost|kitchen):/.test(customId)
+    || /^noodle:nav:(orders|buy|sell|pantry|cook|serve|cancel|help|recipes|regulars|season|event|profile|profile_edit|specialize|decor|about|news|takeout|takeout_menu|daily_menu|takeout_open|takeout_claim|takeout_needs|forage|fishing|garden|compost|kitchen):/.test(customId)
     || /^noodle:action:(store):/.test(customId)
     || /^noodle:profile:(edit_shop_name|edit_tagline|specialize_select|specialize_confirm|specialize_cancel):/.test(customId)
     || /^noodle:profile:specialize_pick:/.test(customId)
@@ -4704,7 +4806,7 @@ function resolveRuntimeBotToken(interaction) {
   return String(process.env.DISCORD_TOKEN || "").trim();
 }
 
-function ensureInteractionClientToken(interaction, reason = "runtime") {
+function ensureInteractionClientToken(interaction, _reason = "runtime") {
   if (interaction?.client?.token) return true;
   const token = resolveRuntimeBotToken(interaction);
   if (!token || !interaction?.client) return false;
@@ -5291,7 +5393,7 @@ export function buildMultiBuyPickerPayload({ userId, p, s, ownerUser, page = 0, 
   if (!opts.length) {
     const emptyEmbed = buildMenuEmbed({
       title: `${getIcon("cart")} Multi-buy`,
-      description: `${getIcon("cart")} No market items are available for your unlocked recipes right now.${marketRestockLine ? `\n\n${marketRestockLine}` : ""}`,
+      description: `${getIcon("cart")} No market items are available for your discovered recipes right now.${marketRestockLine ? `\n\n${marketRestockLine}` : ""}`,
       user: ownerUser
     });
     if (marketRestockLine) {
@@ -7770,7 +7872,9 @@ const buildDevAdminNoticePayload = ({ message, isError = false } = {}) => buildC
 });
 
 if (inDevPath) {
-  if (!isDevAdmin(userId)) {
+  const valorFulfillerId = String(process.env.NOODLE_GIVEAWAY_VALOR_FULFILLER_ID || "").trim();
+  const mayConfirmValorFulfillment = sub === "admin_giveaway_valor_fulfilled" && userId === valorFulfillerId;
+  if (!isDevAdmin(userId) && !mayConfirmValorFulfillment) {
     return commit({
       content: " ",
       ...buildDevMessageV2Payload({ message: "You don’t have access to that command.", isError: true }),
@@ -8060,10 +8164,79 @@ if (inDevPath && sub === "admin_season_event") {
   });
 }
 
+if (inDevPath && (sub === "admin_game_update_preview" || sub === "admin_game_update_schedule")) {
+  const updateId = opt.getString("update_id")?.trim();
+  const update = findGameUpdate(loadGameUpdatesContent(), updateId);
+  if (!update) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({
+        message: `No game update named "${updateId || "(empty)"}" exists in content/game-updates.md.`,
+        isError: true
+      }),
+      ephemeral: true
+    });
+  }
+
+  if (sub === "admin_game_update_preview") {
+    const previewPayload = buildGameUpdatePayload(update);
+    return commit({
+      ...previewPayload,
+      ephemeral: true
+    });
+  }
+
+  if (!db) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
+      ephemeral: true
+    });
+  }
+  const route = resolveGameUpdateSettings();
+  if (!route.ok) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: `Game-update routing is not approved or configured (${route.reason}).`, isError: true }),
+      ephemeral: true
+    });
+  }
+  const scheduledAt = parseScheduledAt(opt.getString("run_at"));
+  if (!scheduledAt) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "Choose a future ISO-8601 date and time, including a timezone.", isError: true }),
+      ephemeral: true
+    });
+  }
+  try {
+    const result = scheduleGameUpdate(db, {
+      guildId: route.guildId,
+      update,
+      scheduledAt,
+      createdBy: userId
+    });
+    const timestamp = Math.floor(result.scheduledAt / 1000);
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({
+        message: `Scheduled **${update.title}** (${update.id}) for <t:${timestamp}:F>. Schedule ID: \`${result.scheduleId}\`.`
+      }),
+      ephemeral: true
+    });
+  } catch (error) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: `Could not schedule game update: ${error.message}`, isError: true }),
+      ephemeral: true
+    });
+  }
+}
+
 if (inDevPath && sub === "wipe_user") {
   const targetUser = opt.getUser("user");
   const targetUserId = targetUser?.id || opt.getString("user_id")?.trim();
-  const _targetServerId = opt.getString("server_id")?.trim() || serverId;
+  const explicitServerId = opt.getString("server_id")?.trim() || "";
   if (!targetUserId) {
     return commit({
       content: " ",
@@ -8081,7 +8254,10 @@ if (inDevPath && sub === "wipe_user") {
 
   const lockKey = `lock:user:${targetUserId}`;
   return await withLock(db, lockKey, owner, 8000, async () => {
-    const deleted = deletePlayerProfiles(db, targetUserId, { serverId: _targetServerId });
+    // Without an explicit server_id, remove the global row and every legacy per-server row so a wiped profile cannot be re-imported.
+    const deleted = explicitServerId
+      ? deletePlayerProfiles(db, targetUserId, { serverId: explicitServerId })
+      : deletePlayerProfiles(db, targetUserId, { allServers: true });
     const mention = `<@${targetUserId}>`;
     if (deleted === 0) {
       return commit({
@@ -8096,7 +8272,7 @@ if (inDevPath && sub === "wipe_user") {
     return commit({
       content: " ",
       ...buildDevMessageV2Payload({
-          message: `${getIcon("status_complete")} Deleted ${deleted} profile row(s) for ${mention} across all servers.`
+          message: `${getIcon("status_complete")} Deleted ${deleted} profile row(s) for ${mention}${explicitServerId ? ` on server ${explicitServerId}` : " across the global profile and all servers"}.`
         }),
       ephemeral: true
     });
@@ -8494,6 +8670,185 @@ if (inDevPath && sub === "giveaway_winner") {
       }),
       ephemeral: false
     });
+  });
+}
+
+if (inDevPath && sub === "admin_delivery_reconcile") {
+  if (!db) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
+      ephemeral: true
+    });
+  }
+  const type = String(opt.getString("type") ?? "").trim();
+  const recordId = String(opt.getString("record_id") ?? "").trim();
+  const resolution = String(opt.getString("resolution") ?? "").trim();
+  const messageId = String(opt.getString("message_id") ?? "").trim();
+  const verifiedAbsent = opt.getBoolean("verified_absent") === true;
+  const canary = String(process.env.NOODLE_OFFICIAL_FEATURE_CANARY ?? "1").trim() !== "0";
+  const channelId = type !== "scheduled_message"
+    ? ""
+    : recordId === "work_ping"
+      ? String(canary ? process.env.NOODLE_DEV_ALERT_CHANNEL_ID : process.env.NOODLE_WORK_PING_CHANNEL_ID || "").trim()
+      : recordId === "giveaway_preview"
+        ? String(process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "").trim()
+        : "";
+  const result = reconcileScheduledDelivery(db, {
+    type,
+    recordId,
+    resolution,
+    messageId,
+    channelId,
+    verifiedAbsent,
+    canary
+  });
+  if (!result.ok) {
+    const reasons = {
+      missing_record_id: "Provide the ID for the uncertain delivery.",
+      invalid_resolution: "Choose whether the delivery was delivered or not delivered.",
+      absence_not_verified: "Confirm that you checked Discord and verified no message exists before allowing a retry.",
+      invalid_message_id: "Provide the Discord message ID when marking a delivery as delivered.",
+      invalid_channel_id: "The current route is missing a valid channel ID, so the delivery cannot be marked as delivered.",
+      missing_attempt_provenance: "This delivery has no recorded destination and mode. Do not mark it delivered; verify absence and retry it through the current route.",
+      not_unknown: "That record is not in an uncertain delivery state; no change was made.",
+      not_awaiting_fulfillment: "That giveaway is not awaiting manual VALOR fulfillment.",
+      giveaway_expired: "That giveaway can no longer be safely reposted.",
+      invalid_type: "Choose a supported scheduled delivery type."
+    };
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({
+        message: reasons[result.reason] ?? "The delivery could not be reconciled.",
+        isError: true
+      }),
+      ephemeral: true
+    });
+  }
+  return commit({
+    content: " ",
+    ...buildDevMessageV2Payload({
+      message: `Delivery ${recordId} was reconciled as **${result.status}**. Keep the Discord message/link and incident context with the operational log.`
+    }),
+    ephemeral: true
+  });
+}
+
+if (inDevPath && sub === "admin_giveaway_valor_fulfilled") {
+  const giveawayId = String(opt.getString("giveaway_id") ?? "").trim();
+  const valorFulfillerId = String(process.env.NOODLE_GIVEAWAY_VALOR_FULFILLER_ID || "").trim();
+  if (String(process.env.NOODLE_GIVEAWAYS_COPY_APPROVED || "").trim() !== "1") {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "VALOR confirmation copy has not been approved.", isError: true }),
+      ephemeral: true
+    });
+  }
+  if (!valorFulfillerId || userId !== valorFulfillerId) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "Only the configured VALOR fulfiller can confirm manual prize delivery.", isError: true }),
+      ephemeral: true
+    });
+  }
+  if (!db) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
+      ephemeral: true
+    });
+  }
+  const giveaway = db.prepare("SELECT * FROM weekly_giveaways WHERE giveaway_id = ?").get(giveawayId);
+  if (!giveaway) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: `Giveaway ${giveawayId || "(empty)"} was not found.`, isError: true }),
+      ephemeral: true
+    });
+  }
+  let prize;
+  try {
+    prize = JSON.parse(giveaway.prize_json);
+  } catch (error) {
+    console.error(`Giveaway ${giveawayId} has invalid prize data.`, error);
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "This giveaway has invalid prize data; no confirmation was sent.", isError: true }),
+      ephemeral: true
+    });
+  }
+  if (prize?.type !== "valor" || giveaway.award_status !== "awaiting_manual" || !giveaway.winner_user_id) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "This giveaway is not awaiting manual VALOR fulfillment.", isError: true }),
+      ephemeral: true
+    });
+  }
+  if (giveaway.valor_confirmation_status === "confirmed") {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "The VALOR fulfillment confirmation was already posted." }),
+      ephemeral: true
+    });
+  }
+  if (giveaway.valor_confirmation_status !== "pending") {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: `VALOR confirmation is ${giveaway.valor_confirmation_status}; verify the giveaway channel before taking further action.`, isError: true }),
+      ephemeral: true
+    });
+  }
+  if (!String(process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "")
+    || String(giveaway.guild_id) !== String(process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID)) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "This giveaway does not belong to the configured official guild.", isError: true }),
+      ephemeral: true
+    });
+  }
+  const targetChannel = await interaction.client?.channels?.fetch?.(giveaway.channel_id);
+  if (!targetChannel || String(targetChannel.guildId || "") !== String(giveaway.guild_id)) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "The giveaway announcement channel could not be verified in the official guild.", isError: true }),
+      ephemeral: true
+    });
+  }
+  return await withLock(db, `lock:giveaway:${giveawayId}`, owner, 8000, async () => {
+    if (!claimValorFulfillmentConfirmation(db, giveawayId, nowTs())) {
+      return commit({
+        content: " ",
+        ...buildDevMessageV2Payload({ message: "Another confirmation is in progress or this giveaway has already been confirmed.", isError: true }),
+        ephemeral: true
+      });
+    }
+    try {
+      const sent = await rawChannelSendMessage(
+        interaction.client,
+        giveaway.channel_id,
+        buildValorFulfillmentConfirmation({
+          giveaway,
+          playerId: giveaway.winner_user_id,
+          valorFulfillerId
+        }),
+        { botToken: process.env.DISCORD_TOKEN || "" }
+      );
+      if (!sent?.id) throw new Error("Discord did not return a VALOR confirmation message ID");
+      completeValorFulfillmentConfirmation(db, giveawayId, String(sent.id));
+      return commit({
+        content: " ",
+        ...buildDevMessageV2Payload({ message: `Public VALOR fulfillment confirmation posted for giveaway ${giveawayId}.` }),
+        ephemeral: true
+      });
+    } catch (error) {
+      markValorFulfillmentConfirmationUnknown(db, giveawayId);
+      console.error(`VALOR fulfillment confirmation failed for giveaway ${giveawayId}.`, error);
+      return commit({
+        content: " ",
+        ...buildDevMessageV2Payload({ message: "Confirmation delivery is uncertain. Check the giveaway channel before retrying.", isError: true }),
+        ephemeral: true
+      });
+    }
   });
 }
 
@@ -8992,6 +9347,16 @@ if (sub === "profile_edit") {
     mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
     components: [noodleProfileEditRow(userId, { specializationsAvailable }), noodleProfileEditBackRow(userId)]
   });
+}
+
+if (sub === "badges") {
+  const p = ensurePlayer(serverId, userId);
+  return commitState(buildProfileBadgesPayload(
+    p,
+    userId,
+    opt.getString("category") ?? "badges",
+    opt.getInteger("page") ?? 0
+  ));
 }
 
 if (sub === "store") {
@@ -9552,6 +9917,7 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
       if (totalBroths > 0) {
         if (!p.lifetime) p.lifetime = {};
         p.lifetime.broths_collected = (p.lifetime.broths_collected || 0) + totalBroths;
+        recordKitchenBrothServings(p, totalBroths);
         applyQuestProgress(p, questsContent, userId, { type: "broth_collect", amount: totalBroths }, now);
       }
 
@@ -9591,6 +9957,143 @@ if (sub === "kitchen" || sub === "kitchen_start" || sub === "kitchen_collect") {
 }
 
 /* ---------------- RECIPES ---------------- */
+if (sub === "daily_menu") {
+  if (!db) {
+    return commit({ content: `${getIcon("error")} Database unavailable in this environment.`, ephemeral: true });
+  }
+  const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, async () => {
+    const p = ensurePlayer(serverId, userId);
+    const s = ensureServer(serverId);
+    const settings = buildSettingsMap(settingsCatalog, s.settings);
+    syncServerSeasonFromSettings(s, settings);
+    ensureDailyOrdersForPlayer(p, settings, content, s.season, serverId, userId, s.active_event_id ?? null);
+    const availableRecipeIds = filterRecipeIdsByActiveSeasonEvent(getValidAvailableRecipeIds(p), s);
+    const pageValue = Number(overrides?.integers?.page ?? opt.getInteger("page") ?? 0);
+    const page = Number.isFinite(pageValue) ? Math.max(0, pageValue) : 0;
+    const rawRecipes = String(opt.getString("recipes") || "").trim();
+    const isDraftSelection = overrides?.booleans?.menu_draft === true;
+    const menuConfirmed = overrides?.booleans?.menu_confirm === true;
+    const shouldCommitMenu = shouldCommitDailyOrderMenu({
+      draftSelection: isDraftSelection,
+      confirmed: menuConfirmed
+    });
+    let currentMenu = (p.daily_order_menu_recipe_ids ?? []).filter((recipeId) => availableRecipeIds.includes(recipeId));
+
+    const renderPicker = (notice, ephemeral = false, draftMode = false) => {
+      const selectedRecipeIds = readTakeoutMenuDraftSelection({
+        serverId,
+        userId,
+        availableRecipeIds,
+        fallbackRecipeIds: currentMenu,
+        kind: "daily_menu"
+      });
+      const picker = buildTakeoutMenuPickerRows(userId, {
+        availableRecipeIds,
+        selectedRecipeIds,
+        maxAllowed: DAILY_ORDER_MENU_MAX_RECIPES,
+        page,
+        menuKind: "daily_menu"
+      });
+      const nextChangeAt = dayKeyUTC() === p.daily_order_menu_changed_day
+        ? "Your menu has already been changed today. You can update your menu again after the daily reset."
+        : "You can change your selected menu once per day after the daily reset.";
+      return buildDailyMenuV2Message({
+        userId,
+        notice,
+        nextChangeAt,
+        currentMenu: currentMenu.map(displayRecipeName),
+        pickerRows: picker?.rows ?? [],
+        draftSelectionCount: selectedRecipeIds.length,
+        showSaveButton: draftMode,
+        ephemeral
+      });
+    };
+
+    if (overrides?.booleans?.menu_confirm === true) {
+      const draftRecipeIds = readTakeoutMenuDraftSelection({
+        serverId,
+        userId,
+        availableRecipeIds,
+        fallbackRecipeIds: [],
+        kind: "daily_menu"
+      });
+      if (!draftRecipeIds.length) {
+        return commit(renderPicker(`${getIcon("warning")} Select at least one recipe before saving your menu.`, true, true));
+      }
+      const menuResult = setDailyOrderMenu(p, draftRecipeIds, {
+        availableRecipeIds,
+        dayKey: dayKeyUTC(),
+        serverId,
+        userId
+      });
+      if (!menuResult.ok) {
+        const failureText = menuResult.reason === "change_limit_reached"
+          ? "Your menu has already been changed today. You can update your menu again after the daily reset."
+          : menuResult.reason === "menu_too_large"
+            ? `Choose no more than ${DAILY_ORDER_MENU_MAX_RECIPES} recipes for your shop's order board menu.`
+            : "Choose at least one recipe you have learned for your shop's order board menu.";
+        return commit(renderPicker(`${getIcon("warning")} ${failureText}`, true, true));
+      }
+
+      currentMenu = [...draftRecipeIds];
+      clearTakeoutMenuDraftSelection({ serverId, userId, kind: "daily_menu" });
+      ensureDailyOrdersForPlayer(p, settings, content, s.season, serverId, userId, s.active_event_id ?? null);
+      upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+      upsertServer(db, serverId, s, null);
+      return commit(renderPicker(`${getIcon("status_complete")} Your shop's order board menu has been updated!`, false));
+    }
+
+    if (!rawRecipes) {
+      if (!availableRecipeIds.length) {
+        return commit(buildDailyMenuV2Message({
+          userId,
+          notice: `${getIcon("warning")} Learn more recipes before changing your shop's order board menu.`,
+          ephemeral: true
+        }));
+      }
+      return commit(renderPicker("Pick the recipes you would like to see on your shop's order board menu.", true));
+    }
+
+    const requestedIds = rawRecipes.split(",").map((id) => resolveCanonicalRecipeId(id)).filter(Boolean);
+    const selectedIds = normalizeTakeoutDraftSelection(requestedIds, availableRecipeIds);
+    if (!selectedIds.length) {
+      if (!shouldCommitMenu) {
+        writeTakeoutMenuDraftSelection({ serverId, userId, selectedRecipeIds: [], kind: "daily_menu" });
+        return commit(renderPicker(`${getIcon("warning")} Select at least one recipe for your shop's order board menu.`, true, true));
+      }
+      return commit(renderPicker(`${getIcon("warning")} Select at least one recipe for your shop's order board menu.`, true));
+    }
+
+    if (!shouldCommitMenu) {
+      writeTakeoutMenuDraftSelection({ serverId, userId, selectedRecipeIds: selectedIds, kind: "daily_menu" });
+      return commit(renderPicker(`${getIcon("status_complete")} Menu draft saved. Continue selecting across pages, then save your menu.`, true, true));
+    }
+
+    const menuResult = setDailyOrderMenu(p, selectedIds, {
+      availableRecipeIds,
+      dayKey: dayKeyUTC(),
+      serverId,
+      userId
+    });
+    if (!menuResult.ok) {
+      const failureText = menuResult.reason === "change_limit_reached"
+        ? "Your menu has already been changed today. You can update your menu again after the daily reset."
+        : menuResult.reason === "menu_too_large"
+          ? `Choose no more than ${DAILY_ORDER_MENU_MAX_RECIPES} recipes for your shop's order board menu.`
+          : "Choose at least one recipe you have learned for your shop's order board menu.";
+      return commit(renderPicker(`${getIcon("warning")} ${failureText}`, true));
+    }
+
+    currentMenu = [...selectedIds];
+    clearTakeoutMenuDraftSelection({ serverId, userId, kind: "daily_menu" });
+    ensureDailyOrdersForPlayer(p, settings, content, s.season, serverId, userId, s.active_event_id ?? null);
+    upsertPlayer(db, serverId, userId, p, null, p.schema_version);
+    upsertServer(db, serverId, s, null);
+    return commit(renderPicker(`${getIcon("status_complete")} Your shop's order board menu has been updated!`, false));
+  });
+  return lockedPayload;
+}
+
 if (sub === "takeout" || sub === "takeout_menu" || sub === "takeout_open" || sub === "takeout_claim" || sub === "takeout_cook" || sub === "takeout_serve" || sub === "takeout_needs") {
   if (!db) {
     const unavailableEmbed = buildMenuEmbed({
@@ -10504,7 +11007,7 @@ if (sub === "recipes") {
   const recipeSlice = knownLines.slice(recipeStart, recipeStart + recipesPerPage);
 
   const pageTitle = !isCluePage
-    ? `**Unlocked Recipes (${unlockedTotal}/${totalRecipes})**${recipePages > 1 ? ` — Page ${recipePageIndex + 1}/${recipePages}` : ""}`
+    ? `**Discovered Recipes (${unlockedTotal}/${totalRecipes})**${recipePages > 1 ? ` — Page ${recipePageIndex + 1}/${recipePages}` : ""}`
     : `**Clues Collected (${clueEntries.length})**`;
 
   const pageBody = !isCluePage
@@ -10984,6 +11487,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
 
   const commitState = async (replyObj) => {
 
+    evaluatePlayerAchievements(p, achievementsContent);
     const replyWithUnlock = applyUnlockNoticeEmbeds(replyObj ?? {}, unlockNoticePlayer, interaction.member ?? interaction.user, {
       consumeSeatingNotice: true,
       consumeSubscriptionNotice: sub === "orders"
@@ -11665,7 +12169,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
       const percent = totalEntries > 0 ? Math.floor((completed / totalEntries) * 100) : 0;
       const status = percent >= 100 ? getIcon("status_complete") : getIcon("status_incomplete");
       const description = collection.description ? `\n_${collection.description}_` : "";
-      return `\n${status} **${collection.name}** — ${completed}/${totalEntries} (${percent}%)${description}`;
+      return `\n${getIcon(collection.collection_id, getIcon("badges"))} ${status} **${collection.name}** — ${completed}/${totalEntries} (${percent}%)${description}`;
     });
 
     const embed = buildMenuEmbed({
@@ -11677,14 +12181,40 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     return commitState({
       content: " ",
       mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]), notices: [],
-      components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
           .setCustomId(`noodle-social:nav:stats:${userId}`)
           .setLabel("Back")
           .setEmoji(getButtonEmoji("back"))
           .setStyle(ButtonStyle.Secondary)
-      )]
+        )
+      ]
     });
+  }
+
+  if (sub === "achievements") {
+    evaluatePlayerAchievements(p, achievementsContent);
+    const visibleAchievements = getVisibleAchievements(p, achievementsContent);
+    const claimedIds = Array.isArray(p.achievements?.claimed_ids) ? p.achievements.claimed_ids : [];
+    const claimedSet = new Set(claimedIds);
+    const claimedAchievements = visibleAchievements.filter((achievement) => claimedSet.has(achievement.achievement_id));
+    const inProgressAchievements = visibleAchievements.filter((achievement) => !claimedSet.has(achievement.achievement_id));
+    const category = opt.getString("category") === "claimed" ? "claimed" : "in_progress";
+    const achievements = category === "claimed" ? claimedAchievements : inProgressAchievements;
+    const achievementPage = getAchievementPage(achievements, opt.getInteger("page"));
+    return commitState(buildAchievementsV2Message({
+      userId,
+      entries: achievementPage.entries,
+      page: achievementPage.page,
+      totalPages: achievementPage.totalPages,
+      visibleCount: achievements.length,
+      category,
+      claimedCount: claimedAchievements.length,
+      inProgressCount: inProgressAchievements.length,
+      unlocked: p.achievements?.unlocked ?? {},
+      claimedIds
+    }));
   }
 
   /* ---------------- FORAGE MENU ---------------- */
@@ -11852,7 +12382,7 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
         .join(", ");
 
       return commitState({
-        content: `That isn't a valid forage item for your unlocked recipes. Try one of: ${suggestions}`,
+        content: `That isn't a valid forage item for your discovered recipes. Try one of: ${suggestions}`,
         components: navRows
       });
     }
@@ -11902,6 +12432,9 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     }
 
     const inventoryResult = applyDropsToInventory(p, accepted);
+    p.lifetime ??= {};
+    p.lifetime.forage_items_collected = (Number(p.lifetime.forage_items_collected) || 0)
+      + Object.values(inventoryResult.added ?? {}).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
     setForageCooldown(p, now);
     const nextForageTs = Math.floor((now + cooldownMs) / 1000);
     if (!Object.keys(inventoryResult.added).length) {
@@ -12760,6 +13293,8 @@ ${lines.join("\n")}`;
 
     p.coins -= cost;
     p.inv_ingredients[itemId] = (p.inv_ingredients[itemId] ?? 0) + qtyToBuy;
+    p.lifetime ??= {};
+    p.lifetime.market_transactions = (Number(p.lifetime.market_transactions) || 0) + 1;
     if (!unlimitedMarketStock) {
       p.market_stock[itemId] = stock - qtyToBuy;
     }
@@ -12828,6 +13363,7 @@ ${lines.join("\n")}`;
     p.inv_ingredients[itemId] = owned - qty;
     p.coins += gain;
     p.lifetime.coins_earned += gain;
+    p.lifetime.market_transactions = (Number(p.lifetime.market_transactions) || 0) + 1;
 
     applyQuestProgress(p, questsContent, userId, { type: "earn_coins", amount: gain }, now);
 
@@ -13346,7 +13882,8 @@ ${lines.join("\n")}`;
         { label: "Cook", actionKey: "ck", style: 2, disabled: disableCook, emoji: getButtonEmoji("cook") },
         { label: "Serve", actionKey: "sv", style: disableServe ? 2 : 1, disabled: disableServe, emoji: getButtonEmoji("serve") },
         { label: "Cancel", actionKey: "cnl", style: 2, disabled: !showCancel, emoji: getButtonEmoji("cancel") },
-        { label: "Main Menu", actionKey: "nm", style: 2, disabled: false, emoji: getButtonEmoji("back") },
+        { label: "Back", actionKey: "nm", style: 2, disabled: false, emoji: getButtonEmoji("back") },
+        { label: "Menu", actionKey: "dm", style: 2, disabled: false, emoji: getButtonEmoji("recipes") },
         { label: "Buy", actionKey: "buy", style: 2, disabled: false, emoji: getButtonEmoji("cart") },
         { label: "Pantry", actionKey: "pn", style: 2, disabled: false, emoji: getButtonEmoji("pantry") },
         { label: "Quests", actionKey: "qs", style: 2, disabled: false, emoji: getButtonEmoji("quests") },
@@ -13393,6 +13930,7 @@ ${lines.join("\n")}`;
               disableServe,
               showTakeout
             }),
+            noodleOrdersDailyMenuRow(userId),
             noodleMainMenuRowNoOrders(userId)
           ]
     });
@@ -14378,6 +14916,38 @@ const isDmReminderToggle = idKind === "dm" && idAction === "reminders_toggle";
 if (!serverId && !isDmReminderToggle) {
   return componentCommit(interaction, { content: "This game runs inside a server (not DMs).", ephemeral: true });
 }
+if (customId.startsWith("noodle:giveaway:enter:")) {
+  const officialGuildId = String(process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "").trim();
+  const productionEnabled = String(process.env.NOODLE_GIVEAWAYS_ENABLED || "").trim() === "1"
+    && String(process.env.NOODLE_GIVEAWAYS_COPY_APPROVED || "").trim() === "1"
+    && String(process.env.NOODLE_GIVEAWAYS_PRODUCTION_ENABLED || "").trim() === "1"
+    && String(process.env.NOODLE_OFFICIAL_FEATURE_CANARY ?? "1").trim() === "0";
+  if (!productionEnabled || serverId !== officialGuildId || !db) {
+    return componentCommit(interaction, { content: "This giveaway is not accepting entries right now.", ephemeral: true });
+  }
+  const result = recordGiveawayEntry(db, {
+    giveawayId: idParts[3],
+    guildId: serverId,
+    channelId: interaction.channelId,
+    messageId: interaction.message?.id,
+    userId
+  });
+  if (!result.ok) {
+    const messages = {
+      giveaway_not_found: "This giveaway post is no longer active.",
+      giveaway_closed: "This giveaway has closed. Look for an active giveaway in this channel!",
+      already_won_this_week: "You have already won a giveaway this week, try again next week!"
+    };
+    return componentCommit(interaction, {
+      content: messages[result.reason] ?? "We could not record your entry, please try again!",
+      ephemeral: true
+    });
+  }
+  return componentCommit(interaction, {
+    content: result.alreadyEntered ? "You are already entered in this giveaway." : "You are now entered in this giveaway! Good luck!",
+    ephemeral: true
+  });
+}
 const v2Parsed = parseV2CustomId(customId);
 if (v2Parsed.isV2) {
   const rolloutPlayer = ensurePlayer(serverId, userId);
@@ -14458,6 +15028,7 @@ if (v2Parsed.isV2) {
       if (action === "pn") return runNoodle(interaction, { sub: "pantry" });
       if (action === "qs") return runNoodle(interaction, { sub: "quests" });
       if (action === "tk") return runNoodle(interaction, { sub: "takeout" });
+      if (action === "dm") return runNoodle(interaction, { sub: "daily_menu" });
       if (action === "rf") return runNoodle(interaction, { sub: "orders" });
       if (action === "nm") return runNoodle(interaction, { sub: "profile" });
     }
@@ -16369,7 +16940,10 @@ try {
     overrides: {
       messageId: sourceMessageId,
       navSource: sub,
-      integers: page !== null && Number.isFinite(page) ? { page } : undefined
+      integers: page !== null && Number.isFinite(page) ? { page } : undefined,
+      strings: ["achievements", "badges"].includes(sub) && parts[5]
+        ? { category: parts[5] }
+        : undefined
     }
   });
   runMs = performance.now() - runStartMs;
@@ -16393,6 +16967,90 @@ try {
 
 /* ---------------- LEGACY ACTION BUTTONS ---------------- */
 if (kind === "action") {
+  if (action === "achievement_claim") {
+    if (ownerId !== userId) {
+      return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+    }
+    const achievementId = String(parts[4] ?? "").trim();
+    if (!achievementId || !db) {
+      return componentCommit(interaction, { content: "That achievement reward could not be claimed right now.", ephemeral: true });
+    }
+    let claim;
+    try {
+      claim = await withLock(db, `lock:user:${userId}`, `achievement:${interaction.id}`, 8000, async () => {
+        const player = ensurePlayer(serverId, userId);
+        const result = claimAchievementReward(player, achievementId, achievementsContent);
+        if (result.ok) player.state_rev = upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+        return result;
+      });
+    } catch (error) {
+      if (error?.code === "ERR_LOCK_BUSY") {
+        return componentCommit(interaction, { content: "Please try claiming that reward again in a moment.", ephemeral: true });
+      }
+      throw error;
+    }
+    if (!claim?.ok) {
+      return componentCommit(interaction, {
+        content: claim?.reason === "already_claimed"
+          ? "That achievement reward has already been claimed!"
+          : "That achievement reward is not ready to claim yet.",
+        ephemeral: true
+      });
+    }
+    const category = parts[5] === "claimed" ? "claimed" : "in_progress";
+    return runNoodle(interaction, {
+      sub: "achievements",
+      overrides: { strings: { category }, integers: { page: 0 } }
+    });
+  }
+  if (action === "achievement_category") {
+    const category = parts[4] === "claimed" ? "claimed" : "in_progress";
+    return runNoodle(interaction, {
+      sub: "achievements",
+      overrides: { strings: { category }, integers: { page: 0 } }
+    });
+  }
+  if (action === "badge_category") {
+    const category = PROFILE_BADGE_CATEGORIES.includes(parts[4]) ? parts[4] : "badges";
+    return runNoodle(interaction, {
+      sub: "badges",
+      overrides: { strings: { category }, integers: { page: 0 } }
+    });
+  }
+  if (action === "badge_toggle") {
+    const category = String(parts[4] ?? "");
+    const badgeId = String(parts[5] ?? "");
+    if (!db || !PROFILE_BADGE_CATEGORIES.includes(category) || !badgeId) {
+      return componentCommit(interaction, { content: "That badge selection could not be updated right now.", ephemeral: true });
+    }
+    let toggle;
+    try {
+      toggle = await withLock(db, `lock:user:${userId}`, `profile-badge:${interaction.id}`, 8000, async () => {
+        const player = ensurePlayer(serverId, userId);
+        evaluatePlayerAchievements(player, achievementsContent);
+        const { eligibleByCategory } = resolveProfileBadgeCatalog(player);
+        ensureDisplayedProfileBadges(player, eligibleByCategory);
+        const result = toggleDisplayedProfileBadge(player, category, badgeId, eligibleByCategory);
+        if (result.ok) upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+        return result;
+      });
+    } catch (error) {
+      if (error?.code === "ERR_LOCK_BUSY") {
+        return componentCommit(interaction, { content: "Please try changing your badge selection again in a moment.", ephemeral: true });
+      }
+      throw error;
+    }
+    if (!toggle?.ok) {
+      const message = toggle?.reason === "row_full"
+        ? `You can equip up to ${PROFILE_BADGE_ROW_LIMIT} ${category} badges. Remove one before adding another.`
+        : "That badge is not available to equip.";
+      return componentCommit(interaction, { content: message, ephemeral: true });
+    }
+    return runNoodle(interaction, {
+      sub: "badges",
+      overrides: { strings: { category }, integers: { page: 0 } }
+    });
+  }
   const sub = action;
   const sourceMessageId = interaction.message?.id;
   return runNoodle(interaction, { sub, group: null, overrides: { messageId: sourceMessageId } });
@@ -16402,6 +17060,30 @@ if (kind === "action") {
 // Skip modals - they're handled separately below
 if (kind === "pick" && !action.endsWith("_select") && !interaction.isModalSubmit?.()) {
 // noodle:pick:<what>:<ownerId>
+if (action === "daily_menu_cancel") {
+  if (parts[3] !== userId) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+  clearTakeoutMenuDraftSelection({ serverId, userId, kind: "daily_menu" });
+  return runNoodle(interaction, {
+    sub: "daily_menu",
+    overrides: { messageId: interaction.message?.id ?? null }
+  });
+}
+
+if (action === "daily_menu_confirm") {
+  if (parts[3] !== userId) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+  return runNoodle(interaction, {
+    sub: "daily_menu",
+    overrides: {
+      booleans: { menu_confirm: true },
+      messageId: interaction.message?.id ?? null
+    }
+  });
+}
+
 if (action === "forage_random") {
   const rawPage = Number(parts[4] ?? 0);
   const page = Number.isFinite(rawPage) ? Math.max(0, rawPage) : 0;
@@ -16714,7 +17396,42 @@ return componentCommit(interaction, { content: "Unknown picker action.", ephemer
 if (interaction.isSelectMenu?.()) {
 const cid = interaction.customId;
 
-if (cid.startsWith("noodle:takeout:menu_select:")) {
+if (cid.startsWith("noodle:achievements:claim:")) {
+  const owner = cid.split(":")[3];
+  if (owner !== userId) {
+    return componentCommit(interaction, { content: "That menu isn’t for you.", ephemeral: true });
+  }
+  const achievementId = String(interaction.values?.[0] ?? "");
+  if (!achievementId || !db) {
+    return componentCommit(interaction, { content: "That achievement reward could not be claimed right now.", ephemeral: true });
+  }
+  let claim;
+  try {
+    claim = await withLock(db, `lock:user:${userId}`, `achievement:${interaction.id}`, 8000, async () => {
+      const player = ensurePlayer(serverId, userId);
+      const result = claimAchievementReward(player, achievementId, achievementsContent);
+      if (result.ok) upsertPlayer(db, serverId, userId, player, null, player.schema_version);
+      return result;
+    });
+  } catch (error) {
+    if (error?.code === "ERR_LOCK_BUSY") {
+      return componentCommit(interaction, { content: "Please try claiming that reward again in a moment.", ephemeral: true });
+    }
+    throw error;
+  }
+  if (!claim?.ok) {
+    return componentCommit(interaction, {
+      content: claim?.reason === "already_claimed"
+        ? "That achievement reward has already been claimed!"
+        : "That achievement reward is not ready to claim yet.",
+      ephemeral: true
+    });
+  }
+  return runNoodle(interaction, { sub: "achievements" });
+}
+
+if (cid.startsWith("noodle:takeout:menu_select:") || cid.startsWith("noodle:daily_menu:menu_select:")) {
+  const dailyMenuSelection = cid.startsWith("noodle:daily_menu:menu_select:");
   const idParts = cid.split(":");
   const owner = idParts[3];
   const rawPage = Number(idParts[4] ?? 0);
@@ -16735,18 +17452,21 @@ if (cid.startsWith("noodle:takeout:menu_select:")) {
     serverId,
     userId: interaction.user.id,
     availableRecipeIds,
-    fallbackRecipeIds: p?.takeout?.menu_recipe_ids ?? []
+    fallbackRecipeIds: dailyMenuSelection
+      ? (p?.daily_order_menu_recipe_ids ?? [])
+      : (p?.takeout?.menu_recipe_ids ?? []),
+    kind: dailyMenuSelection ? "daily_menu" : "takeout"
   });
   const selectedRecipeIds = mergeTakeoutMenuPageSelection({
     availableRecipeIds,
     currentSelectedRecipeIds: currentDraftSelection,
     pageSelectedRecipeIds,
     page,
-    maxAllowed: menuLimits.maxAllowed
+    maxAllowed: dailyMenuSelection ? DAILY_ORDER_MENU_MAX_RECIPES : menuLimits.maxAllowed
   });
 
   return runNoodle(interaction, {
-    sub: "takeout_menu",
+    sub: dailyMenuSelection ? "daily_menu" : "takeout_menu",
     overrides: {
       strings: { recipes: selectedRecipeIds.join(",") },
       booleans: { menu_draft: true },
@@ -17698,6 +18418,8 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
 
         // Apply purchase
         p2.coins -= totalCost;
+        p2.lifetime ??= {};
+        p2.lifetime.market_transactions = (Number(p2.lifetime.market_transactions) || 0) + 1;
 
         for (const x of buyLines) {
           if (!unlimitedMarketStock) {
@@ -17939,6 +18661,8 @@ if (cid.startsWith("noodle:pick:fishing_item_select:")) {
           };
         }
 
+        p2.lifetime ??= {};
+        p2.lifetime.market_transactions = (Number(p2.lifetime.market_transactions) || 0) + 1;
         if (db) {
           upsertPlayer(db, serverId, userId, p2, null, p2.schema_version);
         }
@@ -18028,12 +18752,11 @@ const noodleCommandData = new SlashCommandBuilder()
       .addStringOption((o) => o.setName("item").setDescription("What to fish for (type to search)").setRequired(false).setAutocomplete(true))
       .addIntegerOption((o) => o.setName("quantity").setDescription("Quantity (1-5)").setRequired(false).setMinValue(1).setMaxValue(5))
   )
-  .addSubcommand((sc) => sc.setName("recipes").setDescription("View your unlocked recipes and clues."))
+  .addSubcommand((sc) => sc.setName("recipes").setDescription("View your discovered recipes and clues."))
+  .addSubcommand((sc) => sc.setName("achievements").setDescription("View and claim your achievement rewards."))
   .addSubcommand((sc) => sc.setName("regulars").setDescription("View regular NPCs and their bonuses."))
   .addSubcommand((sc) => sc.setName("event").setDescription("Show the current event (if any)."))
   .addSubcommand((sc) => sc.setName("quests").setDescription("View active quests."))
-  .addSubcommand((sc) => sc.setName("quests_daily").setDescription("Claim your daily reward."))
-  .addSubcommand((sc) => sc.setName("quests_claim").setDescription("Claim completed quest rewards."))
   .addSubcommand((sc) => sc.setName("quests_vote").setDescription("View and claim bot-list vote rewards."))
   .addSubcommandGroup((sg) =>
     sg
@@ -18071,6 +18794,12 @@ const noodleCommandData = new SlashCommandBuilder()
       .addIntegerOption((o) => o.setName("quantity").setDescription("Qty").setRequired(false).setMinValue(1))
   )
   .addSubcommand((sc) => sc.setName("orders").setDescription("View today’s orders."))
+  .addSubcommand((sc) =>
+    sc
+      .setName("daily_menu")
+      .setDescription("Pick recipes for your shop's order board menu.")
+      .addStringOption((o) => o.setName("recipes").setDescription("Optional comma-separated recipe ids.").setRequired(false))
+  )
   .addSubcommand((sc) =>
     sc
       .setName("accept")

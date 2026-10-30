@@ -8,8 +8,7 @@ import {
   buildComponentsV2TextPayload,
   isComponentsV2Enabled,
   MESSAGE_FLAG_IS_COMPONENTS_V2,
-  replyOrEditInteraction,
-  resolveComponentsV2TargetGuild
+  replyOrEditInteraction
 } from "../src/ui/componentsV2.js";
 import { buildHelpPageV2Payload, buildMultiBuyPickerPayload } from "../src/commands/noodle.js";
 import { buildMainAndNoticesFromEmbedsForTest } from "../src/commands/noodle.js";
@@ -19,36 +18,36 @@ import { normalizePayloadForReply as normalizeDecorPayloadForReply } from "../sr
 import { normalizePayloadForReply as normalizeQuestsPayloadForReply } from "../src/commands/noodleQuests.js";
 import { normalizePayloadForReply as normalizeStaffPayloadForReply } from "../src/commands/noodleStaff.js";
 import { normalizePayloadForReply as normalizeUpgradesPayloadForReply } from "../src/commands/noodleUpgrades.js";
+import { commands } from "../src/commands/index.js";
 
-test("Components V2: resolves target guild from NOODLE_OFFICIAL_GUILD_ID first", () => {
-  const target = resolveComponentsV2TargetGuild({
-    NOODLE_OFFICIAL_GUILD_ID: "2200003904585470024",
+test("Slash-command inventory frees a noodle slot for achievements and retains quest claim aliases", () => {
+  const serialized = commands.map((command) => command.data.toJSON());
+  const noodle = serialized.find((command) => command.name === "noodle");
+  const noodleQuests = serialized.find((command) => command.name === "noodle-quests");
+
+  assert.equal(serialized.some((command) => command.name === "achievements"), false);
+  assert.equal(serialized.some((command) => command.name === "badges"), false);
+  assert.equal(noodle.options.length, 24);
+  assert.ok(noodle.options.some((option) => option.type === 1 && option.name === "achievements"));
+  assert.equal(noodle.options.some((option) => option.type === 1 && option.name === "badges"), false);
+  assert.equal(noodle.options.some((option) => option.type === 1 && option.name === "quests_daily"), false);
+  assert.equal(noodle.options.some((option) => option.type === 1 && option.name === "quests_claim"), false);
+  assert.deepEqual(noodleQuests.options.map((option) => option.name), ["daily", "claim"]);
+});
+
+test("Components V2: enabled in every guild for every user while the env flag is on", () => {
+  const env = {
+    NOODLE_COMPONENTS_V2_ENABLED: "1",
+    NOODLE_OFFICIAL_GUILD_ID: "1500003904585470024",
     NOODLE_DEV_GUILD_ID: "1500003904585470024",
-    DISCORD_GUILD_ID: "111111111111111111"
-  });
-  assert.equal(target, "2200003904585470024");
-});
-
-test("Components V2: only enabled when env flag is on and guild matches", () => {
-  const env = {
-    NOODLE_COMPONENTS_V2_ENABLED: "1",
-    NOODLE_DEV_GUILD_ID: "1500003904585470024"
-  };
-
-  assert.equal(isComponentsV2Enabled({ guildId: "1500003904585470024", userId: "u1", env }), true);
-  assert.equal(isComponentsV2Enabled({ guildId: "999999999999999999", userId: "u1", env }), false);
-});
-
-test("Components V2: supports explicit guild and user allowlists", () => {
-  const env = {
-    NOODLE_COMPONENTS_V2_ENABLED: "1",
-    NOODLE_COMPONENTS_V2_GUILD_ALLOWLIST: "g1,g2",
+    DISCORD_GUILD_ID: "1500003904585470024",
+    NOODLE_COMPONENTS_V2_GUILD_ALLOWLIST: "1500003904585470024",
     NOODLE_COMPONENTS_V2_USER_ALLOWLIST: "u2"
   };
 
-  assert.equal(isComponentsV2Enabled({ guildId: "g1", userId: "u2", env }), true);
-  assert.equal(isComponentsV2Enabled({ guildId: "g1", userId: "u9", env }), false);
-  assert.equal(isComponentsV2Enabled({ guildId: "g9", userId: "u2", env }), false);
+  assert.equal(isComponentsV2Enabled({ guildId: "1500003904585470024", userId: "u1", env }), true);
+  assert.equal(isComponentsV2Enabled({ guildId: "999999999999999999", userId: "u9", env }), true);
+  assert.equal(isComponentsV2Enabled({ userId: "u9", env: { NOODLE_COMPONENTS_V2_ENABLED: "1" } }), true);
 });
 
 test("Components V2: tutorial users default to V2 when tutorial gate is not explicitly configured", () => {
@@ -729,4 +728,3 @@ test("Components V2: social ephemeral follow-up falls back to raw webhook after 
   assert.equal(followUpCalls, 1);
   assert.equal(result?.mode, "rawRetry");
 });
-
