@@ -30,7 +30,7 @@ Rules: run **one** bot process only; enable **one** feature at a time; never ret
 
 - [ ] `/noodle start`, orders board, kitchen, garden, recipes, social Stats all open without errors.
 - [ ] Orders board → **Menu**: select recipes across several pages, **Save Menu** commits once; **Cancel Draft** discards; a second change the same UTC day is refused.
-- [ ] The Daily Menu has no dedicated banner yet (`scene_banner_daily_menu` is not set in `content/icons.json`); confirm the picker still renders acceptably, or add the banner URL first.
+- [ ] The Daily Menu picker shows the `scene_banner_menu` banner (Menu.png) and the Save Menu / Cancel Draft buttons.
 - [ ] Achievements opens from the Stats button beside Collections; Claim works once and cannot be repeated.
 - [ ] Customize Profile → **Badges**: equip/unequip, 7-per-row cap, Back works.
 - [ ] Tutorial and tutorial reset work for a test user.
