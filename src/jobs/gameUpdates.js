@@ -400,7 +400,7 @@ async function postScheduledUpdates({ db, client, settings, env, logger, now }) 
   }
 }
 
-async function postPendingSeasonUpdate({ db, client, settings, env, logger, now }) {
+export async function postPendingSeasonUpdate({ db, client, settings, env, logger, now }) {
   if (!hasPublicRolloutUpdate(db, settings.guildId)) return;
   const row = db.prepare(`
     SELECT * FROM game_update_season_state
@@ -436,9 +436,10 @@ async function postPendingSeasonUpdate({ db, client, settings, env, logger, now 
     return;
   }
   const claimed = db.prepare(`
-    UPDATE game_update_season_state SET status = 'sending', updated_at = ?
+    UPDATE game_update_season_state
+    SET status = 'sending', attempt_channel_id = ?, attempt_canary = ?, updated_at = ?
     WHERE guild_id = ? AND status = ?
-  `).run(now, settings.guildId, row.status);
+  `).run(String(settings.channelId), settings.canary ? 1 : 0, now, settings.guildId, row.status);
   if (claimed.changes !== 1) return;
   try {
     const messageId = await sendPayload(client, settings, payload, env);
@@ -493,7 +494,7 @@ function recordSeasonChange({ db, settings, eventsContent, settingsCatalog, now 
   db.prepare(`
     UPDATE game_update_season_state SET
       last_season = ?, last_event_id = ?, payload_json = ?, status = 'pending',
-      message_id = NULL, updated_at = ?
+      message_id = NULL, attempt_channel_id = NULL, attempt_canary = NULL, updated_at = ?
     WHERE guild_id = ?
   `).run(season, eventId, JSON.stringify(update), now, settings.guildId);
 }

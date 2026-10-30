@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { newPlayerProfile } from "../src/game/player.js";
 import { getOrdersMeta } from "../src/game/orders.js";
 import { advanceTutorial, getCurrentTutorialStep, resetTutorialProgress } from "../src/game/tutorial.js";
+import { getOrderAcceptCap, ORDER_ACCEPT_CAP_BASE } from "../src/game/subscriptions.js";
 
 test("Tutorial reset: resets only tutorial state and preserves all other profile data", () => {
   const player = newPlayerProfile("user1");
@@ -55,6 +56,26 @@ test("Tutorial reset: resets only tutorial state and preserves all other profile
   const after = structuredClone(player);
   delete after.tutorial;
   assert.deepEqual(after, before);
+});
+
+test("Tutorial reset: preserved accepted orders do not block the intro accept step", () => {
+  const player = newPlayerProfile("user-full-orders");
+  player.known_recipes = ["classic_soy_ramen"];
+  player.orders = {
+    accepted: Object.fromEntries(
+      Array.from({ length: ORDER_ACCEPT_CAP_BASE }, (_, index) => [`ODR${index}`, { order: { recipe_id: "classic_soy_ramen" } }])
+    )
+  };
+  player.tutorial = { active: false, queue: [], completed: ["intro_order"] };
+  assert.equal(getOrderAcceptCap(player), ORDER_ACCEPT_CAP_BASE);
+
+  resetTutorialProgress(player);
+  assert.equal(getCurrentTutorialStep(player)?.id, "intro_order");
+  assert.equal(getOrderAcceptCap(player), ORDER_ACCEPT_CAP_BASE + 1);
+  assert.equal(Object.keys(player.orders.accepted).length, ORDER_ACCEPT_CAP_BASE);
+
+  assert.equal(advanceTutorial(player, "accept").progressed, true);
+  assert.equal(getOrderAcceptCap(player), ORDER_ACCEPT_CAP_BASE);
 });
 
 test("Tutorial reset: can replay full tutorial chain to completion", () => {

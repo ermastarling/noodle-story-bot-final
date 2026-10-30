@@ -1024,12 +1024,22 @@ function buildSharedOrderProgress({ recipe, servings, contributions }) {
   return { items, isComplete };
 }
 
-function getSharedOrderTotalRequiredUnits(recipe, servings) {
+function getSharedOrderIngredientRequirements(recipe, servings) {
   const normalizedServings = Math.max(0, Math.floor(Number(servings) || 0));
-  return (recipe?.ingredients ?? []).reduce((total, ingredient) => {
-    const quantity = Number(ingredient?.qty);
-    return total + (Number.isFinite(quantity) && quantity > 0 ? quantity * normalizedServings : 0);
-  }, 0);
+  return (recipe?.ingredients ?? [])
+    .map((ingredient) => {
+      const quantity = Number(ingredient?.qty);
+      return Number.isFinite(quantity) && quantity > 0 ? quantity * normalizedServings : 0;
+    })
+    .filter((units) => units > 0);
+}
+
+function buildSharedOrderContributionOptions(recipe, servings, maxIngredientSlots) {
+  return {
+    maxIngredientSlots,
+    ingredientRequirements: getSharedOrderIngredientRequirements(recipe, servings),
+    memberIngredientLimit: getSharedOrderIngredientLimit(recipe)
+  };
 }
 
 function formatSharedOrderContributionError(error) {
@@ -3320,10 +3330,14 @@ async function handleComponent(interaction) {
             player.lifetime.shared_order_ids ??= {};
             player.lifetime.shared_order_ids[sharedOrder.shared_order_id] = true;
             upsertPlayer(db, serverId, userId, player, null, player.schema_version);
-            contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, {
-              maxIngredientSlots: maxSlots,
-              totalRequiredUnits: getSharedOrderTotalRequiredUnits(recipe, servings)
-            });
+            contributeToSharedOrder(
+              db,
+              sharedOrder.shared_order_id,
+              userId,
+              ingredientId,
+              quantity,
+              buildSharedOrderContributionOptions(recipe, servings, maxSlots)
+            );
           })();
 
           const embed = buildCardSpec()
@@ -4695,10 +4709,14 @@ async function handleComponent(interaction) {
             player.lifetime.shared_order_ids ??= {};
             player.lifetime.shared_order_ids[sharedOrder.shared_order_id] = true;
             upsertPlayer(db, serverId, userId, player, null, player.schema_version);
-            contributeToSharedOrder(db, sharedOrder.shared_order_id, userId, ingredientId, quantity, {
-              maxIngredientSlots: maxSlots,
-              totalRequiredUnits: getSharedOrderTotalRequiredUnits(recipe, servings)
-            });
+            contributeToSharedOrder(
+              db,
+              sharedOrder.shared_order_id,
+              userId,
+              ingredientId,
+              quantity,
+              buildSharedOrderContributionOptions(recipe, servings, maxSlots)
+            );
           })();
 
           const embed = buildCardSpec()

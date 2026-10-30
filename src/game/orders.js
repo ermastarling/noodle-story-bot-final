@@ -374,18 +374,31 @@ export function getOrdersMeta(playerState) {
   const currentDay = String(playerState.orders_day ?? "");
   const depletedDay = String(playerState.orders_depleted_day ?? "");
   const depletedForCurrentDay = currentDay.length > 0 && depletedDay === currentDay;
+  const tutorialReplayEligible = playerState.tutorial?.active === true
+    && playerState.tutorial?.queue?.[0] === "intro_order";
 
   if (depletedForCurrentDay) {
-    const tutorialReplayAvailable = playerState.tutorial?.active === true
-      && playerState.tutorial?.queue?.[0] === "intro_order";
-    if (tutorialReplayAvailable) {
+    if (tutorialReplayEligible) {
       return { totalCount, consumedSet, availableCount: 1, depletedForCurrentDay: false, tutorialReplayAvailable: true };
     }
     return { totalCount, consumedSet, availableCount: 0, depletedForCurrentDay: true };
   }
 
   const availableCount = Math.max(0, totalCount - consumedSet.size);
+  if (tutorialReplayEligible && totalCount > 0 && availableCount === 0) {
+    return { totalCount, consumedSet, availableCount: 1, depletedForCurrentDay: false, tutorialReplayAvailable: true };
+  }
   return { totalCount, consumedSet, availableCount, depletedForCurrentDay: false, tutorialReplayAvailable: false };
+}
+
+// True only when served orders have used every board slot; accepted-but-unserved orders can still return.
+export function isOrderBoardExhausted(playerState) {
+  const totalCount = Math.max(0, Math.floor(Number(playerState?.orders_total_count ?? 0) || 0));
+  if (totalCount < 1 || !Array.isArray(playerState.orders_consumed_indices)) return false;
+  const consumed = new Set(
+    playerState.orders_consumed_indices.filter((index) => Number.isInteger(index) && index >= 0 && index < totalCount)
+  );
+  return consumed.size >= totalCount;
 }
 
 export function generateOrderPageForPlayer({

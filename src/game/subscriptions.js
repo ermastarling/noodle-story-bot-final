@@ -208,8 +208,13 @@ export function hasUnlimitedMarketStock(player, now = Date.now()) {
 }
 
 export function getOrderAcceptCap(player, now = Date.now()) {
-  void player;
   void now;
+  const tutorialIntroActive = player?.tutorial?.active === true && player.tutorial.queue?.[0] === "intro_order";
+  if (tutorialIntroActive) {
+    // Preserved accepted orders must not block the intro step that needs one more accept.
+    const accepted = Object.keys(player.orders?.accepted ?? {}).length;
+    return Math.max(ORDER_ACCEPT_CAP_BASE, accepted + 1);
+  }
   return ORDER_ACCEPT_CAP_BASE;
 }
 

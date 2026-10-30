@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS scheduled_message_delivery (
   job_id TEXT PRIMARY KEY,
   status TEXT NOT NULL,
   attempt_started_at INTEGER NOT NULL,
+  attempt_channel_id TEXT,
   updated_at INTEGER NOT NULL
 );
 
@@ -124,6 +125,8 @@ CREATE TABLE IF NOT EXISTS game_update_season_state (
   payload_json TEXT,
   status TEXT NOT NULL DEFAULT 'idle',
   message_id TEXT,
+  attempt_channel_id TEXT,
+  attempt_canary INTEGER CHECK (attempt_canary IN (0, 1) OR attempt_canary IS NULL),
   updated_at INTEGER NOT NULL
 );
 

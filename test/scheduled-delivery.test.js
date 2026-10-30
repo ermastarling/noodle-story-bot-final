@@ -11,7 +11,8 @@ import {
 } from "../src/jobs/scheduledDelivery.js";
 import {
   claimScheduledGameUpdateDelivery,
-  completeScheduledGameUpdateDelivery
+  completeScheduledGameUpdateDelivery,
+  postPendingSeasonUpdate
 } from "../src/jobs/gameUpdates.js";
 
 const require = createRequire(import.meta.url);
@@ -97,6 +98,29 @@ test("uncertain delivery reconciliation requires evidence and supports safe reso
 test("confirmed scheduled messages record the message pointer needed for replacement", () => {
   const db = new Database(":memory:");
   db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
+  const attemptedChannel = "22345678901234567";
+  assert.equal(claimScheduledMessageDelivery(db, "work_ping", 1, attemptedChannel), true);
+  assert.equal(markScheduledMessageDeliveryUnknown(db, "work_ping", 2), true);
+  assert.deepEqual(reconcileScheduledDelivery(db, {
+    type: "scheduled_message",
+    recordId: "work_ping",
+    resolution: "delivered",
+    messageId: "62345678901234567",
+    now: 10
+  }), { ok: true, status: "sent" });
+  assert.deepEqual(db.prepare("SELECT channel_id, message_id FROM scheduled_message_state WHERE job_id = 'work_ping'").get(), {
+    channel_id: attemptedChannel,
+    message_id: "62345678901234567"
+  });
+
+  assert.equal(claimScheduledMessageDelivery(db, "work_ping", 11, "32345678901234567"), true);
+  assert.equal(db.prepare("SELECT attempt_channel_id FROM scheduled_message_delivery WHERE job_id = 'work_ping'").get().attempt_channel_id, "32345678901234567");
+  db.close();
+});
+
+test("scheduled message reconciliation refuses to guess a destination that was never recorded", () => {
+  const db = new Database(":memory:");
+  db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
   db.prepare("INSERT INTO scheduled_message_delivery(job_id, status, attempt_started_at, updated_at) VALUES ('work_ping', 'delivery_unknown', 1, 1)")
     .run();
   assert.deepEqual(reconcileScheduledDelivery(db, {
@@ -104,13 +128,10 @@ test("confirmed scheduled messages record the message pointer needed for replace
     recordId: "work_ping",
     resolution: "delivered",
     messageId: "62345678901234567",
-    channelId: "22345678901234567",
-    now: 10
-  }), { ok: true, status: "sent" });
-  assert.deepEqual(db.prepare("SELECT channel_id, message_id FROM scheduled_message_state WHERE job_id = 'work_ping'").get(), {
-    channel_id: "22345678901234567",
-    message_id: "62345678901234567"
-  });
+    channelId: "22345678901234567"
+  }), { ok: false, reason: "missing_attempt_provenance" });
+  assert.equal(db.prepare("SELECT status FROM scheduled_message_delivery WHERE job_id = 'work_ping'").get().status, "delivery_unknown");
+  assert.equal(db.prepare("SELECT 1 FROM scheduled_message_state WHERE job_id = 'work_ping'").get(), undefined);
   db.close();
 });
 
@@ -123,11 +144,11 @@ test("delivery reconciliation resolves scheduled update, season, and giveaway st
     (schedule_id, guild_id, update_id, scheduled_at, payload_json, rollout_summary, status, created_by, created_at, updated_at)
     VALUES ('update-1', ?, 'update', 1, '{}', 0, 'delivery_unknown', 'admin', 1, 1)`).run(guildId);
   db.prepare(`INSERT INTO game_update_season_state
-    (guild_id, last_season, last_event_id, payload_json, status, updated_at)
-    VALUES (?, 'spring', 'event', '{}', 'delivery_unknown', 1)`).run(guildId);
+    (guild_id, last_season, last_event_id, payload_json, status, attempt_channel_id, attempt_canary, updated_at)
+    VALUES (?, 'spring', 'event', '{}', 'delivery_unknown', '32345678901234567', 0, 1)`).run(guildId);
   db.prepare(`INSERT INTO game_update_season_state
-    (guild_id, last_season, last_event_id, payload_json, status, updated_at)
-    VALUES ('72345678901234567', 'summer', 'event', '{}', 'delivery_unknown', 1)`).run();
+    (guild_id, last_season, last_event_id, payload_json, status, attempt_channel_id, attempt_canary, updated_at)
+    VALUES ('72345678901234567', 'summer', 'event', '{}', 'delivery_unknown', '22345678901234567', 1, 1)`).run();
   const insertGiveaway = db.prepare(`INSERT INTO weekly_giveaways
     (giveaway_id, guild_id, channel_id, week_key, contest_number, prize_json, closes_at, status, award_status, created_at, posting_started_at, confirmation_status, confirmation_started_at, valor_confirmation_status, valor_confirmation_started_at)
     VALUES (?, ?, '22345678901234567', ?, 1, '{}', 9999999999999, ?, ?, 1, 1, ?, 1, ?, 1)`);
@@ -147,6 +168,7 @@ test("delivery reconciliation resolves scheduled update, season, and giveaway st
     recordId: guildId,
     resolution: "delivered",
     messageId,
+    canary: true,
     now: 10
   }), { ok: true, status: "sent" });
   assert.equal(db.prepare("SELECT message_id FROM game_update_season_state WHERE guild_id = ?").get(guildId).message_id, messageId);
@@ -155,7 +177,7 @@ test("delivery reconciliation resolves scheduled update, season, and giveaway st
     recordId: "72345678901234567",
     resolution: "delivered",
     messageId,
-    canary: true,
+    canary: false,
     now: 11
   }), { ok: true, status: "canary_previewed" });
   assert.equal(db.prepare("SELECT status FROM game_update_season_state WHERE guild_id = '72345678901234567'").get().status, "canary_previewed");
@@ -293,5 +315,83 @@ test("legacy uncertain game updates without attempt provenance cannot open the r
   }), { ok: false, reason: "missing_attempt_provenance" });
   assert.equal(db.prepare("SELECT status FROM scheduled_game_updates WHERE schedule_id = 'legacy-uncertain'").get().status, "delivery_unknown");
   assert.equal(db.prepare("SELECT 1 FROM game_update_release_state").get(), undefined);
+  db.close();
+});
+
+test("season delivery persists its attempted route and reconciliation ignores later mode changes", async () => {
+  const db = new Database(":memory:");
+  db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
+  const guildId = "12345678901234567";
+  const productionChannel = "32345678901234567";
+  db.prepare("INSERT INTO game_update_release_state (guild_id, first_update_sent_at, first_update_id) VALUES (?, 1, 'first')").run(guildId);
+  db.prepare(`INSERT INTO game_update_season_state
+    (guild_id, last_season, last_event_id, payload_json, status, updated_at)
+    VALUES (?, 'spring', 'event', ?, 'pending', 1)`)
+    .run(guildId, JSON.stringify({ title: "Spring Update", body: "The season changed." }));
+  const failingClient = {
+    api: { channels: () => ({ messages: { post: async () => { throw new Error("network timeout"); } } }) }
+  };
+  const logger = { info() {}, warn() {}, error() {} };
+
+  await postPendingSeasonUpdate({
+    db,
+    client: failingClient,
+    settings: {
+      guildId,
+      channelId: productionChannel,
+      canary: false,
+      announcementsRoleId: "42345678901234567",
+      eventsRoleId: "52345678901234567"
+    },
+    env: {},
+    logger,
+    now: 5
+  });
+  assert.deepEqual(db.prepare("SELECT status, attempt_channel_id, attempt_canary FROM game_update_season_state WHERE guild_id = ?").get(guildId), {
+    status: "delivery_unknown",
+    attempt_channel_id: productionChannel,
+    attempt_canary: 0
+  });
+
+  assert.deepEqual(reconcileScheduledDelivery(db, {
+    type: "season_update",
+    recordId: guildId,
+    resolution: "delivered",
+    messageId: "62345678901234567",
+    canary: true,
+    now: 10
+  }), { ok: true, status: "sent" });
+  db.close();
+});
+
+test("season reconciliation requires recorded provenance to mark delivered and clears it when requeued", () => {
+  const db = new Database(":memory:");
+  db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
+  const guildId = "12345678901234567";
+  db.prepare(`INSERT INTO game_update_season_state
+    (guild_id, last_season, last_event_id, payload_json, status, updated_at)
+    VALUES (?, 'spring', 'event', '{}', 'delivery_unknown', 1)`).run(guildId);
+  assert.deepEqual(reconcileScheduledDelivery(db, {
+    type: "season_update",
+    recordId: guildId,
+    resolution: "delivered",
+    messageId: "62345678901234567"
+  }), { ok: false, reason: "missing_attempt_provenance" });
+  assert.equal(db.prepare("SELECT status FROM game_update_season_state WHERE guild_id = ?").get(guildId).status, "delivery_unknown");
+
+  db.prepare("UPDATE game_update_season_state SET attempt_channel_id = '22345678901234567', attempt_canary = 1").run();
+  assert.deepEqual(reconcileScheduledDelivery(db, {
+    type: "season_update",
+    recordId: guildId,
+    resolution: "not_delivered",
+    verifiedAbsent: true,
+    now: 12
+  }), { ok: true, status: "pending" });
+  assert.deepEqual(db.prepare("SELECT status, message_id, attempt_channel_id, attempt_canary FROM game_update_season_state WHERE guild_id = ?").get(guildId), {
+    status: "pending",
+    message_id: null,
+    attempt_channel_id: null,
+    attempt_canary: null
+  });
   db.close();
 });

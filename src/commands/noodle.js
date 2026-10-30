@@ -74,6 +74,7 @@ import {
   generateOrderPageForPlayer,
   findOrderByToken,
   getOrdersMeta,
+  isOrderBoardExhausted,
   markOrderConsumed,
   ensureUnlimitedOrdersBuffer
 } from "../game/orders.js";
@@ -8686,22 +8687,12 @@ if (inDevPath && sub === "admin_delivery_reconcile") {
   const resolution = String(opt.getString("resolution") ?? "").trim();
   const messageId = String(opt.getString("message_id") ?? "").trim();
   const verifiedAbsent = opt.getBoolean("verified_absent") === true;
-  const canary = String(process.env.NOODLE_OFFICIAL_FEATURE_CANARY ?? "1").trim() !== "0";
-  const channelId = type !== "scheduled_message"
-    ? ""
-    : recordId === "work_ping"
-      ? String(canary ? process.env.NOODLE_DEV_ALERT_CHANNEL_ID : process.env.NOODLE_WORK_PING_CHANNEL_ID || "").trim()
-      : recordId === "giveaway_preview"
-        ? String(process.env.NOODLE_DEV_ALERT_CHANNEL_ID || "").trim()
-        : "";
   const result = reconcileScheduledDelivery(db, {
     type,
     recordId,
     resolution,
     messageId,
-    channelId,
-    verifiedAbsent,
-    canary
+    verifiedAbsent
   });
   if (!result.ok) {
     const reasons = {
@@ -8709,7 +8700,6 @@ if (inDevPath && sub === "admin_delivery_reconcile") {
       invalid_resolution: "Choose whether the delivery was delivered or not delivered.",
       absence_not_verified: "Confirm that you checked Discord and verified no message exists before allowing a retry.",
       invalid_message_id: "Provide the Discord message ID when marking a delivery as delivered.",
-      invalid_channel_id: "The current route is missing a valid channel ID, so the delivery cannot be marked as delivered.",
       missing_attempt_provenance: "This delivery has no recorded destination and mode. Do not mark it delivered; verify absence and retry it through the current route.",
       not_unknown: "That record is not in an uncertain delivery state; no change was made.",
       not_awaiting_fulfillment: "That giveaway is not awaiting manual VALOR fulfillment.",
@@ -14590,8 +14580,7 @@ ${lines.join("\n")}`;
       });
     }
 
-    const { availableCount: availableAfterServe } = getOrdersMeta(p);
-    if (servedCount > 0 && availableAfterServe === 0) {
+    if (servedCount > 0 && isOrderBoardExhausted(p)) {
       p.orders_depleted_day = dayKeyUTC();
     }
 

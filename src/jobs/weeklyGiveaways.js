@@ -426,7 +426,7 @@ export function startWeeklyGiveawayScheduler({ client, env = process.env, logger
     scheduler = preview;
     void runWithTelemetry("giveaway_preview", "startup", async () => {
       try {
-        if (!claimScheduledMessageDelivery(db, "giveaway_preview")) {
+        if (!claimScheduledMessageDelivery(db, "giveaway_preview", Date.now(), settings.channelId)) {
           const delivery = db.prepare(
             "SELECT status FROM scheduled_message_delivery WHERE job_id = ?"
           ).get("giveaway_preview");

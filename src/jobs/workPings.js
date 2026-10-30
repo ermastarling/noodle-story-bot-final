@@ -110,7 +110,7 @@ export function startWorkPingScheduler({ client, env = process.env, logger = con
           throw new Error(`Configured ${label} channel is not in the official guild`);
         }
       }
-      if (!claimScheduledMessageDelivery(db, "work_ping")) {
+      if (!claimScheduledMessageDelivery(db, "work_ping", Date.now(), settings.channelId)) {
         const delivery = db.prepare(
           "SELECT status FROM scheduled_message_delivery WHERE job_id = ?"
         ).get("work_ping");

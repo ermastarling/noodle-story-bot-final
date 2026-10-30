@@ -7,6 +7,7 @@ import {
 	generateOrderPageForPlayer,
 	findOrderByToken,
 	getOrdersMeta,
+	isOrderBoardExhausted,
 	markOrderConsumed
 } from "../src/game/orders.js";
 
@@ -375,6 +376,52 @@ test("Orders: a depleted board provides a tutorial-only replay order without res
 		userId: "user",
 		pageSize: 10
 	}).orders, []);
+});
+
+test("Orders: accepted-but-unserved orders do not permanently deplete the board", () => {
+	const dayKey = "2026-10-30";
+	const accept = (index) => ({ order: { order_index: index, order_id: `${dayKey}-o${index}-1` } });
+	const playerState = {
+		known_recipes: ["classic_soy_ramen"],
+		orders_day: dayKey,
+		orders_total_count: 4,
+		orders_consumed_indices: [0],
+		orders: { accepted: { a1: accept(1), a2: accept(2), a3: accept(3) } }
+	};
+	assert.equal(getOrdersMeta(playerState).availableCount, 0);
+	assert.equal(isOrderBoardExhausted(playerState), false);
+
+	delete playerState.orders.accepted.a3;
+	assert.equal(getOrdersMeta(playerState).availableCount, 1);
+	assert.equal(isOrderBoardExhausted(playerState), false);
+
+	markOrderConsumed(playerState, 1);
+	markOrderConsumed(playerState, 2);
+	assert.equal(isOrderBoardExhausted(playerState), false);
+	markOrderConsumed(playerState, 3);
+	assert.equal(isOrderBoardExhausted(playerState), true);
+	assert.equal(playerState.orders_depleted_day, dayKey);
+	assert.equal(isOrderBoardExhausted({ orders_total_count: 0, orders_consumed_indices: [] }), false);
+});
+
+test("Orders: tutorial replay is offered when accepted orders occupy every remaining slot", () => {
+	const dayKey = "2026-10-30";
+	const playerState = {
+		known_recipes: ["classic_soy_ramen"],
+		tutorial: { active: true, queue: ["intro_order"], completed: [] },
+		orders_day: dayKey,
+		orders_total_count: 2,
+		orders_consumed_indices: [0],
+		orders: { accepted: { a1: { order: { order_index: 1, order_id: `${dayKey}-o1-1` } } } }
+	};
+	const meta = getOrdersMeta(playerState);
+	assert.equal(meta.tutorialReplayAvailable, true);
+	assert.equal(meta.availableCount, 1);
+	assert.equal(meta.depletedForCurrentDay, false);
+
+	playerState.tutorial.queue = ["intro_market"];
+	assert.equal(getOrdersMeta(playerState).availableCount, 0);
+	assert.equal(getOrdersMeta({ ...playerState, orders_total_count: 0, tutorial: { active: true, queue: ["intro_order"] } }).tutorialReplayAvailable, false);
 });
 
 test("Orders: depleted day marker keeps board complete for the rest of the day", () => {

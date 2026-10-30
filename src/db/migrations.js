@@ -7,7 +7,10 @@ export function ensureRuntimeSchemaColumns(db) {
     ["weekly_giveaways", "valor_confirmation_message_id", "TEXT"],
     ["weekly_giveaways", "posting_started_at", "INTEGER"],
     ["scheduled_game_updates", "attempt_channel_id", "TEXT"],
-    ["scheduled_game_updates", "attempt_canary", "INTEGER"]
+    ["scheduled_game_updates", "attempt_canary", "INTEGER"],
+    ["scheduled_message_delivery", "attempt_channel_id", "TEXT"],
+    ["game_update_season_state", "attempt_channel_id", "TEXT"],
+    ["game_update_season_state", "attempt_canary", "INTEGER"]
   ];
   const migrate = db.transaction(() => {
     for (const [table, column, definition] of additions) {

@@ -28,6 +28,7 @@ import {
   completeSharedOrder,
   contributeToSharedOrder,
   getSharedOrderContributions,
+  getSharedOrderMemberCaps,
   joinParty,
   inviteUserToParty,
   leaveParty,
@@ -225,6 +226,42 @@ test("Shared order: contribution is capped per active member across ingredient t
     .reduce((sum, row) => sum + row.quantity, 0), 6);
   completeSharedOrder(db, sharedOrderId);
   assert.equal(db.prepare("SELECT status FROM shared_orders WHERE shared_order_id = ?").get(sharedOrderId).status, "completed");
+  db.close();
+});
+
+test("Shared order: member caps stay even unless the ingredient-type limit would make the order unfinishable", () => {
+  assert.deepEqual(getSharedOrderMemberCaps({ totalRequiredUnits: 11, memberCount: 3 }), [4, 4, 3]);
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [4, 4, 4], memberCount: 3, ingredientLimit: 2 }), [4, 4, 4]);
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [5, 5], memberCount: 2, ingredientLimit: 1 }), [5, 5]);
+
+  // 5 broth + 5 noodles, three members who can each supply one ingredient type: an even 4/3/3 split cannot finish.
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [5, 5], memberCount: 3, ingredientLimit: 1 }), [5, 4, 4]);
+
+  // A single member can never cover two ingredient types, so the unit cap is not what blocks completion.
+  assert.deepEqual(getSharedOrderMemberCaps({ ingredientRequirements: [5, 5], memberCount: 1, ingredientLimit: 1 }), [10]);
+});
+
+test("Shared order: unit caps and ingredient-type limits can both be satisfied to finish the order", dbTestOpts, () => {
+  const db = setupTestDb();
+  const { partyId } = createParty(db, "server1", "leader1", "Test Party");
+  joinParty(db, "server1", partyId, "user2");
+  joinParty(db, "server1", partyId, "user3");
+  const { sharedOrderId } = createSharedOrder(db, partyId, "butter_noodles", "server1", 5);
+  const limits = { maxIngredientSlots: 1, ingredientRequirements: [5, 5], memberIngredientLimit: 1 };
+
+  assert.throws(
+    () => contributeToSharedOrder(db, sharedOrderId, "leader1", "broth", 6, limits),
+    (error) => error.code === "SHARED_ORDER_MEMBER_CAP"
+  );
+  contributeToSharedOrder(db, sharedOrderId, "leader1", "broth", 5, limits);
+  contributeToSharedOrder(db, sharedOrderId, "user2", "noodles", 4, limits);
+  contributeToSharedOrder(db, sharedOrderId, "user3", "noodles", 1, limits);
+
+  const totals = getSharedOrderContributions(db, sharedOrderId).reduce((acc, row) => {
+    acc[row.ingredient_id] = (acc[row.ingredient_id] ?? 0) + row.quantity;
+    return acc;
+  }, {});
+  assert.deepEqual(totals, { broth: 5, noodles: 5 });
   db.close();
 });
 

@@ -1,16 +1,18 @@
 const DISCORD_SNOWFLAKE = /^\d{17,20}$/;
 const DELIVERY_STALE_AFTER_MS = 10 * 60 * 1000;
 
-export function claimScheduledMessageDelivery(db, jobId, now = Date.now()) {
+export function claimScheduledMessageDelivery(db, jobId, now = Date.now(), channelId = null) {
+  const attemptChannelId = DISCORD_SNOWFLAKE.test(String(channelId ?? "")) ? String(channelId) : null;
   const result = db.prepare(`
-    INSERT INTO scheduled_message_delivery (job_id, status, attempt_started_at, updated_at)
-    VALUES (?, 'sending', ?, ?)
+    INSERT INTO scheduled_message_delivery (job_id, status, attempt_started_at, attempt_channel_id, updated_at)
+    VALUES (?, 'sending', ?, ?, ?)
     ON CONFLICT(job_id) DO UPDATE SET
       status = 'sending',
       attempt_started_at = excluded.attempt_started_at,
+      attempt_channel_id = excluded.attempt_channel_id,
       updated_at = excluded.updated_at
     WHERE scheduled_message_delivery.status = 'sent'
-  `).run(String(jobId), now, now);
+  `).run(String(jobId), now, attemptChannelId, now);
   return result.changes === 1;
 }
 
@@ -67,9 +69,7 @@ export function reconcileScheduledDelivery(db, {
   recordId,
   resolution,
   messageId,
-  channelId,
   verifiedAbsent = false,
-  canary = false,
   now = Date.now()
 } = {}) {
   if (!db) throw new Error("Database is required");
@@ -85,22 +85,22 @@ export function reconcileScheduledDelivery(db, {
   if (resolution === "delivered" && !DISCORD_SNOWFLAKE.test(resolvedMessageId)) {
     return { ok: false, reason: "invalid_message_id" };
   }
-  const resolvedChannelId = String(channelId ?? "").trim();
 
   return db.transaction(() => {
     if (type === "scheduled_message") {
       const row = db.prepare(
-        "SELECT status FROM scheduled_message_delivery WHERE job_id = ?"
+        "SELECT status, attempt_channel_id FROM scheduled_message_delivery WHERE job_id = ?"
       ).get(id);
       if (row?.status !== "delivery_unknown") return { ok: false, reason: "not_unknown" };
       if (resolution === "delivered") {
-        if (!DISCORD_SNOWFLAKE.test(resolvedChannelId)) {
-          return { ok: false, reason: "invalid_channel_id" };
+        const attemptChannelId = String(row.attempt_channel_id ?? "");
+        if (!DISCORD_SNOWFLAKE.test(attemptChannelId)) {
+          return { ok: false, reason: "missing_attempt_provenance" };
         }
         const updated = db.prepare(`
           UPDATE scheduled_message_delivery SET status = 'sent', updated_at = ?
-          WHERE job_id = ? AND status = 'delivery_unknown'
-        `).run(now, id);
+          WHERE job_id = ? AND status = 'delivery_unknown' AND attempt_channel_id = ?
+        `).run(now, id, attemptChannelId);
         if (updated.changes !== 1) return { ok: false, reason: "not_unknown" };
         db.prepare(`
           INSERT INTO scheduled_message_state (job_id, channel_id, message_id, updated_at)
@@ -109,7 +109,7 @@ export function reconcileScheduledDelivery(db, {
             channel_id = excluded.channel_id,
             message_id = excluded.message_id,
             updated_at = excluded.updated_at
-        `).run(id, resolvedChannelId, resolvedMessageId, now);
+        `).run(id, attemptChannelId, resolvedMessageId, now);
       } else {
         const deleted = db.prepare("DELETE FROM scheduled_message_delivery WHERE job_id = ? AND status = 'delivery_unknown'").run(id);
         if (deleted.changes !== 1) return { ok: false, reason: "not_unknown" };
@@ -164,16 +164,30 @@ export function reconcileScheduledDelivery(db, {
 
     if (type === "season_update") {
       const row = db.prepare(
-        "SELECT status FROM game_update_season_state WHERE guild_id = ?"
+        "SELECT status, attempt_channel_id, attempt_canary FROM game_update_season_state WHERE guild_id = ?"
       ).get(id);
       if (row?.status !== "delivery_unknown") return { ok: false, reason: "not_unknown" };
-      const status = resolution === "delivered"
-        ? (canary ? "canary_previewed" : "sent")
-        : "pending";
+      if (resolution === "not_delivered") {
+        const result = db.prepare(`
+          UPDATE game_update_season_state
+          SET status = 'pending', message_id = NULL, attempt_channel_id = NULL, attempt_canary = NULL, updated_at = ?
+          WHERE guild_id = ? AND status = 'delivery_unknown'
+        `).run(now, id);
+        if (result.changes !== 1) return { ok: false, reason: "not_unknown" };
+        return { ok: true, status: "pending" };
+      }
+      if (
+        !DISCORD_SNOWFLAKE.test(String(row.attempt_channel_id ?? ""))
+        || ![0, 1].includes(row.attempt_canary)
+      ) {
+        return { ok: false, reason: "missing_attempt_provenance" };
+      }
+      const status = row.attempt_canary === 1 ? "canary_previewed" : "sent";
       const result = db.prepare(`
         UPDATE game_update_season_state SET status = ?, message_id = ?, updated_at = ?
         WHERE guild_id = ? AND status = 'delivery_unknown'
-      `).run(status, resolution === "delivered" ? resolvedMessageId : null, now, id);
+          AND attempt_channel_id = ? AND attempt_canary = ?
+      `).run(status, resolvedMessageId, now, id, row.attempt_channel_id, row.attempt_canary);
       if (result.changes !== 1) return { ok: false, reason: "not_unknown" };
       return { ok: true, status };
     }
