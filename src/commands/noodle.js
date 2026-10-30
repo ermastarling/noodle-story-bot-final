@@ -2409,8 +2409,8 @@ function noodleProfileEditRow(userId, { specializationsAvailable = false } = {})
     new ButtonBuilder().setCustomId(`noodle:profile:edit_shop_name:${userId}`).setLabel("Shop Name").setEmoji(getButtonEmoji("note")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:profile:edit_tagline:${userId}`).setLabel("Tagline").setEmoji(getButtonEmoji("tag")).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`noodle:nav:specialize:${userId}`).setLabel("Specializations").setEmoji(getButtonEmoji("sparkle")).setStyle(specializationsAvailable ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`noodle:action:store:${userId}`).setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`noodle:nav:badges:${userId}`).setLabel("Badges").setEmoji(getButtonEmoji("badges")).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`noodle:nav:badges:${userId}`).setLabel("Badges").setEmoji(getButtonEmoji("badges")).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`noodle:action:store:${userId}`).setLabel("Store").setEmoji(getButtonEmoji("cart")).setStyle(ButtonStyle.Success)
   );
 }
 
@@ -2563,6 +2563,20 @@ new ButtonBuilder().setCustomId(`noodle:nav:pantry:${userId}`).setLabel("Pantry"
 new ButtonBuilder().setCustomId(`noodle:nav:profile:${userId}`).setLabel("Profile").setEmoji(getButtonEmoji("profile")).setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId(`noodle:nav:orders:${userId}`).setLabel("Back").setEmoji(getButtonEmoji("back")).setStyle(ButtonStyle.Secondary)
 );
+}
+
+// Keeps the board's action rows on an all-failed serve so the player is never left without buttons.
+function buildServeFailurePayload({ userId, embed, hasAcceptedOrders = false, useV2 = true } = {}) {
+  const payload = {
+    content: " ",
+    components: [
+      noodleOrdersActionRow(userId, { highlightAccept: false, disableServe: !hasAcceptedOrders }),
+      noodleMainMenuRow(userId)
+    ],
+    mainComponents: legacyEmbedsToV2TextComponentsForLegacy([embed]),
+    notices: []
+  };
+  return useV2 ? convertLegacyEmbedPayloadToComponentsV2(payload) : payload;
 }
 
 function noodleOrdersActionRow(userId, { highlightAccept = true, disableAccept = false, disableServe = false } = {}) {
@@ -14610,19 +14624,12 @@ ${lines.join("\n")}`;
         description: failLines.join("\n"),
         user: interaction.member ?? interaction.user
       });
-      const failPayload = {
-        content: " ",
-        components: [
-          noodleOrdersActionRow(userId, { highlightAccept: false, disableServe: !Object.keys(acceptedMap).length }),
-          noodleMainMenuRow(userId)
-        ],
-        mainComponents: legacyEmbedsToV2TextComponentsForLegacy([failEmbed]),
-        notices: []
-      };
-      if (isComponentsV2Enabled({ guildId: serverId, userId, player: p })) {
-        return commitState(convertLegacyEmbedPayloadToComponentsV2(failPayload));
-      }
-      return commitState(failPayload);
+      return commitState(buildServeFailurePayload({
+        userId,
+        embed: failEmbed,
+        hasAcceptedOrders: Object.keys(acceptedMap).length > 0,
+        useV2: isComponentsV2Enabled({ guildId: serverId, userId, player: p })
+      }));
     }
 
     if (servedCount > 0) {
@@ -18881,5 +18888,7 @@ export {
   buildMainAndNoticesFromEmbeds as buildMainAndNoticesFromEmbedsForTest,
   resolveComponentNavSub,
   applyPersistentNoticeCards as applyPersistentNoticeCardsForTest,
-  convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest
+  convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest,
+  buildServeFailurePayload as buildServeFailurePayloadForTest,
+  noodleProfileEditRow as noodleProfileEditRowForTest
 };

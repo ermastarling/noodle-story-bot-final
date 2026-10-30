@@ -168,3 +168,25 @@ test("Daily order generation uses selected menu without rewriting accepted-order
     recipe_id: "classic_soy_ramen"
   });
 });
+
+function findButtons(node, out = []) {
+  if (!node || typeof node !== "object") return out;
+  if (node.type === 2) out.push(node);
+  for (const child of node.components ?? []) findButtons(child, out);
+  return out;
+}
+
+for (const [name, options] of [
+  ["normal", {}],
+  ["draft with save button", { showSaveButton: true, draftSelectionCount: 2 }],
+  ["empty picker", { pickerRows: [] }],
+  ["empty picker with save button", { pickerRows: [], showSaveButton: true }]
+]) {
+  test(`Daily order menu always has an owner-scoped Back button to the orders board (${name})`, () => {
+    const userId = "12345678901234567";
+    const payload = buildDailyMenuV2Message({ userId, ...options });
+    const back = findButtons(payload.components?.[0]).filter((b) => b.label === "Back");
+    assert.equal(back.length, 1);
+    assert.equal(back[0].custom_id, `noodle:nav:orders:${userId}`);
+  });
+}
