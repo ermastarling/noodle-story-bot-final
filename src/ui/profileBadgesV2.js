@@ -66,7 +66,7 @@ export function buildProfileBadgesV2Message({
           type: 2,
           style: isSelected ? 3 : 2,
           label: isSelected ? "Equipped" : "Equip",
-          custom_id: `noodle:action:badge_toggle:${safeUserId}:${safeCategory}:${id}`,
+          custom_id: `noodle:action:badge_toggle:${safeUserId}:${safeCategory}:${id}:${safePage}`,
           ...(normalizeComponentEmoji(getButtonEmoji(isSelected ? "status_complete" : "badges"))
             ? { emoji: normalizeComponentEmoji(getButtonEmoji(isSelected ? "status_complete" : "badges")) }
             : {})

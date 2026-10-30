@@ -81,7 +81,7 @@ test("Badges menu provides category tabs, equipped state, pagination, and Custom
   assert.match(text, /Page 2\/2/);
   assert.match(text, /achievement_10/);
   assert.match(text, /badge_category:12345678901234567:collections/);
-  assert.match(text, /badge_toggle:12345678901234567:achievements:achievement_10/);
+  assert.match(text, /badge_toggle:12345678901234567:achievements:achievement_10:1\b/);
   assert.match(text, /Select the badges you want to display on your profile!/);
   assert.equal((text.match(/1\/7 equipped in \*\*Achievements\*\*/g) ?? []).length, 1);
   assert.match(text, /-# Page 2\/2/);
