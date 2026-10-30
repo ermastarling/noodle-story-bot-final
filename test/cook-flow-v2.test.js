@@ -314,3 +314,27 @@ test("Cook flow V2: standard and counter-cook flows use quantity-aware turn scal
     "counter-cook should still preserve its own flow flag"
   );
 });
+
+test("Cook flow V2: staff quality and fail-reduction bonuses apply to minigame outcomes", () => {
+  const run = (effects) => resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 10,
+    minigameScore: 5,
+    minigameTurns: 10,
+    rollBatchOutcomeFn: () => {
+      throw new Error("random roll should not execute in v2 minigame flow");
+    },
+    rollBatchOutcomeArgs: { tier: "rare", effects, rng: () => 0, blessing: null }
+  });
+
+  const base = run({});
+  assert.equal(base.failed, 3);
+  assert.equal(base.qualityCounts.good, 5);
+
+  const boosted = run({ order_quality_bonus: 0.1, rare_epic_fail_reduction: 0.05, rare_epic_quality_bonus: 0.05 });
+  assert.equal(boosted.failed, 0);
+  assert.equal(boosted.success, 10);
+  assert.ok((boosted.qualityCounts.excellent ?? 0) > 0);
+  const total = Object.values(boosted.qualityCounts).reduce((sum, v) => sum + v, 0);
+  assert.equal(total, 10);
+});

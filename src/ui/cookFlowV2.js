@@ -1,4 +1,5 @@
 import { buildComponentsV2MenuPayload } from "./componentsV2.js";
+import { applyStaffBonusesToMinigameOutcome } from "../game/cooking.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
@@ -203,7 +204,7 @@ export function resolveCookOutcomeForFlow({
   const bias = normalizeBias(qualityBias || perf.qualityBias);
   const qualityCounts = buildQualityCountsForBias({ success, bias });
 
-  return {
+  const baseOutcome = {
     success,
     failed,
     salvage: 0,
@@ -211,6 +212,14 @@ export function resolveCookOutcomeForFlow({
     qualityBias: bias,
     performance: perf
   };
+  const args = rollBatchOutcomeArgs ?? {};
+  if (typeof args.rng !== "function") return baseOutcome;
+  return applyStaffBonusesToMinigameOutcome(baseOutcome, {
+    tier: args.tier,
+    effects: args.effects,
+    rng: args.rng,
+    blessing: args.blessing
+  });
 }
 
 export function buildCookRecipePickerV2Message({
