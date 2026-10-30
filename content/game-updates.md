@@ -38,8 +38,8 @@ rollout_summary: true
 
 > • A **Work Ping** now appears every two hours in the Official Server to remind you to use `/work` and earn VALOR (server xp).
 
-> • The Official Server's **Counting Channel** is open: count with the community and reach special milestones to earn coins, REP, SXP, and recipe clues for your shop. A wrong number sends everyone back to 1, so count carefully!
-
 > • Adjustments were made to shared orders: Shared orders limit how much one party member can contribute, so everyone gets a fair chance to help your party finish together.
 
 > • Recipe wording updated, it now says **Discovered** to better match how you find new recipes.
+
+> • **Coming soon:** a **Counting Channel** in the Official Server where the community counts together and reaches milestones for coins, REP, SXP, and recipe clues. Stay tuned!
