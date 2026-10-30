@@ -19,6 +19,7 @@ For variables that accept file paths, absolute paths are honored, and relative p
 ## Optional Developer Alert Env Vars
 
 - `NOODLE_DEV_GUILD_ID` (falls back to `DISCORD_GUILD_ID`) - guild where `/noodle-dev` is registered and allowed
+- `NOODLE_SKIP_DB` - set `1` to skip opening the SQLite database (state stays in memory); used by tests and command registration, never set in production
 - `NOODLE_COMPONENTS_V2_ENABLED` - set `1` to enable Components V2 menus for every server and player (global kill switch; never scoped to the official/dev guild)
 - `NOODLE_COMPONENTS_V2_TUTORIAL_ENABLED` - set `0` to keep tutorial-active users on V1; default allows tutorial users onto V2 paths unless explicitly disabled
 - `NOODLE_COMPONENTS_V2_TUTORIAL_USER_ALLOWLIST` - optional comma-separated tutorial-active user IDs allowed onto V2 while tutorial gate is off
