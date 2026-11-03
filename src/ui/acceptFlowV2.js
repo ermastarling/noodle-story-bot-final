@@ -1,10 +1,11 @@
 import { buildComponentsV2MenuPayload } from "./componentsV2.js";
+import { getButtonEmoji, normalizeComponentEmoji } from "./icons.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
 }
 
-function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, disabled = false } = {}) {
+function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, disabled = false, emoji = null } = {}) {
   const customId = arg
     ? `noodle:v2:${sceneKey}:${actionKey}:${userId}:${token}:${arg}`
     : `noodle:v2:${sceneKey}:${actionKey}:${userId}:${token}`;
@@ -13,7 +14,8 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
     style,
     label,
     custom_id: customId,
-    disabled: Boolean(disabled)
+    disabled: Boolean(disabled),
+    ...(emoji ? { emoji } : {})
   };
 }
 
@@ -116,8 +118,8 @@ export function buildAcceptPickerV2Message({
   const paginationRowTemplate = {
     type: 1,
     components: [
-      button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2 }),
-      button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2 })
+      button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2, emoji: normalizeComponentEmoji(getButtonEmoji("back")) }),
+      button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2, emoji: normalizeComponentEmoji(getButtonEmoji("next")) })
     ]
   };
   const overflowLineTemplate = text("_...and 1 more order(s)._");

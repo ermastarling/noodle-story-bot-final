@@ -1,11 +1,12 @@
 import { buildComponentsV2MenuPayload } from "./componentsV2.js";
 import { applyStaffBonusesToMinigameOutcome } from "../game/cooking.js";
+import { getButtonEmoji, normalizeComponentEmoji } from "./icons.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
 }
 
-function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, disabled = false } = {}) {
+function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, disabled = false, emoji = null } = {}) {
   const customId = arg
     ? `noodle:v2:${sceneKey}:${actionKey}:${userId}:${token}:${arg}`
     : `noodle:v2:${sceneKey}:${actionKey}:${userId}:${token}`;
@@ -14,7 +15,8 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
     style,
     label,
     custom_id: customId,
-    disabled: Boolean(disabled)
+    disabled: Boolean(disabled),
+    ...(emoji ? { emoji } : {})
   };
 }
 
@@ -179,6 +181,7 @@ export function buildQualityCountsForBias({ success = 0, bias = "good" } = {}) {
 export function resolveCookOutcomeForFlow({
   v2MinigameCook = false,
   batchOutput = 0,
+  baseQuantity = null,
   minigameScore = 0,
   minigameTurns = 1,
   successBowlsOverride,
@@ -191,16 +194,21 @@ export function resolveCookOutcomeForFlow({
     return rollBatchOutcomeFn(rollBatchOutcomeArgs);
   }
 
+  // Performance only decides the bowls the player paid ingredients for; bonus bowls (e.g. Prep bonus) are never failures.
+  const paidBowls = baseQuantity == null
+    ? safeBatchOutput
+    : Math.max(0, Math.min(safeBatchOutput, Math.floor(Number(baseQuantity) || 0)));
+  const bonusBowls = safeBatchOutput - paidBowls;
   const perf = deriveCookMinigamePerformance({
     score: minigameScore,
     totalTurns: minigameTurns,
-    quantity: safeBatchOutput
+    quantity: paidBowls
   });
   const resolvedSuccess = Number.isFinite(successBowlsOverride)
-    ? Math.max(0, Math.min(safeBatchOutput, Math.floor(Number(successBowlsOverride))))
-    : perf.successBowls;
-  const success = Math.max(0, Math.min(safeBatchOutput, resolvedSuccess));
-  const failed = Math.max(0, safeBatchOutput - success);
+    ? Math.max(0, Math.min(paidBowls, Math.floor(Number(successBowlsOverride))))
+    : Math.min(paidBowls, perf.successBowls);
+  const failed = Math.max(0, paidBowls - resolvedSuccess);
+  const success = resolvedSuccess + bonusBowls;
   const bias = normalizeBias(qualityBias || perf.qualityBias);
   const qualityCounts = buildQualityCountsForBias({ success, bias });
 
@@ -255,13 +263,15 @@ export function buildCookRecipePickerV2Message({
     const short = Math.max(0, Math.floor(Number(entry?.short) || 0));
     const descParts = [`${tier}`, `ready ${ready}`, `max ${cookable}`];
     if (short > 0) descParts.push(`cook ${short}`);
-    const description = descParts.join(" • ").slice(0, 100);
+    const description = String(entry?.optionDescription || descParts.join(" • ")).slice(0, 100);
+    const emoji = cookable > 0 ? normalizeComponentEmoji(getButtonEmoji("status_complete")) : null;
 
     return {
-      label: recipeName.slice(0, 100),
+      label: String(entry?.optionLabel || recipeName).slice(0, 100),
       value: recipeId,
       description,
-      default: recipeId === selectedId
+      default: recipeId === selectedId,
+      ...(emoji ? { emoji } : {})
     };
   }).filter((option) => Boolean(option.value));
 
@@ -312,8 +322,8 @@ export function buildCookRecipePickerV2Message({
       components.push({
         type: 1,
         components: [
-          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2 }),
-          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2 })
+          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2, emoji: normalizeComponentEmoji(getButtonEmoji("back")) }),
+          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2, emoji: normalizeComponentEmoji(getButtonEmoji("next")) })
         ]
       });
     }

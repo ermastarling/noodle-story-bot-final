@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { dedupeComponentCustomIds, normalizeRawContainerPayload } from "../src/util/rawPayload.js";
+import { normalizeComponentsForTest } from "../src/commands/noodle.js";
 import { buildProfileBadgesV2Message } from "../src/ui/profileBadgesV2.js";
 
 function collectIds(node, out = []) {
@@ -65,4 +66,27 @@ test("Badges V2: a two-page menu produces unique custom ids once normalized for 
   assert.equal(new Set(ids).size, ids.length);
   const nextId = ids.find((id) => id.startsWith("noodle:nav:badges:u1:1:badges:"));
   assert.ok(nextId, "deduped button keeps the original route prefix");
+});
+
+test("Legacy nav rows: a two-page menu keeps both Prev and Next with unique ids that still route to the same page", () => {
+  const userId = "123456789012345678";
+  const [row] = normalizeComponentsForTest([
+    {
+      type: 1,
+      components: [
+        { type: 2, style: 2, label: "Prev", custom_id: `noodle:nav:buy:${userId}:1` },
+        { type: 2, style: 2, label: "Next", custom_id: `noodle:nav:buy:${userId}:1` }
+      ]
+    }
+  ], 0);
+  const ids = row.components.map((c) => c.custom_id);
+  assert.deepEqual(row.components.map((c) => c.label), ["Prev", "Next"]);
+  assert.equal(new Set(ids).size, 2);
+  for (const id of ids) {
+    assert.ok(id.length <= 100);
+    const parts = id.split(":");
+    assert.deepEqual(parts.slice(0, 3), ["noodle", "nav", "buy"]);
+    assert.equal(parts[3], userId);
+    assert.equal(Number(parts[4]), 1);
+  }
 });

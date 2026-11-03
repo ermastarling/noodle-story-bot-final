@@ -21,6 +21,18 @@ function matchesCriteria(player, criteria) {
   return false;
 }
 
+export function getAchievementProgress(player, criteria) {
+  const threshold = Number(criteria?.threshold);
+  if (!Number.isSafeInteger(threshold) || threshold < 1) return null;
+  const value = getByPath(player, criteria.path);
+  let current = null;
+  if (criteria.type === "metric") current = Number(value);
+  else if (criteria.type === "array_length") current = Array.isArray(value) ? value.length : 0;
+  else if (criteria.type === "distinct") current = value && typeof value === "object" ? Object.keys(value).length : 0;
+  if (!Number.isFinite(current)) return current === null ? null : { current: 0, threshold };
+  return { current: Math.max(0, Math.min(Math.floor(current), threshold)), threshold };
+}
+
 export function validateAchievementsContent(content) {
   if (!Array.isArray(content?.achievements)) {
     throw new Error("Achievements content must include an achievements array");

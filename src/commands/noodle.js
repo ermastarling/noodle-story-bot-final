@@ -188,6 +188,7 @@ import {
   claimAchievementReward,
   evaluatePlayerAchievements,
   getAchievementPage,
+  getAchievementProgress,
   getVisibleAchievements
 } from "../game/achievements.js";
 import {
@@ -1622,17 +1623,15 @@ function buildHelpPage({ page, userId, user }) {
       .setCustomId(`noodle:help:page:${userId}:${prevPage}`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!hasMultiplePages),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:help:page:${userId}:${nextPage}`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!hasMultiplePages)
   );
 
-  const rows = [row];
+  const rows = hasMultiplePages ? [row] : [];
   if (current.supportUrl) {
     const supportRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -2529,12 +2528,12 @@ function noodleNewsPageRow(userId, page = 0, totalPages = 1) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:news:${userId}:${prevPage}`)
-      .setLabel("Prev Update")
+      .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:news:${userId}:${nextPage}`)
-      .setLabel("Next Update")
+      .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
   );
@@ -4364,16 +4363,10 @@ function normalizeComponentsRows(rows, flags = 0) {
     if (!row) continue;
     const baseRow = row.toJSON?.() ?? row;
     const rawComponents = baseRow.components ?? row.components ?? [];
-    const seenIds = new Set();
+    // Duplicate custom_ids are made unique by dedupeComponentCustomIds; dropping them here would lose Next on 2-page menus.
     const mapped = (rawComponents || [])
       .map((comp) => comp?.toJSON?.() ?? comp)
-      .filter((comp) => {
-        if (!comp) return false;
-        const cid = comp.custom_id ?? comp.customId ?? null;
-        if (cid && seenIds.has(cid)) return false;
-        if (cid) seenIds.add(cid);
-        return true;
-      });
+      .filter(Boolean);
     if (!mapped.length) continue;
     normalized.push({ type: 1, components: mapped });
   }
@@ -6177,6 +6170,18 @@ function resolveTutorialCookRecipeId(player) {
   return knownRecipeIds[0] ?? "";
 }
 
+function buildCookIngredientOptionDescription(p, relevantIngredients, cookable) {
+  const ingTokens = relevantIngredients.map((ing) => {
+    const have = Math.max(0, p.inv_ingredients?.[ing.item_id] ?? 0);
+    const base = `${displayItemName(ing.item_id)}:${have}`;
+    return isIngredientOptionalForPlayer(p, ing) ? `${base} (opt)` : base;
+  });
+  const descRaw = ingTokens.length
+    ? `${ingTokens.join(" · ")} | Max ${cookable}`
+    : `Max ${cookable}`;
+  return descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
+}
+
 function buildCookRecipePickerSceneEntries({ p, s }) {
   const available = getValidAvailableRecipeIds(p);
   const seasonFiltered = available.filter((rid) => {
@@ -6212,10 +6217,13 @@ function buildCookRecipePickerSceneEntries({ p, s }) {
     const ready = getTotalBowlsForRecipe(p, recipeId);
     const short = Math.max(0, need - ready);
     const needLine = short > 0 ? ` • needs **${short}**` : "";
+    const optionLabelRaw = recipe ? `${recipe.name} (${recipe.tier})` : recipeName;
 
     return {
       recipeId,
       recipeName,
+      optionLabel: optionLabelRaw.length > 100 ? optionLabelRaw.slice(0, 97) + "…" : optionLabelRaw,
+      optionDescription: buildCookIngredientOptionDescription(p, relevantIngredients, cookable),
       tier: String(recipe?.tier ?? "standard"),
       need,
       ready,
@@ -6625,169 +6633,6 @@ function buildCookMinigameScenePayload({
     tutorialMode: safeTutorialMode,
     coachingLine: safeCoachingLine
   });
-}
-
-function buildCookPickerPayload({ userId, p, s, ownerUser, page = 0 }) {
-  const hasAcceptedOrders = Object.keys(p.orders?.accepted ?? {}).length > 0;
-  const { availableCount } = getOrdersMeta(p);
-  const remainingOrders = availableCount;
-  const disableAccept = remainingOrders === 0;
-  const highlightAccept = !hasAcceptedOrders && !disableAccept;
-  const available = getValidAvailableRecipeIds(p);
-  const seasonFiltered = available.filter((rid) => {
-    const recipe = content.recipes?.[rid] ?? null;
-    return isRecipeCookAvailableForCurrentSeasonEvent(recipe, s);
-  });
-
-  const sortKey = (rid) => {
-    const r = content.recipes?.[rid];
-    return (r?.name ?? displayItemName(rid, content) ?? "").toLowerCase();
-  };
-
-  const sorted = [...seasonFiltered].sort((a, b) => sortKey(a).localeCompare(sortKey(b), "en", { sensitivity: "base" }));
-  const totalPages = Math.max(1, Math.ceil(sorted.length / 25));
-  const safePage = Math.min(Math.max(Number(page) || 0, 0), totalPages - 1);
-
-  const opts = sorted
-    .slice(safePage * 25, (safePage + 1) * 25)
-    .map((rid) => {
-    const r = content.recipes?.[rid];
-    const relevantIngredients = getRelevantRecipeIngredients(p, r);
-    const labelRaw = r ? `${r.name} (${r.tier})` : displayItemName(rid, content);
-    const label = labelRaw.length > 100 ? labelRaw.slice(0, 97) + "…" : labelRaw;
-
-    // Show ingredient availability and max cookable for quick glance
-    const ingTokens = relevantIngredients.map((ing) => {
-      const have = Math.max(0, p.inv_ingredients?.[ing.item_id] ?? 0);
-      const name = displayItemName(ing.item_id);
-      const base = `${name}:${have}`;
-      return isIngredientOptionalForPlayer(p, ing) ? `${base} (opt)` : base;
-    });
-
-    const maxCookable = relevantIngredients
-      .filter((ing) => !isIngredientOptionalForPlayer(p, ing) && (ing?.qty ?? 0) > 0)
-      .map((ing) => Math.floor((p.inv_ingredients?.[ing.item_id] ?? 0) / (ing.qty ?? 1)))
-      .reduce((min, cur) => Math.min(min, cur), Infinity);
-    const cookable = Number.isFinite(maxCookable) ? Math.max(0, maxCookable) : 0;
-
-    const descRaw = ingTokens.length
-      ? `${ingTokens.join(" · ")} | Max ${cookable}`
-      : `Max ${cookable}`;
-    const description = descRaw.length > 100 ? descRaw.slice(0, 97) + "…" : descRaw;
-
-    const option = { label, value: rid, description };
-    if (cookable > 0) {
-      const emoji = getButtonEmoji("status_complete");
-      if (emoji) option.emoji = emoji;
-    }
-
-    return option;
-  });
-
-  if (!opts.length) {
-    const msg = available.length > 0
-      ? "You don’t have any recipes available to cook this season."
-      : "You don’t know any recipes yet.";
-    return { content: msg, ephemeral: true };
-  }
-
-  // Show what needs to be cooked for accepted orders
-  const neededByRecipe = {};
-  Object.values(p.orders?.accepted ?? {}).forEach((entry) => {
-    const recipeId = entry?.order?.recipe_id;
-    if (!recipeId) return;
-    neededByRecipe[recipeId] = (neededByRecipe[recipeId] ?? 0) + 1;
-  });
-
-  const cookNeedLines = Object.entries(neededByRecipe)
-    .map(([recipeId, need]) => {
-      const ready = getTotalBowlsForRecipe(p, recipeId);
-      const short = Math.max(0, need - ready);
-      if (short <= 0) return null; // hide recipes already ready
-      const recipeName = displayRecipeName(recipeId);
-      const line = `• ${recipeName} — need **${need}**, ready **${ready}** (cook **${short}** more)`;
-      return { short, line, recipeName };
-    })
-    .filter(Boolean);
-
-  cookNeedLines.sort((a, b) => {
-    if (b.short !== a.short) return b.short - a.short;
-    return a.recipeName.localeCompare(b.recipeName);
-  });
-
-  const cookNeedsText = cookNeedLines.length
-    ? `${getIcon("cook")} Accepted orders to cook:\n${cookNeedLines
-        .slice(0, 6)
-        .map((x) => x.line)
-        .join("\n")}${cookNeedLines.length > 6 ? "\n…" : ""}`
-    : "";
-
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`noodle:pick:cook_select:${userId}:${safePage}:${Date.now().toString(36)}`)
-    .setPlaceholder("Select a recipe to cook")
-    .setMinValues(1)
-    .setMaxValues(1)
-    .addOptions(opts);
-
-  const cookEmbed = buildMenuEmbed({
-    title: `${getIcon("cook")} Cook`,
-    description: totalPages > 1
-      ? `Select a recipe to cook:\n(page ${safePage + 1}/${totalPages})`
-      : "Select a recipe to cook:",
-    user: ownerUser
-  });
-
-  if (cookNeedsText) {
-    const baseDesc = cookEmbed?.data?.description ?? cookEmbed?.description ?? "";
-    const combined = baseDesc ? `${baseDesc}\n\n${cookNeedsText}` : cookNeedsText;
-    cookEmbed.setDescription(combined);
-  }
-
-  const showOrdersActions = resolveTutorialGateValue({
-    player: p,
-    gate: "cookPickerShowOrdersActions",
-    fallbackValue: true
-  });
-  const navRow = totalPages > 1
-    ? new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`noodle:pick:cook:${userId}:${safePage <= 0 ? totalPages - 1 : safePage - 1}`)
-          .setLabel("Prev")
-          .setEmoji(getButtonEmoji("back"))
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(false),
-        new ButtonBuilder()
-          .setCustomId(`noodle:pick:cook:${userId}:${safePage >= totalPages - 1 ? 0 : safePage + 1}`)
-          .setLabel("Next")
-          .setEmoji(getButtonEmoji("next"))
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(false)
-      )
-    : null;
-
-  const components = [];
-  components.push(new ActionRowBuilder().addComponents(menu));
-  if (navRow) components.push(navRow);
-  if (showOrdersActions) {
-    components.push(noodleOrdersActionRowWithBack(userId, {
-      highlightAccept,
-      disableAccept,
-      disableServe: !hasAcceptedOrders
-    }));
-  }
-
-  return {
-    content: " ",
-    ...buildComponentsV2PayloadWithNoticeCards({
-      mainComponents: [
-        ...legacyEmbedsToV2TextComponentsForLegacy([cookEmbed]),
-        ...normalizeComponents(components, 0)
-      ],
-      notices: [],
-      ownerId: userId,
-      includeGreenButtonTip: false
-    })
-  };
 }
 
 function getTakeoutRecipeNeedRows(player, takeoutState) {
@@ -11038,25 +10883,29 @@ if (sub === "recipes") {
   const hasMultiplePages = totalPages > 1;
   const prevPage = page <= 0 ? totalPages - 1 : page - 1;
   const nextPage = page >= totalPages - 1 ? 0 : page + 1;
-  const navRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:recipes:${userId}:${prevPage}`)
-      .setLabel("Prev")
-      .setEmoji(getButtonEmoji("back"))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!hasMultiplePages),
-    new ButtonBuilder()
-      .setCustomId(`noodle:nav:recipes:${userId}:${nextPage}`)
-      .setLabel("Next")
-      .setEmoji(getButtonEmoji("next"))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!hasMultiplePages),
+  const navButtons = [];
+  if (hasMultiplePages) {
+    navButtons.push(
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:recipes:${userId}:${prevPage}`)
+        .setLabel("Prev")
+        .setEmoji(getButtonEmoji("back"))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`noodle:nav:recipes:${userId}:${nextPage}`)
+        .setLabel("Next")
+        .setEmoji(getButtonEmoji("next"))
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+  navButtons.push(
     new ButtonBuilder()
       .setCustomId(`noodle:nav:recipes:${userId}:clues`)
       .setLabel("Clues")
       .setEmoji(getButtonEmoji("scroll"))
       .setStyle(isCluePage ? ButtonStyle.Primary : ButtonStyle.Secondary)
   );
+  const navRow = new ActionRowBuilder().addComponents(...navButtons);
 
   return commit({
     content: " ",
@@ -11119,14 +10968,12 @@ if (sub === "regulars") {
       .setCustomId(`noodle:nav:regulars:${userId}:${page <= 0 ? totalPages - 1 : page - 1}`)
       .setLabel("Prev")
       .setEmoji(getButtonEmoji("back"))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(totalPages <= 1),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`noodle:nav:regulars:${userId}:${page >= totalPages - 1 ? 0 : page + 1}`)
       .setLabel("Next")
       .setEmoji(getButtonEmoji("next"))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(totalPages <= 1)
   );
 
   return commit({
@@ -12211,17 +12058,22 @@ const lockedPayload = await withLock(db, `lock:user:${userId}`, owner, 8000, asy
     const category = opt.getString("category") === "claimed" ? "claimed" : "in_progress";
     const achievements = category === "claimed" ? claimedAchievements : inProgressAchievements;
     const achievementPage = getAchievementPage(achievements, opt.getInteger("page"));
+    const progressById = {};
+    for (const achievement of achievementPage.entries) {
+      const progress = getAchievementProgress(p, achievement.criteria);
+      if (progress) progressById[achievement.achievement_id] = progress;
+    }
     return commitState(buildAchievementsV2Message({
       userId,
       entries: achievementPage.entries,
       page: achievementPage.page,
       totalPages: achievementPage.totalPages,
-      visibleCount: achievements.length,
       category,
       claimedCount: claimedAchievements.length,
       inProgressCount: inProgressAchievements.length,
       unlocked: p.achievements?.unlocked ?? {},
-      claimedIds
+      claimedIds,
+      progressById
     }));
   }
 
@@ -13516,6 +13368,7 @@ ${lines.join("\n")}`;
     const outcome = resolveCookOutcomeForFlow({
       v2MinigameCook,
       batchOutput,
+      baseQuantity: qtyToCook,
       minigameScore: v2Score,
       minigameTurns: v2Turns,
       successBowlsOverride: v2SuccessBowlsOverride,
@@ -13585,14 +13438,21 @@ ${lines.join("\n")}`;
       ? `${getIcon("warning")} **Cook failure**: ${outcome.failed} bowl(s) failed. Lost: ${lostLine}. Cause: ${failCause}.${salvageLine}`
       : null;
 
+    const prepBonusLine = batchOutput > qtyToCook ? `${getIcon("bowl")} Prep bonus: **+${batchOutput - qtyToCook}** bowl(s).` : null;
+    const doubleCraftLine = doubleCrafted ? `${getIcon("sparkle")} Double craft! **+${extra}** extra bowl(s).` : null;
+    // Silent minigame cooks hand these lines back so the Cook Result can show them.
+    if (Array.isArray(overrides?.bonusLinesOut)) {
+      overrides.bonusLinesOut.push(...[prepBonusLine, doubleCraftLine, ...savedLines].filter(Boolean));
+    }
+
     const cookEmbed = buildMenuEmbed({
       title: counterCookFlow ? `${getIcon("cook")} Counter Cook` : `${getIcon("cook")} Cooked`,
       description: [
         `You cooked **${batchOutput}× ${r.name}**.`,
         qtyToCook < qty ? `${getIcon("basket")} Bowl storage limited this cook to **${qtyToCook}**.` : null,
-        batchOutput > qtyToCook ? `${getIcon("bowl")} Prep bonus: **+${batchOutput - qtyToCook}** bowl(s).` : null,
+        prepBonusLine,
         failInfo,
-        doubleCrafted ? `${getIcon("sparkle")} Double craft! **+${extra}** extra bowl(s).` : null,
+        doubleCraftLine,
         savedLines.length ? savedLines.join("\n") : null,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
@@ -15798,6 +15658,7 @@ if (v2Parsed.isV2) {
         const beforePlayer = ensurePlayer(serverId, userId);
         const beforeTotalBowlCount = getBowlCount(beforePlayer);
 
+        const cookBonusLines = [];
         if (cookAllMode) {
           const successByRecipe = allocateSuccessBowlsAcrossPlan(cookAllPlan, performance.successBowls);
           for (const row of cookAllPlan) {
@@ -15807,6 +15668,7 @@ if (v2Parsed.isV2) {
               sub: "cook",
               overrides: {
                 silentResponse: true,
+                bonusLinesOut: cookBonusLines,
                 strings: {
                   recipe: row.recipeId,
                   v2_quality_bias: performance.qualityBias
@@ -15830,6 +15692,7 @@ if (v2Parsed.isV2) {
             sub: "cook",
             overrides: {
               silentResponse: true,
+              bonusLinesOut: cookBonusLines,
               strings: {
                 recipe: recipeId,
                 v2_quality_bias: performance.qualityBias
@@ -15880,7 +15743,8 @@ if (v2Parsed.isV2) {
         `Kitchen Line score: **${performance.score}/${performance.totalTurns}** (${performance.accuracyLabel}).`,
         produced > 0
           ? `${getIcon("status_complete")} Cooked **${produced}** bowl(s).`
-          : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`
+          : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`,
+        ...cookBonusLines
       ];
       const tutorialStepAfterCook = tutorialMode ? getCurrentTutorialStep(afterPlayer) : null;
       if (tutorialMode && tutorialStepAfterCook) {
@@ -17371,16 +17235,7 @@ if (action === "cook") {
     }
   }
 
-  // select a recipe from known_recipes, then modal for qty
-  const s = ensureServer(serverId);
-  const rawPage = Number(parts[4] ?? 0);
-  const payload = buildCookPickerPayload({
-    userId,
-    p,
-    s,
-    ownerUser: interaction.member ?? interaction.user,
-    page: Number.isFinite(rawPage) ? rawPage : 0
-  });
+  const payload = buildCookRecipePickerScenePayload({ userId, p, s: ensureServer(serverId), quantity: 1 });
 
   return componentCommit(interaction, payload);
 }
@@ -18892,5 +18747,6 @@ export {
   applyPersistentNoticeCards as applyPersistentNoticeCardsForTest,
   convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest,
   buildServeFailurePayload as buildServeFailurePayloadForTest,
-  noodleProfileEditRow as noodleProfileEditRowForTest
+  noodleProfileEditRow as noodleProfileEditRowForTest,
+  normalizeComponents as normalizeComponentsForTest
 };

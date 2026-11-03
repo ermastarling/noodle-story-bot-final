@@ -51,6 +51,10 @@ function formatCountPer100(value) {
   return Number.isFinite(value) ? `${String(value)} per 100` : safe(value);
 }
 
+function code(value) {
+  return `\`${String(value).replaceAll("`", "'")}\``;
+}
+
 const REPORT_TEXT_BUDGET = 3600;
 
 export function buildReportText({
@@ -67,39 +71,39 @@ export function buildReportText({
 } = {}) {
   const metricSummary = summary && typeof summary === "object" ? summary : {};
   const lines = [
-    `Window: last ${windowHours}h`,
+    `Window: last ${code(`${windowHours}h`)}`,
     "Scope: sampled bot interactions, instrumented scheduled-job runs, and V2 diagnostics. This is measured activity, not continuous uptime or Discord availability.",
     "",
     "What was observed:",
-    `- Log records in this window: ${safe(metricSummary.recordsInWindow, "0")}`,
-    `- Bot interaction latency records: ${safe(metricSummary.interactionEventRecords, safe(metricSummary.interactions, "0"))} seen; ${safe(metricSummary.interactions, "0")} had valid durations`,
-    `- Failed interactions: ${safe(metricSummary.interactionErrors, "0")} (${formatPct(metricSummary.interactionErrorRatePct)})`,
-    `- Server response time p50 / p95: ${formatMs(metricSummary.interactionTimeP50)} / ${formatMs(metricSummary.interactionTimeP95)}`,
-    `- Interactions over the slow-event threshold: ${safe(metricSummary.slowInteractions, "0")}`,
-    `- Scheduled-job runs: ${safe(metricSummary.scheduledJobRuns, "0")} (${safe(metricSummary.successfulJobRuns, "0")} succeeded, ${safe(metricSummary.failedJobRuns, "0")} failed, ${safe(metricSummary.skippedJobRuns, "0")} skipped)`,
-    `- Hard operation/delivery failures recorded: ${safe(metricSummary.hardFailures, "0")}`,
-    `- Process start events observed: ${safe(metricSummary.processStarts, "0")}; continuous uptime: not measured`,
-    `- Discord gateway events: ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "ready")?.count, "0")} ready, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "disconnect")?.count, "0")} disconnect, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "shard_error")?.count, "0")} shard errors, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "reconnecting")?.count, "0")} reconnecting, ${safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "resume")?.count, "0")} resumed`,
-    `- V2 scene transitions / completed flows: ${safe(metricSummary.transitions, "0")} / ${safe(metricSummary.loops, "0")}`,
-    `- V2 route-error signals per 100 scene transitions: ${formatCountPer100(metricSummary.errorRatePct)} (diagnostic ratio, not a command failure rate)`,
-    `- Gate bypasses: ${safe(metricSummary.bypasses, "0")}`,
-    `- V2 average clicks per completed flow: ${safe(metricSummary.clickAvg)}`,
-    `- V2 flow elapsed p50 / p95: ${formatMs(metricSummary.loopTimeP50)} / ${formatMs(metricSummary.loopTimeP95)} (includes time between player clicks; not server latency)`,
-    `- Data collection: mode=${safe(telemetryMode)}, sample rate=${formatPct(Number(sampleRate) * 100)}`
+    `- Log records in this window: ${code(safe(metricSummary.recordsInWindow, "0"))}`,
+    `- Bot interaction latency records: ${code(safe(metricSummary.interactionEventRecords, safe(metricSummary.interactions, "0")))} seen; ${code(safe(metricSummary.interactions, "0"))} had valid durations`,
+    `- Failed interactions: ${code(safe(metricSummary.interactionErrors, "0"))} (${code(formatPct(metricSummary.interactionErrorRatePct))})`,
+    `- Server response time p50 / p95: ${code(formatMs(metricSummary.interactionTimeP50))} / ${code(formatMs(metricSummary.interactionTimeP95))}`,
+    `- Interactions over the slow-event threshold: ${code(safe(metricSummary.slowInteractions, "0"))}`,
+    `- Scheduled-job runs: ${code(safe(metricSummary.scheduledJobRuns, "0"))} (${code(safe(metricSummary.successfulJobRuns, "0"))} succeeded, ${code(safe(metricSummary.failedJobRuns, "0"))} failed, ${code(safe(metricSummary.skippedJobRuns, "0"))} skipped)`,
+    `- Hard operation/delivery failures recorded: ${code(safe(metricSummary.hardFailures, "0"))}`,
+    `- Process start events observed: ${code(safe(metricSummary.processStarts, "0"))}; continuous uptime: not measured`,
+    `- Discord gateway events: ${code(safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "ready")?.count, "0"))} ready, ${code(safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "disconnect")?.count, "0"))} disconnect, ${code(safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "shard_error")?.count, "0"))} shard errors, ${code(safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "reconnecting")?.count, "0"))} reconnecting, ${code(safe(metricSummary.gatewayEventCounts?.find((row) => row.kind === "resume")?.count, "0"))} resumed`,
+    `- V2 scene transitions / completed flows: ${code(safe(metricSummary.transitions, "0"))} / ${code(safe(metricSummary.loops, "0"))}`,
+    `- V2 route-error signals per 100 scene transitions: ${code(formatCountPer100(metricSummary.errorRatePct))} (diagnostic ratio, not a command failure rate)`,
+    `- Gate bypasses: ${code(safe(metricSummary.bypasses, "0"))}`,
+    `- V2 average clicks per completed flow: ${code(safe(metricSummary.clickAvg))}`,
+    `- V2 flow elapsed p50 / p95: ${code(formatMs(metricSummary.loopTimeP50))} / ${code(formatMs(metricSummary.loopTimeP95))} (includes time between player clicks; not server latency)`,
+    `- Data collection: mode=${code(safe(telemetryMode))}, sample rate=${code(formatPct(Number(sampleRate) * 100))}`
   ];
 
   if (delta) {
     lines.push(
       "",
-      `Compared with previous ${windowHours}h window:`,
-      `- Interactions measured: ${safe(baselineSummary?.interactions, "0")} before → ${safe(metricSummary.interactions, "0")} now`,
-      `- Failed interactions: ${safe(baselineSummary?.interactionErrors, "0")} before → ${safe(metricSummary.interactionErrors, "0")} now`,
-      `- Server response p95 change: ${formatMs(delta.interactionTimeP95Delta)} (${safe(delta.interactionTimeP95DeltaPct)}%)`,
-      `- Interaction error-rate change: ${safe(delta.interactionErrorRateDeltaPct)} percentage points`,
-      `- Failed scheduled-job runs: ${safe(baselineSummary?.failedJobRuns, "0")} before → ${safe(metricSummary.failedJobRuns, "0")} now`,
-      `- Hard send failures: ${safe(baselineSummary?.hardFailures, "0")} before → ${safe(metricSummary.hardFailures, "0")} now`,
-      `- V2 flow elapsed p95 change: ${formatMs(delta.loopTimeP95Delta)} (${safe(delta.loopTimeP95DeltaPct)}%)`,
-      `- V2 route-error signal change: ${formatCountPer100(delta.errorRateDeltaPct)}`
+      `Compared with previous ${code(`${windowHours}h`)} window:`,
+      `- Interactions measured: ${code(safe(baselineSummary?.interactions, "0"))} before → ${code(safe(metricSummary.interactions, "0"))} now`,
+      `- Failed interactions: ${code(safe(baselineSummary?.interactionErrors, "0"))} before → ${code(safe(metricSummary.interactionErrors, "0"))} now`,
+      `- Server response p95 change: ${code(formatMs(delta.interactionTimeP95Delta))} (${code(`${safe(delta.interactionTimeP95DeltaPct)}%`)})`,
+      `- Interaction error-rate change: ${code(safe(delta.interactionErrorRateDeltaPct))} percentage points`,
+      `- Failed scheduled-job runs: ${code(safe(baselineSummary?.failedJobRuns, "0"))} before → ${code(safe(metricSummary.failedJobRuns, "0"))} now`,
+      `- Hard send failures: ${code(safe(baselineSummary?.hardFailures, "0"))} before → ${code(safe(metricSummary.hardFailures, "0"))} now`,
+      `- V2 flow elapsed p95 change: ${code(formatMs(delta.loopTimeP95Delta))} (${code(`${safe(delta.loopTimeP95DeltaPct)}%`)})`,
+      `- V2 route-error signal change: ${code(formatCountPer100(delta.errorRateDeltaPct))}`
     );
   } else {
     lines.push("", "Comparison:", "- No prior window data available; changes cannot be assessed.");
@@ -107,34 +111,34 @@ export function buildReportText({
 
   if (metricSummary?.errorsByReason?.length) {
     const topReasons = metricSummary.errorsByReason.slice(0, 3)
-      .map((row) => `${row.reason}(${row.count})`)
+      .map((row) => `${code(`${row.reason}(${row.count})`)}`)
       .join(", ");
     lines.push("", `Top V2 route-error signals (may include expected stale/ownership rejections): ${topReasons}`);
   }
 
   if (metricSummary?.interactionErrorsByRoute?.length) {
     const topRoutes = metricSummary.interactionErrorsByRoute.slice(0, 3)
-      .map((row) => `${row.route}(${row.count})`)
+      .map((row) => `${code(`${row.route}(${row.count})`)}`)
       .join(", ");
     lines.push("", `Most failed interaction routes: ${topRoutes}`);
   }
 
   if (metricSummary?.jobRunRows?.length) {
     const jobRows = metricSummary.jobRunRows.slice(0, 5)
-      .map((row) => `${row.job}(${row.runs} runs, ${row.failures} failed)`)
+      .map((row) => `${code(row.job)}(${code(row.runs)} runs, ${code(row.failures)} failed)`)
       .join(", ");
     lines.push("", `Scheduled-job outcomes: ${jobRows}`);
   }
 
   if (metricSummary?.hardFailuresByType?.length) {
     const failureTypes = metricSummary.hardFailuresByType.slice(0, 4)
-      .map((row) => `${row.event}(${row.count})`)
+      .map((row) => `${code(`${row.event}(${row.count})`)}`)
       .join(", ");
     lines.push("", `Hard failure signals: ${failureTypes}`);
   }
   if (metricSummary?.hardFailureRows?.length) {
     const failureSources = metricSummary.hardFailureRows.slice(0, 5)
-      .map((row) => `${row.source}(${row.count})`)
+      .map((row) => `${code(`${row.source}(${row.count})`)}`)
       .join(", ");
     lines.push(`Affected operation sources: ${failureSources}`);
   }
@@ -145,7 +149,7 @@ export function buildReportText({
 
   if (metricSummary?.bypassByReason?.length) {
     const topBypassReasons = metricSummary.bypassByReason.slice(0, 3)
-      .map((row) => `${row.reason}(${row.count})`)
+      .map((row) => `${code(`${row.reason}(${row.count})`)}`)
       .join(", ");
     lines.push("", `Top bypass reasons: ${topBypassReasons}`);
   }

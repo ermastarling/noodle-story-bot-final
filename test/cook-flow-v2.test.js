@@ -48,6 +48,26 @@ test("Cook flow V2: renders quantity controls and cook action", () => {
   assert.equal(Boolean(cookAllButton), true);
 });
 
+test("Cook flow V2: picker options show recipe ingredients and max when provided", () => {
+  const payload = buildCookRecipePickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [
+      { recipeId: "ramen", recipeName: "Ramen", optionLabel: "Ramen (standard)", optionDescription: "Noodles:4 · Broth:2 | Max 2", cookable: 2 },
+      { recipeId: "udon", recipeName: "Udon", optionLabel: "Udon (standard)", optionDescription: "Noodles:0 | Max 0", cookable: 0 }
+    ],
+    selectedRecipeId: "ramen"
+  });
+  const select = (payload.components?.[0]?.components ?? [])
+    .flatMap((c) => c?.components ?? [])
+    .find((c) => c?.type === 3);
+  assert.equal(select.options[0].label, "Ramen (standard)");
+  assert.equal(select.options[0].description, "Noodles:4 · Broth:2 | Max 2");
+  assert.ok(select.options[0].emoji, "cookable recipes get the status_complete emoji");
+  assert.equal(select.options[1].description, "Noodles:0 | Max 0");
+  assert.equal(select.options[1].emoji, undefined);
+});
+
 test("Cook flow V2: disables cook action when no recipe entries exist", () => {
   const payload = buildCookRecipePickerV2Message({
     userId: "123",
@@ -337,4 +357,29 @@ test("Cook flow V2: staff quality and fail-reduction bonuses apply to minigame o
   assert.ok((boosted.qualityCounts.excellent ?? 0) > 0);
   const total = Object.values(boosted.qualityCounts).reduce((sum, v) => sum + v, 0);
   assert.equal(total, 10);
+});
+
+test("Cook flow V2: Prep bonus bowls are successes, not failures, and performance only judges paid bowls", () => {
+  const outcome = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 6,
+    baseQuantity: 5,
+    minigameScore: 6,
+    minigameTurns: 6,
+    successBowlsOverride: 5,
+    qualityBias: "good"
+  });
+  assert.equal(outcome.failed, 0);
+  assert.equal(outcome.success, 6);
+  assert.equal(Object.values(outcome.qualityCounts).reduce((sum, n) => sum + n, 0), 6);
+
+  const rough = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 6,
+    baseQuantity: 5,
+    successBowlsOverride: 2,
+    qualityBias: "salvage"
+  });
+  assert.equal(rough.failed, 3, "only paid bowls can fail");
+  assert.equal(rough.success, 2 + 1, "2 paid successes + 1 bonus bowl");
 });

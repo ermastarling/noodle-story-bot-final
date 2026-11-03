@@ -4,11 +4,31 @@
 
 This is the consolidated copy and reward-value review for the current rollout. Internal-only command responses, telemetry, debug logs, audit messages, and this review document are excluded. Existing player-facing copy not listed here is unchanged.
 
-## 1. Shared-Order Contribution Limit
+## 1. Shared-Order Rules
 
-**Where:** Private response when a player tries to contribute above their equal per-member share for a shared order. The existing warning icon is shown before the text.
+Shared orders have no per-member contribution limits: any party member can contribute any amount of any ingredient the order still needs, up to what they own. The one completion rule is unchanged: at least one party member other than the leader must contribute before the leader can complete the order.
 
-> ⚠️ You've reached the maximum allowed contribution for one party member in this shared order, your party members can help with the rest!
+**Where:** "How It Works" field when a shared order is created:
+
+> All party members must already know the selected recipe. Any party member can tap **Contribute** to add any amount of any ingredient the order still needs. Once every ingredient is covered, the party leader taps **Complete Order**, but at least one other party member must have contributed first, so leaders should leave some for the party. When complete, everyone who helped gets rewarded!
+
+**Where:** Contribute menu description:
+
+> Pick an ingredient to add. You can add any amount, up to what the order still needs and what you have.
+
+**Where:** Shared-order status field when every ingredient is covered but no other member has contributed, and the private responses when completion is attempted early:
+
+> All ingredients are covered. At least one other party member must contribute before the leader can complete this shared order.
+
+> You can’t complete this shared order alone. At least one other party member must contribute before the leader can complete this shared order. Ask a party member to add an ingredient first.
+
+**Where:** Private response when the leader tries to cover the last ingredients before anyone else has contributed (ingredients are not consumed):
+
+> ⚠️ Leave some of the ingredients for another party member. At least one other party member must contribute before the leader can complete this shared order.
+
+**Where:** Private response when entering more than an ingredient still needs:
+
+> This ingredient only needs [N] more. Pick [N] or fewer.
 
 ## 2. Counting Channel
 
