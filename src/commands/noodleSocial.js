@@ -1074,7 +1074,7 @@ const SHARED_ORDER_NEEDS_CONTRIBUTOR_TEXT = "At least one other party member mus
 
 function sharedOrderStatusText({ isComplete, canComplete }) {
   if (canComplete) return `${getIcon("status_complete")} Ready to complete!`;
-  if (isComplete) return `${getIcon("hourglass")} All ingredients are covered. ${SHARED_ORDER_NEEDS_CONTRIBUTOR_TEXT}`;
+  if (isComplete) return `${getIcon("hourglass")} ${SHARED_ORDER_NEEDS_CONTRIBUTOR_TEXT}`;
   return `${getIcon("hourglass")} In progress...`;
 }
 

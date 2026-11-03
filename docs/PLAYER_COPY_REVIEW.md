@@ -16,9 +16,9 @@ Shared orders have no per-member contribution limits: any party member can contr
 
 > Pick an ingredient to add. You can add any amount, up to what the order still needs and what you have.
 
-**Where:** Shared-order status field when every ingredient is covered but no other member has contributed, and the private responses when completion is attempted early:
+**Where:** Shared-order status field while no other member has contributed yet, and the private responses when completion is attempted early:
 
-> All ingredients are covered. At least one other party member must contribute before the leader can complete this shared order.
+> At least one other party member must contribute before the leader can complete this shared order.
 
 > You can’t complete this shared order alone. At least one other party member must contribute before the leader can complete this shared order. Ask a party member to add an ingredient first.
 

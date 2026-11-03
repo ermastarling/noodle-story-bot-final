@@ -376,3 +376,44 @@ test("Cook bonuses: each staff and upgrade effect applies independently of the o
   assert.ok(Math.abs(combined.double_craft_chance - 0.16) < 1e-9);
   assert.equal(combined.prep_batch_bonus, 1);
 });
+
+test("Cook bonuses: every staff member and upgrade contributes only its own effects, and any pair sums exactly", async () => {
+  const { calculateCombinedEffects } = await import("../src/game/upgrades.js");
+  const { loadUpgradesContent } = await import("../src/content/index.js");
+  const upgradesContent = loadUpgradesContent();
+  const combine = (player) => calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
+  const fresh = () => ({ ...makeTestPlayer(), shop_level: 99, upgrades: {}, staff_levels: {} });
+  const sources = [
+    ...Object.entries(staffContent.staff_members).map(([id, def]) => ({
+      id, effects: def.effects_per_level ?? {}, apply: (p, lvl) => { p.staff_levels[id] = lvl; }
+    })),
+    ...Object.entries(upgradesContent.upgrades)
+      .filter(([, def]) => !("staff_effect_multiplier" in (def.effects_per_level ?? {})))
+      .map(([id, def]) => ({ id, effects: def.effects_per_level ?? {}, apply: (p, lvl) => { p.upgrades[id] = lvl; } }))
+  ];
+  const level = 2;
+  const solo = new Map();
+  for (const source of sources) {
+    const player = fresh();
+    source.apply(player, level);
+    const effects = combine(player);
+    solo.set(source.id, effects);
+    for (const [key, value] of Object.entries(effects)) {
+      const expected = (source.effects[key] ?? 0) * level;
+      assert.ok(Math.abs(value - expected) < 1e-9, `${source.id} alone: ${key} expected ${expected}, got ${value}`);
+    }
+  }
+  for (let i = 0; i < sources.length; i += 1) {
+    for (let j = i + 1; j < sources.length; j += 1) {
+      const player = fresh();
+      sources[i].apply(player, level);
+      sources[j].apply(player, level);
+      const effects = combine(player);
+      for (const key of Object.keys(effects)) {
+        const expected = (solo.get(sources[i].id)[key] ?? 0) + (solo.get(sources[j].id)[key] ?? 0);
+        assert.ok(Math.abs(effects[key] - expected) < 1e-9,
+          `${sources[i].id} + ${sources[j].id}: ${key} expected ${expected}, got ${effects[key]}`);
+      }
+    }
+  }
+});

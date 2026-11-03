@@ -383,3 +383,54 @@ test("Cook flow V2: Prep bonus bowls are successes, not failures, and performanc
   assert.equal(rough.failed, 3, "only paid bowls can fail");
   assert.equal(rough.success, 2 + 1, "2 paid successes + 1 bonus bowl");
 });
+
+test("Cook bonuses: fail rescue and quality boost are counted from their own effects only", async () => {
+  const { rollCookBatchOutcome } = await import("../src/game/cooking.js");
+  const player = { upgrades: {}, staff_levels: {} };
+  const seq = (values) => { let i = 0; return () => values[i++ % values.length]; };
+
+  const none = rollCookBatchOutcome({ quantity: 4, tier: "epic", player, effects: {}, rng: seq([0.5]), blessing: null });
+  assert.equal(none.failRescued, 0);
+  assert.equal(none.qualityBoosted, 0);
+
+  // Roll 0.20 fails at the base epic chance but is rescued once rare_epic_fail_reduction applies.
+  const base = rollCookBatchOutcome({ quantity: 1, tier: "epic", player, effects: {}, rng: seq([0.001]), blessing: null });
+  assert.equal(base.failed, 1);
+  const rescued = rollCookBatchOutcome({ quantity: 1, tier: "epic", player, effects: { rare_epic_fail_reduction: 0.05 }, rng: seq([0.2]), blessing: null });
+  const unreduced = rollCookBatchOutcome({ quantity: 1, tier: "epic", player, effects: {}, rng: seq([0.2]), blessing: null });
+  assert.equal(rescued.failed + rescued.failRescued, unreduced.failed + unreduced.failRescued);
+
+  const boosted = rollCookBatchOutcome({ quantity: 50, tier: "common", player, effects: { order_quality_bonus: 0.5 }, rng: seq([0.5, 0.3, 0.7, 0.9, 0.45]), blessing: null });
+  const plain = rollCookBatchOutcome({ quantity: 50, tier: "common", player, effects: {}, rng: seq([0.5, 0.3, 0.7, 0.9, 0.45]), blessing: null });
+  assert.equal(plain.qualityBoosted, 0);
+  assert.ok(boosted.qualityBoosted > 0, "quality bonus upgrades some bowls");
+});
+
+test("Cook bonuses: minigame outcome reports staff fail rescue and quality boost", () => {
+  const outcome = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 4,
+    baseQuantity: 4,
+    successBowlsOverride: 0,
+    qualityBias: "good",
+    rollBatchOutcomeArgs: {
+      tier: "epic",
+      effects: { rare_epic_fail_reduction: 1, rare_epic_quality_bonus: 1 },
+      rng: () => 0,
+      blessing: null
+    }
+  });
+  assert.equal(outcome.failRescued, 4);
+  assert.equal(outcome.failed, 0);
+  assert.ok(outcome.qualityBoosted > 0);
+
+  const upgradeOnly = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 4,
+    baseQuantity: 4,
+    successBowlsOverride: 4,
+    qualityBias: "good",
+    rollBatchOutcomeArgs: { tier: "common", effects: { order_quality_bonus: 1 }, rng: () => 0, blessing: null }
+  });
+  assert.ok(upgradeOnly.qualityBoosted > 0, "quality from an upgrade alone applies without any staff");
+});

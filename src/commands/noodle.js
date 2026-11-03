@@ -221,7 +221,7 @@ import {
   getCookBatchOutput,
   rollCookBatchOutcome,
   getQualityMultiplier,
-  rollCookQuality
+  rollCookQualityDetailed
 } from "../game/cooking.js";
 import {
   calculateCombinedEffects,
@@ -13391,8 +13391,9 @@ ${lines.join("\n")}`;
       const remainingAfter = Math.max(0, bowlCap - (bowlCount + batchOutput));
       extra = Math.min(batchOutput, remainingAfter);
       for (let i = 0; i < extra; i += 1) {
-        const quality = rollCookQuality(cookRng, p, combinedEffects, blessing, r.tier);
+        const { quality, boosted } = rollCookQualityDetailed(cookRng, p, combinedEffects, blessing, r.tier);
         outcome.qualityCounts[quality] = (outcome.qualityCounts[quality] ?? 0) + 1;
+        if (boosted) outcome.qualityBoosted = (outcome.qualityBoosted ?? 0) + 1;
       }
     }
 
@@ -13439,10 +13440,16 @@ ${lines.join("\n")}`;
       : null;
 
     const prepBonusLine = batchOutput > qtyToCook ? `${getIcon("bowl")} Prep bonus: **+${batchOutput - qtyToCook}** bowl(s).` : null;
+    const failRescueLine = outcome.failRescued > 0
+      ? `${getIcon("status_complete")} Fail rescue: **${outcome.failRescued}** bowl(s) saved from failing.`
+      : null;
+    const qualityBoostLine = outcome.qualityBoosted > 0
+      ? `${getIcon("sparkle")} Quality boost: **${outcome.qualityBoosted}** bowl(s) upgraded.`
+      : null;
     const doubleCraftLine = doubleCrafted ? `${getIcon("sparkle")} Double craft! **+${extra}** extra bowl(s).` : null;
     // Silent minigame cooks hand these lines back so the Cook Result can show them.
     if (Array.isArray(overrides?.bonusLinesOut)) {
-      overrides.bonusLinesOut.push(...[prepBonusLine, doubleCraftLine, ...savedLines].filter(Boolean));
+      overrides.bonusLinesOut.push(...[prepBonusLine, doubleCraftLine, failRescueLine, qualityBoostLine, ...savedLines].filter(Boolean));
     }
 
     const cookEmbed = buildMenuEmbed({
@@ -13453,6 +13460,8 @@ ${lines.join("\n")}`;
         prepBonusLine,
         failInfo,
         doubleCraftLine,
+        failRescueLine,
+        qualityBoostLine,
         savedLines.length ? savedLines.join("\n") : null,
         `You now have **${have}** bowl(s) ready.`,
         tutorialSuffix(p)
