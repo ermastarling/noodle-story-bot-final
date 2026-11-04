@@ -83,7 +83,7 @@ import {
   setDailyOrderMenu,
   shouldCommitDailyOrderMenu
 } from "../game/dailyMenu.js";
-import { recordGiveawayEntry } from "../game/giveaways.js";
+import { getCurrentWeeklyGiveawayEntries, recordGiveawayEntry } from "../game/giveaways.js";
 import {
   buildValorFulfillmentConfirmation,
   claimValorFulfillmentConfirmation,
@@ -325,6 +325,7 @@ import {
   createCookRunToken,
   evaluateCookMinigameTurn,
   buildCookRecipePickerV2Message,
+  buildCookBonusSummaryLines,
   buildCookResultV2Message,
   deriveCookMinigameTotalTurns,
   deriveCookMinigamePerformance,
@@ -7374,7 +7375,7 @@ let unlockNoticePlayer = null;
 
 let seasonRolloverNotice = null;
 
-const shouldDeferEphemeral = group === "dev" && !isDevAdmin(userId);
+const shouldDeferEphemeral = group === "dev" && (sub === "admin_giveaway_entries" || !isDevAdmin(userId));
 
 // Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
@@ -8583,6 +8584,61 @@ if (inDevPath && sub === "admin_delivery_reconcile") {
     ...buildDevMessageV2Payload({
       message: `Delivery ${recordId} was reconciled as **${result.status}**. Keep the Discord message/link and incident context with the operational log.`
     }),
+    ephemeral: true
+  });
+}
+
+if (inDevPath && sub === "admin_giveaway_entries") {
+  const giveawayId = String(opt.getString("giveaway_id") ?? "").trim();
+  const page = opt.getInteger("page") ?? 1;
+  const officialGuildId = String(process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "").trim();
+  if (!db) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
+      ephemeral: true
+    });
+  }
+  if (!/^\d{17,20}$/.test(officialGuildId)) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "The official giveaway guild is not configured.", isError: true }),
+      ephemeral: true
+    });
+  }
+
+  const report = getCurrentWeeklyGiveawayEntries(db, {
+    guildId: officialGuildId,
+    giveawayId,
+    page
+  });
+  if (!report) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({
+        message: "That giveaway is not currently open in the current weekly batch.",
+        isError: true
+      }),
+      ephemeral: true
+    });
+  }
+
+  const entrantLines = report.entries.length
+    ? report.entries.map((entry) => `<@${entry.user_id}> - entered <t:${Math.floor(Number(entry.entered_at) / 1000)}:R>`)
+    : ["No one has entered this giveaway yet."];
+  return commit({
+    content: " ",
+    ...buildDevMessageV2Payload({
+      title: "Weekly Giveaway Entrants",
+      message: [
+        `Contest #${report.contest_number} (${report.giveaway_id})`,
+        `Entrants: ${report.entrant_count}`,
+        `Page ${report.page}/${report.total_pages}`,
+        "",
+        ...entrantLines
+      ].join("\n")
+    }),
+    allowed_mentions: { parse: [] },
     ephemeral: true
   });
 }
@@ -13447,9 +13503,17 @@ ${lines.join("\n")}`;
       ? `${getIcon("sparkle")} Quality boost: **${outcome.qualityBoosted}** bowl(s) upgraded.`
       : null;
     const doubleCraftLine = doubleCrafted ? `${getIcon("sparkle")} Double craft! **+${extra}** extra bowl(s).` : null;
-    // Silent minigame cooks hand these lines back so the Cook Result can show them.
-    if (Array.isArray(overrides?.bonusLinesOut)) {
-      overrides.bonusLinesOut.push(...[prepBonusLine, doubleCraftLine, failRescueLine, qualityBoostLine, ...savedLines].filter(Boolean));
+    if (Array.isArray(overrides?.cookBonusOutcomesOut)) {
+      overrides.cookBonusOutcomesOut.push({
+        prepBonusBowls: Math.max(0, batchOutput - qtyToCook),
+        doubleCraftOccurred: doubleCrafted,
+        doubleCraftBowls: extra,
+        failRescuedBowls: outcome.failRescued,
+        qualityBoostedBowls: outcome.qualityBoosted
+      });
+    }
+    if (Array.isArray(overrides?.savedIngredientLinesOut)) {
+      overrides.savedIngredientLinesOut.push(...savedLines);
     }
 
     const cookEmbed = buildMenuEmbed({
@@ -15667,7 +15731,8 @@ if (v2Parsed.isV2) {
         const beforePlayer = ensurePlayer(serverId, userId);
         const beforeTotalBowlCount = getBowlCount(beforePlayer);
 
-        const cookBonusLines = [];
+        const cookBonusOutcomes = [];
+        const savedIngredientLines = [];
         if (cookAllMode) {
           const successByRecipe = allocateSuccessBowlsAcrossPlan(cookAllPlan, performance.successBowls);
           for (const row of cookAllPlan) {
@@ -15677,7 +15742,8 @@ if (v2Parsed.isV2) {
               sub: "cook",
               overrides: {
                 silentResponse: true,
-                bonusLinesOut: cookBonusLines,
+                cookBonusOutcomesOut: cookBonusOutcomes,
+                savedIngredientLinesOut: savedIngredientLines,
                 strings: {
                   recipe: row.recipeId,
                   v2_quality_bias: performance.qualityBias
@@ -15701,7 +15767,8 @@ if (v2Parsed.isV2) {
             sub: "cook",
             overrides: {
               silentResponse: true,
-              bonusLinesOut: cookBonusLines,
+              cookBonusOutcomesOut: cookBonusOutcomes,
+              savedIngredientLinesOut: savedIngredientLines,
               strings: {
                 recipe: recipeId,
                 v2_quality_bias: performance.qualityBias
@@ -15753,7 +15820,8 @@ if (v2Parsed.isV2) {
         produced > 0
           ? `${getIcon("status_complete")} Cooked **${produced}** bowl(s).`
           : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`,
-        ...cookBonusLines
+        ...buildCookBonusSummaryLines(cookBonusOutcomes),
+        ...savedIngredientLines
       ];
       const tutorialStepAfterCook = tutorialMode ? getCurrentTutorialStep(afterPlayer) : null;
       if (tutorialMode && tutorialStepAfterCook) {

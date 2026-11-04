@@ -1,6 +1,6 @@
 import { buildComponentsV2MenuPayload } from "./componentsV2.js";
 import { applyStaffBonusesToMinigameOutcome } from "../game/cooking.js";
-import { getButtonEmoji, normalizeComponentEmoji } from "./icons.js";
+import { getButtonEmoji, getIcon, normalizeComponentEmoji } from "./icons.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
@@ -462,6 +462,32 @@ export function fitCookResultLines(lines) {
     }
   }
   return out;
+}
+
+export function buildCookBonusSummaryLines(outcomes = []) {
+  const totals = {
+    prepBonusBowls: 0,
+    doubleCraftBowls: 0,
+    doubleCraftOccurred: false,
+    failRescuedBowls: 0,
+    qualityBoostedBowls: 0
+  };
+  const safeOutcomes = Array.isArray(outcomes) ? outcomes : [];
+
+  for (const outcome of safeOutcomes) {
+    totals.prepBonusBowls += Math.max(0, Math.floor(Number(outcome?.prepBonusBowls) || 0));
+    totals.doubleCraftBowls += Math.max(0, Math.floor(Number(outcome?.doubleCraftBowls) || 0));
+    totals.doubleCraftOccurred ||= outcome?.doubleCraftOccurred === true;
+    totals.failRescuedBowls += Math.max(0, Math.floor(Number(outcome?.failRescuedBowls) || 0));
+    totals.qualityBoostedBowls += Math.max(0, Math.floor(Number(outcome?.qualityBoostedBowls) || 0));
+  }
+
+  return [
+    totals.prepBonusBowls > 0 ? `${getIcon("bowl")} Prep bonus: **+${totals.prepBonusBowls}** bowl(s).` : null,
+    totals.doubleCraftOccurred ? `${getIcon("sparkle")} Double craft! **+${totals.doubleCraftBowls}** extra bowl(s).` : null,
+    totals.failRescuedBowls > 0 ? `${getIcon("status_complete")} Fail rescue: **${totals.failRescuedBowls}** bowl(s) saved from failing.` : null,
+    totals.qualityBoostedBowls > 0 ? `${getIcon("sparkle")} Quality boost: **${totals.qualityBoostedBowls}** bowl(s) upgraded.` : null
+  ].filter(Boolean);
 }
 
 export function buildCookResultV2Message({

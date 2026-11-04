@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   buildQualityCountsForBias,
+  buildCookBonusSummaryLines,
   buildCookMinigameTargetActions,
   buildCookMinigameV2Message,
   buildCookRecipePickerV2Message,
@@ -382,6 +383,31 @@ test("Cook flow V2: Prep bonus bowls are successes, not failures, and performanc
   });
   assert.equal(rough.failed, 3, "only paid bowls can fail");
   assert.equal(rough.success, 2 + 1, "2 paid successes + 1 bonus bowl");
+});
+
+test("Cook flow V2: bonus summary combines matching effects across recipes", () => {
+  const lines = buildCookBonusSummaryLines([
+    {
+      prepBonusBowls: 2,
+      doubleCraftOccurred: true,
+      doubleCraftBowls: 2,
+      failRescuedBowls: 1,
+      qualityBoostedBowls: 2
+    },
+    {
+      prepBonusBowls: 2,
+      doubleCraftOccurred: true,
+      doubleCraftBowls: 2,
+      failRescuedBowls: 2,
+      qualityBoostedBowls: 1
+    }
+  ]);
+
+  assert.equal(lines.length, 4);
+  assert.match(lines[0], /Prep bonus: \*\*\+4\*\* bowl\(s\)\./);
+  assert.match(lines[1], /Double craft! \*\*\+4\*\* extra bowl\(s\)\./);
+  assert.match(lines[2], /Fail rescue: \*\*3\*\* bowl\(s\) saved from failing\./);
+  assert.match(lines[3], /Quality boost: \*\*3\*\* bowl\(s\) upgraded\./);
 });
 
 test("Cook bonuses: fail rescue and quality boost are counted from their own effects only", async () => {

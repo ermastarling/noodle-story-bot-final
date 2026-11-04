@@ -6,7 +6,9 @@ import { loadGiveawaysContent } from "../src/content/index.js";
 import {
   chooseWeeklyContestCount,
   chooseWeeklyPrizes,
+  getCurrentWeeklyGiveawayEntries,
   getGiveawayWeekStart,
+  listCurrentWeeklyGiveaways,
   recordGiveawayEntry,
   validateGiveawayContent
 } from "../src/game/giveaways.js";
@@ -128,6 +130,51 @@ test("Giveaway entries are bound to the post, deduplicated, and blocked after a 
   assert.equal(recordGiveawayEntry(db, { ...entry, userId: "user-test-2" }).ok, true);
   assert.equal(recordGiveawayEntry(db, entry).reason, "already_won_this_week");
   assert.equal(recordGiveawayEntry(db, { ...entry, now: future }).reason, "giveaway_closed");
+  db.close();
+});
+
+test("Current weekly giveaway entrant reports include counts and page only open giveaways", () => {
+  const db = new Database(":memory:");
+  db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
+  const now = Date.UTC(2026, 9, 21, 22, 0, 0);
+  const weekKey = String(getGiveawayWeekStart(now));
+  const insertGiveaway = db.prepare(`
+    INSERT INTO weekly_giveaways
+      (giveaway_id, guild_id, channel_id, week_key, contest_number, prize_json, closes_at, status, award_status, created_at)
+    VALUES (?, ?, 'channel', ?, ?, '{}', ?, ?, 'pending', ?)
+  `);
+  insertGiveaway.run("current-1", "guild-current", weekKey, 1, now + 60_000, "open", now);
+  insertGiveaway.run("current-2", "guild-current", weekKey, 2, now + 60_000, "open", now);
+  insertGiveaway.run("closed", "guild-current", weekKey, 3, now + 60_000, "closed", now);
+  insertGiveaway.run("other-guild", "guild-other", weekKey, 1, now + 60_000, "open", now);
+  insertGiveaway.run("previous-week", "guild-current", String(weekKey - 7 * 24 * 60 * 60 * 1000), 1, now + 60_000, "open", now);
+  db.prepare(`
+    INSERT INTO weekly_giveaway_entries (giveaway_id, user_id, entered_at)
+    VALUES ('current-1', 'user-1', ?), ('current-1', 'user-2', ?), ('current-1', 'user-3', ?)
+  `).run(now - 3000, now - 2000, now - 1000);
+
+  const active = listCurrentWeeklyGiveaways(db, "guild-current", now);
+  assert.deepEqual(active.map((giveaway) => giveaway.giveaway_id), ["current-1", "current-2"]);
+  assert.equal(active[0].entrant_count, 3);
+  assert.equal(active[1].entrant_count, 0);
+
+  const report = getCurrentWeeklyGiveawayEntries(db, {
+    guildId: "guild-current",
+    giveawayId: "current-1",
+    page: 2,
+    pageSize: 2,
+    now
+  });
+  assert.equal(report.entrant_count, 3);
+  assert.equal(report.page, 2);
+  assert.equal(report.total_pages, 2);
+  assert.deepEqual(report.entries.map((entry) => entry.user_id), ["user-3"]);
+  assert.equal(getCurrentWeeklyGiveawayEntries(db, {
+    guildId: "guild-current",
+    giveawayId: "closed",
+    now
+  }), null);
+  assert.deepEqual(listCurrentWeeklyGiveaways(null, "guild-current", now), []);
   db.close();
 });
 

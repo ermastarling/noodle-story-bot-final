@@ -3889,7 +3889,6 @@ async function handleComponent(interaction) {
           `Ingredient: **${ingredient.name}**\n` +
           `Remaining needed: **${selected.remaining}**\n` +
           `You have: **${availableQty}**\n` +
-          (Number.isFinite(allowance.cap) ? `Your share: **${allowance.used}/${allowance.cap}** contributed\n` : "") +
           "\nChoose quantity:"
         )
         .setColor(theme.colors.info);
