@@ -14,22 +14,25 @@ function sliceBetween(source, startToken, endToken) {
   return source.slice(startIdx, endIdx);
 }
 
-test("Cook picker uses normal cook select custom id", () => {
+test("Every normal Cook button opens the same V2 recipe picker scene", () => {
+  assert.equal(noodleSource.includes("function buildCookPickerPayload("), false, "legacy cook picker layout must stay removed");
   const body = sliceBetween(
     noodleSource,
-    "function buildCookPickerPayload(",
-    "function getTakeoutRecipeNeedRows("
+    "if (action === \"cook\") {\n  const p = ensurePlayer(serverId, userId);",
+    "if (action === \"takeout_cook\") {"
   );
-  assert.match(
-    body,
-    /setCustomId\(`noodle:pick:cook_select:\$\{userId\}:\$\{safePage\}:\$\{Date\.now\(\)\.toString\(36\)\}`\)/,
-    "Normal cook picker should emit noodle:pick:cook_select"
+  assert.match(body, /buildCookRecipePickerScenePayload\(/, "noodle:pick:cook should use the V2 recipe picker scene");
+});
+
+test("Cook picker options list recipe ingredients like the kitchen broth picker", () => {
+  const body = sliceBetween(
+    noodleSource,
+    "function buildCookIngredientOptionDescription(",
+    "function buildCookRecipePickerSceneEntries("
   );
-  assert.doesNotMatch(
-    body,
-    /setCustomId\(`noodle:pick:takeout_cook_select:/,
-    "Normal cook picker should not emit takeout cook custom id"
-  );
+  assert.match(body, /\(opt\)/);
+  assert.match(body, /\| Max \$\{cookable\}/);
+  assert.match(noodleSource, /optionDescription: buildCookIngredientOptionDescription\(/);
 });
 
 test("Takeout cook picker uses takeout cook select custom id", () => {

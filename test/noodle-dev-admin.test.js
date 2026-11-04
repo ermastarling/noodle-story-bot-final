@@ -8,6 +8,8 @@ import { unlockSpecialization } from "../src/game/specialization.js";
 import { getKitchenUnlockState, KITCHEN_UNLOCK_LEVEL } from "../src/game/kitchen.js";
 import { unlockRecipeForPlayer } from "../src/game/discovery.js";
 
+const DEV_ID = "705521883335885031";
+
 test("noodle-dev command schema includes admin control group", () => {
   const schema = noodleDevCommand.data.toJSON();
   const adminGroup = (schema.options ?? []).find((option) => option.name === "admin");
@@ -56,6 +58,7 @@ test("noodle-dev command schema includes admin control group", () => {
 test("noodle-dev admin recipe autocomplete includes event recipes", async () => {
   const responses = [];
   const interaction = {
+    user: { id: DEV_ID },
     options: {
       getSubcommandGroup: () => "admin",
       getSubcommand: () => "recipe",
@@ -75,6 +78,7 @@ test("noodle-dev admin recipe autocomplete includes event recipes", async () => 
 test("noodle-dev admin season_event autocomplete includes all configured events", async () => {
   const responses = [];
   const interaction = {
+    user: { id: DEV_ID },
     options: {
       getSubcommandGroup: () => "admin",
       getSubcommand: () => "season_event",
@@ -282,4 +286,45 @@ test("unlockRecipeForPlayer validates and dedupes known recipes", () => {
   assert.equal(second.ok, true);
   assert.equal(second.added, false);
   assert.deepEqual(player.known_recipes, ["simple_broth"]);
+});
+test("noodle-dev admin autocomplete lists game updates, and record lists only for the dev admin", async () => {
+  const run = async (userId, sub, focusedName, value = "", extra = {}) => {
+    let out = null;
+    await noodleDevCommand.autocomplete({
+      user: { id: userId },
+      options: {
+        getSubcommandGroup: () => "admin",
+        getSubcommand: () => sub,
+        getFocused: () => ({ name: focusedName, value }),
+        getString: (name) => extra[name] ?? null
+      },
+      respond: async (items) => { out = items; }
+    });
+    return out;
+  };
+
+  const updates = await run(DEV_ID, "game_update_preview", "update_id");
+  assert.ok(updates.length > 0);
+  assert.ok(updates.every((item) => item.value && item.name.includes(item.value)));
+  assert.deepEqual(await run("111111111111111111", "game_update_preview", "update_id"), []);
+  assert.deepEqual(await run(DEV_ID, "delivery_reconcile", "record_id", "", { type: "game_update" }), []);
+});
+
+test("listReconcilableDeliveryRecords returns only delivery_unknown records with readable labels", async () => {
+  const { default: Database } = await import("better-sqlite3");
+  const { listReconcilableDeliveryRecords, listAwaitingValorGiveaways } = await import("../src/jobs/scheduledDelivery.js");
+  const db = new Database(":memory:");
+  db.exec(`
+    CREATE TABLE scheduled_game_updates (schedule_id TEXT, update_id TEXT, scheduled_at INTEGER, status TEXT);
+    CREATE TABLE weekly_giveaways (giveaway_id TEXT, contest_number INTEGER, week_key TEXT, status TEXT, confirmation_status TEXT, valor_confirmation_status TEXT, award_status TEXT, created_at INTEGER);
+    INSERT INTO scheduled_game_updates VALUES ('s1','v1-update',1700000000000,'delivery_unknown'),('s2','v2-update',1700000000000,'sent');
+    INSERT INTO weekly_giveaways VALUES ('g1',3,'2026-W44','open','pending','pending','awaiting_manual',1),('g2',4,'2026-W45','delivery_unknown','pending','pending','none',2),('g3',5,'2026-W46','closed','pending','confirmed','awaiting_manual',3),('g4',6,'2026-W47','closed','pending','sending','awaiting_manual',4);
+  `);
+  const updates = listReconcilableDeliveryRecords(db, "game_update");
+  assert.deepEqual(updates.map((r) => r.id), ["s1"]);
+  assert.ok(updates[0].name.includes("v1-update"));
+  assert.deepEqual(listReconcilableDeliveryRecords(db, "giveaway_post").map((r) => r.id), ["g2"]);
+  assert.deepEqual(listAwaitingValorGiveaways(db).map((r) => r.id), ["g1"]);
+  assert.deepEqual(listReconcilableDeliveryRecords(db, "bogus"), []);
+  assert.deepEqual(listReconcilableDeliveryRecords(null, "game_update"), []);
 });

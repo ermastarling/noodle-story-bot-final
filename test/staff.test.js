@@ -342,3 +342,78 @@ test("Staff command wrapper: acknowledged V2 payload falls back to editReply whe
   assert.strictEqual(editReplyCalls, 1);
   assert.strictEqual(result?.mode, "editReplyFallback");
 });
+
+test("Cook bonuses: each staff and upgrade effect applies independently of the others", async () => {
+  const { calculateCombinedEffects } = await import("../src/game/upgrades.js");
+  const { loadUpgradesContent } = await import("../src/content/index.js");
+  const upgradesContent = loadUpgradesContent();
+  const combine = (player) => calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
+  const base = () => ({ ...makeTestPlayer(), shop_level: 1 });
+  const cookKeys = ["ingredient_save_chance", "double_craft_chance", "prep_batch_bonus", "rare_epic_fail_reduction", "rare_epic_quality_bonus", "order_quality_bonus"];
+
+  const cases = [
+    { name: "sous_chef", apply: (p) => { p.staff_levels.sous_chef = 3; }, expected: { ingredient_save_chance: 0.03 } },
+    { name: "master_chef", apply: (p) => { p.staff_levels.master_chef = 2; }, expected: { double_craft_chance: 0.16 } },
+    { name: "sommelier", apply: (p) => { p.staff_levels.sommelier = 2; }, expected: { rare_epic_fail_reduction: 0.1, rare_epic_quality_bonus: 0.1 } },
+    { name: "u_prep", apply: (p) => { p.upgrades.u_prep = 4; }, expected: { prep_batch_bonus: 1 } },
+    { name: "u_stoves", apply: (p) => { p.upgrades.u_stoves = 2; }, expected: { ingredient_save_chance: 0.01 } }
+  ];
+
+  for (const testCase of cases) {
+    const player = base();
+    testCase.apply(player);
+    const effects = combine(player);
+    for (const key of cookKeys) {
+      assert.ok(Math.abs((effects[key] ?? 0) - (testCase.expected[key] ?? 0)) < 1e-9,
+        `${testCase.name} alone should give ${key}=${testCase.expected[key] ?? 0}, got ${effects[key]}`);
+    }
+  }
+
+  const all = base();
+  for (const testCase of cases) testCase.apply(all);
+  const combined = combine(all);
+  assert.ok(Math.abs(combined.ingredient_save_chance - 0.04) < 1e-9, "save chance from staff and upgrade stacks additively");
+  assert.ok(Math.abs(combined.double_craft_chance - 0.16) < 1e-9);
+  assert.equal(combined.prep_batch_bonus, 1);
+});
+
+test("Cook bonuses: every staff member and upgrade contributes only its own effects, and any pair sums exactly", async () => {
+  const { calculateCombinedEffects } = await import("../src/game/upgrades.js");
+  const { loadUpgradesContent } = await import("../src/content/index.js");
+  const upgradesContent = loadUpgradesContent();
+  const combine = (player) => calculateCombinedEffects(player, upgradesContent, staffContent, calculateStaffEffects);
+  const fresh = () => ({ ...makeTestPlayer(), shop_level: 99, upgrades: {}, staff_levels: {} });
+  const sources = [
+    ...Object.entries(staffContent.staff_members).map(([id, def]) => ({
+      id, effects: def.effects_per_level ?? {}, apply: (p, lvl) => { p.staff_levels[id] = lvl; }
+    })),
+    ...Object.entries(upgradesContent.upgrades)
+      .filter(([, def]) => !("staff_effect_multiplier" in (def.effects_per_level ?? {})))
+      .map(([id, def]) => ({ id, effects: def.effects_per_level ?? {}, apply: (p, lvl) => { p.upgrades[id] = lvl; } }))
+  ];
+  const level = 2;
+  const solo = new Map();
+  for (const source of sources) {
+    const player = fresh();
+    source.apply(player, level);
+    const effects = combine(player);
+    solo.set(source.id, effects);
+    for (const [key, value] of Object.entries(effects)) {
+      const expected = (source.effects[key] ?? 0) * level;
+      assert.ok(Math.abs(value - expected) < 1e-9, `${source.id} alone: ${key} expected ${expected}, got ${value}`);
+    }
+  }
+  for (let i = 0; i < sources.length; i += 1) {
+    for (let j = i + 1; j < sources.length; j += 1) {
+      const player = fresh();
+      sources[i].apply(player, level);
+      sources[j].apply(player, level);
+      const effects = combine(player);
+      for (const key of Object.keys(effects)) {
+        const expected = (solo.get(sources[i].id)[key] ?? 0) + (solo.get(sources[j].id)[key] ?? 0);
+        assert.ok(Math.abs(effects[key] - expected) < 1e-9,
+          `${sources[i].id} + ${sources[j].id}: ${key} expected ${expected}, got ${effects[key]}`);
+      }
+    }
+  }
+});

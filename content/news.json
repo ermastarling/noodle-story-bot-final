@@ -41,11 +41,10 @@
           "classification": "player_update",
           "changes": [
             "**Achievements** have arrived! Track 90 shop milestones across bowls served, gardening, fishing & foraging, blessings, quests, broth simmering, tipping, visitors, and more, then **claim your rewards** right from the Achievements menu (open it from your Stats menu or run `/noodle achievements`).",
-            "**Badge Customization** lets you show off your journey: open Customize menu → **Badges** to equip up to 7 badges each for Milestones, Achievements, and Collections on your profile.",
+            "**Badge Customization** lets you show off your journey. Open Customize menu → **Badges** to equip up to 7 badges each for Badge Milestones, Achievements, and Collections on your profile.",
             "**Daily Menu Customization** is here! Pick up to 10 learned recipes for your shop's order board menu from the new **Menu** button on the Orders Board. Select across multiple pages if you have a lot of recipes, then **Save Menu** (or cancel the draft). You can change your menu once per day after the daily reset.",
-            "**Weekly Giveaways** now run automatically in the Official Server every Wednesday: one to three contests, each open for a week, with prizes that include coins, coin packs, perks, and VALOR (official server xp). Tap **Enter Giveaway** for a chance to win, each player can win once per week.",
+            "**Weekly Giveaways** now run automatically in the Official Server every Wednesday. From one to three contests, each open for a week, with prizes that include coins, coin packs, perks, and VALOR (official server xp). Tap **Enter Giveaway** for a chance to win, each player can win once per week.",
             "A **Work Ping** now appears every two hours in the Official Server to remind you to use `/work` and earn VALOR (server xp).",
-            "Adjustments were made to shared orders: Shared orders limit how much one party member can contribute, so everyone gets a fair chance to help your party finish together.",
             "Recipe wording updated, it now says **Discovered** to better match how you find new recipes."
           ]
         }

@@ -51,11 +51,17 @@ function getCookQualityBoost(effects, blessing, tier) {
   return qualityBonus + rareEpicBonus + blessingBonus;
 }
 
+function getCookEffectQualityBoost(effects, tier) {
+  return getCookQualityBoost(effects, null, tier);
+}
+
 // Minigame cooks fix success/quality from performance, so staff quality and fail-reduction bonuses are applied on top.
 export function applyStaffBonusesToMinigameOutcome(outcome, { tier = null, effects, rng, blessing = null } = {}) {
   const qualityCounts = { ...(outcome?.qualityCounts ?? {}) };
   let success = outcome?.success ?? 0;
   let failed = outcome?.failed ?? 0;
+  let failRescued = 0;
+  let qualityBoosted = 0;
 
   const failReduction = (tier === "rare" || tier === "epic")
     ? Math.max(0, Number(effects?.rare_epic_fail_reduction) || 0)
@@ -68,46 +74,62 @@ export function applyStaffBonusesToMinigameOutcome(outcome, { tier = null, effec
     if (rescued > 0) {
       failed -= rescued;
       success += rescued;
+      failRescued = rescued;
       qualityCounts.standard = (qualityCounts.standard ?? 0) + rescued;
     }
   }
 
   const boost = getCookQualityBoost(effects, blessing, tier);
   if (boost > 0) {
-    const upgrade = (from, to, chance) => {
+    const baselineBoost = getCookQualityBoost(null, blessing, tier);
+    const upgrade = (from, to, scale) => {
       let moved = 0;
       for (let i = 0; i < (qualityCounts[from] ?? 0); i += 1) {
-        if (rng() < chance) moved += 1;
+        const roll = rng();
+        if (roll < boost * scale) {
+          moved += 1;
+          if (roll >= baselineBoost * scale) qualityBoosted += 1;
+        }
       }
       if (moved > 0) {
         qualityCounts[from] -= moved;
         qualityCounts[to] = (qualityCounts[to] ?? 0) + moved;
       }
     };
-    upgrade("good", "excellent", boost / 2);
-    upgrade("standard", "good", boost);
+    upgrade("good", "excellent", 0.5);
+    upgrade("standard", "good", 1);
   }
 
-  return { ...outcome, success, failed, qualityCounts };
+  return { ...outcome, success, failed, qualityCounts, failRescued, qualityBoosted };
 }
 
-export function rollCookQuality(rng, player, effects, blessing, tier = null) {
-  const rules = loadCookingRules();
+const QUALITY_RANK = { salvage: 0, standard: 1, good: 2, excellent: 3 };
+
+function buildQualityWeights(rules, boost) {
   const weights = { ...(rules.quality?.weights || {}) };
-
-  const boost = getCookQualityBoost(effects, blessing, tier);
-
   weights.good = Math.max(0, (weights.good ?? 0) + boost * 0.4);
   weights.excellent = Math.max(0, (weights.excellent ?? 0) + boost * 0.2);
   weights.standard = Math.max(0, (weights.standard ?? 0) - boost * 0.6);
+  return weights;
+}
 
-  const pick = weightedPick(rng, weights);
+// Uses a single rng draw; `boosted` compares against the same draw without staff/upgrade quality bonuses.
+export function rollCookQualityDetailed(rng, player, effects, blessing, tier = null) {
+  const rules = loadCookingRules();
   const floor = getFailStreakBonuses(player)?.quality_floor;
+  const applyFloor = (pick) => (floor && pick === "salvage" ? floor : pick);
 
-  if (floor && pick === "salvage") {
-    return floor;
-  }
-  return pick;
+  const roll = rng();
+  const pick = applyFloor(weightedPick(() => roll, buildQualityWeights(rules, getCookQualityBoost(effects, blessing, tier))));
+  const effectBoost = getCookEffectQualityBoost(effects, tier);
+  if (effectBoost <= 0) return { quality: pick, boosted: false };
+
+  const baseline = applyFloor(weightedPick(() => roll, buildQualityWeights(rules, getCookQualityBoost(null, blessing, tier))));
+  return { quality: pick, boosted: (QUALITY_RANK[pick] ?? 0) > (QUALITY_RANK[baseline] ?? 0) };
+}
+
+export function rollCookQuality(rng, player, effects, blessing, tier = null) {
+  return rollCookQualityDetailed(rng, player, effects, blessing, tier).quality;
 }
 
 export function getQualityMultiplier(quality) {
@@ -128,24 +150,30 @@ export function rollCookBatchOutcome({ quantity, tier, player, effects, rng, ble
   }
 
   const failChance = getCookFailChance(tier, player, effects);
+  const failChanceWithoutStaff = getCookFailChance(tier, player, { ...effects, rare_epic_fail_reduction: 0 });
   let failed = 0;
+  let failRescued = 0;
   for (let i = 0; i < total; i += 1) {
     const roll = rng();
-    if (!disableFailures && roll < failChance) failed += 1;
+    if (disableFailures) continue;
+    if (roll < failChance) failed += 1;
+    else if (roll < failChanceWithoutStaff) failRescued += 1;
   }
 
   const success = Math.max(0, total - failed);
   const salvage = Math.floor(failed * getFailBowlYield());
   const qualityCounts = {};
+  let qualityBoosted = 0;
 
   for (let i = 0; i < success; i += 1) {
-    const q = rollCookQuality(rng, player, effects, blessing, tier);
+    const { quality: q, boosted } = rollCookQualityDetailed(rng, player, effects, blessing, tier);
     qualityCounts[q] = (qualityCounts[q] ?? 0) + 1;
+    if (boosted) qualityBoosted += 1;
   }
 
   if (salvage > 0) {
     qualityCounts.salvage = (qualityCounts.salvage ?? 0) + salvage;
   }
 
-  return { success, failed, salvage, qualityCounts };
+  return { success, failed, salvage, qualityCounts, failRescued, qualityBoosted };
 }

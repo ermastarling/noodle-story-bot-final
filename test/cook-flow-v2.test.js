@@ -48,6 +48,26 @@ test("Cook flow V2: renders quantity controls and cook action", () => {
   assert.equal(Boolean(cookAllButton), true);
 });
 
+test("Cook flow V2: picker options show recipe ingredients and max when provided", () => {
+  const payload = buildCookRecipePickerV2Message({
+    userId: "123",
+    token: "tok",
+    entries: [
+      { recipeId: "ramen", recipeName: "Ramen", optionLabel: "Ramen (standard)", optionDescription: "Noodles:4 · Broth:2 | Max 2", cookable: 2 },
+      { recipeId: "udon", recipeName: "Udon", optionLabel: "Udon (standard)", optionDescription: "Noodles:0 | Max 0", cookable: 0 }
+    ],
+    selectedRecipeId: "ramen"
+  });
+  const select = (payload.components?.[0]?.components ?? [])
+    .flatMap((c) => c?.components ?? [])
+    .find((c) => c?.type === 3);
+  assert.equal(select.options[0].label, "Ramen (standard)");
+  assert.equal(select.options[0].description, "Noodles:4 · Broth:2 | Max 2");
+  assert.ok(select.options[0].emoji, "cookable recipes get the status_complete emoji");
+  assert.equal(select.options[1].description, "Noodles:0 | Max 0");
+  assert.equal(select.options[1].emoji, undefined);
+});
+
 test("Cook flow V2: disables cook action when no recipe entries exist", () => {
   const payload = buildCookRecipePickerV2Message({
     userId: "123",
@@ -337,4 +357,106 @@ test("Cook flow V2: staff quality and fail-reduction bonuses apply to minigame o
   assert.ok((boosted.qualityCounts.excellent ?? 0) > 0);
   const total = Object.values(boosted.qualityCounts).reduce((sum, v) => sum + v, 0);
   assert.equal(total, 10);
+});
+
+test("Cook flow V2: Prep bonus bowls are successes, not failures, and performance only judges paid bowls", () => {
+  const outcome = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 6,
+    baseQuantity: 5,
+    minigameScore: 6,
+    minigameTurns: 6,
+    successBowlsOverride: 5,
+    qualityBias: "good"
+  });
+  assert.equal(outcome.failed, 0);
+  assert.equal(outcome.success, 6);
+  assert.equal(Object.values(outcome.qualityCounts).reduce((sum, n) => sum + n, 0), 6);
+
+  const rough = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 6,
+    baseQuantity: 5,
+    successBowlsOverride: 2,
+    qualityBias: "salvage"
+  });
+  assert.equal(rough.failed, 3, "only paid bowls can fail");
+  assert.equal(rough.success, 2 + 1, "2 paid successes + 1 bonus bowl");
+});
+
+test("Cook bonuses: fail rescue and quality boost are counted from their own effects only", async () => {
+  const { rollCookBatchOutcome } = await import("../src/game/cooking.js");
+  const player = { upgrades: {}, staff_levels: {} };
+  const seq = (values) => { let i = 0; return () => values[i++ % values.length]; };
+
+  const none = rollCookBatchOutcome({ quantity: 4, tier: "epic", player, effects: {}, rng: seq([0.5]), blessing: null });
+  assert.equal(none.failRescued, 0);
+  assert.equal(none.qualityBoosted, 0);
+
+  // 0.06 fails at the base epic chance (0.09) but is rescued by a 0.05 reduction (0.04).
+  const rescued = rollCookBatchOutcome({ quantity: 2, tier: "epic", player, effects: { rare_epic_fail_reduction: 0.05 }, rng: seq([0.06, 0.5]), blessing: null });
+  const unreduced = rollCookBatchOutcome({ quantity: 2, tier: "epic", player, effects: {}, rng: seq([0.06, 0.5]), blessing: null });
+  assert.equal(unreduced.failRescued, 0);
+  assert.ok(rescued.failRescued > 0, "rolls between the reduced and base chance are rescued");
+  assert.equal(rescued.failed, unreduced.failed - rescued.failRescued);
+
+  const boosted = rollCookBatchOutcome({ quantity: 50, tier: "common", player, effects: { order_quality_bonus: 0.5 }, rng: seq([0.5, 0.3, 0.7, 0.9, 0.45]), blessing: null });
+  const plain = rollCookBatchOutcome({ quantity: 50, tier: "common", player, effects: {}, rng: seq([0.5, 0.3, 0.7, 0.9, 0.45]), blessing: null });
+  assert.equal(plain.qualityBoosted, 0);
+  assert.ok(boosted.qualityBoosted > 0, "quality bonus upgrades some bowls");
+});
+
+test("Cook bonuses: minigame outcome reports staff fail rescue and quality boost", () => {
+  const outcome = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 4,
+    baseQuantity: 4,
+    successBowlsOverride: 0,
+    qualityBias: "good",
+    rollBatchOutcomeArgs: {
+      tier: "epic",
+      effects: { rare_epic_fail_reduction: 1, rare_epic_quality_bonus: 1 },
+      rng: () => 0,
+      blessing: null
+    }
+  });
+  assert.equal(outcome.failRescued, 4);
+  assert.equal(outcome.failed, 0);
+  assert.ok(outcome.qualityBoosted > 0);
+
+  const upgradeOnly = resolveCookOutcomeForFlow({
+    v2MinigameCook: true,
+    batchOutput: 4,
+    baseQuantity: 4,
+    successBowlsOverride: 4,
+    qualityBias: "good",
+    rollBatchOutcomeArgs: { tier: "common", effects: { order_quality_bonus: 1 }, rng: () => 0, blessing: null }
+  });
+  assert.ok(upgradeOnly.qualityBoosted > 0, "quality from an upgrade alone applies without any staff");
+});
+
+test("Cook bonuses: blessing-only quality upgrades are not attributed to staff or upgrades", async () => {
+  const { applyStaffBonusesToMinigameOutcome } = await import("../src/game/cooking.js");
+  const outcome = { success: 1, failed: 0, qualityCounts: { standard: 1 } };
+  const blessing = { type: "quality_shift" };
+  const result = applyStaffBonusesToMinigameOutcome(outcome, { tier: "common", effects: { order_quality_bonus: 0.002 }, blessing, rng: () => 0.05 });
+  assert.equal(result.qualityCounts.good, 1, "blessing upgrades the bowl");
+  assert.equal(result.qualityBoosted, 0);
+});
+
+test("Cook result keeps the component count within Discord's limit for long bonus reports", async () => {
+  const { fitCookResultLines } = await import("../src/ui/cookFlowV2.js");
+  const lines = Array.from({ length: 60 }, (_, i) => `line ${i}`);
+  const fitted = fitCookResultLines(lines);
+  assert.ok(fitted.length <= 20);
+  assert.equal(fitted.join("\n"), lines.join("\n"));
+  assert.deepEqual(fitCookResultLines(["a", "b"]), ["a", "b"]);
+});
+
+test("Cook result text stays within Discord's total text limit", async () => {
+  const { fitCookResultLines } = await import("../src/ui/cookFlowV2.js");
+  const lines = Array.from({ length: 30 }, () => "x".repeat(400));
+  const fitted = fitCookResultLines(lines);
+  assert.ok(fitted.join("").length <= 3500);
+  assert.ok(fitted.length <= 20);
 });

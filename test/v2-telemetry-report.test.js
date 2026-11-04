@@ -408,15 +408,26 @@ test("V2 telemetry report: alert text explains scope, samples, and error metric 
   });
 
   assert.match(text, /sampled bot interactions, instrumented scheduled-job runs, and V2 diagnostics/);
-  assert.match(text, /12 seen; 12 had valid durations/);
-  assert.match(text, /Log records in this window: 40/);
-  assert.match(text, /Failed interactions: 1 \(8.3%\)/);
-  assert.match(text, /Server response time p50 \/ p95: 1200ms \/ 2600ms/);
+  assert.match(text, /`12` seen; `12` had valid durations/);
+  assert.match(text, /Log records in this window: `40`/);
+  assert.match(text, /Failed interactions: `1` \(`8.3%`\)/);
+  assert.match(text, /Server response time p50 \/ p95: `1200ms` \/ `2600ms`/);
   assert.match(text, /continuous uptime: not measured/);
-  assert.match(text, /Scheduled-job runs: 0 \(0 succeeded, 0 failed, 0 skipped\)/);
+  assert.match(text, /Scheduled-job runs: `0` \(`0` succeeded, `0` failed, `0` skipped\)/);
   assert.match(text, /not server latency/);
   assert.match(text, /Suggested next step:/);
+  assert.match(text, /Window: last `24h`/);
 });
+
+test("buildReportText wraps scheduled-job outcome values in backticks", async () => {
+  const text = buildReportText({
+    summary: { jobRunRows: [{ job: "game_updates", runs: 1440, failures: 0 }] },
+    recommendation: "STABLE",
+    windowHours: 24
+  });
+  assert.match(text, /Scheduled-job outcomes: `game_updates`\(`1440` runs, `0` failed\)/);
+});
+
 test("buildReportText stays within the Discord limit and keeps recommendation and issues", async () => {
   const { buildReportText } = await import("../src/jobs/v2TelemetryAlerts.js");
   const longWarnings = Array.from({ length: 60 }, (_, i) => `Warning number ${i} ${"x".repeat(80)}`);

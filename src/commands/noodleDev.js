@@ -1,6 +1,8 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
-import { runNoodle } from "./noodle.js";
-import { loadContentBundle, loadEventsContent, loadSpecializationsContent } from "../content/index.js";
+import { runNoodle, isDevAdmin } from "./noodle.js";
+import { openDb } from "../db/index.js";
+import { listReconcilableDeliveryRecords, listAwaitingValorGiveaways } from "../jobs/scheduledDelivery.js";
+import { loadContentBundle, loadEventsContent, loadGameUpdatesContent, loadSpecializationsContent } from "../content/index.js";
 import { withEventRecipes } from "../game/events.js";
 
 const content = loadContentBundle();
@@ -121,13 +123,13 @@ const noodleDevData = new SlashCommandBuilder()
         sc
           .setName("game_update_preview")
           .setDescription("Dev only.")
-          .addStringOption((o) => o.setName("update_id").setDescription("ID from content/game-updates.md").setRequired(true))
+          .addStringOption((o) => o.setName("update_id").setDescription("Update from content/game-updates.md").setRequired(true).setAutocomplete(true))
       )
       .addSubcommand((sc) =>
         sc
           .setName("game_update_schedule")
           .setDescription("Dev only.")
-          .addStringOption((o) => o.setName("update_id").setDescription("ID from content/game-updates.md").setRequired(true))
+          .addStringOption((o) => o.setName("update_id").setDescription("Update from content/game-updates.md").setRequired(true).setAutocomplete(true))
           .addStringOption((o) => o.setName("run_at").setDescription("Future ISO-8601 date/time, including timezone").setRequired(true))
       )
       .addSubcommand((sc) =>
@@ -144,7 +146,7 @@ const noodleDevData = new SlashCommandBuilder()
               { name: "VALOR confirmation", value: "valor_confirmation" }
             )
           )
-          .addStringOption((o) => o.setName("record_id").setDescription("Job, schedule, guild, or giveaway ID").setRequired(true))
+          .addStringOption((o) => o.setName("record_id").setDescription("Record awaiting reconciliation (pick a type first)").setRequired(true).setAutocomplete(true))
           .addStringOption((o) =>
             o.setName("resolution").setDescription("What you verified in Discord").setRequired(true).addChoices(
               { name: "Delivered", value: "delivered" },
@@ -158,7 +160,7 @@ const noodleDevData = new SlashCommandBuilder()
         sc
           .setName("giveaway_valor_fulfilled")
           .setDescription("Dev only.")
-          .addStringOption((o) => o.setName("giveaway_id").setDescription("Giveaway ID to confirm").setRequired(true))
+          .addStringOption((o) => o.setName("giveaway_id").setDescription("Giveaway ID to confirm").setRequired(true).setAutocomplete(true))
       )
   )
   .addSubcommand((sc) =>
@@ -329,6 +331,12 @@ export const noodleDevCommand = {
 
     if (group !== "admin") return interaction.respond([]);
 
+    const userId = interaction.user?.id;
+    const valorFulfillerId = String(process.env.NOODLE_GIVEAWAY_VALOR_FULFILLER_ID || "").trim();
+    const mayUseValorList = sub === "giveaway_valor_fulfilled" && valorFulfillerId && userId === valorFulfillerId;
+    // Record lists come from live data, so only the callers who may run the command get suggestions.
+    if (!isDevAdmin(userId) && !mayUseValorList) return interaction.respond([]);
+
     if (sub === "spec" && focused?.name === "spec_id") {
       return interaction.respond(buildAutocompleteResults(specializationAutocompleteEntries, query));
     }
@@ -339,6 +347,21 @@ export const noodleDevCommand = {
 
     if (sub === "season_event" && focused?.name === "event_id") {
       return interaction.respond(buildAutocompleteResults(seasonEventAutocompleteEntries, query));
+    }
+
+    if (sub === "game_update_preview" || sub === "game_update_schedule") {
+      if (focused?.name !== "update_id") return interaction.respond([]);
+      const entries = (loadGameUpdatesContent()?.updates ?? []).map((update) => ({ id: update.id, name: update.title ?? update.id }));
+      return interaction.respond(buildAutocompleteResults(entries, query));
+    }
+
+    if (sub === "delivery_reconcile" && focused?.name === "record_id") {
+      const type = String(interaction.options.getString("type") ?? "").trim();
+      return interaction.respond(buildAutocompleteResults(listReconcilableDeliveryRecords(openDb(), type), query));
+    }
+
+    if (sub === "giveaway_valor_fulfilled" && focused?.name === "giveaway_id") {
+      return interaction.respond(buildAutocompleteResults(listAwaitingValorGiveaways(openDb()), query));
     }
 
     return interaction.respond([]);
