@@ -452,3 +452,11 @@ test("Cook result keeps the component count within Discord's limit for long bonu
   assert.equal(fitted.join("\n"), lines.join("\n"));
   assert.deepEqual(fitCookResultLines(["a", "b"]), ["a", "b"]);
 });
+
+test("Cook result text stays within Discord's total text limit", async () => {
+  const { fitCookResultLines } = await import("../src/ui/cookFlowV2.js");
+  const lines = Array.from({ length: 30 }, () => "x".repeat(400));
+  const fitted = fitCookResultLines(lines);
+  assert.ok(fitted.join("").length <= 3500);
+  assert.ok(fitted.length <= 20);
+});

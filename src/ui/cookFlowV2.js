@@ -441,12 +441,27 @@ export function buildCookMinigameV2Message({
   });
 }
 
-// Discord caps a V2 message at 40 components; extra lines (e.g. Cook All bonus reports) are merged into the last text display.
+// Discord caps a V2 message at 40 components and 4000 text characters in total; Cook All bonus reports can exceed both.
 const COOK_RESULT_MAX_TEXT_LINES = 20;
+const COOK_RESULT_MAX_CHARS = 3500;
 export function fitCookResultLines(lines) {
-  if (lines.length <= COOK_RESULT_MAX_TEXT_LINES) return lines;
-  const head = lines.slice(0, COOK_RESULT_MAX_TEXT_LINES - 1);
-  return [...head, lines.slice(COOK_RESULT_MAX_TEXT_LINES - 1).join("\n")];
+  let fitted = lines;
+  if (fitted.length > COOK_RESULT_MAX_TEXT_LINES) {
+    fitted = [...fitted.slice(0, COOK_RESULT_MAX_TEXT_LINES - 1), fitted.slice(COOK_RESULT_MAX_TEXT_LINES - 1).join("\n")];
+  }
+  let remaining = COOK_RESULT_MAX_CHARS;
+  const out = [];
+  for (const line of fitted) {
+    if (remaining <= 0) break;
+    if (line.length <= remaining) {
+      out.push(line);
+      remaining -= line.length;
+    } else {
+      out.push(`${line.slice(0, Math.max(0, remaining - 1))}…`);
+      remaining = 0;
+    }
+  }
+  return out;
 }
 
 export function buildCookResultV2Message({

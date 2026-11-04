@@ -5430,4 +5430,4 @@ export const noodleSocialCommand = {
   }
 };
 
-export { replyInitial as replyInitialForTest, socialMainMenuRow, socialMainMenuRowNoProfile, statsViewButtons, componentCommit as componentCommitForTest };
+export { sharedOrderModalState as sharedOrderModalStateForTest, replyInitial as replyInitialForTest, socialMainMenuRow, socialMainMenuRowNoProfile, statsViewButtons, componentCommit as componentCommitForTest };
