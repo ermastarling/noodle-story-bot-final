@@ -89,7 +89,7 @@ export function buildProfileBadgesV2Message({
         {
           type: 2,
           style: 2,
-          label: "Previous",
+          label: "Prev",
           custom_id: `noodle:nav:badges:${safeUserId}:${safePage > 0 ? safePage - 1 : safeTotalPages - 1}:${safeCategory}`,
           ...(backEmoji ? { emoji: backEmoji } : {})
         },

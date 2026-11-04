@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { openDb } from "../db/index.js";
 import { buildComponentsV2PayloadWithNoticeCards, rawChannelSendMessage } from "../ui/componentsV2.js";
+import { ensureClientToken } from "../util/clientToken.js";
 import { loadWorkPingContent } from "../content/index.js";
 import { runWithTelemetry } from "../infra/telemetry.js";
 import {
@@ -101,6 +102,7 @@ export function startWorkPingScheduler({ client, env = process.env, logger = con
     running = true;
     try {
       markStaleScheduledDeliveriesUnknown(db);
+      ensureClientToken(client, env);
       const [targetChannel, workChannel] = await Promise.all([
         client.channels.fetch(settings.channelId),
         client.channels.fetch(settings.workChannelId)

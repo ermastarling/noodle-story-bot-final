@@ -18,6 +18,7 @@ import { chooseWeeklyContestCount, chooseWeeklyPrizes, getGiveawayWeekStart, val
 import { withLock } from "../infra/locks.js";
 import { loadGiveawaysContent } from "../content/index.js";
 import { buildComponentsV2PayloadWithNoticeCards, rawChannelSendMessage } from "../ui/componentsV2.js";
+import { ensureClientToken } from "../util/clientToken.js";
 import { getButtonEmoji, getIcon } from "../ui/icons.js";
 import {
   claimScheduledMessageDelivery,
@@ -437,6 +438,7 @@ export function startWeeklyGiveawayScheduler({ client, env = process.env, logger
           });
           return false;
         }
+        ensureClientToken(client, env);
         const channel = await client.channels.fetch(settings.channelId);
         if (!channel || String(channel.guildId || "") !== settings.guildId) {
           throw new Error("Configured giveaway canary channel is not in the official guild");
@@ -485,6 +487,7 @@ export function startWeeklyGiveawayScheduler({ client, env = process.env, logger
     running = true;
     try {
       markStaleScheduledDeliveriesUnknown(db);
+      ensureClientToken(client, env);
       const channel = await client.channels.fetch(settings.channelId);
       if (!channel || String(channel.guildId || "") !== settings.guildId) {
         throw new Error("Configured giveaway channel is not in the official guild");

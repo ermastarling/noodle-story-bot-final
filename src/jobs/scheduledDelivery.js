@@ -232,3 +232,51 @@ export function reconcileScheduledDelivery(db, {
     return { ok: true, status };
   })();
 }
+
+// Records an operator can reconcile: only rows currently stuck in delivery_unknown, labelled so the ID is recognisable.
+export function listReconcilableDeliveryRecords(db, type, limit = 100) {
+  if (!db) return [];
+  const max = Math.max(1, Math.min(200, Math.floor(Number(limit) || 100)));
+  const when = (ms) => (Number.isFinite(Number(ms)) && Number(ms) > 0 ? new Date(Number(ms)).toISOString().slice(0, 16).replace("T", " ") : "unknown time");
+  switch (type) {
+    case "scheduled_message":
+      return db.prepare(`
+        SELECT job_id AS id, updated_at FROM scheduled_message_delivery
+        WHERE status = 'delivery_unknown' ORDER BY updated_at DESC LIMIT ?
+      `).all(max).map((row) => ({ id: row.id, name: `Scheduled message ${row.id} (${when(row.updated_at)} UTC)` }));
+    case "game_update":
+      return db.prepare(`
+        SELECT schedule_id AS id, update_id, scheduled_at FROM scheduled_game_updates
+        WHERE status = 'delivery_unknown' ORDER BY scheduled_at DESC LIMIT ?
+      `).all(max).map((row) => ({ id: row.id, name: `${row.update_id} scheduled ${when(row.scheduled_at)} UTC` }));
+    case "season_update":
+      return db.prepare(`
+        SELECT guild_id AS id, last_season FROM game_update_season_state
+        WHERE status = 'delivery_unknown' LIMIT ?
+      `).all(max).map((row) => ({ id: row.id, name: `${row.last_season || "Season"} update for guild ${row.id}` }));
+    case "giveaway_post":
+    case "giveaway_winner":
+    case "valor_confirmation": {
+      const column = {
+        giveaway_post: "status",
+        giveaway_winner: "confirmation_status",
+        valor_confirmation: "valor_confirmation_status"
+      }[type];
+      return db.prepare(`
+        SELECT giveaway_id AS id, contest_number, week_key FROM weekly_giveaways
+        WHERE ${column} = 'delivery_unknown' ORDER BY created_at DESC LIMIT ?
+      `).all(max).map((row) => ({ id: row.id, name: `Giveaway #${row.contest_number} (${row.week_key})` }));
+    }
+    default:
+      return [];
+  }
+}
+
+export function listAwaitingValorGiveaways(db, limit = 100) {
+  if (!db) return [];
+  const max = Math.max(1, Math.min(200, Math.floor(Number(limit) || 100)));
+  return db.prepare(`
+    SELECT giveaway_id AS id, contest_number, week_key FROM weekly_giveaways
+    WHERE award_status = 'awaiting_manual' AND valor_confirmation_status = 'pending' ORDER BY created_at DESC LIMIT ?
+  `).all(max).map((row) => ({ id: row.id, name: `Giveaway #${row.contest_number} (${row.week_key})` }));
+}

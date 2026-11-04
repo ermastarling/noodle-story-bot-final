@@ -10,6 +10,7 @@ import {
   isComponentsV2Payload,
   rawChannelSendMessage
 } from "../ui/componentsV2.js";
+import { ensureClientToken } from "../util/clientToken.js";
 import { emitTelemetry, runWithTelemetry } from "../infra/telemetry.js";
 import { getSceneBannerUrl } from "../ui/icons.js";
 import { markStaleScheduledDeliveriesUnknown } from "./scheduledDelivery.js";
@@ -305,7 +306,8 @@ function getEventForServer(eventsContent, eventId) {
   return (eventsContent?.events ?? []).find((entry) => entry?.event_id === id) ?? null;
 }
 
-async function ensureOfficialChannel(client, channelId, guildId) {
+async function ensureOfficialChannel(client, channelId, guildId, env = process.env) {
+  ensureClientToken(client, env);
   const channel = await client.channels.fetch(channelId);
   if (!channel || String(channel.guildId ?? "") !== guildId) {
     throw new Error("Configured announcement channel is not in the official guild");
@@ -499,7 +501,7 @@ function recordSeasonChange({ db, settings, eventsContent, settingsCatalog, now 
   `).run(season, eventId, JSON.stringify(update), now, settings.guildId);
 }
 
-export function startGameUpdateScheduler({ client, env = process.env, logger = console } = {}) {
+export function startGameUpdateScheduler({ client, env = process.env, logger = console, db: dbOverride = null } = {}) {
   if (scheduler) return scheduler;
   if (!client) throw new Error("startGameUpdateScheduler requires a Discord client");
   const settings = resolveGameUpdateSettings(env);
@@ -508,7 +510,7 @@ export function startGameUpdateScheduler({ client, env = process.env, logger = c
     logger.warn("Game-update scheduler is not tracking season changes (official guild ID is not configured).");
     return null;
   }
-  const db = openDb();
+  const db = dbOverride ?? openDb();
   if (!db) {
     logger.error("Game updates are enabled but the database is unavailable.");
     return null;
@@ -530,7 +532,7 @@ export function startGameUpdateScheduler({ client, env = process.env, logger = c
       markStaleScheduledDeliveriesUnknown(db, now);
       recordSeasonChange({ db, settings: runSettings, eventsContent, settingsCatalog, now });
       if (settings.ok) {
-        await ensureOfficialChannel(client, settings.channelId, settings.guildId);
+        await ensureOfficialChannel(client, settings.channelId, settings.guildId, env);
         await postScheduledUpdates({ db, client, settings, env, logger, now });
         await postPendingSeasonUpdate({ db, client, settings, env, logger, now });
       }

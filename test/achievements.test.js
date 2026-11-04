@@ -13,6 +13,7 @@ import {
   claimAchievementReward,
   evaluatePlayerAchievements,
   getAchievementPage,
+  getAchievementProgress,
   getVisibleAchievements,
   validateAchievementsContent
 } from "../src/game/achievements.js";
@@ -54,12 +55,35 @@ test("A full claimable-achievement page stays within Discord's component limit",
   const payload = buildAchievementsV2Message({
     userId: "12345678901234567",
     entries,
-    unlocked: Object.fromEntries(entries.map((entry) => [entry.achievement_id, { unlocked_at: 1 }])),
-    visibleCount: entries.length
+    unlocked: Object.fromEntries(entries.map((entry) => [entry.achievement_id, { unlocked_at: 1 }]))
   });
   const count = payload.components.reduce((sum, component) => sum + countComponentsDeep(component), 0);
   assert.equal(entries.length, 9);
   assert.ok(count <= 40, `expected at most 40 components, received ${count}`);
+});
+
+test("Achievements show current/threshold progress and no count text in the footer", () => {
+  const userId = "12345678901234567";
+  const payload = buildAchievementsV2Message({
+    userId,
+    entries: [{ achievement_id: "a1", name: "Counter", description: "Do it." }, { achievement_id: "a2", name: "Plain", description: "No numbers." }],
+    progressById: { a1: { current: 3, threshold: 10 } }
+  });
+  const text = JSON.stringify(payload);
+  assert.match(text, /Counter\*\* — 3\/10/);
+  assert.match(text, /Plain\*\* — In progress/);
+  assert.doesNotMatch(text, /in progress achievements|claimed achievements/);
+  assert.match(text, /Menu owner: <@12345678901234567>/);
+});
+
+test("getAchievementProgress reads metric, array_length and distinct criteria and caps at the threshold", () => {
+  const player = { lifetime: { coins: 40 }, list: [1, 2], map: { a: 1, b: 2, c: 3 } };
+  assert.deepEqual(getAchievementProgress(player, { type: "metric", path: "lifetime.coins", threshold: 100 }), { current: 40, threshold: 100 });
+  assert.deepEqual(getAchievementProgress(player, { type: "metric", path: "lifetime.coins", threshold: 25 }), { current: 25, threshold: 25 });
+  assert.deepEqual(getAchievementProgress(player, { type: "array_length", path: "list", threshold: 5 }), { current: 2, threshold: 5 });
+  assert.deepEqual(getAchievementProgress(player, { type: "distinct", path: "map", threshold: 5 }), { current: 3, threshold: 5 });
+  assert.deepEqual(getAchievementProgress(player, { type: "metric", path: "missing", threshold: 5 }), { current: 0, threshold: 5 });
+  assert.equal(getAchievementProgress(player, { type: "array_includes", path: "list", value: 1 }), null);
 });
 
 test("Achievement notice cards use the achievement banner and point to the achievements command", () => {
@@ -89,7 +113,6 @@ test("Achievements container places claim actions inline and keeps pagination wi
     ],
     page: 1,
     totalPages: 3,
-    visibleCount: 22,
     category: "in_progress",
     inProgressCount: 18,
     claimedCount: 4,
@@ -113,15 +136,15 @@ test("Achievements container places claim actions inline and keeps pagination wi
     && node.accessory.emoji?.name === "daily_reward"));
   assert.equal(nodes.some((node) => node.type === 3), false);
   assert.ok(nodes.some((node) => node.type === 10
-    && node.content.includes("-# Page 2/3 • 22 in progress achievements • Menu owner: <@12345678901234567> • Tip: Tap the green button(s) to continue.")));
-  assert.ok(nodes.some((node) => node.type === 2 && node.label === "Previous"
+    && node.content.includes("-# Page 2/3 • Menu owner: <@12345678901234567> • Tip: Tap the green button(s) to continue.")));
+  assert.ok(nodes.some((node) => node.type === 2 && node.label === "Prev"
     && node.custom_id === `noodle:nav:achievements:${userId}:0:in_progress`));
   assert.ok(nodes.some((node) => node.type === 2 && node.label === "Next"
     && node.custom_id === `noodle:nav:achievements:${userId}:2:in_progress`));
   const categoryRow = nodes.find((node) => node.type === 1
     && node.components?.some((button) => button.custom_id === `noodle:action:achievement_category:${userId}:claimed`));
   const navigationRow = nodes.find((node) => node.type === 1
-    && node.components?.some((button) => button.label === "Previous"));
+    && node.components?.some((button) => button.label === "Prev"));
   assert.ok(categoryRow);
   assert.ok(navigationRow);
   assert.ok(nodes.indexOf(categoryRow) < nodes.indexOf(navigationRow));

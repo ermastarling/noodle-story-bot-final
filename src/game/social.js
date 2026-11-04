@@ -632,91 +632,6 @@ export function createSharedOrder(db, partyId, recipeId, serverId, servings = 5)
 }
 
 /**
- * Split the required units across members; earlier members absorb the remainder.
- */
-function distributeSharedOrderUnits(totalUnits, memberCount) {
-  const base = Math.floor(totalUnits / memberCount);
-  const remainder = totalUnits % memberCount;
-  return Array.from({ length: memberCount }, (_, index) => base + (index < remainder ? 1 : 0));
-}
-
-/**
- * True when members with these unit caps, each limited to `ingredientLimit` ingredient types,
- * can still cover every required ingredient (Hall's condition over each member's ingredient choice).
- */
-function canCompleteWithinMemberLimits(caps, requirements, ingredientLimit) {
-  const fullMask = (1 << requirements.length) - 1;
-  const bitCount = (mask) => requirements.reduce((count, _, bit) => count + ((mask >> bit) & 1), 0);
-  const choices = [];
-  for (let mask = 1; mask <= fullMask; mask += 1) {
-    if (bitCount(mask) <= ingredientLimit) choices.push(mask);
-  }
-  const demandByMask = new Map();
-  for (let mask = 1; mask <= fullMask; mask += 1) {
-    demandByMask.set(mask, requirements.reduce((sum, units, bit) => sum + (((mask >> bit) & 1) ? units : 0), 0));
-  }
-  const satisfiesDemand = (assignment) => {
-    for (let mask = 1; mask <= fullMask; mask += 1) {
-      const supply = caps.reduce((sum, cap, index) => sum + ((assignment[index] & mask) ? cap : 0), 0);
-      if (supply < demandByMask.get(mask)) return false;
-    }
-    return true;
-  };
-  const assign = (index, assignment) => {
-    if (index === caps.length) return satisfiesDemand(assignment);
-    return choices.some((mask) => {
-      assignment[index] = mask;
-      return assign(index + 1, assignment);
-    });
-  };
-  return assign(0, []);
-}
-
-/**
- * Per-member unit caps for a shared order. When the per-member ingredient-type limit would make the
- * even split impossible to finish, the caps are raised just enough to keep the order completable.
- */
-export function getSharedOrderMemberCaps({
-  totalRequiredUnits = null,
-  ingredientRequirements = null,
-  memberCount,
-  ingredientLimit = Infinity
-} = {}) {
-  const requirements = Array.isArray(ingredientRequirements)
-    ? ingredientRequirements.map((units) => Math.max(0, Math.floor(Number(units) || 0))).filter((units) => units > 0)
-    : null;
-  const totalUnits = requirements
-    ? requirements.reduce((sum, units) => sum + units, 0)
-    : Math.max(0, Math.floor(Number(totalRequiredUnits) || 0));
-  const evenCaps = distributeSharedOrderUnits(totalUnits, memberCount);
-  if (
-    !requirements
-    || requirements.length < 2
-    || !Number.isFinite(ingredientLimit)
-    || ingredientLimit >= requirements.length
-  ) {
-    return evenCaps;
-  }
-
-  const limit = Math.max(1, Math.floor(ingredientLimit));
-  const feasible = (allowance) => canCompleteWithinMemberLimits(
-    distributeSharedOrderUnits(allowance, memberCount),
-    requirements,
-    limit
-  );
-  let low = totalUnits;
-  let high = totalUnits * memberCount;
-  // Even uncapped members cannot finish under the ingredient-type limit, so the unit cap is not the blocker.
-  if (!feasible(high)) return evenCaps;
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (feasible(mid)) high = mid;
-    else low = mid + 1;
-  }
-  return distributeSharedOrderUnits(low, memberCount);
-}
-
-/**
  * Contribute to a shared order
  */
 export function contributeToSharedOrder(
@@ -724,13 +639,7 @@ export function contributeToSharedOrder(
   sharedOrderId,
   userId,
   ingredientId,
-  quantity,
-  {
-    maxIngredientSlots = null,
-    totalRequiredUnits = null,
-    ingredientRequirements = null,
-    memberIngredientLimit = Infinity
-  } = {}
+  quantity
 ) {
   const now = nowTs();
 
@@ -754,42 +663,6 @@ export function contributeToSharedOrder(
     const existing = db.prepare(
       "SELECT * FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ? AND ingredient_id = ?"
     ).get(sharedOrderId, userId, ingredientId);
-
-    if (!existing && Number.isFinite(maxIngredientSlots)) {
-      const slotCount = db.prepare(
-        "SELECT COUNT(DISTINCT ingredient_id) as cnt FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
-      ).get(sharedOrderId, userId).cnt || 0;
-      if (slotCount >= maxIngredientSlots) {
-        const error = new Error("You have already contributed the maximum ingredient types for this shared order.");
-        error.code = "SHARED_ORDER_SLOT_LIMIT";
-        throw error;
-      }
-    }
-
-    if (Number.isFinite(totalRequiredUnits) || Array.isArray(ingredientRequirements)) {
-      const activeMembers = db.prepare(
-        "SELECT user_id FROM party_members WHERE party_id = ? AND left_at IS NULL ORDER BY joined_at, user_id"
-      ).all(sharedOrder.party_id);
-      if (activeMembers.length < 1) {
-        throw new Error("Shared order has no active party members");
-      }
-      const memberCaps = getSharedOrderMemberCaps({
-        totalRequiredUnits,
-        ingredientRequirements,
-        memberCount: activeMembers.length,
-        ingredientLimit: memberIngredientLimit
-      });
-      const memberIndex = activeMembers.findIndex((member) => member.user_id === userId);
-      const maxMemberUnits = memberCaps[memberIndex];
-      const currentMemberUnits = db.prepare(
-        "SELECT COALESCE(SUM(quantity), 0) AS total FROM shared_order_contributions WHERE shared_order_id = ? AND user_id = ?"
-      ).get(sharedOrderId, userId).total;
-      if (currentMemberUnits + quantity > maxMemberUnits) {
-        const error = new Error("Shared order member contribution limit reached");
-        error.code = "SHARED_ORDER_MEMBER_CAP";
-        throw error;
-      }
-    }
 
     if (existing) {
       db.prepare(`

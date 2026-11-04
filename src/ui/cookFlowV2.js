@@ -1,11 +1,12 @@
 import { buildComponentsV2MenuPayload } from "./componentsV2.js";
 import { applyStaffBonusesToMinigameOutcome } from "../game/cooking.js";
+import { getButtonEmoji, normalizeComponentEmoji } from "./icons.js";
 
 function text(content) {
   return { type: 10, content: String(content ?? "").trim() || "-" };
 }
 
-function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, disabled = false } = {}) {
+function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, disabled = false, emoji = null } = {}) {
   const customId = arg
     ? `noodle:v2:${sceneKey}:${actionKey}:${userId}:${token}:${arg}`
     : `noodle:v2:${sceneKey}:${actionKey}:${userId}:${token}`;
@@ -14,7 +15,8 @@ function button({ sceneKey, actionKey, userId, token, arg, label, style = 2, dis
     style,
     label,
     custom_id: customId,
-    disabled: Boolean(disabled)
+    disabled: Boolean(disabled),
+    ...(emoji ? { emoji } : {})
   };
 }
 
@@ -179,6 +181,7 @@ export function buildQualityCountsForBias({ success = 0, bias = "good" } = {}) {
 export function resolveCookOutcomeForFlow({
   v2MinigameCook = false,
   batchOutput = 0,
+  baseQuantity = null,
   minigameScore = 0,
   minigameTurns = 1,
   successBowlsOverride,
@@ -191,16 +194,21 @@ export function resolveCookOutcomeForFlow({
     return rollBatchOutcomeFn(rollBatchOutcomeArgs);
   }
 
+  // Performance only decides the bowls the player paid ingredients for; bonus bowls (e.g. Prep bonus) are never failures.
+  const paidBowls = baseQuantity == null
+    ? safeBatchOutput
+    : Math.max(0, Math.min(safeBatchOutput, Math.floor(Number(baseQuantity) || 0)));
+  const bonusBowls = safeBatchOutput - paidBowls;
   const perf = deriveCookMinigamePerformance({
     score: minigameScore,
     totalTurns: minigameTurns,
-    quantity: safeBatchOutput
+    quantity: paidBowls
   });
   const resolvedSuccess = Number.isFinite(successBowlsOverride)
-    ? Math.max(0, Math.min(safeBatchOutput, Math.floor(Number(successBowlsOverride))))
-    : perf.successBowls;
-  const success = Math.max(0, Math.min(safeBatchOutput, resolvedSuccess));
-  const failed = Math.max(0, safeBatchOutput - success);
+    ? Math.max(0, Math.min(paidBowls, Math.floor(Number(successBowlsOverride))))
+    : Math.min(paidBowls, perf.successBowls);
+  const failed = Math.max(0, paidBowls - resolvedSuccess);
+  const success = resolvedSuccess + bonusBowls;
   const bias = normalizeBias(qualityBias || perf.qualityBias);
   const qualityCounts = buildQualityCountsForBias({ success, bias });
 
@@ -255,13 +263,15 @@ export function buildCookRecipePickerV2Message({
     const short = Math.max(0, Math.floor(Number(entry?.short) || 0));
     const descParts = [`${tier}`, `ready ${ready}`, `max ${cookable}`];
     if (short > 0) descParts.push(`cook ${short}`);
-    const description = descParts.join(" • ").slice(0, 100);
+    const description = String(entry?.optionDescription || descParts.join(" • ")).slice(0, 100);
+    const emoji = cookable > 0 ? normalizeComponentEmoji(getButtonEmoji("status_complete")) : null;
 
     return {
-      label: recipeName.slice(0, 100),
+      label: String(entry?.optionLabel || recipeName).slice(0, 100),
       value: recipeId,
       description,
-      default: recipeId === selectedId
+      default: recipeId === selectedId,
+      ...(emoji ? { emoji } : {})
     };
   }).filter((option) => Boolean(option.value));
 
@@ -312,8 +322,8 @@ export function buildCookRecipePickerV2Message({
       components.push({
         type: 1,
         components: [
-          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2 }),
-          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2 })
+          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "prev", label: "Prev", style: 2, emoji: normalizeComponentEmoji(getButtonEmoji("back")) }),
+          button({ sceneKey, actionKey: "pg", userId: safeUserId, token: safeToken, arg: "next", label: "Next", style: 2, emoji: normalizeComponentEmoji(getButtonEmoji("next")) })
         ]
       });
     }
@@ -431,6 +441,29 @@ export function buildCookMinigameV2Message({
   });
 }
 
+// Discord caps a V2 message at 40 components and 4000 text characters in total; Cook All bonus reports can exceed both.
+const COOK_RESULT_MAX_TEXT_LINES = 20;
+const COOK_RESULT_MAX_CHARS = 3500;
+export function fitCookResultLines(lines) {
+  let fitted = lines;
+  if (fitted.length > COOK_RESULT_MAX_TEXT_LINES) {
+    fitted = [...fitted.slice(0, COOK_RESULT_MAX_TEXT_LINES - 1), fitted.slice(COOK_RESULT_MAX_TEXT_LINES - 1).join("\n")];
+  }
+  let remaining = COOK_RESULT_MAX_CHARS;
+  const out = [];
+  for (const line of fitted) {
+    if (remaining <= 0) break;
+    if (line.length <= remaining) {
+      out.push(line);
+      remaining -= line.length;
+    } else {
+      out.push(`${line.slice(0, Math.max(0, remaining - 1))}…`);
+      remaining = 0;
+    }
+  }
+  return out;
+}
+
 export function buildCookResultV2Message({
   userId,
   token,
@@ -443,7 +476,7 @@ export function buildCookResultV2Message({
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
   const sceneKey = "cook.result";
-  const lines = (summaryLines || []).filter(Boolean).map((line) => String(line));
+  const lines = fitCookResultLines((summaryLines || []).filter(Boolean).map((line) => String(line)));
   const nextOnly = Boolean(tutorialNextOnly);
   const nextLabel = String(tutorialNextLabel || "").trim() || "Next Tutorial Step";
   const safePreferServe = Boolean(preferServe);

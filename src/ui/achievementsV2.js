@@ -6,12 +6,12 @@ export function buildAchievementsV2Message({
   entries = [],
   page = 0,
   totalPages = 1,
-  visibleCount = 0,
   category = "in_progress",
   inProgressCount = 0,
   claimedCount = 0,
   unlocked = {},
-  claimedIds = []
+  claimedIds = [],
+  progressById = {}
 } = {}) {
   const safeUserId = String(userId ?? "").trim();
   if (!safeUserId) throw new Error("userId is required");
@@ -35,7 +35,9 @@ export function buildAchievementsV2Message({
       const achievementId = String(achievement?.achievement_id ?? "").trim();
       const isUnlocked = Boolean(unlocked?.[achievementId]);
       const isClaimed = claimed.has(achievementId);
-      const status = isClaimed ? "Claimed" : isUnlocked ? "Ready to claim" : "In progress";
+      const progress = progressById?.[achievementId];
+      const progressText = progress ? `${progress.current}/${progress.threshold}` : "In progress";
+      const status = isClaimed ? "Claimed" : isUnlocked ? "Ready to claim" : progressText;
       const entryText = `**${getIcon(achievementId, getIcon("badges"))} ${String(achievement?.name ?? "Achievement")}** — ${status}\n${String(achievement?.description ?? "")}`;
       if (isUnlocked && !isClaimed) {
         const emoji = normalizeComponentEmoji(getButtonEmoji("daily_reward"));
@@ -58,7 +60,7 @@ export function buildAchievementsV2Message({
 
   components.push({
     type: 10,
-    content: `-# Page ${safePage + 1}/${safeTotalPages} • ${Math.max(0, Math.floor(Number(visibleCount) || 0))} ${safeCategory === "claimed" ? "claimed" : "in progress"} achievements`
+    content: `-# Page ${safePage + 1}/${safeTotalPages}`
   });
 
   const backEmoji = normalizeComponentEmoji(getButtonEmoji("back"));
@@ -88,7 +90,7 @@ export function buildAchievementsV2Message({
         {
           type: 2,
           style: 2,
-          label: "Previous",
+          label: "Prev",
           custom_id: `noodle:nav:achievements:${safeUserId}:${safePage > 0 ? safePage - 1 : safeTotalPages - 1}:${safeCategory}`,
           ...(backEmoji ? { emoji: backEmoji } : {})
         },
