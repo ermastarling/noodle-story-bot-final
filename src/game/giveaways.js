@@ -12,6 +12,59 @@ export function getGiveawayWeekStart(now = Date.now()) {
   return start;
 }
 
+export function listCurrentWeeklyGiveaways(db, guildId, now = Date.now()) {
+  const safeGuildId = String(guildId ?? "").trim();
+  if (!db || !safeGuildId) return [];
+  const weekKey = String(getGiveawayWeekStart(now));
+  return db.prepare(`
+    SELECT
+      g.giveaway_id,
+      g.guild_id,
+      g.week_key,
+      g.contest_number,
+      g.closes_at,
+      COUNT(e.user_id) AS entrant_count
+    FROM weekly_giveaways g
+    LEFT JOIN weekly_giveaway_entries e ON e.giveaway_id = g.giveaway_id
+    WHERE g.guild_id = ? AND g.week_key = ? AND g.status = 'open' AND g.closes_at > ?
+    GROUP BY g.giveaway_id, g.guild_id, g.week_key, g.contest_number, g.closes_at
+    ORDER BY g.contest_number
+  `).all(safeGuildId, weekKey, now);
+}
+
+export function getCurrentWeeklyGiveawayEntries(db, {
+  guildId,
+  giveawayId,
+  page = 1,
+  pageSize = 20,
+  now = Date.now()
+} = {}) {
+  const giveaway = listCurrentWeeklyGiveaways(db, guildId, now)
+    .find((entry) => entry.giveaway_id === String(giveawayId ?? "").trim());
+  if (!giveaway) return null;
+
+  const safePageSize = Math.max(1, Math.min(50, Math.floor(Number(pageSize) || 20)));
+  const totalEntries = Number(giveaway.entrant_count) || 0;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / safePageSize));
+  const safePage = Math.min(totalPages, Math.max(1, Math.floor(Number(page) || 1)));
+  const entries = db.prepare(`
+    SELECT user_id, entered_at
+    FROM weekly_giveaway_entries
+    WHERE giveaway_id = ?
+    ORDER BY entered_at, user_id
+    LIMIT ? OFFSET ?
+  `).all(giveaway.giveaway_id, safePageSize, (safePage - 1) * safePageSize);
+
+  return {
+    ...giveaway,
+    entrant_count: totalEntries,
+    entries,
+    page: safePage,
+    page_size: safePageSize,
+    total_pages: totalPages
+  };
+}
+
 function validatePrize(prize) {
   if (!prize || typeof prize !== "object") return false;
   if (prize.type === "coins") {

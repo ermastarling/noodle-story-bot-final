@@ -83,7 +83,7 @@ import {
   setDailyOrderMenu,
   shouldCommitDailyOrderMenu
 } from "../game/dailyMenu.js";
-import { recordGiveawayEntry } from "../game/giveaways.js";
+import { getCurrentWeeklyGiveawayEntries, recordGiveawayEntry } from "../game/giveaways.js";
 import {
   buildValorFulfillmentConfirmation,
   claimValorFulfillmentConfirmation,
@@ -8583,6 +8583,61 @@ if (inDevPath && sub === "admin_delivery_reconcile") {
     ...buildDevMessageV2Payload({
       message: `Delivery ${recordId} was reconciled as **${result.status}**. Keep the Discord message/link and incident context with the operational log.`
     }),
+    ephemeral: true
+  });
+}
+
+if (inDevPath && sub === "admin_giveaway_entries") {
+  const giveawayId = String(opt.getString("giveaway_id") ?? "").trim();
+  const page = opt.getInteger("page") ?? 1;
+  const officialGuildId = String(process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "").trim();
+  if (!db) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "Database unavailable in this environment.", isError: true }),
+      ephemeral: true
+    });
+  }
+  if (!/^\d{17,20}$/.test(officialGuildId)) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({ message: "The official giveaway guild is not configured.", isError: true }),
+      ephemeral: true
+    });
+  }
+
+  const report = getCurrentWeeklyGiveawayEntries(db, {
+    guildId: officialGuildId,
+    giveawayId,
+    page
+  });
+  if (!report) {
+    return commit({
+      content: " ",
+      ...buildDevMessageV2Payload({
+        message: "That giveaway is not currently open in the current weekly batch.",
+        isError: true
+      }),
+      ephemeral: true
+    });
+  }
+
+  const entrantLines = report.entries.length
+    ? report.entries.map((entry) => `<@${entry.user_id}> - entered <t:${Math.floor(Number(entry.entered_at) / 1000)}:R>`)
+    : ["No one has entered this giveaway yet."];
+  return commit({
+    content: " ",
+    ...buildDevMessageV2Payload({
+      title: "Weekly Giveaway Entrants",
+      message: [
+        `Contest #${report.contest_number} (${report.giveaway_id})`,
+        `Entrants: ${report.entrant_count}`,
+        `Page ${report.page}/${report.total_pages}`,
+        "",
+        ...entrantLines
+      ].join("\n")
+    }),
+    allowed_mentions: { parse: [] },
     ephemeral: true
   });
 }

@@ -22,6 +22,7 @@ test("noodle-dev command schema includes admin control group", () => {
     "delivery_reconcile",
     "game_update_preview",
     "game_update_schedule",
+    "giveaway_entries",
     "giveaway_valor_fulfilled",
     "recipe",
     "season_event",
@@ -34,6 +35,7 @@ test("noodle-dev command schema includes admin control group", () => {
   const seasonEventSub = (adminGroup.options ?? []).find((option) => option.name === "season_event");
   const gameUpdatePreviewSub = (adminGroup.options ?? []).find((option) => option.name === "game_update_preview");
   const gameUpdateScheduleSub = (adminGroup.options ?? []).find((option) => option.name === "game_update_schedule");
+  const giveawayEntriesSub = (adminGroup.options ?? []).find((option) => option.name === "giveaway_entries");
   const valorFulfilledSub = (adminGroup.options ?? []).find((option) => option.name === "giveaway_valor_fulfilled");
   const deliveryReconcileSub = (adminGroup.options ?? []).find((option) => option.name === "delivery_reconcile");
   const specIdOption = (specSub?.options ?? []).find((option) => option.name === "spec_id");
@@ -45,6 +47,8 @@ test("noodle-dev command schema includes admin control group", () => {
   assert.equal(eventIdOption?.autocomplete, true);
   assert.equal((gameUpdatePreviewSub?.options ?? []).some((option) => option.name === "update_id"), true);
   assert.deepEqual((gameUpdateScheduleSub?.options ?? []).map((option) => option.name), ["update_id", "run_at"]);
+  assert.deepEqual((giveawayEntriesSub?.options ?? []).map((option) => option.name), ["giveaway_id", "page"]);
+  assert.equal((giveawayEntriesSub?.options ?? []).find((option) => option.name === "giveaway_id")?.autocomplete, true);
   assert.deepEqual((valorFulfilledSub?.options ?? []).map((option) => option.name), ["giveaway_id"]);
   assert.deepEqual((deliveryReconcileSub?.options ?? []).map((option) => option.name), [
     "type",
@@ -308,6 +312,7 @@ test("noodle-dev admin autocomplete lists game updates, and record lists only fo
   assert.ok(updates.every((item) => item.value && item.name.includes(item.value)));
   assert.deepEqual(await run("111111111111111111", "game_update_preview", "update_id"), []);
   assert.deepEqual(await run(DEV_ID, "delivery_reconcile", "record_id", "", { type: "game_update" }), []);
+  assert.deepEqual(await run("111111111111111111", "giveaway_entries", "giveaway_id"), []);
 });
 
 test("listReconcilableDeliveryRecords returns only delivery_unknown records with readable labels", async () => {

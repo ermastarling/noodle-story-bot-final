@@ -4,6 +4,7 @@ import { openDb } from "../db/index.js";
 import { listReconcilableDeliveryRecords, listAwaitingValorGiveaways } from "../jobs/scheduledDelivery.js";
 import { loadContentBundle, loadEventsContent, loadGameUpdatesContent, loadSpecializationsContent } from "../content/index.js";
 import { withEventRecipes } from "../game/events.js";
+import { listCurrentWeeklyGiveaways } from "../game/giveaways.js";
 
 const content = loadContentBundle();
 const eventsContent = loadEventsContent();
@@ -155,6 +156,13 @@ const noodleDevData = new SlashCommandBuilder()
           )
           .addStringOption((o) => o.setName("message_id").setDescription("Required if delivered").setRequired(false))
           .addBooleanOption((o) => o.setName("verified_absent").setDescription("Confirm you verified no post exists before retrying").setRequired(false))
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("giveaway_entries")
+          .setDescription("Dev only. View entrants in a currently open weekly giveaway.")
+          .addStringOption((o) => o.setName("giveaway_id").setDescription("Open giveaway (current week)").setRequired(true).setAutocomplete(true))
+          .addIntegerOption((o) => o.setName("page").setDescription("Entrant page (20 users per page)").setRequired(false).setMinValue(1).setMaxValue(10000))
       )
       .addSubcommand((sc) =>
         sc
@@ -352,6 +360,15 @@ export const noodleDevCommand = {
     if (sub === "game_update_preview" || sub === "game_update_schedule") {
       if (focused?.name !== "update_id") return interaction.respond([]);
       const entries = (loadGameUpdatesContent()?.updates ?? []).map((update) => ({ id: update.id, name: update.title ?? update.id }));
+      return interaction.respond(buildAutocompleteResults(entries, query));
+    }
+
+    if (sub === "giveaway_entries" && focused?.name === "giveaway_id") {
+      const guildId = String(process.env.NOODLE_OFFICIAL_GUILD_ID || process.env.DISCORD_GUILD_ID || "").trim();
+      const entries = listCurrentWeeklyGiveaways(openDb(), guildId).map((giveaway) => ({
+        id: giveaway.giveaway_id,
+        name: `Contest #${giveaway.contest_number} - ${giveaway.entrant_count} entr${giveaway.entrant_count === 1 ? "y" : "ies"}`
+      }));
       return interaction.respond(buildAutocompleteResults(entries, query));
     }
 
