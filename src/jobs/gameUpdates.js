@@ -306,8 +306,8 @@ function getEventForServer(eventsContent, eventId) {
   return (eventsContent?.events ?? []).find((entry) => entry?.event_id === id) ?? null;
 }
 
-async function ensureOfficialChannel(client, channelId, guildId) {
-  ensureClientToken(client);
+async function ensureOfficialChannel(client, channelId, guildId, env = process.env) {
+  ensureClientToken(client, env);
   const channel = await client.channels.fetch(channelId);
   if (!channel || String(channel.guildId ?? "") !== guildId) {
     throw new Error("Configured announcement channel is not in the official guild");
@@ -532,7 +532,7 @@ export function startGameUpdateScheduler({ client, env = process.env, logger = c
       markStaleScheduledDeliveriesUnknown(db, now);
       recordSeasonChange({ db, settings: runSettings, eventsContent, settingsCatalog, now });
       if (settings.ok) {
-        await ensureOfficialChannel(client, settings.channelId, settings.guildId);
+        await ensureOfficialChannel(client, settings.channelId, settings.guildId, env);
         await postScheduledUpdates({ db, client, settings, env, logger, now });
         await postPendingSeasonUpdate({ db, client, settings, env, logger, now });
       }
