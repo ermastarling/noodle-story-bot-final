@@ -325,6 +325,7 @@ import {
   createCookRunToken,
   evaluateCookMinigameTurn,
   buildCookRecipePickerV2Message,
+  buildCookBonusSummaryLines,
   buildCookResultV2Message,
   deriveCookMinigameTotalTurns,
   deriveCookMinigamePerformance,
@@ -13502,9 +13503,17 @@ ${lines.join("\n")}`;
       ? `${getIcon("sparkle")} Quality boost: **${outcome.qualityBoosted}** bowl(s) upgraded.`
       : null;
     const doubleCraftLine = doubleCrafted ? `${getIcon("sparkle")} Double craft! **+${extra}** extra bowl(s).` : null;
-    // Silent minigame cooks hand these lines back so the Cook Result can show them.
-    if (Array.isArray(overrides?.bonusLinesOut)) {
-      overrides.bonusLinesOut.push(...[prepBonusLine, doubleCraftLine, failRescueLine, qualityBoostLine, ...savedLines].filter(Boolean));
+    if (Array.isArray(overrides?.cookBonusOutcomesOut)) {
+      overrides.cookBonusOutcomesOut.push({
+        prepBonusBowls: Math.max(0, batchOutput - qtyToCook),
+        doubleCraftOccurred: doubleCrafted,
+        doubleCraftBowls: extra,
+        failRescuedBowls: outcome.failRescued,
+        qualityBoostedBowls: outcome.qualityBoosted
+      });
+    }
+    if (Array.isArray(overrides?.savedIngredientLinesOut)) {
+      overrides.savedIngredientLinesOut.push(...savedLines);
     }
 
     const cookEmbed = buildMenuEmbed({
@@ -15722,7 +15731,8 @@ if (v2Parsed.isV2) {
         const beforePlayer = ensurePlayer(serverId, userId);
         const beforeTotalBowlCount = getBowlCount(beforePlayer);
 
-        const cookBonusLines = [];
+        const cookBonusOutcomes = [];
+        const savedIngredientLines = [];
         if (cookAllMode) {
           const successByRecipe = allocateSuccessBowlsAcrossPlan(cookAllPlan, performance.successBowls);
           for (const row of cookAllPlan) {
@@ -15732,7 +15742,8 @@ if (v2Parsed.isV2) {
               sub: "cook",
               overrides: {
                 silentResponse: true,
-                bonusLinesOut: cookBonusLines,
+                cookBonusOutcomesOut: cookBonusOutcomes,
+                savedIngredientLinesOut: savedIngredientLines,
                 strings: {
                   recipe: row.recipeId,
                   v2_quality_bias: performance.qualityBias
@@ -15756,7 +15767,8 @@ if (v2Parsed.isV2) {
             sub: "cook",
             overrides: {
               silentResponse: true,
-              bonusLinesOut: cookBonusLines,
+              cookBonusOutcomesOut: cookBonusOutcomes,
+              savedIngredientLinesOut: savedIngredientLines,
               strings: {
                 recipe: recipeId,
                 v2_quality_bias: performance.qualityBias
@@ -15808,7 +15820,8 @@ if (v2Parsed.isV2) {
         produced > 0
           ? `${getIcon("status_complete")} Cooked **${produced}** bowl(s).`
           : `${getIcon("warning")} Cooked **0** bowl(s). Check ingredients/capacity and try again.`,
-        ...cookBonusLines
+        ...buildCookBonusSummaryLines(cookBonusOutcomes),
+        ...savedIngredientLines
       ];
       const tutorialStepAfterCook = tutorialMode ? getCurrentTutorialStep(afterPlayer) : null;
       if (tutorialMode && tutorialStepAfterCook) {
