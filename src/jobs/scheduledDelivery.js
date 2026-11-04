@@ -277,6 +277,6 @@ export function listAwaitingValorGiveaways(db, limit = 100) {
   const max = Math.max(1, Math.min(200, Math.floor(Number(limit) || 100)));
   return db.prepare(`
     SELECT giveaway_id AS id, contest_number, week_key FROM weekly_giveaways
-    WHERE award_status = 'awaiting_manual' ORDER BY created_at DESC LIMIT ?
+    WHERE award_status = 'awaiting_manual' AND valor_confirmation_status = 'pending' ORDER BY created_at DESC LIMIT ?
   `).all(max).map((row) => ({ id: row.id, name: `Giveaway #${row.contest_number} (${row.week_key})` }));
 }

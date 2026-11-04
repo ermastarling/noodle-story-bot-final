@@ -81,20 +81,23 @@ export function applyStaffBonusesToMinigameOutcome(outcome, { tier = null, effec
 
   const boost = getCookQualityBoost(effects, blessing, tier);
   if (boost > 0) {
-    const effectBoostActive = getCookEffectQualityBoost(effects, tier) > 0;
-    const upgrade = (from, to, chance) => {
+    const baselineBoost = getCookQualityBoost(null, blessing, tier);
+    const upgrade = (from, to, scale) => {
       let moved = 0;
       for (let i = 0; i < (qualityCounts[from] ?? 0); i += 1) {
-        if (rng() < chance) moved += 1;
+        const roll = rng();
+        if (roll < boost * scale) {
+          moved += 1;
+          if (roll >= baselineBoost * scale) qualityBoosted += 1;
+        }
       }
       if (moved > 0) {
-        if (effectBoostActive) qualityBoosted += moved;
         qualityCounts[from] -= moved;
         qualityCounts[to] = (qualityCounts[to] ?? 0) + moved;
       }
     };
-    upgrade("good", "excellent", boost / 2);
-    upgrade("standard", "good", boost);
+    upgrade("good", "excellent", 0.5);
+    upgrade("standard", "good", 1);
   }
 
   return { ...outcome, success, failed, qualityCounts, failRescued, qualityBoosted };

@@ -441,6 +441,14 @@ export function buildCookMinigameV2Message({
   });
 }
 
+// Discord caps a V2 message at 40 components; extra lines (e.g. Cook All bonus reports) are merged into the last text display.
+const COOK_RESULT_MAX_TEXT_LINES = 20;
+export function fitCookResultLines(lines) {
+  if (lines.length <= COOK_RESULT_MAX_TEXT_LINES) return lines;
+  const head = lines.slice(0, COOK_RESULT_MAX_TEXT_LINES - 1);
+  return [...head, lines.slice(COOK_RESULT_MAX_TEXT_LINES - 1).join("\n")];
+}
+
 export function buildCookResultV2Message({
   userId,
   token,
@@ -453,7 +461,7 @@ export function buildCookResultV2Message({
   const safeUserId = String(userId || "").trim();
   const safeToken = String(token || "").trim();
   const sceneKey = "cook.result";
-  const lines = (summaryLines || []).filter(Boolean).map((line) => String(line));
+  const lines = fitCookResultLines((summaryLines || []).filter(Boolean).map((line) => String(line)));
   const nextOnly = Boolean(tutorialNextOnly);
   const nextLabel = String(tutorialNextLabel || "").trim() || "Next Tutorial Step";
   const safePreferServe = Boolean(preferServe);

@@ -318,7 +318,7 @@ test("listReconcilableDeliveryRecords returns only delivery_unknown records with
     CREATE TABLE scheduled_game_updates (schedule_id TEXT, update_id TEXT, scheduled_at INTEGER, status TEXT);
     CREATE TABLE weekly_giveaways (giveaway_id TEXT, contest_number INTEGER, week_key TEXT, status TEXT, confirmation_status TEXT, valor_confirmation_status TEXT, award_status TEXT, created_at INTEGER);
     INSERT INTO scheduled_game_updates VALUES ('s1','v1-update',1700000000000,'delivery_unknown'),('s2','v2-update',1700000000000,'sent');
-    INSERT INTO weekly_giveaways VALUES ('g1',3,'2026-W44','open','pending','pending','awaiting_manual',1),('g2',4,'2026-W45','delivery_unknown','pending','pending','none',2);
+    INSERT INTO weekly_giveaways VALUES ('g1',3,'2026-W44','open','pending','pending','awaiting_manual',1),('g2',4,'2026-W45','delivery_unknown','pending','pending','none',2),('g3',5,'2026-W46','closed','pending','confirmed','awaiting_manual',3),('g4',6,'2026-W47','closed','pending','sending','awaiting_manual',4);
   `);
   const updates = listReconcilableDeliveryRecords(db, "game_update");
   assert.deepEqual(updates.map((r) => r.id), ["s1"]);

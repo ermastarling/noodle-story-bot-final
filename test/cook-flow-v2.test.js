@@ -393,12 +393,12 @@ test("Cook bonuses: fail rescue and quality boost are counted from their own eff
   assert.equal(none.failRescued, 0);
   assert.equal(none.qualityBoosted, 0);
 
-  // Roll 0.20 fails at the base epic chance but is rescued once rare_epic_fail_reduction applies.
-  const base = rollCookBatchOutcome({ quantity: 1, tier: "epic", player, effects: {}, rng: seq([0.001]), blessing: null });
-  assert.equal(base.failed, 1);
-  const rescued = rollCookBatchOutcome({ quantity: 1, tier: "epic", player, effects: { rare_epic_fail_reduction: 0.05 }, rng: seq([0.2]), blessing: null });
-  const unreduced = rollCookBatchOutcome({ quantity: 1, tier: "epic", player, effects: {}, rng: seq([0.2]), blessing: null });
-  assert.equal(rescued.failed + rescued.failRescued, unreduced.failed + unreduced.failRescued);
+  // 0.06 fails at the base epic chance (0.09) but is rescued by a 0.05 reduction (0.04).
+  const rescued = rollCookBatchOutcome({ quantity: 2, tier: "epic", player, effects: { rare_epic_fail_reduction: 0.05 }, rng: seq([0.06, 0.5]), blessing: null });
+  const unreduced = rollCookBatchOutcome({ quantity: 2, tier: "epic", player, effects: {}, rng: seq([0.06, 0.5]), blessing: null });
+  assert.equal(unreduced.failRescued, 0);
+  assert.ok(rescued.failRescued > 0, "rolls between the reduced and base chance are rescued");
+  assert.equal(rescued.failed, unreduced.failed - rescued.failRescued);
 
   const boosted = rollCookBatchOutcome({ quantity: 50, tier: "common", player, effects: { order_quality_bonus: 0.5 }, rng: seq([0.5, 0.3, 0.7, 0.9, 0.45]), blessing: null });
   const plain = rollCookBatchOutcome({ quantity: 50, tier: "common", player, effects: {}, rng: seq([0.5, 0.3, 0.7, 0.9, 0.45]), blessing: null });
@@ -433,4 +433,22 @@ test("Cook bonuses: minigame outcome reports staff fail rescue and quality boost
     rollBatchOutcomeArgs: { tier: "common", effects: { order_quality_bonus: 1 }, rng: () => 0, blessing: null }
   });
   assert.ok(upgradeOnly.qualityBoosted > 0, "quality from an upgrade alone applies without any staff");
+});
+
+test("Cook bonuses: blessing-only quality upgrades are not attributed to staff or upgrades", async () => {
+  const { applyStaffBonusesToMinigameOutcome } = await import("../src/game/cooking.js");
+  const outcome = { success: 1, failed: 0, qualityCounts: { standard: 1 } };
+  const blessing = { type: "quality_shift" };
+  const result = applyStaffBonusesToMinigameOutcome(outcome, { tier: "common", effects: { order_quality_bonus: 0.002 }, blessing, rng: () => 0.05 });
+  assert.equal(result.qualityCounts.good, 1, "blessing upgrades the bowl");
+  assert.equal(result.qualityBoosted, 0);
+});
+
+test("Cook result keeps the component count within Discord's limit for long bonus reports", async () => {
+  const { fitCookResultLines } = await import("../src/ui/cookFlowV2.js");
+  const lines = Array.from({ length: 60 }, (_, i) => `line ${i}`);
+  const fitted = fitCookResultLines(lines);
+  assert.ok(fitted.length <= 20);
+  assert.equal(fitted.join("\n"), lines.join("\n"));
+  assert.deepEqual(fitCookResultLines(["a", "b"]), ["a", "b"]);
 });
