@@ -130,5 +130,27 @@ for (const [routeName, buildRoute] of Object.entries(routes)) {
 
     assert.equal(snapshot(serverId, leaderId, sharedOrderId).owned, 100 - (REQUIRED - 1));
     assert.doesNotMatch(JSON.stringify(calls), /other party member must contribute/);
+
+    const completion = buildInteraction({
+      serverId,
+      userId: leaderId,
+      customId: `noodle-social:action:shared_order_complete:${leaderId}`
+    });
+    completion.interaction.message = null;
+    await noodleSocialCommand.handleComponent(completion.interaction);
+    assert.match(JSON.stringify(completion.calls), /shared_order_confirm_complete/);
+
+    const confirmation = buildInteraction({
+      serverId,
+      userId: leaderId,
+      customId: `noodle-social:action:shared_order_confirm_complete:${leaderId}`
+    });
+    confirmation.interaction.message = null;
+    await noodleSocialCommand.handleComponent(confirmation.interaction);
+    assert.equal(
+      db.prepare("SELECT status FROM shared_orders WHERE shared_order_id = ?").get(sharedOrderId).status,
+      "completed"
+    );
+    assert.ok(confirmation.calls.length > 0, "completion returns a response");
   });
 }
