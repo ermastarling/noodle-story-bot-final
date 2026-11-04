@@ -101,6 +101,24 @@ function snapshot(serverId, userId, sharedOrderId) {
   };
 }
 
+test("Shared order ingredient picker opens quantity choices without per-member cap text", async () => {
+  const { serverId, leaderId } = setupParty();
+  const { interaction, calls } = buildInteraction({
+    serverId,
+    userId: leaderId,
+    customId: `noodle-social:select:shared_order_ingredient:${leaderId}`
+  });
+  interaction.isButton = () => false;
+  interaction.isSelectMenu = () => true;
+  interaction.values = [INGREDIENT_ID];
+
+  await noodleSocialCommand.handleComponent(interaction);
+
+  const response = JSON.stringify(calls);
+  assert.match(response, /Choose quantity/);
+  assert.doesNotMatch(response, /Your share/);
+});
+
 for (const [routeName, buildRoute] of Object.entries(routes)) {
   test(`Shared order (${routeName}): leader cannot make the final contribution before a non-leader helps`, async () => {
     const { serverId, leaderId, sharedOrderId } = setupParty();
