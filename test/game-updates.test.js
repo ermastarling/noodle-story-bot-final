@@ -11,6 +11,7 @@ import {
   parseScheduledAt,
   resolveGameUpdateSettings,
   scheduleGameUpdate,
+  startGameUpdateScheduler,
   validateGameUpdatesContent
 } from "../src/jobs/gameUpdates.js";
 
@@ -100,6 +101,81 @@ test("game-update routes default disabled and require copy, private-canary, and 
     NOODLE_GAME_UPDATES_CHANNEL_ID: ids.production,
     NOODLE_ROLLOUT_ANNOUNCEMENTS_ROLE_ID: "42345678901234567"
   }).reason, "missing_events_role");
+});
+
+test("game-update scheduler hydrates a missing client token from its injected env before startup channel fetch", async (t) => {
+  const db = new Database(":memory:");
+  db.exec(fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8"));
+  const previousToken = process.env.DISCORD_TOKEN;
+  delete process.env.DISCORD_TOKEN;
+  t.after(() => {
+    if (previousToken === undefined) delete process.env.DISCORD_TOKEN;
+    else process.env.DISCORD_TOKEN = previousToken;
+    db.close();
+  });
+
+  const env = {
+    DISCORD_TOKEN: " injected-token ",
+    NOODLE_GAME_UPDATES_ENABLED: "1",
+    NOODLE_GAME_UPDATES_COPY_APPROVED: "1",
+    NOODLE_OFFICIAL_GUILD_ID: ids.guild,
+    NOODLE_OFFICIAL_FEATURE_CANARY: "1",
+    NOODLE_OFFICIAL_FEATURE_CANARY_PRIVATE_VERIFIED: "1",
+    NOODLE_DEV_ALERT_CHANNEL_ID: ids.canary
+  };
+  const fetchCalls = [];
+  let resolveFirstFetch;
+  const firstFetch = new Promise((resolve) => {
+    resolveFirstFetch = resolve;
+  });
+  const errors = [];
+  const client = {
+    token: null,
+    channels: {
+      fetch: async (channelId) => {
+        fetchCalls.push({ channelId, token: client.token });
+        resolveFirstFetch();
+        if (!client.token) throw new Error("token was unavailable to the client");
+        return { id: channelId, guildId: ids.guild };
+      }
+    }
+  };
+
+  const scheduler = startGameUpdateScheduler({
+    client,
+    env,
+    db,
+    logger: { warn() {}, error: (...args) => errors.push(args) }
+  });
+  assert.ok(scheduler);
+
+  try {
+    let startupTimeout;
+    try {
+      await Promise.race([
+        firstFetch,
+        new Promise((_, reject) => {
+          startupTimeout = setTimeout(() => reject(new Error("startup channel fetch did not run")), 2000);
+        })
+      ]);
+    } finally {
+      clearTimeout(startupTimeout);
+    }
+
+    let result = "skipped";
+    for (let attempt = 0; attempt < 20 && result === "skipped"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      result = await scheduler.runOnce("test");
+    }
+
+    assert.equal(result, true);
+    assert.ok(fetchCalls.length >= 2, "startup and explicit run both fetch the channel");
+    assert.ok(fetchCalls.every((call) => call.channelId === ids.canary));
+    assert.ok(fetchCalls.every((call) => call.token === "injected-token"));
+    assert.deepEqual(errors, []);
+  } finally {
+    scheduler.stop();
+  }
 });
 
 test("schedule times must be future ISO-8601 values with an explicit timezone", () => {

@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { dedupeComponentCustomIds, normalizeRawContainerPayload } from "../src/util/rawPayload.js";
-import { normalizeComponentsForTest } from "../src/commands/noodle.js";
-import { buildProfileBadgesV2Message } from "../src/ui/profileBadgesV2.js";
+process.env.NOODLE_SKIP_DB = "1";
+
+const { dedupeComponentCustomIds, normalizeRawContainerPayload } = await import("../src/util/rawPayload.js");
+const { normalizeComponentsForTest, noodleCommand } = await import("../src/commands/noodle.js");
+const { buildProfileBadgesV2Message } = await import("../src/ui/profileBadgesV2.js");
 
 function collectIds(node, out = []) {
   if (!node || typeof node !== "object") return out;
@@ -89,4 +91,45 @@ test("Legacy nav rows: a two-page menu keeps both Prev and Next with unique ids 
     assert.equal(parts[3], userId);
     assert.equal(Number(parts[4]), 1);
   }
+});
+
+test("Legacy pagination: a deduped wrap-around button dispatches to its intended page", async () => {
+  const userId = "123456789012345678";
+  const [, nextButton] = normalizeComponentsForTest([
+    {
+      type: 1,
+      components: [
+        { type: 2, style: 2, label: "Prev", custom_id: `noodle:help:page:${userId}:1` },
+        { type: 2, style: 2, label: "Next", custom_id: `noodle:help:page:${userId}:1` }
+      ]
+    }
+  ], 0)[0].components;
+  assert.match(nextButton.custom_id, /:1:dup2$/);
+
+  const calls = [];
+  const interaction = {
+    customId: nextButton.custom_id,
+    guildId: "12345678901234567",
+    user: { id: userId, username: "tester" },
+    member: { id: userId, user: { id: userId, username: "tester" }, displayName: "tester" },
+    message: null,
+    deferred: false,
+    replied: false,
+    isButton: () => true,
+    isMessageComponent: () => true,
+    update: async (payload) => {
+      calls.push(payload);
+      return payload;
+    },
+    editReply: async (payload) => {
+      calls.push(payload);
+      return payload;
+    }
+  };
+
+  await noodleCommand.handleComponent(interaction);
+
+  assert.equal(calls.length, 1);
+  assert.match(JSON.stringify(calls[0]), /Page 2\/3/);
+  assert.match(JSON.stringify(calls[0]), /Orders Menu/);
 });

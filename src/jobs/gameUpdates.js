@@ -501,7 +501,7 @@ function recordSeasonChange({ db, settings, eventsContent, settingsCatalog, now 
   `).run(season, eventId, JSON.stringify(update), now, settings.guildId);
 }
 
-export function startGameUpdateScheduler({ client, env = process.env, logger = console } = {}) {
+export function startGameUpdateScheduler({ client, env = process.env, logger = console, db: dbOverride = null } = {}) {
   if (scheduler) return scheduler;
   if (!client) throw new Error("startGameUpdateScheduler requires a Discord client");
   const settings = resolveGameUpdateSettings(env);
@@ -510,7 +510,7 @@ export function startGameUpdateScheduler({ client, env = process.env, logger = c
     logger.warn("Game-update scheduler is not tracking season changes (official guild ID is not configured).");
     return null;
   }
-  const db = openDb();
+  const db = dbOverride ?? openDb();
   if (!db) {
     logger.error("Game updates are enabled but the database is unavailable.");
     return null;
