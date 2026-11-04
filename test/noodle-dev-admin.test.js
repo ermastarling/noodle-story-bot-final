@@ -153,6 +153,55 @@ test("runNoodle dev slash retries defer after token-unavailable and hydrates cli
   assert.equal(replyCalls, 0);
 });
 
+test("runNoodle admin giveaway entrant report defers ephemerally for the dev admin", async () => {
+  const previousToken = process.env.DISCORD_TOKEN;
+  const previousOfficialGuildId = process.env.NOODLE_OFFICIAL_GUILD_ID;
+  process.env.DISCORD_TOKEN = "token-from-env";
+  process.env.NOODLE_OFFICIAL_GUILD_ID = "invalid-guild-id";
+
+  const deferOptions = [];
+  const interaction = {
+    guildId: "guild-1",
+    user: { id: DEV_ID, tag: "dev-admin#0001" },
+    member: { id: DEV_ID, user: { id: DEV_ID, tag: "dev-admin#0001" } },
+    client: {
+      token: "",
+      user: { id: "bot-1", tag: "bot#0001" },
+      guilds: { cache: new Map() }
+    },
+    deferred: false,
+    replied: false,
+    isChatInputCommand: () => true,
+    isCommand: () => false,
+    options: {
+      getString: () => "giveaway-1",
+      getInteger: () => null
+    },
+    deferReply: async (options) => {
+      deferOptions.push(options);
+      interaction.deferred = true;
+      interaction.ephemeral = Boolean(options?.ephemeral);
+      return { ok: true };
+    }
+  };
+
+  try {
+    await runNoodle(interaction, {
+      sub: "admin_giveaway_entries",
+      group: "dev",
+      overrides: { silentResponse: true }
+    });
+  } finally {
+    if (previousToken === undefined) delete process.env.DISCORD_TOKEN;
+    else process.env.DISCORD_TOKEN = previousToken;
+    if (previousOfficialGuildId === undefined) delete process.env.NOODLE_OFFICIAL_GUILD_ID;
+    else process.env.NOODLE_OFFICIAL_GUILD_ID = previousOfficialGuildId;
+  }
+
+  assert.deepEqual(deferOptions, [{ ephemeral: true }]);
+  assert.equal(interaction.ephemeral, true);
+});
+
 test("runNoodle dev slash falls back to reply when defer cannot be recovered", async () => {
   const previousToken = process.env.DISCORD_TOKEN;
   process.env.DISCORD_TOKEN = "token-from-env";

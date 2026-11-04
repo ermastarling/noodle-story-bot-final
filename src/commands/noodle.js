@@ -7374,7 +7374,7 @@ let unlockNoticePlayer = null;
 
 let seasonRolloverNotice = null;
 
-const shouldDeferEphemeral = group === "dev" && !isDevAdmin(userId);
+const shouldDeferEphemeral = group === "dev" && (sub === "admin_giveaway_entries" || !isDevAdmin(userId));
 
 // Defer immediately for slash commands (chat input) to prevent timeout
 // DON'T defer for components - they're already deferred in index.js
