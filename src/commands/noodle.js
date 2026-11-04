@@ -18757,5 +18757,6 @@ export {
   convertLegacyEmbedPayloadToComponentsV2 as convertLegacyEmbedPayloadToComponentsV2ForTest,
   buildServeFailurePayload as buildServeFailurePayloadForTest,
   noodleProfileEditRow as noodleProfileEditRowForTest,
-  normalizeComponents as normalizeComponentsForTest
+  normalizeComponents as normalizeComponentsForTest,
+  isDevAdmin
 };
