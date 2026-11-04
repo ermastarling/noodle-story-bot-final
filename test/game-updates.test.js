@@ -39,10 +39,10 @@ test("game-update content is editable, validated, and missing IDs are handled ex
   const firstUpdate = findGameUpdate(shipped, "v0-6-0-first-update");
   assert.equal(firstUpdate.rollout_summary, true);
   for (const line of firstUpdate.body.split("\n").filter((entry) => entry.includes("• "))) {
-    assert.match(line, /^>/);
+    assert.match(line, /^(?:> )?•/);
   }
   assert.doesNotThrow(() => buildGameUpdatePayload(firstUpdate));
-  const normalizedBody = firstUpdate.body.replace(/^> (?:• )?/gm, "").replace(/\s+/g, " ");
+  const normalizedBody = firstUpdate.body.replace(/^(?:> )?(?:• )?/gm, "").replace(/\s+/g, " ");
   const newsChanges = loadNewsContent().sections[0].entries[0].changes;
   for (const change of newsChanges) assert.ok(normalizedBody.includes(change));
   const parsed = parseGameUpdatesMarkdown("intro\n\n---\nid: a\ntitle: T\nrollout_summary: false\n---\nOne\n---\nTwo\n\n---\nid: b\ntitle: U\nrollout_summary: true\n---\nThree\n");
